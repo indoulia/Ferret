@@ -57,7 +57,7 @@ Two of the three corrections moved the result **against** the eventual recommend
 ## Benchmark results (Windows host)
 
 From the final run (`report-run3-final.json`), the only run made after the fairness
-corrections described below. Ratio is the slower over the faster.
+corrections described above. Ratio is the slower over the faster.
 
 | Benchmark | Node | Python | Faster |
 |---|---:|---:|---|
