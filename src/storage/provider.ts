@@ -5,12 +5,11 @@ import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/ind
 import { ErrorCode, FerretError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 import {
+  BaseProvider,
   Capability,
   CAPABILITY_VERSIONS,
   ProviderKind,
-  PROVIDER_CONTRACT_VERSION,
   type CapabilityDeclaration,
-  type Provider,
   type ProviderContext,
 } from '../providers/index.js';
 
@@ -66,11 +65,22 @@ export interface StorageReport {
   readonly extensions: readonly ExtensionStatus[];
 }
 
-export class PostgresStorageProvider implements Provider {
+/**
+ * EPIC-012: the lifecycle comes from {@link BaseProvider} rather than being
+ * written here again.
+ *
+ * That is not only tidiness. The hand-written `shutdown` read `#pool` and
+ * returned when it was undefined — correct for a provider that was never
+ * started, and a **leak** when a shutdown arrived while `initialize` was still
+ * connecting: it closed nothing, and the pool created a moment later was never
+ * closed by anyone. `BaseProvider` waits for the in-flight initialization
+ * before tearing down, which closes that race for every provider at once.
+ */
+export class PostgresStorageProvider extends BaseProvider {
   readonly id = STORAGE_PROVIDER_ID;
   readonly kind = ProviderKind.STORAGE;
-  readonly contractVersion = PROVIDER_CONTRACT_VERSION;
-  readonly description = 'PostgreSQL persistence, schema migration and schema version tracking';
+  readonly description =
+    'PostgreSQL persistence, schema migration and schema version tracking';
 
   /**
    * What this provider offers, declared for capability-based selection.
@@ -104,6 +114,7 @@ export class PostgresStorageProvider implements Provider {
   #logger: Logger | undefined;
 
   constructor(options: StorageProviderOptions = {}) {
+    super();
     this.#options = options;
   }
 
@@ -144,7 +155,7 @@ export class PostgresStorageProvider implements Provider {
     );
   }
 
-  async initialize(context: ProviderContext): Promise<void> {
+  protected override async onInitialize(context: ProviderContext): Promise<void> {
     const logger = context.logger.child({ component: 'storage' });
     this.#logger = logger;
 
@@ -351,7 +362,7 @@ export class PostgresStorageProvider implements Provider {
   }
 
   /** Closes the pool. Safe to call without a successful `initialize`. */
-  async shutdown(): Promise<void> {
+  protected override async onShutdown(): Promise<void> {
     const pool = this.#pool;
     this.#pool = undefined;
     this.#db = undefined;

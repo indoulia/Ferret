@@ -154,10 +154,13 @@ describe('core public entry point', () => {
     //
     // `capabilities.ts` joined the allowlist with EPIC-011: it is the capability
     // *contract*, which is core by definition — the core has to be able to ask
-    // for a capability. What it still may not reach is an implementation, which
-    // the "capability boundary" block below asserts separately.
+    // for a capability. `sdk/` joined it with EPIC-012 for the same reason: it
+    // is machinery built *on* the contract, and depends on no implementation,
+    // which the "provider SDK boundary" block below asserts separately.
+    //
+    // What the core still may not reach is an implementation.
     const concreteProviders = [...graph.files].filter((file) =>
-      /providers\/(?!contract|registry|capabilities|index)/.test(file),
+      /^providers\/(?!contract|registry|capabilities|index|sdk\/)/.test(file),
     );
     expect(concreteProviders).toStrictEqual([]);
   });
@@ -294,5 +297,41 @@ describe('canonical model boundary', () => {
     const core = importGraph('index.ts');
     expect(core.files).toContain('domain/entity.ts');
     expect(core.files).toContain('domain/identity.ts');
+  });
+});
+
+describe('provider SDK boundary', () => {
+  const core = importGraph('index.ts');
+  const sdk = importGraph('providers/sdk/index.ts');
+
+  it('builds on the contract and the canonical model, never on an implementation', () => {
+    expect(sdk.files).toContain('providers/contract.ts');
+    expect(sdk.files).toContain('domain/evidence.ts');
+    // The SDK exists so that providers do not each reinvent lifecycle, retry and
+    // emission. The moment it names one of them, it stops being shared
+    // machinery and becomes that provider's private helper library.
+    expect([...sdk.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+  });
+
+  it('adds no runtime dependency beyond the core set', () => {
+    // Governance §5 records the reuse decision (EPIC-012 §15): the SDK builds on
+    // Node 22's abort and timer primitives rather than adopting a retry package.
+    // A new package appearing here means that decision was reversed without
+    // anyone saying so — which is the failure this assertion exists to catch,
+    // since a retry library is exactly the thing someone reaches for later.
+    const external = [...sdk.packages].filter((name) => !name.startsWith('node:'));
+    expect(external.sort()).toStrictEqual([...ALLOWED_CORE_PACKAGES].sort());
+  });
+
+  it('keeps its test doubles out of the core entry point', () => {
+    // `testing.ts` ships under `@indoulia/ferret/testing` so an out-of-tree
+    // provider author can use it. Reaching it from the package root would put a
+    // stub provider and a capturing logger into every production bundle.
+    expect(core.files.has('providers/sdk/testing.ts')).toBe(false);
+    expect(sdk.files.has('providers/sdk/testing.ts')).toBe(false);
+  });
+
+  it('does not reach any CLI module', () => {
+    expect([...sdk.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
   });
 });

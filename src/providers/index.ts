@@ -27,3 +27,4 @@ export {
   type ProviderDescriptor,
 } from './contract.js';
 export { ProviderRegistry } from './registry.js';
+export * from './sdk/index.js';
