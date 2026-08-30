@@ -93,13 +93,13 @@ export async function createTestDatabase(label: string): Promise<TestDatabase> {
   const name = `ferret_t_${label.replace(/[^a-z0-9]+/gi, '_').toLowerCase().slice(0, 24)}_${randomBytes(4).toString('hex')}`;
 
   const adminPool = new Pool({ ...admin, max: 2 });
-  adminPool.on('error', () => undefined);
+  silence(adminPool);
   // Identifier is generated from a sanitized label plus hex, and CREATE
   // DATABASE cannot take a bind parameter for the name.
   await adminPool.query(`CREATE DATABASE "${name}"`);
 
   const pool = new Pool({ ...admin, database: name, max: 8 });
-  pool.on('error', () => undefined);
+  silence(pool);
 
   const env: Record<string, string> = {
     FERRET_DATABASE_HOST: admin.host,
@@ -135,6 +135,24 @@ export async function createTestDatabase(label: string): Promise<TestDatabase> {
   };
 }
 
+/**
+ * Attaches error handlers to a test pool.
+ *
+ * `pool.on('error')` covers *idle* clients; `pool.on('connect')` is what covers
+ * a client that fails while checked out. Tests here deliberately terminate
+ * backends, and without the second handler the resulting `FATAL 57P01` arrives
+ * on a client nothing is listening to — which Node turns into an uncaught
+ * exception that fails the whole run for a reason unrelated to the test.
+ *
+ * `src/storage/connection.ts` does the same thing for real pools, and for the
+ * same reason: there it is the difference between one failed query and a dead
+ * process.
+ */
+function silence(pool: Pool): void {
+  pool.on('error', () => undefined);
+  pool.on('connect', (client) => client.on('error', () => undefined));
+}
+
 /** A second, independent pool on the same database, for concurrency tests. */
 export function connectTo(database: TestDatabase, max = 4): Pool {
   const pool = new Pool({
@@ -145,7 +163,7 @@ export function connectTo(database: TestDatabase, max = 4): Pool {
     password: database.password,
     max,
   });
-  pool.on('error', () => undefined);
+  silence(pool);
   return pool;
 }
 

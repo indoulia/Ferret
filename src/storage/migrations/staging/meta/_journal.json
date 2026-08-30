@@ -8,6 +8,13 @@
       "when": 1788092785490,
       "tag": "0000_canonical_entities",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788094683515,
+      "tag": "0001_relationships",
+      "breakpoints": true
     }
   ]
 }

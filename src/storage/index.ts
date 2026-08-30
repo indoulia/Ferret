@@ -75,3 +75,16 @@ export {
   type EntityRow,
   type NewEntityRow,
 } from './schema/entities.js';
+
+export {
+  AssertOutcome,
+  RelationshipStore,
+  type AssertResult,
+  type TraversalOptions,
+} from './relationships.js';
+
+export {
+  relationship,
+  type NewRelationshipRow,
+  type RelationshipRow,
+} from './schema/relationships.js';

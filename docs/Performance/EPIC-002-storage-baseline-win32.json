@@ -1,6 +1,6 @@
 {
   "epic": "EPIC-002",
-  "recordedAt": "2026-08-30T12:44:10.940Z",
+  "recordedAt": "2026-08-30T13:17:15.461Z",
   "platform": "win32/x64",
   "node": "22.23.2",
   "note": "Budgets are regression ceilings, not targets. See tests/integration/storage/performance.test.ts.",
@@ -8,28 +8,28 @@
     {
       "label": "fresh migration (empty database)",
       "samples": 1,
-      "minMs": 229.98,
-      "medianMs": 229.98,
-      "p95Ms": 229.98,
-      "maxMs": 229.98,
+      "minMs": 734.21,
+      "medianMs": 734.21,
+      "p95Ms": 734.21,
+      "maxMs": 734.21,
       "budgetMs": 5000
     },
     {
       "label": "no-op migration (schema already current)",
       "samples": 20,
-      "minMs": 6.21,
-      "medianMs": 7.56,
-      "p95Ms": 17.98,
-      "maxMs": 17.98,
+      "minMs": 7.72,
+      "medianMs": 10.02,
+      "p95Ms": 61.31,
+      "maxMs": 61.31,
       "budgetMs": 750
     },
     {
       "label": "readSchemaStatus (read-only)",
       "samples": 30,
-      "minMs": 4.35,
-      "medianMs": 5.01,
-      "p95Ms": 12.95,
-      "maxMs": 22.88,
+      "minMs": 4.56,
+      "medianMs": 5.08,
+      "p95Ms": 7.18,
+      "maxMs": 7.56,
       "budgetMs": 400
     },
     {
@@ -44,19 +44,19 @@
     {
       "label": "SELECT 1 round trip",
       "samples": 100,
-      "minMs": 1.16,
-      "medianMs": 1.58,
-      "p95Ms": 3.43,
-      "maxMs": 19.85,
+      "minMs": 1.15,
+      "medianMs": 1.55,
+      "p95Ms": 2.16,
+      "maxMs": 2.93,
       "budgetMs": 25
     },
     {
       "label": "provider initialize + shutdown",
       "samples": 8,
-      "minMs": 46.61,
-      "medianMs": 57.04,
-      "p95Ms": 72.82,
-      "maxMs": 72.82,
+      "minMs": 50.86,
+      "medianMs": 65.01,
+      "p95Ms": 110.84,
+      "maxMs": 110.84,
       "budgetMs": 2000
     }
   ]
