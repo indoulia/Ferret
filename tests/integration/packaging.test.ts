@@ -63,7 +63,18 @@ beforeAll(() => {
 
   const raw = execFileSync(
     process.execPath,
-    [requireNpmCli(), 'pack', '--json', '--pack-destination', workspace],
+    // `--ignore-scripts` so `prepack` does not run here.
+    //
+    // `prepack` rebuilds, and rebuilding *cleans* `dist/` — while the rest of
+    // this suite is executing the CLI from it. Packing during a test run would
+    // therefore delete the build out from under forty other tests, which is
+    // exactly what happened the first time `prepack` was added.
+    //
+    // The global setup has already built, so what is packed here is current.
+    // That `prepack` exists at all is asserted in `distribution.test.ts`, which
+    // is the right place for it: the guarantee is about publishing, not about
+    // this test.
+    [requireNpmCli(), 'pack', '--json', '--ignore-scripts', '--pack-destination', workspace],
     { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   );
   pack = (JSON.parse(raw) as PackResult[])[0] as PackResult;
@@ -152,11 +163,15 @@ describe('package contents', () => {
   it('is reproducible — packing twice yields byte-identical tarballs', () => {
     const second = join(workspace, 'repack');
     mkdirSync(second, { recursive: true });
-    execFileSync(process.execPath, [requireNpmCli(), 'pack', '--json', '--pack-destination', second], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    execFileSync(
+      process.execPath,
+      [requireNpmCli(), 'pack', '--json', '--ignore-scripts', '--pack-destination', second],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
 
     const digest = (path: string): string =>
       createHash('sha256').update(readFileSync(path)).digest('hex');

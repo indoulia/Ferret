@@ -84,10 +84,101 @@ if the body throws — so a started runtime cannot leak.
 | `ferret config` | Implemented | EPIC-003 |
 | `ferret status` | Implemented | EPIC-004 |
 | `ferret doctor` | Implemented | EPIC-004 |
-| `ferret mcp` | Planned | EPIC-064 |
+| `ferret index` | Implemented | EPIC-031 |
+| `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
 
-A planned command exits with code `5` and error code `E_NOT_IMPLEMENTED`, naming
-the Epic that will deliver it.
+Every approved command in this release is implemented. The mechanism for
+reporting an approved-but-unbuilt command — exit code `5` with
+`E_NOT_IMPLEMENTED` and the owning Epic — remains, because the honest answer to
+"is this coming" is worth more than an unknown-command error.
+
+## Index a repository
+
+```bash
+ferret index .              # index the repository you are standing in
+ferret index ~/code/api     # or one you name
+ferret index . --full       # re-read everything, ignoring what was indexed before
+ferret index . --json       # machine-readable, for a script or a CI job
+```
+
+Indexing is **incremental by default**. The first run reads the whole history;
+later runs read only what is new, and re-indexing an unchanged repository writes
+nothing at all — which you can see in the report:
+
+```
+repository        github.com/indoulia/Ferret
+mode              incremental
+read              2 commits, 305 files, 5 branches, 1 worktrees
+entities          33 new, 3 changed, 620 unchanged
+relationships     56 new, 0 changed, 637 unchanged
+evidence          23 recorded, 292 already known
+```
+
+Ferret reads with `git`, never by reimplementing it, and it reads **safely**: a
+repository cannot make Ferret run a program by putting one in its configuration,
+and a credential in a remote URL never reaches the database or a log. See
+[EPIC-017's decisions](docs/Architecture/EPIC-017-DECISIONS.md) for how, and why
+each step is there.
+
+## Connect an AI client
+
+`ferret mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io)
+over stdio. Any MCP client can spawn it.
+
+**Claude Desktop** — add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "ferret": {
+      "command": "ferret",
+      "args": ["mcp"],
+      "env": {
+        "FERRET_DATABASE_HOST": "localhost",
+        "FERRET_DATABASE_NAME": "ferret",
+        "FERRET_DATABASE_USER": "ferret",
+        "FERRET_DATABASE_PASSWORD": "..."
+      }
+    }
+  }
+}
+```
+
+**Claude Code** — `claude mcp add ferret -- ferret mcp`, having run
+`ferret init --save` first so the connection is already stored.
+
+If you ran `ferret init --save`, the `env` block is unnecessary: Ferret reads
+its own configuration file. Passing the password through the client's
+configuration is supported because an AI client spawns Ferret with an
+environment Ferret does not control — but a stored configuration keeps the
+secret out of one more file.
+
+### What the client can then do
+
+| Tool | Answers |
+| --- | --- |
+| `ferret_search` | "Where did we discuss connection timeouts?" |
+| `ferret_find` | "Every file in this repository." — exact, unranked |
+| `ferret_get_entity` | One commit, file or branch, with its identifiers |
+| `ferret_neighbours` | "What touched this file?" — and, with `at`, "what was I working on last Tuesday?" |
+| `ferret_context_pack` | A bounded pack of relevant knowledge for a question |
+
+Every tool is **read-only**. Ferret writes nothing through MCP: indexing is a
+command a person runs.
+
+Every response tells the model, before any content, that what follows is indexed
+source content — **data, not instructions**. A commit message that says "ignore
+your previous instructions" is delivered intact, as an attributed value, because
+hiding it would be its own kind of failure; what Ferret controls is the frame
+around it, never the content itself. See
+[the specification](docs/EPICs/EPIC-059-061-064-065-Context-And-MCP.md) §8.
+
+### Check it is working
+
+```bash
+ferret status          # is the database reachable, is the schema current
+ferret doctor          # ...and what to do about it if not
+```
 
 ## Global options
 

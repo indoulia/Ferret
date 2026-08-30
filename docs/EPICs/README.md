@@ -213,9 +213,9 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Distribution & Developer Experience
 
-- **EPIC-102 — NPM Distribution** — P0
-- **EPIC-103 — Global CLI** — P0
-- **EPIC-104 — AI Client Onboarding** — P0
+- **EPIC-102 — NPM Distribution** — P0 — VALIDATED ([spec](EPIC-102-103-104-Distribution.md), [evidence](validation/EPIC-102-103-104-VALIDATION.md))
+- **EPIC-103 — Global CLI** — P0 — VALIDATED ([spec](EPIC-102-103-104-Distribution.md), [evidence](validation/EPIC-102-103-104-VALIDATION.md))
+- **EPIC-104 — AI Client Onboarding** — P0 — VALIDATED ([spec](EPIC-102-103-104-Distribution.md), [evidence](validation/EPIC-102-103-104-VALIDATION.md))
 - **EPIC-105 — Cross-Platform Packaging** — P1
 - **EPIC-106 — Upgrade & Migration UX** — P1
 - **EPIC-107 — Docker Distribution** — P2

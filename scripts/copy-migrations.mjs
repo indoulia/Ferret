@@ -25,4 +25,6 @@ for (const name of files) {
   copyFileSync(join(SOURCE, name), join(TARGET, name));
 }
 
-console.log(`copy-migrations: ${files.length} file(s) -> dist/storage/migrations`);
+// stderr, for the same reason as `clean.mjs`: this runs inside `prepack`,
+// and `npm pack --json` parses stdout.
+process.stderr.write(`copy-migrations: ${files.length} file(s) -> dist/storage/migrations\n`);

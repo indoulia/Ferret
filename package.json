@@ -61,6 +61,7 @@
   },
   "scripts": {
     "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs",
+    "prepack": "npm run build",
     "clean": "node scripts/clean.mjs",
     "migration:generate": "node scripts/generate-migration.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",

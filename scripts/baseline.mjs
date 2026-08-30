@@ -89,7 +89,9 @@ let pack;
 try {
   const raw = execFileSync(
     process.execPath,
-    [npmCli(), 'pack', '--json', '--pack-destination', workspace],
+    // `--ignore-scripts`: the caller has already built, and letting `prepack`
+    // rebuild here would measure the build rather than the package.
+    [npmCli(), 'pack', '--json', '--ignore-scripts', '--pack-destination', workspace],
     { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   );
   pack = JSON.parse(raw)[0];
