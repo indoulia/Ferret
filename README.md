@@ -10,9 +10,9 @@ without repeatedly traversing source systems.
 > domain is delivered — core runtime and package (EPIC-001), PostgreSQL
 > bootstrap and migrations (EPIC-002), the configuration engine (EPIC-003),
 > health and diagnostics (EPIC-004), and the technology selection they rest on
-> (EPIC-005) — along with the canonical knowledge model: entities (EPIC-006),
-> relationships and time (EPIC-007), evidence and provenance (EPIC-008), and
-> identity and scope (EPIC-009).
+> (EPIC-005) — and the canonical knowledge model is complete: entities
+> (EPIC-006), relationships and time (EPIC-007), evidence and provenance
+> (EPIC-008), identity and scope (EPIC-009) and schema versioning (EPIC-010).
 > Indexing, retrieval and the MCP server are defined by later Epics and are
 > **not** implemented yet. Commands that belong to those Epics are listed in `--help` as
 > `(planned)` and fail with a clear error rather than doing nothing. See
@@ -298,6 +298,8 @@ mismatch is refused as `E_SCHEMA_DRIFT` rather than silently re-applied.
   out of the record
 - [Identity decisions](docs/Architecture/EPIC-009-DECISIONS.md) — why collisions
   are reported rather than merged, and why developers and agents never merge
+- [Compatibility matrix](docs/Architecture/COMPATIBILITY.md) — what Ferret can
+  read, what it refuses, and why downgrade is never attempted
 - [Governance](docs/Governance/README.md) — the binding engineering rules
 - [Technology decisions](docs/TECHNOLOGY-DECISIONS.md) — the EPIC-005 stack
   selection and its evidence

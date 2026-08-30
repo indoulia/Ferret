@@ -13,6 +13,33 @@ import type { Logger } from '../logging/index.js';
 export const PROVIDER_CONTRACT_VERSION = 1;
 
 /**
+ * The oldest contract version this runtime still honours.
+ *
+ * EPIC-001 compared for exact equality, which made every contract change a
+ * flag day: a provider built against version 1 would be refused by a runtime
+ * implementing version 2, even where nothing it used had changed. EPIC-010 AC-4
+ * requires provider contract compatibility to be *explicit*, so the supported
+ * span is stated rather than implied by an equality check.
+ *
+ * It is currently equal to {@link PROVIDER_CONTRACT_VERSION}, so behaviour is
+ * unchanged — which is the right moment to fix the rule, before there is
+ * pressure to bend it for a specific provider.
+ *
+ * Raising this drops support for providers built against older contracts and
+ * belongs in a release note, not a refactor.
+ */
+export const MINIMUM_PROVIDER_CONTRACT_VERSION = 1;
+
+/** True when this runtime can honour a provider built against `version`. */
+export function isSupportedContractVersion(version: number): boolean {
+  return (
+    Number.isInteger(version) &&
+    version >= MINIMUM_PROVIDER_CONTRACT_VERSION &&
+    version <= PROVIDER_CONTRACT_VERSION
+  );
+}
+
+/**
  * Categories of replaceable implementation.
  *
  * Governance §4 puts *every* replaceable implementation behind a provider

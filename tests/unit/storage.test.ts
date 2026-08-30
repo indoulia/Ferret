@@ -106,6 +106,34 @@ describe('database error classification', () => {
     expect(classified.remediation).toBeUndefined();
   });
 
+  it('unwraps a driver error that a query layer has wrapped', () => {
+    // Drizzle wraps a failing query in its own error and puts the `pg` error in
+    // `cause`. Reading `error.code` directly finds nothing, so every error
+    // arriving through a Drizzle query fell through to the generic branch —
+    // losing the SQLSTATE, the classification and the remediation.
+    const driver = Object.assign(new Error('permission denied for schema ferret'), { code: '42501' });
+    const wrapped = Object.assign(new Error('Failed query: select ...'), { cause: driver });
+
+    const classified = classifyDatabaseError(wrapped, 'test');
+    expect(classified.code).toBe('E_STORAGE_PERMISSION_DENIED');
+    expect(classified.remediation).toContain('CREATE');
+  });
+
+  it('unwraps through more than one layer of wrapping', () => {
+    const driver = Object.assign(new Error('relation does not exist'), { code: '42P01' });
+    const inner = Object.assign(new Error('inner'), { cause: driver });
+    const outer = Object.assign(new Error('outer'), { cause: inner });
+    expect(isMissingRelation(outer)).toBe(true);
+  });
+
+  it('gives up rather than looping on a self-referencing cause', () => {
+    // A cycle should not be constructible, and a classifier that hangs on a
+    // malformed error would be worse than one that gives up.
+    const looped: { message: string; cause?: unknown } = { message: 'looped' };
+    looped.cause = looped;
+    expect(() => classifyDatabaseError(looped, 'test')).not.toThrow();
+  });
+
   it('passes a FerretError through unchanged so remediation is not overwritten', () => {
     const original = classifyDatabaseError(Object.assign(new Error('x'), { code: '42501' }), 'first');
     expect(classifyDatabaseError(original, 'second')).toBe(original);

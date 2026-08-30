@@ -147,3 +147,17 @@ export {
   type ScopeEvaluation,
   type ScopeSelector,
 } from './scope.js';
+
+export {
+  Compatibility,
+  SURFACE_POLICIES,
+  VersionedSurface,
+  assertSafeToWrite,
+  checkCompatibility,
+  databaseSchemaPolicy,
+  isArtifactStale,
+  summarizeCompatibility,
+  type CompatibilityReport,
+  type CompatibilityVerdict,
+  type SurfacePolicy,
+} from './compatibility.js';

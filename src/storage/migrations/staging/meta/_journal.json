@@ -29,6 +29,13 @@
       "when": 1788098178294,
       "tag": "0003_identity_aliases",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788099225241,
+      "tag": "0004_derived_artifacts",
+      "breakpoints": true
     }
   ]
 }

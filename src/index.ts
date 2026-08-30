@@ -157,8 +157,10 @@ export {
 } from './diagnostics/index.js';
 
 export {
+  MINIMUM_PROVIDER_CONTRACT_VERSION,
   PROVIDER_CONTRACT_VERSION,
   PROVIDER_ID_PATTERN,
+  isSupportedContractVersion,
   ProviderKind,
   ProviderRegistry,
   describeProvider,
@@ -293,4 +295,18 @@ export {
   type ScopeContext,
   type ScopeEvaluation,
   type ScopeSelector,
+} from './domain/index.js';
+
+export {
+  Compatibility,
+  SURFACE_POLICIES,
+  VersionedSurface,
+  assertSafeToWrite,
+  checkCompatibility,
+  databaseSchemaPolicy,
+  isArtifactStale,
+  summarizeCompatibility,
+  type CompatibilityReport,
+  type CompatibilityVerdict,
+  type SurfacePolicy,
 } from './domain/index.js';
