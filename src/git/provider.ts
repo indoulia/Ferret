@@ -39,6 +39,13 @@ import {
 } from '../providers/index.js';
 
 import { walkForRepositories, type RepositoryCandidate } from './discovery.js';
+import {
+  TreeEntryKind,
+  extensionOf,
+  gitContentHash,
+  listFiles,
+  type TreeEntry,
+} from './files.js';
 import { ChangeKind, readHistory, type CommitRecord } from './history.js';
 import { listBranches, listWorktrees } from './refs.js';
 import { RepositoryIdentitySource, maskRemote, normalizeRemote, repositoryIdentity } from './identity.js';
@@ -100,6 +107,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         RepositoryOperation.LIST_WORKTREES,
         RepositoryOperation.LIST_BRANCHES,
         RepositoryOperation.READ_HISTORY,
+        RepositoryOperation.LIST_FILES,
       ],
       systems: [GIT_SOURCE_SYSTEM],
       limits: {
@@ -687,6 +695,154 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     };
   }
 
+  /**
+   * Lists the files a repository holds at a revision.
+   *
+   * Answers for a *revision* rather than for a working directory, so it works on
+   * a bare repository and on a commit nobody has checked out — which is most of
+   * them.
+   */
+  async listFiles(
+    repository: DiscoveredRepository,
+    request: { revision?: string; limit?: number; offset?: number },
+    context: ProviderOperationContext,
+  ): Promise<{ entries: readonly TreeEntry[]; cursor: string | undefined }> {
+    const offset = request.offset ?? 0;
+    const listing = await listFiles({
+      ...this.#gitOptions(repository, context),
+      ...(request.revision === undefined ? {} : { revision: request.revision }),
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+      offset,
+    });
+
+    return {
+      entries: listing.entries,
+      cursor: listing.truncated
+        ? encodeCursor(this.id, Capability.SOURCE_REPOSITORY, { offset: offset + listing.entries.length })
+        : undefined,
+    };
+  }
+
+  /**
+   * Emits files and the versions of them a revision holds.
+   *
+   * **File identity is the repository and the path** — the same scheme
+   * EPIC-020 chose for files seen in commit history, deliberately, so that a
+   * file found by listing a tree and the same file found in a commit are one
+   * entity rather than two.
+   *
+   * **File-version identity is the content hash**, which for a tracked file is
+   * Git's own object id. Ferret does not recompute it: an object id is
+   * `sha1("blob <length>" + NUL + bytes)` over exactly the bytes Git stored,
+   * whereas hashing the working copy would produce a different number for the
+   * same content on a machine with different line-ending settings — and two
+   * developers' identical files would look like two versions.
+   *
+   * A **symlink is not a file**. Its blob holds a target path, not content, and
+   * indexing it as source would record the string `../../etc/passwd` as though
+   * it were something someone wrote. A **submodule is not a file** either: its
+   * "oid" is a commit id in a repository Ferret may not even have. Both are
+   * reported by `listFiles` and neither becomes a `file` entity here.
+   */
+  emitFiles(
+    repository: DiscoveredRepository,
+    entries: readonly TreeEntry[],
+    options: { revision?: string; observedAt?: Date } = {},
+  ): {
+    entities: readonly CanonicalEntity[];
+    relationships: readonly CanonicalRelationship[];
+    evidence: readonly CanonicalEvidence[];
+    skipped: readonly { path: string; reason: string }[];
+  } {
+    const emitter = this.#requireEmitter();
+    const observedAt = options.observedAt ?? new Date();
+    const repositoryEntity = this.emit(repository).entity;
+
+    const entities: CanonicalEntity[] = [repositoryEntity];
+    const relationships: CanonicalRelationship[] = [];
+    const evidence: CanonicalEvidence[] = [];
+    const skipped: { path: string; reason: string }[] = [];
+
+    for (const entry of entries) {
+      if (entry.kind === TreeEntryKind.SUBMODULE) {
+        skipped.push({ path: entry.path, reason: 'submodule' });
+        continue;
+      }
+      if (entry.kind === TreeEntryKind.SYMLINK) {
+        skipped.push({ path: entry.path, reason: 'symlink' });
+        continue;
+      }
+      if (entry.kind === TreeEntryKind.UNKNOWN) {
+        skipped.push({ path: entry.path, reason: 'unrecognised-mode' });
+        continue;
+      }
+
+      const extension = extensionOf(entry.path);
+      const file = emitter.entity({
+        kind: 'file',
+        source: { id: entry.path, scope: repositoryEntity.id },
+        attributes: {
+          path: entry.path,
+          ...(extension === undefined ? {} : { extension }),
+        },
+      });
+      entities.push(file);
+
+      const version = emitter.entity({
+        kind: 'file_version',
+        // Scoped to the file, not the repository: the same bytes at two paths
+        // are two versions of two files, and the same bytes at one path in two
+        // clones are one version of one file.
+        source: { id: gitContentHash(entry.oid), scope: file.id },
+        attributes: {
+          contentHash: gitContentHash(entry.oid),
+          path: entry.path,
+          ...(entry.sizeBytes === undefined ? {} : { sizeBytes: entry.sizeBytes }),
+        },
+      });
+      entities.push(version);
+
+      relationships.push(
+        emitter.relationship(
+          {
+            fromId: repositoryEntity.id,
+            type: RelationshipType.REPOSITORY_CONTAINS_FILE,
+            toId: file.id,
+            fromKind: 'repository',
+            toKind: 'file',
+          },
+          observedAt,
+        ),
+      );
+      relationships.push(
+        emitter.relationship(
+          {
+            fromId: file.id,
+            type: RelationshipType.FILE_HAS_VERSION,
+            toId: version.id,
+            fromKind: 'file',
+            toKind: 'file_version',
+            metadata: options.revision === undefined ? {} : { revision: options.revision },
+          },
+          observedAt,
+        ),
+      );
+
+      evidence.push(
+        emitter.observed({
+          subjectId: version.id,
+          field: 'attributes.contentHash',
+          statement: gitContentHash(entry.oid),
+          sourceId: entry.oid,
+          sourceContentHash: gitContentHash(entry.oid),
+          locator: { kind: 'path', detail: entry.path },
+        }),
+      );
+    }
+
+    return { entities, relationships, evidence, skipped };
+  }
+
   #gitOptions(
     repository: DiscoveredRepository,
     context: ProviderOperationContext,
@@ -923,14 +1079,6 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
 function repositoryName(repository: DiscoveredRepository): string {
   const fromKey = repository.identityKey.split('/').filter((part) => part.length > 0).pop();
   return fromKey ?? repository.root;
-}
-
-/** Lowercase extension without the dot, when the path has one. */
-function extensionOf(path: string): string | undefined {
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  const dot = name.lastIndexOf('.');
-  if (dot <= 0 || dot === name.length - 1) return undefined;
-  return name.slice(dot + 1).toLowerCase();
 }
 
 function normalizeSeparators(path: string): string {
