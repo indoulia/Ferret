@@ -49,6 +49,10 @@ export const ErrorCode = {
   ENTITY_NOT_FOUND: 'E_ENTITY_NOT_FOUND',
   /** A relationship failed validation, or names an unregistered type. */
   RELATIONSHIP_INVALID: 'E_RELATIONSHIP_INVALID',
+  /** An evidence record failed validation. */
+  EVIDENCE_INVALID: 'E_EVIDENCE_INVALID',
+  /** A stored evidence record no longer matches its integrity hash. */
+  EVIDENCE_TAMPERED: 'E_EVIDENCE_TAMPERED',
   /** The capability exists in the roadmap but is not implemented in this release. */
   NOT_IMPLEMENTED: 'E_NOT_IMPLEMENTED',
   /** The operation was interrupted by a signal. */

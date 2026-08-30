@@ -10,9 +10,10 @@ without repeatedly traversing source systems.
 > domain is delivered — core runtime and package (EPIC-001), PostgreSQL
 > bootstrap and migrations (EPIC-002), the configuration engine (EPIC-003),
 > health and diagnostics (EPIC-004), and the technology selection they rest on
-> (EPIC-005) — along with the canonical entity model (EPIC-006) and the
-> relationship and temporal model (EPIC-007). Indexing, retrieval and the MCP
-> server are defined by later Epics and are **not** implemented yet. Commands that belong to those Epics are listed in `--help` as
+> (EPIC-005) — along with the canonical knowledge model: entities (EPIC-006),
+> relationships and time (EPIC-007), and evidence and provenance (EPIC-008).
+> Indexing, retrieval and the MCP server are defined by later Epics and are
+> **not** implemented yet. Commands that belong to those Epics are listed in `--help` as
 > `(planned)` and fail with a clear error rather than doing nothing. See
 > [What works today](#what-works-today).
 
@@ -291,6 +292,9 @@ mismatch is refused as `E_SCHEMA_DRIFT` rather than silently re-applied.
 - [Relationship decisions](docs/Architecture/EPIC-007-DECISIONS.md) — bitemporal
   intervals, why exclusive relationships need a lock, and how out-of-order
   events are reconciled
+- [Evidence decisions](docs/Architecture/EPIC-008-DECISIONS.md) — why evidence is
+  immutable, why a derived fact must cite its sources, and how secrets are kept
+  out of the record
 - [Governance](docs/Governance/README.md) — the binding engineering rules
 - [Technology decisions](docs/TECHNOLOGY-DECISIONS.md) — the EPIC-005 stack
   selection and its evidence
