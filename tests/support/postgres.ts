@@ -98,7 +98,19 @@ export async function createTestDatabase(label: string): Promise<TestDatabase> {
   // DATABASE cannot take a bind parameter for the name.
   await adminPool.query(`CREATE DATABASE "${name}"`);
 
-  const pool = new Pool({ ...admin, database: name, max: 8 });
+  // Three, not eight.
+  //
+  // The suite runs many files in parallel forks, each creating its own test
+  // database and holding a pool until the file ends. At eight connections each
+  // that reaches PostgreSQL's default `max_connections` of 100, and the failure
+  // is not "too slow" but `PostgreSQL is not accepting work: Failed query:
+  // begin` — which looks like a correctness bug in whichever test drew the
+  // short straw. CI hit it on the storage job once the suite passed fifty
+  // files, and it is the most likely explanation for issue #21.
+  //
+  // No test needs eight: the concurrency suites use a handful of simultaneous
+  // statements, and a pool that queues is exactly what they are testing anyway.
+  const pool = new Pool({ ...admin, database: name, max: 3 });
   silence(pool);
 
   const env: Record<string, string> = {
@@ -154,7 +166,7 @@ function silence(pool: Pool): void {
 }
 
 /** A second, independent pool on the same database, for concurrency tests. */
-export function connectTo(database: TestDatabase, max = 4): Pool {
+export function connectTo(database: TestDatabase, max = 3): Pool {
   const pool = new Pool({
     host: database.host,
     port: database.port,

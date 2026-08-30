@@ -100,6 +100,31 @@ the belt:
 - The baseline packs with `--ignore-scripts`, because rebuilding inside the
   measurement would time the build rather than the package.
 
+### …and then CI ran out of database connections
+
+The storage job failed with what looked like a performance regression —
+`asserts a relationship in under 300 ms at p95` — and was not one:
+
+```
+FerretError: PostgreSQL is not accepting work: Failed query: begin
+```
+
+The server had no connections left. Each test database held a pool of **eight**,
+the suite runs many files in parallel forks, and at fifty files that reaches
+PostgreSQL's default `max_connections` of 100. The failure then lands on
+whichever test drew the short straw, wearing that test's name.
+
+Reduced to three per test database. No test needs eight — the concurrency suites
+use a handful of simultaneous statements, and a pool that queues is what they
+are testing anyway.
+
+This is very likely the explanation for
+[issue #21](https://github.com/indoulia/Ferret/issues/21), the intermittent that
+has appeared three times in full local runs and never in isolation: the same
+resource, the same shape, the same "correctness bug in an unrelated test"
+disguise. Recorded on the issue rather than claimed as closed, because the
+diagnostics that would prove it have not yet fired.
+
 ---
 
 ## 4. Post-deployment verification
