@@ -31,6 +31,8 @@ export const ErrorCode = {
   PROVIDER_INIT_FAILED: 'E_PROVIDER_INIT_FAILED',
   /** No registered provider offers a capability the operation needs. */
   CAPABILITY_UNAVAILABLE: 'E_CAPABILITY_UNAVAILABLE',
+  /** A pagination cursor is malformed, expired, or was issued by something else. */
+  CURSOR_INVALID: 'E_CURSOR_INVALID',
   /** The database is unreachable, refused the connection, or dropped it. */
   STORAGE_UNAVAILABLE: 'E_STORAGE_UNAVAILABLE',
   /** The database rejected an operation because the role lacks a privilege. */

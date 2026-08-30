@@ -49,6 +49,9 @@ const BY_ERROR_CODE: Readonly<Record<ErrorCode, ExitCode>> = {
   // A missing capability is an absent dependency, not a Ferret defect: the
   // remedy is to install or configure a provider that offers it.
   [ErrorCode.CAPABILITY_UNAVAILABLE]: ExitCode.DEPENDENCY,
+  // A bad cursor is a malformed request, whoever sent it: the caller passed
+  // something Ferret did not issue, which is the usage class.
+  [ErrorCode.CURSOR_INVALID]: ExitCode.USAGE,
   // An unreachable database is an unavailable external dependency, which is
   // exit code 4; a *reachable* database whose schema Ferret cannot use is a
   // distinct condition an operator resolves differently, so it gets its own.
