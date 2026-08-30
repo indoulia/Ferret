@@ -125,19 +125,29 @@ describeDb(`schema migration against real PostgreSQL (${databaseAvailable() ? 'a
     });
 
     it('migrates forward without manual SQL when a migration is added', async () => {
-      // Simulate a database one version behind by removing the newest applied
-      // record and the object it created, then letting the migrator catch up.
-      const newest = allMigrations().at(-1);
-      expect(newest).toBeDefined();
-      await db.pool.query('DELETE FROM ferret.schema_migrations WHERE version = $1', [newest?.version]);
-      await db.pool.query('DROP TABLE IF EXISTS ferret.instance');
+      // A database one version behind, built the honest way: apply every
+      // migration but the newest to a fresh database, then let the migrator
+      // catch up. Simulating it by deleting a bookkeeping row and dropping
+      // whichever object that migration happened to create would encode a fact
+      // about one migration into a test about the mechanism, and would break
+      // every time a migration was added.
+      const all = allMigrations();
+      expect(all.length).toBeGreaterThan(1);
+      const newest = all.at(-1);
 
-      const pending = await readSchemaStatus(db.pool);
-      expect(pending.pending.map((entry) => entry.version)).toStrictEqual([newest?.version]);
+      const behind = await createTestDatabase('behind');
+      try {
+        await migrate(behind.pool, { logger, migrations: all.slice(0, -1) });
 
-      const report = await migrate(db.pool, { logger });
-      expect(report.applied.map((entry) => entry.version)).toStrictEqual([newest?.version]);
-      expect(report.schemaVersion).toBe(targetSchemaVersion());
+        const pending = await readSchemaStatus(behind.pool);
+        expect(pending.pending.map((entry) => entry.version)).toStrictEqual([newest?.version]);
+
+        const report = await migrate(behind.pool, { logger });
+        expect(report.applied.map((entry) => entry.version)).toStrictEqual([newest?.version]);
+        expect(report.schemaVersion).toBe(targetSchemaVersion());
+      } finally {
+        await behind.drop();
+      }
     });
 
     it('refuses a database migrated by a newer Ferret rather than guessing', async () => {

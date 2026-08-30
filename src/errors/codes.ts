@@ -43,6 +43,10 @@ export const ErrorCode = {
   SCHEMA_UNSUPPORTED: 'E_SCHEMA_UNSUPPORTED',
   /** An applied migration no longer matches the migration this build ships. */
   SCHEMA_DRIFT: 'E_SCHEMA_DRIFT',
+  /** A canonical entity failed validation, or names an unregistered kind. */
+  ENTITY_INVALID: 'E_ENTITY_INVALID',
+  /** An entity that was expected to exist does not. */
+  ENTITY_NOT_FOUND: 'E_ENTITY_NOT_FOUND',
   /** The capability exists in the roadmap but is not implemented in this release. */
   NOT_IMPLEMENTED: 'E_NOT_IMPLEMENTED',
   /** The operation was interrupted by a signal. */

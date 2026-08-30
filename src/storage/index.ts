@@ -59,3 +59,19 @@ export {
   type StorageProviderOptions,
   type StorageReport,
 } from './provider.js';
+
+export {
+  EntityStore,
+  UpsertOutcome,
+  type FerretDatabase,
+  type UpsertResult,
+} from './entities.js';
+
+export {
+  entity,
+  entityExternalId,
+  ferret as ferretSchema,
+  type EntityExternalIdRow,
+  type EntityRow,
+  type NewEntityRow,
+} from './schema/entities.js';
