@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ExitCode } from '../../src/cli/exit-codes.js';
 import { run } from '../../src/cli/main.js';
-import { PLANNED_COMMANDS } from '../../src/cli/commands/planned.js';
+import { PLANNED_COMMANDS, plannedCommand } from '../../src/cli/commands/planned.js';
 import { VERSION } from '../../src/index.js';
 
 interface Invocation {
@@ -109,18 +109,31 @@ describe('planned commands', () => {
     },
   );
 
-  it('names the owning Epic so the response is actionable', async () => {
+  it('names the owning Epic so the response is actionable', () => {
     // `status` and `doctor` were the examples here until EPIC-004 implemented
-    // them; `mcp` is the remaining planned command.
-    const result = await invoke('mcp', '--json');
-    const payload = JSON.parse(result.stdout) as {
-      ok: boolean;
-      error: { code: string; details: { plannedIn: string[] } };
-    };
+    // them, and `mcp` until EPIC-064 did — so the list is now empty, and the
+    // parameterised cases above run zero times.
+    //
+    // The mechanism is still worth keeping and still worth testing: the honest
+    // answer to "is this coming" is better than an unknown-command error, and
+    // the next approved-but-unbuilt command will want it. So this asserts the
+    // *builder*, which is the part that would rot unnoticed.
+    const command = plannedCommand({
+      name: 'example',
+      summary: 'A command the roadmap approves and this build does not have',
+      owners: ['EPIC-999'],
+    });
 
-    expect(payload.ok).toBe(false);
-    expect(payload.error.code).toBe('E_NOT_IMPLEMENTED');
-    expect(payload.error.details.plannedIn).toContain('EPIC-064');
+    expect(command.name()).toBe('example');
+    expect(command.description()).toContain('planned');
+    expect(command.description()).toContain('EPIC-999');
+  });
+
+  it('has no planned commands left, which is the point', () => {
+    // A deliberate assertion rather than an absence. If a command is added to
+    // the planned list, the parameterised cases above start running again and
+    // this line says why.
+    expect(PLANNED_COMMANDS).toStrictEqual([]);
   });
 
   it('does nothing silently — every planned command reports its status', async () => {

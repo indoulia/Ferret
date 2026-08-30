@@ -231,6 +231,24 @@ export {
 } from './providers/index.js';
 
 export {
+  CONTENT_NOTICE,
+  ContextPackBuilder,
+  DEFAULT_BUDGET,
+  ESTIMATE_MARGIN,
+  MAX_BUDGET,
+  PACK_FORMAT_VERSION,
+  TokenBudget,
+  TruncationReason,
+  estimateJsonTokens,
+  estimateTokens,
+  renderPack,
+  type ContextPack,
+  type PackItem,
+  type PackOmission,
+  type PackRequest,
+} from './context/index.js';
+
+export {
   DEFAULT_LIMIT,
   Direction,
   HitSource,

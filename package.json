@@ -40,6 +40,10 @@
       "types": "./dist/git/index.d.ts",
       "default": "./dist/git/index.js"
     },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "default": "./dist/mcp/index.js"
+    },
     "./testing": {
       "types": "./dist/providers/sdk/testing.d.ts",
       "default": "./dist/providers/sdk/testing.js"
@@ -68,6 +72,7 @@
     "verify": "npm run lint && npm run typecheck && npm run build && npm run test"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "commander": "^15.0.0",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.23.0",

@@ -146,16 +146,16 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Context Compilation
 
-- **EPIC-059 — Context Packs** — P0
+- **EPIC-059 — Context Packs** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
 - **EPIC-060 — Answer Packs** — P0
-- **EPIC-061 — Token Budgeting** — P0
+- **EPIC-061 — Token Budgeting** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
 - **EPIC-062 — Evidence Selection** — P0
 - **EPIC-063 — Query Explanation** — P1
 
 ### AI Control Plane & MCP
 
-- **EPIC-064 — MCP Server** — P0
-- **EPIC-065 — MCP Knowledge Tools** — P0
+- **EPIC-064 — MCP Server** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
+- **EPIC-065 — MCP Knowledge Tools** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
 - **EPIC-066 — MCP Configuration Tools** — P0
 - **EPIC-067 — MCP Provider Administration** — P1
 - **EPIC-068 — AI Authorization Model** — P0

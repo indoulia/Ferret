@@ -53,7 +53,10 @@ describe('installed CLI — exit codes', () => {
     // it is a usable assertion rather than an environment-dependent one.
     [['status'], ExitCode.CONFIG],
     [['doctor'], ExitCode.CONFIG],
-    [['mcp'], ExitCode.NOT_IMPLEMENTED],
+    // EPIC-064 implemented `mcp`. With no database configured it reports an
+    // unavailable configuration and exits 3, like every other command that
+    // needs storage — it does not start serving and then fail.
+    [['mcp'], ExitCode.CONFIG],
     [['nope'], ExitCode.USAGE],
     [['version', '--bad-flag'], ExitCode.USAGE],
   ])('exits %j with code %i', async (args, expected) => {
@@ -96,11 +99,27 @@ describe('installed CLI — stream discipline', () => {
   });
 
   it('writes human errors to stderr and leaves stdout empty', async () => {
-    // `mcp` is still planned, so invoking it is a genuine error. `status` used
-    // to serve here, but EPIC-004 made it a command that succeeds at reporting.
+    // An unknown command is a genuine error and always will be. `status` served
+    // here until EPIC-004 made it succeed at reporting, and `mcp` until
+    // EPIC-064 implemented it — so this uses the one case that cannot become a
+    // success later.
+    //
+    // stdout staying empty matters more for `mcp` than for anything else:
+    // stdout *is* the MCP transport, and a single stray line corrupts it.
+    const result = await runCli(['nope']);
+    expect(result.stdout).toBe('');
+    // Commander words this one, not Ferret — an unknown command never reaches
+    // Ferret's error taxonomy. What matters here is the stream, not the code:
+    // the exit-code table above asserts that separately.
+    expect(result.stderr).toContain("unknown command 'nope'");
+  });
+
+  it('keeps stdout empty when `mcp` cannot start', async () => {
+    // The specific case the transport depends on. If Ferret ever prints its
+    // failure to stdout, an AI client reads it as a protocol message.
     const result = await runCli(['mcp']);
     expect(result.stdout).toBe('');
-    expect(result.stderr).toContain('E_NOT_IMPLEMENTED');
+    expect(result.stderr).toContain('E_CONFIG_MISSING');
   });
 });
 

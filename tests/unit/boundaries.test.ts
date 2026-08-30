@@ -92,6 +92,19 @@ const ALLOWED_CORE_PACKAGES: ReadonlySet<string> = new Set(['picomatch', 'pino',
  * reachable through `@indoulia/ferret/storage` and through the CLI, which
  * composes providers, but never from `@indoulia/ferret` itself.
  */
+/**
+ * Packages the MCP surface adds on top of the core set.
+ *
+ * EPIC-064 serves the AI control plane, and TECHNOLOGY-DECISIONS §4 selected the
+ * official SDK rather than hand-rolling the protocol. Reachable from the CLI,
+ * which composes it, and from `@indoulia/ferret/mcp` — never from the core,
+ * which the "mcp boundary" block below asserts separately.
+ */
+const MCP_PACKAGES: readonly string[] = [
+  '@modelcontextprotocol/sdk/server/mcp.js',
+  '@modelcontextprotocol/sdk/server/stdio.js',
+];
+
 const STORAGE_PACKAGES: readonly string[] = [
   'drizzle-orm',
   'drizzle-orm/node-postgres',
@@ -180,10 +193,10 @@ describe('cli entry point', () => {
     expect(graph.packages.has('commander')).toBe(true);
   });
 
-  it('adds no runtime dependency beyond commander, storage and the core set', () => {
+  it('adds no runtime dependency beyond commander, storage, MCP and the core set', () => {
     const external = [...graph.packages].filter((name) => !name.startsWith('node:'));
     expect(external.sort()).toStrictEqual(
-      ['commander', ...STORAGE_PACKAGES, ...ALLOWED_CORE_PACKAGES].sort(),
+      ['commander', ...STORAGE_PACKAGES, ...MCP_PACKAGES, ...ALLOWED_CORE_PACKAGES].sort(),
     );
   });
 });
@@ -417,3 +430,39 @@ function executorsIn(files: ReadonlySet<string>): string[] {
     .filter((file) => /['"]node:child_process['"]/.test(stripComments(readFileSync(resolve(SRC, file), 'utf8'))))
     .sort();
 }
+
+describe('mcp boundary', () => {
+  const core = importGraph('index.ts');
+  const mcp = importGraph('mcp/index.ts');
+
+  it('is not reachable from the core entry point', () => {
+    // The AI control plane is a *surface*, not the product. A consumer of
+    // `@indoulia/ferret` that never speaks MCP must not install its SDK, and a
+    // library that pulls a protocol server into every import is one nobody
+    // embeds.
+    expect([...core.files].filter((file) => file.startsWith('mcp/'))).toStrictEqual([]);
+    expect([...core.packages].some((name) => name.includes('modelcontextprotocol'))).toBe(false);
+  });
+
+  it('builds on retrieval and context, not on storage', () => {
+    // The tools answer through `RetrievalPort`, so the MCP surface has no idea
+    // PostgreSQL exists — which is what makes it testable without one.
+    expect(mcp.files).toContain('retrieval/query.ts');
+    expect(mcp.files).toContain('context/pack.ts');
+    expect([...mcp.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+  });
+
+  it('adds nothing beyond the MCP SDK and the core set', () => {
+    // A subset assertion, not an equality one: the MCP surface reaches only
+    // part of the core (it has no need of the exclusion matcher, for one), and
+    // demanding it reach all of it would make an unrelated refactor fail here.
+    // What must not happen is a *new* package appearing.
+    const allowed = new Set<string>([...MCP_PACKAGES, ...ALLOWED_CORE_PACKAGES]);
+    const unexpected = [...mcp.packages].filter(
+      (name) => !name.startsWith('node:') && !allowed.has(name),
+    );
+    expect(unexpected).toStrictEqual([]);
+    // …and the SDK is genuinely there, so this cannot pass by reaching nothing.
+    expect([...mcp.packages].some((name) => name.includes('modelcontextprotocol'))).toBe(true);
+  });
+});
