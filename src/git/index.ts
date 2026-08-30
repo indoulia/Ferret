@@ -17,6 +17,17 @@ export {
   type RepositoryIdentity,
 } from './identity.js';
 export {
+  ChangeKind,
+  MAX_COMMITS_PER_READ,
+  assertSafeRevision,
+  parseLog,
+  readHistory,
+  type CommitChange,
+  type CommitRecord,
+  type HistoryPage,
+  type ReadHistoryOptions,
+} from './history.js';
+export {
   MAX_REFS_PER_READ,
   listBranches,
   listWorktrees,

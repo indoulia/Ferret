@@ -39,6 +39,7 @@ import {
 } from '../providers/index.js';
 
 import { walkForRepositories, type RepositoryCandidate } from './discovery.js';
+import { ChangeKind, readHistory, type CommitRecord } from './history.js';
 import { listBranches, listWorktrees } from './refs.js';
 import { RepositoryIdentitySource, maskRemote, normalizeRemote, repositoryIdentity } from './identity.js';
 import { runGit } from './runner.js';
@@ -98,6 +99,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         RepositoryOperation.DESCRIBE,
         RepositoryOperation.LIST_WORKTREES,
         RepositoryOperation.LIST_BRANCHES,
+        RepositoryOperation.READ_HISTORY,
       ],
       systems: [GIT_SOURCE_SYSTEM],
       limits: {
@@ -434,6 +436,257 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     return { entities, relationships, evidence };
   }
 
+  /**
+   * Reads a page of commit history.
+   *
+   * Paged by offset. `git log --skip` walks the history to reach the offset, so
+   * this is O(offset) on a deep repository — acceptable for the first pages and
+   * wrong for the ten-thousandth. The read that actually matters for a running
+   * Ferret is the *incremental* one, `since`, which walks only what is new; a
+   * better deep-paging strategy belongs with the Epic that schedules indexing.
+   */
+  async readHistory(
+    repository: DiscoveredRepository,
+    request: { revision?: string; limit?: number; skip?: number; since?: string; withChanges?: boolean },
+    context: ProviderOperationContext,
+  ): Promise<{ commits: readonly CommitRecord[]; cursor: string | undefined }> {
+    const skip = request.skip ?? 0;
+    const page = await readHistory({
+      ...this.#gitOptions(repository, context),
+      ...(request.revision === undefined ? {} : { revision: request.revision }),
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+      ...(request.since === undefined ? {} : { since: request.since }),
+      ...(request.withChanges === undefined ? {} : { withChanges: request.withChanges }),
+      skip,
+    });
+
+    return {
+      commits: page.commits,
+      cursor: page.truncated
+        ? encodeCursor(this.id, Capability.SOURCE_REPOSITORY, { skip: skip + page.commits.length })
+        : undefined,
+    };
+  }
+
+  /**
+   * Turns commits into the graph they imply.
+   *
+   * **Commit identity is the object id, and nothing else.** A Git commit hash is
+   * a content hash of the commit object: the same commit in a fork and in its
+   * upstream is the same commit, byte for byte. Scoping it to a repository would
+   * make "which release contains the fix for FER-12" unanswerable across a fork,
+   * which is one of the questions Ferret exists to answer.
+   *
+   * Which repositories *hold* a commit is recorded as
+   * `repository_contains_commit`, which is exactly what that relationship type
+   * is for.
+   *
+   * **Developer identity is the email address, lowercased** — for now. One
+   * person commits as several addresses, and EPIC-036 resolves them; EPIC-006
+   * models `emails` as a list precisely so that resolution has somewhere to put
+   * the answer. Collapsing to one address here would destroy the evidence that
+   * resolution depends on.
+   *
+   * **File identity is the repository and the path.** A rename therefore
+   * produces a *different* file entity, and the continuity between them is the
+   * rename relationship rather than a shared id — Ferret records what Git
+   * recorded, and Git records a rename as a similarity score rather than an
+   * identity claim.
+   */
+  emitHistory(
+    repository: DiscoveredRepository,
+    commits: readonly CommitRecord[],
+    options: { observedAt?: Date } = {},
+  ): {
+    entities: readonly CanonicalEntity[];
+    relationships: readonly CanonicalRelationship[];
+    evidence: readonly CanonicalEvidence[];
+  } {
+    const emitter = this.#requireEmitter();
+    const observedAt = options.observedAt ?? new Date();
+    const repositoryEntity = this.emit(repository).entity;
+
+    const entities = new Map<string, CanonicalEntity>();
+    const relationships = new Map<string, CanonicalRelationship>();
+    const evidence: CanonicalEvidence[] = [];
+
+    const add = (entity: CanonicalEntity): CanonicalEntity => {
+      const existing = entities.get(entity.id);
+      if (existing !== undefined) return existing;
+      entities.set(entity.id, entity);
+      return entity;
+    };
+    const link = (relationship: CanonicalRelationship): void => {
+      relationships.set(relationship.id, relationship);
+    };
+
+    add(repositoryEntity);
+
+    const developerFor = (name: string, email: string): CanonicalEntity | undefined => {
+      const normalized = email.trim().toLowerCase();
+      // No address means no identity. Inventing one from a display name would
+      // merge every "unknown" author in the repository into one person.
+      if (normalized.length === 0) return undefined;
+      return add(
+        emitter.entity({
+          kind: 'developer',
+          source: { id: normalized },
+          attributes: {
+            // `name` is the canonical model's field for a human-readable name
+            // (EPIC-006). `emails` is a *list* because one person commits as
+            // several addresses and EPIC-036 resolves them — collapsing it to
+            // one would destroy the evidence resolution depends on.
+            name: name.length === 0 ? normalized : name,
+            emails: [normalized],
+          },
+        }),
+      );
+    };
+
+    const fileFor = (path: string): CanonicalEntity =>
+      add(
+        emitter.entity({
+          kind: 'file',
+          source: { id: path, scope: repositoryEntity.id },
+          attributes: { path, ...(extensionOf(path) === undefined ? {} : { extension: extensionOf(path) }) },
+        }),
+      );
+
+    for (const commit of commits) {
+      const commitEntity = add(
+        emitter.entity({
+          kind: 'commit',
+          source: { id: commit.sha },
+          attributes: {
+            sha: commit.sha,
+            message: commit.body.length === 0 ? commit.subject : commit.subject + '\n\n' + commit.body,
+            authoredAt: commit.authoredAt,
+            committedAt: commit.committedAt,
+            parents: [...commit.parents],
+            ...(commit.tree === undefined ? {} : { tree: commit.tree }),
+          },
+          sourceObservedAt: commit.committedAt,
+        }),
+      );
+
+      link(
+        emitter.relationship(
+          {
+            fromId: repositoryEntity.id,
+            type: RelationshipType.REPOSITORY_CONTAINS_COMMIT,
+            toId: commitEntity.id,
+            fromKind: 'repository',
+            toKind: 'commit',
+          },
+          observedAt,
+        ),
+      );
+
+      // A commit's valid time is a fact Git *does* know, unlike a branch's
+      // containment: the commit came into being when it was committed.
+      const committedAt = new Date(commit.committedAt);
+      const commitTime = Number.isNaN(committedAt.getTime()) ? observedAt : committedAt;
+
+      for (const parent of commit.parents) {
+        const parentEntity = add(
+          emitter.entity({ kind: 'commit', source: { id: parent }, attributes: { sha: parent } }),
+        );
+        link(
+          emitter.relationship(
+            {
+              fromId: commitEntity.id,
+              type: RelationshipType.COMMIT_PARENT_OF_COMMIT,
+              toId: parentEntity.id,
+              fromKind: 'commit',
+              toKind: 'commit',
+            },
+            commitTime,
+          ),
+        );
+      }
+
+      const author = developerFor(commit.authorName, commit.authorEmail);
+      if (author !== undefined) {
+        link(
+          emitter.relationship(
+            {
+              fromId: author.id,
+              type: RelationshipType.DEVELOPER_AUTHORED_COMMIT,
+              toId: commitEntity.id,
+              fromKind: 'developer',
+              toKind: 'commit',
+            },
+            commitTime,
+          ),
+        );
+        evidence.push(
+          emitter.about(commitEntity, 'attributes.authoredAt', commit.authoredAt, {
+            observedAt: commit.authoredAt,
+          }),
+        );
+      }
+
+      for (const change of commit.changes) {
+        const file = fileFor(change.path);
+        link(
+          emitter.relationship(
+            {
+              fromId: repositoryEntity.id,
+              type: RelationshipType.REPOSITORY_CONTAINS_FILE,
+              toId: file.id,
+              fromKind: 'repository',
+              toKind: 'file',
+            },
+            commitTime,
+          ),
+        );
+        link(
+          emitter.relationship(
+            {
+              fromId: commitEntity.id,
+              type: RelationshipType.COMMIT_MODIFIES_FILE,
+              toId: file.id,
+              fromKind: 'commit',
+              toKind: 'file',
+              metadata: {
+                change: change.kind,
+                ...(change.previousPath === undefined ? {} : { previousPath: change.previousPath }),
+                ...(change.similarity === undefined ? {} : { similarity: change.similarity }),
+              },
+            },
+            commitTime,
+          ),
+        );
+
+        // A rename touches two paths, and the old one is a file Ferret may never
+        // otherwise hear about — a file deleted in the same commit that created
+        // its successor. Recording it keeps the history traversable backwards.
+        if (change.previousPath !== undefined && change.kind === ChangeKind.RENAMED) {
+          const previous = fileFor(change.previousPath);
+          link(
+            emitter.relationship(
+              {
+                fromId: commitEntity.id,
+                type: RelationshipType.COMMIT_MODIFIES_FILE,
+                toId: previous.id,
+                fromKind: 'commit',
+                toKind: 'file',
+                metadata: { change: ChangeKind.DELETED, renamedTo: change.path },
+              },
+              commitTime,
+            ),
+          );
+        }
+      }
+    }
+
+    return {
+      entities: [...entities.values()],
+      relationships: [...relationships.values()],
+      evidence,
+    };
+  }
+
   #gitOptions(
     repository: DiscoveredRepository,
     context: ProviderOperationContext,
@@ -670,6 +923,14 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
 function repositoryName(repository: DiscoveredRepository): string {
   const fromKey = repository.identityKey.split('/').filter((part) => part.length > 0).pop();
   return fromKey ?? repository.root;
+}
+
+/** Lowercase extension without the dot, when the path has one. */
+function extensionOf(path: string): string | undefined {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0 || dot === name.length - 1) return undefined;
+  return name.slice(dot + 1).toLowerCase();
 }
 
 function normalizeSeparators(path: string): string {

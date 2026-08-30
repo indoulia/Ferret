@@ -82,8 +82,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 - **EPIC-017 — Local Repository Discovery** — P0 — VALIDATED ([spec](EPIC-017-Local-Repository-Discovery.md), [evidence](validation/EPIC-017-VALIDATION.md))
 - **EPIC-018 — Branch & Worktree Discovery** — P0 — VALIDATED ([spec](EPIC-018-Branch-Worktree-Discovery.md), [evidence](validation/EPIC-018-VALIDATION.md))
-- **EPIC-019 — Git History Ingestion** — P0
-- **EPIC-020 — Commit & Reference Modeling** — P0
+- **EPIC-019 — Git History Ingestion** — P0 — VALIDATED ([spec](EPIC-019-Git-History-Ingestion.md), [evidence](validation/EPIC-019-020-VALIDATION.md))
+- **EPIC-020 — Commit & Reference Modeling** — P0 — VALIDATED ([spec](EPIC-020-Commit-Reference-Modeling.md), [evidence](validation/EPIC-019-020-VALIDATION.md))
 - **EPIC-021 — GitHub Provider** — P1
 
 ### File Intelligence
