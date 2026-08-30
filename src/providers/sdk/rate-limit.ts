@@ -279,9 +279,14 @@ export class RateLimiter {
       this.#timer = undefined;
       this.#drain();
     }, waitMs);
-    // A pending refill must not keep the process alive; if nothing else is
-    // running, there is nobody left to serve.
-    this.#timer.unref?.();
+    // Deliberately **not** unref'd. This timer is only ever scheduled when a
+    // caller is waiting, and an awaited promise does not keep the event loop
+    // alive by itself — so unref'ing it lets a process whose only outstanding
+    // work is a rate-limited request exit with that request unresolved.
+    // Silently, and only when the limiter is actually doing its job.
+    //
+    // The timer is cleared the moment the queue empties, so an idle limiter
+    // holds nothing.
   }
 
   #clearTimer(): void {

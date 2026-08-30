@@ -165,9 +165,26 @@ describe('package contents', () => {
   });
 
   it('stays small enough to install quickly', () => {
-    // A regression baseline, not a tuned target: the runtime is ~50 kB of
-    // JavaScript, so anything approaching a megabyte means something leaked in.
-    expect(pack.unpackedSize).toBeLessThan(1_000_000);
+    // A coarse backstop against *leakage* — a dependency bundled by accident,
+    // a fixture directory shipped, sources included by mistake — not a tuned
+    // target. The precise assertions are elsewhere in this file: the tarball
+    // contains exactly the files it declared, and nothing secret-shaped.
+    //
+    // EPIC-001 set this at 1 MB when the package was a CLI skeleton over ~50 kB
+    // of JavaScript. It now ships the canonical model, a storage provider, the
+    // provider SDK and a Git provider, and it will ship more. Raised to 2 MB
+    // rather than nudged each Epic, which would make it a number nobody trusts.
+    expect(pack.unpackedSize).toBeLessThan(2_000_000);
+  });
+
+  it('does not ship a source map that points at files it does not contain', () => {
+    // Declaration maps let an editor jump from a `.d.ts` into the original
+    // TypeScript. The sources are deliberately not published, so shipping the
+    // maps meant every one of them referenced a path that did not exist —
+    // strictly worse than having none, because resolution fails instead of
+    // falling back to the declaration.
+    const maps = pack.files.filter((file) => file.path.endsWith('.map'));
+    expect(maps).toStrictEqual([]);
   });
 });
 

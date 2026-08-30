@@ -1,4 +1,4 @@
-import type { Page, ProviderOperationContext } from '../sdk/operation.js';
+import type { Page, PageRequest, ProviderOperationContext } from '../sdk/operation.js';
 
 /**
  * The `source.repository` capability interface.
@@ -135,10 +135,72 @@ export interface RepositoryDiscoveryResult extends Page<DiscoveredRepository> {
   readonly directoriesVisited: number;
 }
 
+/**
+ * One checkout of a repository.
+ *
+ * Governance §9 keeps this separate from both the repository and the branch. A
+ * developer with four worktrees of one clone is working on four branches at
+ * once, and a model that stores "the current branch" against the repository can
+ * represent exactly one of them — which is the difference between answering
+ * *"what was I working on"* and *"what is checked out right now"*.
+ */
+export interface DiscoveredWorktree {
+  /** Absolute path of the checkout, as Git records it. */
+  readonly path: string;
+  /** Commit `HEAD` resolves to here, when the worktree has one. */
+  readonly headCommit: string | undefined;
+  /** The ref checked out here, absent when detached or bare. */
+  readonly ref: string | undefined;
+  readonly detached: boolean;
+  readonly bare: boolean;
+  /**
+   * The repository's original working directory.
+   *
+   * A linked worktree can be removed; the primary one cannot. Git reports it
+   * first, which is the only reason Ferret can tell them apart.
+   */
+  readonly primary: boolean;
+  readonly locked: boolean;
+  readonly lockReason: string | undefined;
+  /** Git considers this worktree removable — usually its directory is gone. */
+  readonly prunable: boolean;
+  readonly prunableReason: string | undefined;
+}
+
+/** A local branch. */
+export interface DiscoveredBranch {
+  /** Full ref name, e.g. `refs/heads/main`. */
+  readonly ref: string;
+  /** The part after `refs/heads/`. */
+  readonly shortName: string;
+  /** Commit the ref currently points at. */
+  readonly headCommit: string;
+  /** The ref it tracks, e.g. `refs/remotes/origin/main`. */
+  readonly upstream: string | undefined;
+  /** Checked out in the worktree that was read. */
+  readonly isHead: boolean;
+  /**
+   * The ref a fresh clone would check out.
+   *
+   * From `refs/remotes/origin/HEAD`, which is what a clone records — not from
+   * the local `HEAD`, which only says what this checkout happens to be on.
+   * Frequently unknown, and reported as unknown rather than guessed: assuming
+   * `main` is wrong for every repository that predates 2020.
+   */
+  readonly isDefault: boolean;
+}
+
+export interface BranchPage extends Page<DiscoveredBranch> {
+  /** The default ref, when the repository records one. */
+  readonly defaultRef: string | undefined;
+}
+
 /** Operation names, for a provider declaring partial support (EPIC-011 AC-4). */
 export const RepositoryOperation = {
   DISCOVER: 'discoverRepositories',
   DESCRIBE: 'describeRepository',
+  LIST_WORKTREES: 'listWorktrees',
+  LIST_BRANCHES: 'listBranches',
 } as const;
 
 export type RepositoryOperation =
@@ -162,4 +224,22 @@ export interface RepositorySource {
     root: string,
     context: ProviderOperationContext,
   ): Promise<DiscoveredRepository>;
+
+  /**
+   * Every checkout of a repository, primary first.
+   *
+   * Takes the repository rather than a path because a linked worktree and its
+   * primary share one repository, and asking either of them the question must
+   * give the same answer.
+   */
+  listWorktrees(
+    repository: DiscoveredRepository,
+    context: ProviderOperationContext,
+  ): Promise<readonly DiscoveredWorktree[]>;
+
+  listBranches(
+    repository: DiscoveredRepository,
+    request: PageRequest,
+    context: ProviderOperationContext,
+  ): Promise<BranchPage>;
 }

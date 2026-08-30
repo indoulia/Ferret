@@ -1,7 +1,12 @@
 import { isAbsolute, resolve } from 'node:path';
 
 import { effectiveExclusions, type ExclusionRule } from '../config/index.js';
-import type { CanonicalEntity, CanonicalEvidence } from '../domain/index.js';
+import {
+  RelationshipType,
+  type CanonicalEntity,
+  type CanonicalEvidence,
+  type CanonicalRelationship,
+} from '../domain/index.js';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import { VERSION } from '../version.js';
@@ -9,7 +14,10 @@ import {
   RepositoryIdentityKind,
   RepositoryOperation,
   SkipReason,
+  type BranchPage,
+  type DiscoveredBranch,
   type DiscoveredRepository,
+  type DiscoveredWorktree,
   type RepositoryDiscoveryRequest,
   type RepositoryDiscoveryResult,
   type RepositoryRemote,
@@ -25,11 +33,13 @@ import {
   decodeCursor,
   encodeCursor,
   type CapabilityDeclaration,
+  type PageRequest,
   type ProviderContext,
   type ProviderOperationContext,
 } from '../providers/index.js';
 
 import { walkForRepositories, type RepositoryCandidate } from './discovery.js';
+import { listBranches, listWorktrees } from './refs.js';
 import { RepositoryIdentitySource, maskRemote, normalizeRemote, repositoryIdentity } from './identity.js';
 import { runGit } from './runner.js';
 
@@ -83,7 +93,12 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     {
       capability: Capability.SOURCE_REPOSITORY,
       version: CAPABILITY_VERSIONS[Capability.SOURCE_REPOSITORY],
-      operations: [RepositoryOperation.DISCOVER, RepositoryOperation.DESCRIBE],
+      operations: [
+        RepositoryOperation.DISCOVER,
+        RepositoryOperation.DESCRIBE,
+        RepositoryOperation.LIST_WORKTREES,
+        RepositoryOperation.LIST_BRANCHES,
+      ],
       systems: [GIT_SOURCE_SYSTEM],
       limits: {
         supportsPagination: true,
@@ -222,6 +237,213 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       });
     }
     return this.#describe({ path: resolve(root), gitLink: false, bareCandidate: false }, context);
+  }
+
+  /**
+   * Every checkout of a repository, primary first.
+   *
+   * Asked of the **common** Git directory, not of whichever worktree happened to
+   * be discovered: a linked worktree and its primary share one repository, and
+   * asking either of them must give the same answer or the graph disagrees with
+   * itself depending on which directory a walk reached first.
+   */
+  async listWorktrees(
+    repository: DiscoveredRepository,
+    context: ProviderOperationContext,
+  ): Promise<readonly DiscoveredWorktree[]> {
+    return listWorktrees(this.#gitOptions(repository, context));
+  }
+
+  /**
+   * Local branches, sorted by ref name so paging is stable.
+   *
+   * Offset paging rather than a ref-name cursor. Refs are read in one bounded
+   * call and sorted by Git itself, so an offset is exactly the position in that
+   * ordering — and unlike a name it stays meaningful when the branch it pointed
+   * at is deleted between pages.
+   */
+  async listBranches(
+    repository: DiscoveredRepository,
+    request: PageRequest,
+    context: ProviderOperationContext,
+  ): Promise<BranchPage> {
+    const offset =
+      request.cursor === undefined
+        ? 0
+        : decodeCursor(this.id, Capability.SOURCE_REPOSITORY, request.cursor, (state) => {
+            const value = (state as { offset?: unknown } | null)?.offset;
+            if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+              throw new Error('not a branch cursor');
+            }
+            return value;
+          });
+
+    const listing = await listBranches({
+      ...this.#gitOptions(repository, context),
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+      offset,
+    });
+
+    return {
+      items: listing.branches,
+      cursor: listing.truncated
+        ? encodeCursor(this.id, Capability.SOURCE_REPOSITORY, { offset: offset + listing.branches.length })
+        : undefined,
+      defaultRef: listing.defaultRef,
+    };
+  }
+
+  /**
+   * Emits a repository together with its checkouts and its branches.
+   *
+   * One method rather than three, because the *relationships* are the point.
+   * A worktree entity that nobody connected to its repository, and a branch
+   * entity that nobody connected to the worktree that has it checked out, are
+   * three disconnected facts where Governance §9 asked for a graph.
+   *
+   * `worktree_checks_out_branch` is declared exclusive from the worktree
+   * (EPIC-007): a checkout is on one branch at a time, and the reconciliation
+   * that enforces it is the reason switching branches produces history rather
+   * than a contradiction.
+   */
+  emitGraph(
+    repository: DiscoveredRepository,
+    parts: {
+      worktrees?: readonly DiscoveredWorktree[];
+      branches?: readonly DiscoveredBranch[];
+      /**
+       * When this observation was made.
+       *
+       * Explicit, and threaded through every relationship in the graph, because
+       * `validFrom` is part of a relationship's identity (EPIC-007). Letting it
+       * default per call would mint a different id for every edge in a single
+       * emission, so a graph read in one pass would not even be internally
+       * consistent — let alone idempotent.
+       *
+       * Git cannot say when a branch came to be contained by its repository, so
+       * this is Ferret's observation time rather than a valid time it knows.
+       * Governance §6: that distinction is recorded rather than smoothed over.
+       */
+      observedAt?: Date;
+    } = {},
+  ): {
+    entities: readonly CanonicalEntity[];
+    relationships: readonly CanonicalRelationship[];
+    evidence: readonly CanonicalEvidence[];
+  } {
+    const emitter = this.#requireEmitter();
+    const observedAt = parts.observedAt ?? new Date();
+    const { entity: repositoryEntity, evidence: repositoryEvidence } = this.emit(repository);
+
+    const entities: CanonicalEntity[] = [repositoryEntity];
+    const relationships: CanonicalRelationship[] = [];
+    const evidence: CanonicalEvidence[] = [...repositoryEvidence];
+
+    const branchByRef = new Map<string, CanonicalEntity>();
+
+    for (const branch of parts.branches ?? []) {
+      const entity = emitter.entity({
+        kind: 'branch',
+        // Scoped to the repository: `main` means nothing on its own, and two
+        // repositories' `main` branches are different objects.
+        source: { id: branch.ref, scope: repositoryEntity.id },
+        attributes: {
+          ref: branch.ref,
+          shortName: branch.shortName,
+          headCommit: branch.headCommit,
+          isDefault: branch.isDefault,
+        },
+        unknownFields: branch.upstream === undefined ? {} : { upstream: branch.upstream },
+      });
+      entities.push(entity);
+      branchByRef.set(branch.ref, entity);
+      relationships.push(
+        emitter.relationship(
+          {
+            fromId: repositoryEntity.id,
+            type: RelationshipType.REPOSITORY_CONTAINS_BRANCH,
+            toId: entity.id,
+            fromKind: 'repository',
+            toKind: 'branch',
+          },
+          observedAt,
+        ),
+      );
+      evidence.push(emitter.about(entity, 'attributes.headCommit', branch.headCommit));
+    }
+
+    for (const worktree of parts.worktrees ?? []) {
+      const entity = emitter.entity({
+        kind: 'worktree',
+        source: { id: normalizeSeparators(worktree.path), scope: repositoryEntity.id },
+        attributes: {
+          path: worktree.path,
+          isDetached: worktree.detached,
+          isPrimary: worktree.primary,
+          isLocked: worktree.locked,
+          ...(worktree.ref === undefined ? {} : { ref: worktree.ref }),
+        },
+        unknownFields: {
+          ...(worktree.headCommit === undefined ? {} : { headCommit: worktree.headCommit }),
+          ...(worktree.lockReason === undefined ? {} : { lockReason: worktree.lockReason }),
+          ...(worktree.prunable ? { prunable: true } : {}),
+          ...(worktree.prunableReason === undefined ? {} : { prunableReason: worktree.prunableReason }),
+          bare: worktree.bare,
+        },
+      });
+      entities.push(entity);
+      relationships.push(
+        emitter.relationship(
+          {
+            fromId: repositoryEntity.id,
+            type: RelationshipType.REPOSITORY_CONTAINS_WORKTREE,
+            toId: entity.id,
+            fromKind: 'repository',
+            toKind: 'worktree',
+          },
+          observedAt,
+        ),
+      );
+      evidence.push(
+        emitter.about(entity, 'attributes.path', worktree.path, {
+          locator: { kind: 'path', detail: worktree.path },
+        }),
+      );
+
+      // Only when the branch is one Ferret also emitted. A detached HEAD has no
+      // branch, and a worktree on a ref outside `refs/heads/` is not on a branch
+      // in the sense this relationship means — inventing an endpoint for either
+      // would be manufacturing certainty (Governance §6).
+      const branchEntity = worktree.ref === undefined ? undefined : branchByRef.get(worktree.ref);
+      if (branchEntity !== undefined) {
+        relationships.push(
+          emitter.relationship(
+            {
+              fromId: entity.id,
+              type: RelationshipType.WORKTREE_CHECKS_OUT_BRANCH,
+              toId: branchEntity.id,
+              fromKind: 'worktree',
+              toKind: 'branch',
+            },
+            observedAt,
+          ),
+        );
+      }
+    }
+
+    return { entities, relationships, evidence };
+  }
+
+  #gitOptions(
+    repository: DiscoveredRepository,
+    context: ProviderOperationContext,
+  ): { cwd: string; signal: AbortSignal; logger: ProviderOperationContext['logger']; timeoutMs?: number } {
+    return {
+      cwd: repository.commonGitDir,
+      signal: context.signal,
+      logger: context.logger,
+      ...(this.#options.gitTimeoutMs === undefined ? {} : { timeoutMs: this.#options.gitTimeoutMs }),
+    };
   }
 
   /**
