@@ -15,8 +15,9 @@ conversation.
 **Objective:** Deliver the minimal installable Ferret runtime and a stable
 application boundary that later Epics extend without breaking.
 
-**Branch:** `feat/epic-001-core-runtime`, cut from `main` at `890aa49`
-("EPIC-005: Technology Evaluation & Selection").
+**Branch:** `feat/epic-001-core-runtime`, cut from `main` at `890aa49`.
+**Merged:** PR #2, squashed to `main` as `4cbead2`.
+**Epic status:** VALIDATED (not DONE — see Blockers).
 
 ---
 
@@ -131,7 +132,11 @@ Recorded in full in `docs/Architecture/EPIC-001-DECISIONS.md`:
 
 ## Blockers
 
-None.
+None for implementation. One item needs a product decision before the Epic can
+move to DONE: AC-1 is written as `npm install -g ferret`, but that unscoped npm
+name is permanently unobtainable, so the package ships as `@indoulia/ferret`
+with the binary `ferret`. The criterion's substance is delivered and evidenced
+(D-001); ratifying the deviation is EPIC-102's call, not the implementation's.
 
 ## Known limitations
 
