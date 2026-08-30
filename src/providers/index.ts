@@ -26,5 +26,16 @@ export {
   type ProviderContext,
   type ProviderDescriptor,
 } from './contract.js';
+export {
+  RepositoryIdentityKind,
+  RepositoryOperation,
+  SkipReason,
+  type DiscoveredRepository,
+  type RepositoryDiscoveryRequest,
+  type RepositoryDiscoveryResult,
+  type RepositoryRemote,
+  type RepositorySource,
+  type SkippedPath,
+} from './contracts/source-repository.js';
 export { ProviderRegistry } from './registry.js';
 export * from './sdk/index.js';
