@@ -1,98 +1,232 @@
-# Ferret Functional Epics
+# Ferret Functional Epic Registry
 
 **Status: APPROVED**  
-**Registry Version: 2.0**  
+**Registry Version: 3.0**  
 **Effective: 2026-08-30**
 
 ## Purpose
 
-This registry defines the implementation-level Epics for Ferret. The former 12 broad entries are strategic domains, not implementation Epics. Implementation Epics are deliberately smaller functional capabilities so that each can be independently planned, implemented, tested, validated, tracked, and completed.
+This registry is the authoritative delivery map for Ferret. Strategic Domains organize the product; **Functional Epics are the unit of implementation, testing, validation, and completion**.
 
-## Definition of an Epic
-
-One Epic represents one independently meaningful capability with a bounded objective, explicit non-scope, dependencies, acceptance criteria, test expectations, and Definition of Done.
-
-An Epic must be large enough to deliver meaningful value and small enough to reach `DONE` without hiding unrelated unfinished work.
+An Epic is intentionally small enough to have a coherent outcome, independently testable acceptance criteria, and a meaningful Definition of Done. There is no fixed target number of Epics.
 
 ## Lifecycle
 
-`PROPOSED → REVIEWED → APPROVED → READY → IN PROGRESS → BLOCKED/IMPLEMENTED → VALIDATING → VALIDATED → DONE`
+`PROPOSED → REVIEWED → APPROVED → READY → IN_PROGRESS → BLOCKED → IMPLEMENTED → VALIDATING → VALIDATED → DONE`
 
-## Approved functional Epics
+## Epic rules
+
+- Every Functional Epic has one coherent capability outcome.
+- Every Epic has explicit scope and non-scope.
+- Every Epic has dependencies and objective acceptance criteria.
+- Tests are part of the Epic, not follow-up work.
+- An Epic cannot be DONE on code existence alone.
+- Material scope expansion creates or updates an Epic explicitly.
+- Do not split capabilities artificially merely to increase Epic count.
+- Do not combine unrelated capabilities merely to reduce Epic count.
+- Provider-specific work remains behind provider contracts.
+- Governance is authoritative over Epic implementation.
+
+## Approved strategic domains
+
+1. Foundation & Runtime
+2. Configuration & Provisioning
+3. Canonical Knowledge Model
+4. Provider Platform
+5. Source Discovery & Git
+6. File Intelligence
+7. Code Intelligence
+8. Engineering Context
+9. Session & Agent Memory
+10. Evidence & Provenance
+11. Knowledge Graph & Relationships
+12. Search & Retrieval
+13. Context Compilation
+14. AI Control Plane & MCP
+15. External Project Knowledge
+16. Synchronization & Reconciliation
+17. Security & Authorization
+18. Storage & Data Lifecycle
+19. Reliability & Operations
+20. Evaluation & Quality
+21. Distribution & Developer Experience
+
+## Approved functional Epic catalog
 
 ### Foundation & Runtime
-- **EPIC-001 — Core Runtime & Package** — P0 — installable Ferret runtime and package boundary.
-- **EPIC-002 — Database Bootstrap & Migrations** — P0 — automatic schema provisioning and safe migrations.
-- **EPIC-003 — Configuration Engine** — P0 — minimal configuration, precedence, persistence, and validation.
-- **EPIC-004 — Runtime Health & Diagnostics** — P0 — status, doctor, structured errors, and operational diagnostics.
 
-### Canonical Knowledge
-- **EPIC-005 — Canonical Entity Model** — P0 — provider-neutral entities and identifiers.
-- **EPIC-006 — Relationships & Temporal Model** — P0 — typed relationships and historical state.
-- **EPIC-007 — Evidence & Provenance Model** — P0 — source evidence, provenance, authority, and derivation.
-- **EPIC-008 — Identity & Scope Model** — P0 — developers, agents, repositories, worktrees, and scopes.
+- **EPIC-001 — Core Runtime & Package** — P0
+- **EPIC-002 — Database Bootstrap & Migrations** — P0
+- **EPIC-003 — Configuration Engine** — P0
+- **EPIC-004 — Runtime Health & Diagnostics** — P0
+- **EPIC-005 — Technology Evaluation & Selection** — P0
+
+### Canonical Knowledge Model
+
+- **EPIC-006 — Canonical Entity Model** — P0
+- **EPIC-007 — Relationship & Temporal Model** — P0
+- **EPIC-008 — Evidence & Provenance Model** — P0
+- **EPIC-009 — Identity & Scope Model** — P0
+- **EPIC-010 — Schema Versioning & Compatibility** — P0
 
 ### Provider Platform
-- **EPIC-009 — Provider SDK & Contracts** — P0 — stable provider interfaces and conformance contracts.
-- **EPIC-010 — Provider Registry & Lifecycle** — P0 — discovery, enablement, health, compatibility, and isolation.
-- **EPIC-011 — Provider Configuration & Secrets** — P0 — secure, AI-manageable provider configuration.
+
+- **EPIC-011 — Provider Contracts** — P0
+- **EPIC-012 — Provider SDK** — P0
+- **EPIC-013 — Provider Registry & Discovery** — P0
+- **EPIC-014 — Provider Lifecycle & Health** — P1
+- **EPIC-015 — Provider Configuration & Secrets** — P0
+- **EPIC-016 — Provider Conformance Testing** — P0
 
 ### Source Discovery & Git
-- **EPIC-012 — Local Repository Discovery** — P0 — automatic repository and worktree discovery.
-- **EPIC-013 — Git History Provider** — P0 — commits, branches, tags, and historical Git state.
-- **EPIC-014 — GitHub Provider** — P1 — repositories, PRs, reviews, issues, releases, and relationships.
+
+- **EPIC-017 — Local Repository Discovery** — P0
+- **EPIC-018 — Branch & Worktree Discovery** — P0
+- **EPIC-019 — Git History Ingestion** — P0
+- **EPIC-020 — Commit & Reference Modeling** — P0
+- **EPIC-021 — GitHub Provider** — P1
 
 ### File Intelligence
-- **EPIC-015 — File Discovery & Identity** — P0 — file identity, metadata, hashes, and lifecycle.
-- **EPIC-016 — Parser Framework** — P0 — pluggable parser selection and normalized extraction.
-- **EPIC-017 — Code Intelligence** — P0 — AST/symbol-aware code indexing using mature tooling.
-- **EPIC-018 — Document Intelligence** — P1 — PDF, DOCX, Markdown, and text structure/provenance.
-- **EPIC-019 — Spreadsheet Intelligence** — P1 — XLSX/CSV structure, sheets, tables, cells, and formulas.
-- **EPIC-020 — Incremental Indexing & Deduplication** — P0 — hash-based incremental processing and idempotency.
-- **EPIC-021 — Index Lifecycle & Recovery** — P1 — tombstones, rebuilds, parser versions, and integrity recovery.
+
+- **EPIC-022 — File Discovery** — P0
+- **EPIC-023 — File Identity & Content Hashing** — P0
+- **EPIC-024 — Parser Framework** — P0
+- **EPIC-025 — Code File Parsing** — P0
+- **EPIC-026 — PDF Intelligence** — P1
+- **EPIC-027 — Office Document Intelligence** — P1
+- **EPIC-028 — Spreadsheet Intelligence** — P1
+- **EPIC-029 — Text & Markdown Intelligence** — P1
+- **EPIC-030 — File Structure & Metadata** — P0
+- **EPIC-031 — Incremental Indexing** — P0
+- **EPIC-032 — Index Lifecycle & Tombstones** — P0
+
+### Code Intelligence
+
+- **EPIC-033 — AST Model** — P0
+- **EPIC-034 — Symbol Index** — P0
+- **EPIC-035 — Reference & Relationship Index** — P1
 
 ### Engineering Context
-- **EPIC-022 — Session Capture** — P0 — durable AI session state and activity context.
-- **EPIC-023 — Checkpoints & Session Recovery** — P0 — resumable work context without transcript replay.
-- **EPIC-024 — Decisions & Engineering Memory** — P1 — durable decisions, assumptions, problems, and solutions.
 
-### Retrieval & Context
-- **EPIC-025 — Query Understanding & Entity Resolution** — P0 — turn natural language into structured retrieval intent.
-- **EPIC-026 — Hybrid Search** — P0 — structured, full-text, semantic, and relationship retrieval.
-- **EPIC-027 — Ranking, Freshness & Authority** — P0 — evidence-aware ranking and conflict handling.
-- **EPIC-028 — Context Pack Compiler** — P0 — compact token-efficient context for AI clients.
-- **EPIC-029 — Evidence-backed Answer Support** — P0 — provenance, confidence, completeness, and explainability.
+- **EPIC-036 — Developer Identity** — P0
+- **EPIC-037 — Repository Context** — P0
+- **EPIC-038 — Worktree Context** — P0
 
-### AI Control Plane
-- **EPIC-030 — MCP Server & Capability Discovery** — P0 — standard AI interface and self-description.
-- **EPIC-031 — AI Configuration Control Plane** — P0 — configuration and administration through AI.
-- **EPIC-032 — AI Authorization & Confirmation** — P0 — permission classes and destructive-operation safeguards.
+### Session & Agent Memory
+
+- **EPIC-039 — Session Model** — P0
+- **EPIC-040 — Session Capture** — P0
+- **EPIC-041 — Durable Checkpoints** — P0
+- **EPIC-042 — Decision & Engineering Memory** — P1
+- **EPIC-043 — Session Recovery** — P1
+
+### Evidence & Provenance
+
+- **EPIC-044 — Evidence Store** — P0
+- **EPIC-045 — Source Authority** — P0
+- **EPIC-046 — Confidence & Completeness** — P1
+- **EPIC-047 — Conflict Detection** — P1
+- **EPIC-048 — Answer Traceability** — P0
+
+### Knowledge Graph & Relationships
+
+- **EPIC-049 — Relationship Storage** — P0
+- **EPIC-050 — Relationship Traversal** — P1
+- **EPIC-051 — Cross-Source Entity Resolution** — P1
+
+### Search & Retrieval
+
+- **EPIC-052 — Exact Structured Retrieval** — P0
+- **EPIC-053 — Full-Text Retrieval** — P0
+- **EPIC-054 — Semantic Retrieval** — P1
+- **EPIC-055 — Hybrid Query Planner** — P0
+- **EPIC-056 — Ranking & Reranking** — P1
+- **EPIC-057 — Freshness & Authority Ranking** — P1
+- **EPIC-058 — Permission-Aware Retrieval** — P0
+
+### Context Compilation
+
+- **EPIC-059 — Context Packs** — P0
+- **EPIC-060 — Answer Packs** — P0
+- **EPIC-061 — Token Budgeting** — P0
+- **EPIC-062 — Evidence Selection** — P0
+- **EPIC-063 — Query Explanation** — P1
+
+### AI Control Plane & MCP
+
+- **EPIC-064 — MCP Server** — P0
+- **EPIC-065 — MCP Knowledge Tools** — P0
+- **EPIC-066 — MCP Configuration Tools** — P0
+- **EPIC-067 — MCP Provider Administration** — P1
+- **EPIC-068 — AI Authorization Model** — P0
+- **EPIC-069 — Destructive Operation Confirmation** — P0
+- **EPIC-070 — AI Client Capability Discovery** — P1
 
 ### External Project Knowledge
-- **EPIC-033 — Jira Provider** — P1 — issues, comments, status history, releases, and relationships.
-- **EPIC-034 — External Provider Framework Extensions** — P2 — patterns enabling Slack, CI/CD, PM, and future systems.
 
-### Reliability, Security & Quality
-- **EPIC-035 — Synchronization & Reconciliation** — P1 — cursors, retries, event processing, and convergence.
-- **EPIC-036 — Security & Secret Protection** — P0 — access boundaries, secret exclusion, and prompt-injection resistance.
-- **EPIC-037 — Observability & Audit** — P1 — logs, metrics, tracing, provider state, and auditability.
-- **EPIC-038 — Evaluation & Quality Gates** — P0 — golden datasets, parser fixtures, retrieval metrics, and release gates.
+- **EPIC-071 — Jira Provider** — P1
+- **EPIC-072 — Pull Request & Review Modeling** — P1
+- **EPIC-073 — Release & Deployment Modeling** — P1
+- **EPIC-074 — External Provider Extension Framework** — P2
 
-### Distribution
-- **EPIC-039 — NPM Distribution & Upgrade** — P1 — global installation, upgrades, compatibility, and packaging.
-- **EPIC-040 — AI Client Onboarding** — P1 — generated MCP/client instructions and zero-friction onboarding.
+### Synchronization & Reconciliation
 
-## Strategic domains
+- **EPIC-075 — Sync Cursor Management** — P0
+- **EPIC-076 — Incremental Source Synchronization** — P0
+- **EPIC-077 — Event & Webhook Ingestion** — P1
+- **EPIC-078 — Periodic Reconciliation** — P1
+- **EPIC-079 — Retry & Backoff** — P0
+- **EPIC-080 — Idempotent Ingestion** — P0
 
-The old broad categories remain useful as architecture domains, but they are no longer implementation tracking units. The functional Epics above may cross domain boundaries only through explicit contracts.
+### Security & Authorization
+
+- **EPIC-081 — Credential Isolation** — P0
+- **EPIC-082 — Secret Detection & Exclusion** — P0
+- **EPIC-083 — Authorization Enforcement** — P0
+- **EPIC-084 — Prompt-Injection Resistance** — P0
+- **EPIC-085 — Audit Events** — P1
+
+### Storage & Data Lifecycle
+
+- **EPIC-086 — PostgreSQL Storage Layer** — P0
+- **EPIC-087 — Deduplicated Content Storage** — P0
+- **EPIC-088 — Retention & Exclusion Policies** — P1
+- **EPIC-089 — Backup & Export** — P1
+- **EPIC-090 — Data Import & Recovery** — P1
+
+### Reliability & Operations
+
+- **EPIC-091 — Structured Logging** — P0
+- **EPIC-092 — Metrics & Tracing** — P1
+- **EPIC-093 — Provider Failure Isolation** — P0
+- **EPIC-094 — Index Integrity & Recovery** — P0
+- **EPIC-095 — Operational Diagnostics** — P0
+
+### Evaluation & Quality
+
+- **EPIC-096 — Golden Evaluation Dataset** — P0
+- **EPIC-097 — Parser Quality Harness** — P0
+- **EPIC-098 — Retrieval Quality Harness** — P0
+- **EPIC-099 — Provider Conformance Harness** — P0
+- **EPIC-100 — Security Regression Suite** — P0
+- **EPIC-101 — Performance & Scale Benchmarks** — P1
+
+### Distribution & Developer Experience
+
+- **EPIC-102 — NPM Distribution** — P0
+- **EPIC-103 — Global CLI** — P0
+- **EPIC-104 — AI Client Onboarding** — P0
+- **EPIC-105 — Cross-Platform Packaging** — P1
+- **EPIC-106 — Upgrade & Migration UX** — P1
+- **EPIC-107 — Docker Distribution** — P2
 
 ## Dependency baseline
 
-The primary dependency direction is:
+The broad delivery direction is:
 
-**001/002/003 → 005/006/007/008 → 009/010/011 → 012/013/015/016 → 017/018/019/020/021 → 022/023/024 → 025/026/027/028/029 → 030/031/032 → 014/033/034/035/036/037/038 → 039/040**
+**Foundation → Configuration → Technology Evaluation → Canonical Model → Provider Platform → Source/File/Context → Indexing → Retrieval → Context Compilation → MCP → External Providers → Security/Reliability/Quality → Distribution.**
 
-This is a dependency guide, not a prohibition on parallel work.
+Individual Epics may proceed in parallel when their contracts and dependencies permit.
 
 ## Epic Definition of Done
 
@@ -100,9 +234,9 @@ An Epic is `DONE` only when:
 
 - scope is implemented;
 - all acceptance criteria are satisfied;
-- unit/integration tests exist where applicable;
+- applicable unit/integration tests exist and pass;
 - failure and boundary cases are tested;
-- security implications are tested;
+- security implications are addressed;
 - observability is adequate;
 - documentation is updated;
 - governance is satisfied;
@@ -110,10 +244,6 @@ An Epic is `DONE` only when:
 - no known blocker remains;
 - validation evidence is recorded.
 
-## Scope discipline
-
-Do not expand an approved Epic silently. If a capability becomes independently valuable or independently testable, create a new Epic. Do not create artificial Epics merely to inflate tracking granularity.
-
 ## Approval
 
-**APPROVED.** Registry v2.0 supersedes the previous 12-entry implementation registry. The previous entries remain useful as strategic domains but are no longer the unit of implementation tracking.
+**APPROVED.** Registry v3.0 supersedes previous Epic registries. The catalog is intentionally functional rather than fixed-size; additional Epics may be introduced through normal governance when a capability warrants independent tracking.
