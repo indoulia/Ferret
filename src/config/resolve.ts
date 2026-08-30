@@ -3,13 +3,14 @@ import type { z } from 'zod';
 import { ErrorCode, FerretError, REDACTED, isSecretKey } from '../errors/index.js';
 
 import { ferretConfigSchema, type FerretConfig } from './schema.js';
+import { isSecretRef, resolveSecrets } from './secret-ref.js';
 
 /**
  * A layer of configuration input.
  *
- * EPIC-001 ships only defaults and environment variables. EPIC-003 adds file,
- * repository-policy and session-scope sources by implementing this interface;
- * the runtime does not change when it does.
+ * Every source is a fragment plus a precedence. Adding a layer — a file, a
+ * repository policy, a session scope — is implementing this interface; the
+ * runtime does not change when one is added.
  */
 export interface ConfigSource {
   /** Stable identifier reported by configuration introspection. */
@@ -21,8 +22,20 @@ export interface ConfigSource {
 }
 
 /**
- * Precedence ladder from Governance §16. EPIC-001 populates the first two
- * rungs; the remainder are reserved so later Epics slot in without renumbering.
+ * The precedence ladder from Governance §16:
+ *
+ * ```text
+ * safe defaults → environment discovery → user configuration
+ *   → repository policy → session scope → explicit operation
+ * ```
+ *
+ * A stored setting therefore outranks an environment variable, which is
+ * deliberate: the file is what the user chose, an inherited environment is not.
+ * An explicit operation outranks everything, because the user is asking for it
+ * right now.
+ *
+ * Security restrictions are *not* on this ladder. They cannot be overridden by
+ * a lower-trust input at all — see `repository-source.ts`.
  */
 export const ConfigPrecedence = {
   DEFAULTS: 0,
@@ -35,7 +48,7 @@ export const ConfigPrecedence = {
 
 export const ENV_PREFIX = 'FERRET_';
 
-/** Environment variables read by EPIC-001, and the config path each populates. */
+/** Environment variables Ferret reads, and the config path each populates. */
 export const ENV_BINDINGS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['FERRET_LOG_LEVEL', ['logLevel']],
   ['FERRET_DATABASE_HOST', ['database', 'host']],
@@ -62,7 +75,7 @@ function assign(target: Record<string, unknown>, path: readonly string[], value:
   if (leaf !== undefined) cursor[leaf] = value;
 }
 
-/** Reads the EPIC-001 environment surface. Unset variables contribute nothing. */
+/** Reads the environment surface. Unset variables contribute nothing. */
 export function environmentSource(env: NodeJS.ProcessEnv = process.env): ConfigSource {
   return {
     name: 'environment',
@@ -86,24 +99,48 @@ export function environmentSource(env: NodeJS.ProcessEnv = process.env): ConfigS
   };
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function mergeFragments(fragments: readonly Record<string, unknown>[]): Record<string, unknown> {
   const merged: Record<string, unknown> = {};
   for (const fragment of fragments) {
     for (const [key, value] of Object.entries(fragment)) {
       const existing = merged[key];
+      // A secret reference is a leaf, not a structure to merge into: merging it
+      // with a literal would produce an object that is neither.
       const bothPlainObjects =
-        typeof value === 'object' &&
-        value !== null &&
-        !Array.isArray(value) &&
-        typeof existing === 'object' &&
-        existing !== null &&
-        !Array.isArray(existing);
+        isPlainObject(value) && isPlainObject(existing) && !isSecretRef(value) && !isSecretRef(existing);
       merged[key] = bothPlainObjects
-        ? mergeFragments([existing as Record<string, unknown>, value as Record<string, unknown>])
+        ? mergeFragments([existing, value])
         : value;
     }
   }
   return merged;
+}
+
+/**
+ * Records which source supplied each leaf, for configuration introspection.
+ *
+ * Governance §18 requires Ferret to be able to explain itself, and "why is this
+ * value what it is" is the first question anyone asks of a layered
+ * configuration system.
+ */
+function collectOrigins(
+  fragment: Record<string, unknown>,
+  sourceName: string,
+  into: Record<string, string>,
+  prefix: readonly string[] = [],
+): void {
+  for (const [key, value] of Object.entries(fragment)) {
+    const path = [...prefix, key];
+    if (isPlainObject(value) && !isSecretRef(value)) {
+      collectOrigins(value, sourceName, into, path);
+    } else {
+      into[path.join('.')] = sourceName;
+    }
+  }
 }
 
 /**
@@ -122,7 +159,7 @@ function toConfigError(error: z.ZodError): FerretError {
   return new FerretError(ErrorCode.CONFIG_INVALID, `Configuration is invalid — ${summary}`, {
     details: { issues },
     remediation:
-      'Correct the listed configuration values. Run `ferret env` to confirm which environment variables Ferret can see.',
+      'Correct the listed configuration values. Run `ferret config list --explain` to see which layer supplied each one.',
   });
 }
 
@@ -130,22 +167,47 @@ export interface ResolvedConfig {
   readonly config: FerretConfig;
   /** Source names that contributed, ordered by increasing precedence. */
   readonly sources: readonly string[];
+  /** Dotted path to the name of the source that supplied it. */
+  readonly origins: Readonly<Record<string, string>>;
+}
+
+export interface ResolveOptions {
+  /** Environment used to resolve secret references. */
+  readonly env?: NodeJS.ProcessEnv;
 }
 
 /**
  * Resolves configuration from the supplied sources in precedence order.
  *
- * Resolution must succeed with no configuration at all: a user is never
- * required to author a configuration file merely to start Ferret.
+ * Resolution must succeed with no configuration at all: a user is never required
+ * to author a configuration file merely to start Ferret. Secret references are
+ * resolved before validation, so the schema — and every consumer after it — sees
+ * only plain values.
  */
-export function resolveConfig(sources: readonly ConfigSource[] = [environmentSource()]): ResolvedConfig {
+export function resolveConfig(
+  sources: readonly ConfigSource[] = [environmentSource()],
+  options: ResolveOptions = {},
+): ResolvedConfig {
   const ordered = [...sources].sort((a, b) => a.precedence - b.precedence);
-  const fragments = ordered.map((source) => source.read());
-  const result = ferretConfigSchema.safeParse(mergeFragments(fragments));
+
+  const origins: Record<string, string> = {};
+  const fragments: Record<string, unknown>[] = [];
+  for (const source of ordered) {
+    const fragment = source.read();
+    fragments.push(fragment);
+    collectOrigins(fragment, source.name, origins);
+  }
+
+  const merged = resolveSecrets(mergeFragments(fragments), {
+    ...(options.env === undefined ? {} : { env: options.env }),
+  });
+  const result = ferretConfigSchema.safeParse(merged);
   if (!result.success) throw toConfigError(result.error);
+
   return {
     config: result.data,
     sources: ordered.map((source) => source.name),
+    origins,
   };
 }
 

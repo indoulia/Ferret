@@ -6,7 +6,36 @@ import { describe, expect, it } from 'vitest';
 const SRC = resolve(fileURLToPath(new URL('../../src', import.meta.url)));
 
 /** Matches static `import`/`export ... from '<specifier>'` and `import('<specifier>')`. */
-const SPECIFIER = /(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g;
+const SPECIFIER = /(?:from|import)\s*\(?\s*['"]([^'"\n]+)['"]/g;
+
+/**
+ * A real module specifier: relative, bare, or scoped, with no spaces.
+ *
+ * The pattern above also fires on English prose that happens to end in the word
+ * "from" immediately before a quote — a CLI help string reading
+ * `'Print the files Ferret reads configuration from'` was picked up as a
+ * dependency. Requiring the capture to look like a specifier removes that whole
+ * class of false positive, and cannot hide a real import: every real specifier
+ * satisfies this shape.
+ */
+const MODULE_SPECIFIER = /^(?:\.{1,2}(?:\/[\w.-]+)*\/?[\w.-]*|node:[\w/.-]+|@[\w.-]+\/[\w.-]+(?:\/[\w.-]+)*|[\w.-]+(?:\/[\w.-]+)*)$/;
+
+/**
+ * Removes comments before the import graph is walked.
+ *
+ * Without this the scanner reads prose as code: a doc comment containing the
+ * words `from "unreadable"` was picked up as a dependency on a package called
+ * `unreadable`. An architectural control that a sentence can fool is not a
+ * control, and the failure direction is the dangerous one — a comment could
+ * just as easily *hide* nothing but could add noise that trains people to
+ * loosen the allowlist.
+ *
+ * Block comments are stripped wholesale; line comments only when they start a
+ * line, so a `'https://…'` literal inside real code is never truncated.
+ */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
 
 interface Graph {
   /** Repository-relative paths of every module reachable from the entry point. */
@@ -33,10 +62,10 @@ function importGraph(entry: string): Graph {
     if (files.has(key)) continue;
     files.add(key);
 
-    const source = readFileSync(current, 'utf8');
+    const source = stripComments(readFileSync(current, 'utf8'));
     for (const match of source.matchAll(SPECIFIER)) {
       const specifier = match[1];
-      if (specifier === undefined) continue;
+      if (specifier === undefined || !MODULE_SPECIFIER.test(specifier)) continue;
       if (specifier.startsWith('.')) {
         queue.push(resolve(dirname(current), specifier.replace(/\.js$/, '.ts')));
       } else {
@@ -54,7 +83,7 @@ function importGraph(entry: string): Graph {
  * Adding an entry here is a deliberate architectural decision, not a fix for a
  * failing test: it widens what every consumer of `@indoulia/ferret` installs.
  */
-const ALLOWED_CORE_PACKAGES: ReadonlySet<string> = new Set(['pino', 'zod']);
+const ALLOWED_CORE_PACKAGES: ReadonlySet<string> = new Set(['picomatch', 'pino', 'zod']);
 
 /**
  * Packages the storage provider adds on top of the core set.

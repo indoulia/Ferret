@@ -59,7 +59,14 @@ describe('resolveConfig — environment source', () => {
       password: 'hunter2',
       migrate: 'auto',
     });
-    expect(config.exclude).toStrictEqual(['node_modules', 'dist', 'coverage']);
+    // EPIC-003 turned the shorthand into full rules, so an exclusion can carry
+    // a scope, a reason and an effective-from instant. The shorthand still
+    // works — Governance §2 caps ordinary setup at database details plus these.
+    expect(config.exclude).toStrictEqual([
+      { pattern: 'node_modules', scope: 'global' },
+      { pattern: 'dist', scope: 'global' },
+      { pattern: 'coverage', scope: 'global' },
+    ]);
     expect(isDatabaseConfigured(config)).toBe(true);
     expect(sources).toStrictEqual(['environment']);
   });
@@ -103,7 +110,7 @@ describe('resolveConfig — precedence', () => {
       fixedSource('a', 0, { exclude: ['one', 'two'] }),
       fixedSource('b', 100, { exclude: ['three'] }),
     ]);
-    expect(config.exclude).toStrictEqual(['three']);
+    expect(config.exclude).toStrictEqual([{ pattern: 'three', scope: 'global' }]);
   });
 });
 
@@ -165,6 +172,7 @@ describe('describeConfig', () => {
         migrate: 'auto',
       },
       exclude: [],
+      providers: {},
     });
   });
 

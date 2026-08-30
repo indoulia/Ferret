@@ -1,6 +1,6 @@
 {
   "epic": "EPIC-002",
-  "recordedAt": "2026-08-30T10:28:34.322Z",
+  "recordedAt": "2026-08-30T11:21:49.700Z",
   "platform": "win32/x64",
   "node": "22.23.2",
   "note": "Budgets are regression ceilings, not targets. See tests/integration/storage/performance.test.ts.",
@@ -8,28 +8,28 @@
     {
       "label": "fresh migration (empty database)",
       "samples": 1,
-      "minMs": 156.33,
-      "medianMs": 156.33,
-      "p95Ms": 156.33,
-      "maxMs": 156.33,
+      "minMs": 206.91,
+      "medianMs": 206.91,
+      "p95Ms": 206.91,
+      "maxMs": 206.91,
       "budgetMs": 5000
     },
     {
       "label": "no-op migration (schema already current)",
       "samples": 20,
-      "minMs": 6.08,
-      "medianMs": 6.8,
-      "p95Ms": 8.41,
-      "maxMs": 8.41,
+      "minMs": 8.22,
+      "medianMs": 10.01,
+      "p95Ms": 16.18,
+      "maxMs": 16.18,
       "budgetMs": 750
     },
     {
       "label": "readSchemaStatus (read-only)",
       "samples": 30,
-      "minMs": 3.64,
-      "medianMs": 4.25,
-      "p95Ms": 5.04,
-      "maxMs": 5.1,
+      "minMs": 4.62,
+      "medianMs": 5.46,
+      "p95Ms": 16.01,
+      "maxMs": 26.43,
       "budgetMs": 400
     },
     {
@@ -37,26 +37,26 @@
       "samples": 50,
       "minMs": 0.02,
       "medianMs": 0.02,
-      "p95Ms": 0.14,
-      "maxMs": 0.87,
+      "p95Ms": 0.04,
+      "maxMs": 0.05,
       "budgetMs": 50
     },
     {
       "label": "SELECT 1 round trip",
       "samples": 100,
-      "minMs": 1.06,
-      "medianMs": 1.26,
-      "p95Ms": 1.83,
-      "maxMs": 2.6,
+      "minMs": 1.4,
+      "medianMs": 1.63,
+      "p95Ms": 2.55,
+      "maxMs": 3.46,
       "budgetMs": 25
     },
     {
       "label": "provider initialize + shutdown",
       "samples": 8,
-      "minMs": 38.44,
-      "medianMs": 44.49,
-      "p95Ms": 48.37,
-      "maxMs": 48.37,
+      "minMs": 53.81,
+      "medianMs": 59.95,
+      "p95Ms": 78.07,
+      "maxMs": 78.07,
       "budgetMs": 2000
     }
   ]
