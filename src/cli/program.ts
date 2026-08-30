@@ -4,8 +4,10 @@ import { LOG_LEVELS } from '../logging/index.js';
 import { PACKAGE_NAME, VERSION } from '../version.js';
 
 import { configCommand } from './commands/config.js';
+import { doctorCommand } from './commands/doctor.js';
 import { envCommand } from './commands/env.js';
 import { initCommand } from './commands/init.js';
+import { statusCommand } from './commands/status.js';
 import { PLANNED_COMMANDS, plannedCommand } from './commands/planned.js';
 import { versionCommand } from './commands/version.js';
 import type { OutputOptions } from './output.js';
@@ -15,6 +17,16 @@ export interface ProgramOptions {
   readonly stdout?: (text: string) => void;
   /** Writes diagnostics. Defaults to process stderr. */
   readonly stderr?: (text: string) => void;
+  /**
+   * Lets a command report an exit code without failing.
+   *
+   * `ferret status` needs this: reporting that the database is down is a
+   * *successful* execution of the command, but the process should still exit
+   * non-zero so a script can branch on it. Throwing would be wrong — there is
+   * no error to report — and writing `process.exitCode` directly would be
+   * overwritten by {@link run}, and would leak between in-process test cases.
+   */
+  readonly onExitCode?: (code: number) => void;
 }
 
 /**
@@ -33,6 +45,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   const writeError = options.stderr ?? ((text: string) => process.stderr.write(text));
 
   const output = (json: boolean): OutputOptions => ({ json, stdout: write, stderr: writeError });
+  const reportExitCode = options.onExitCode ?? ((): void => undefined);
 
   const program = new Command()
     .name('ferret')
@@ -60,8 +73,10 @@ export function buildProgram(options: ProgramOptions = {}): Command {
 
   program.addCommand(versionCommand(output));
   program.addCommand(configCommand(output));
+  program.addCommand(doctorCommand(output, reportExitCode));
   program.addCommand(envCommand(output));
   program.addCommand(initCommand(output));
+  program.addCommand(statusCommand(output, reportExitCode));
   for (const spec of PLANNED_COMMANDS) program.addCommand(plannedCommand(spec));
 
   // Commander's `addCommand` does not propagate `exitOverride` or the output

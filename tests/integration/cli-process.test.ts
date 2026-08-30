@@ -48,8 +48,11 @@ describe('installed CLI — exit codes', () => {
     [['--version'], ExitCode.OK],
     [['version'], ExitCode.OK],
     [['env'], ExitCode.OK],
-    [['status'], ExitCode.NOT_IMPLEMENTED],
-    [['doctor'], ExitCode.NOT_IMPLEMENTED],
+    // EPIC-004 implemented these. With no database configured they report an
+    // unavailable configuration, which is exit code 3 — deterministically, so
+    // it is a usable assertion rather than an environment-dependent one.
+    [['status'], ExitCode.CONFIG],
+    [['doctor'], ExitCode.CONFIG],
     [['mcp'], ExitCode.NOT_IMPLEMENTED],
     [['nope'], ExitCode.USAGE],
     [['version', '--bad-flag'], ExitCode.USAGE],
@@ -93,7 +96,9 @@ describe('installed CLI — stream discipline', () => {
   });
 
   it('writes human errors to stderr and leaves stdout empty', async () => {
-    const result = await runCli(['status']);
+    // `mcp` is still planned, so invoking it is a genuine error. `status` used
+    // to serve here, but EPIC-004 made it a command that succeeds at reporting.
+    const result = await runCli(['mcp']);
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain('E_NOT_IMPLEMENTED');
   });

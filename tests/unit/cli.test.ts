@@ -110,7 +110,9 @@ describe('planned commands', () => {
   );
 
   it('names the owning Epic so the response is actionable', async () => {
-    const result = await invoke('status', '--json');
+    // `status` and `doctor` were the examples here until EPIC-004 implemented
+    // them; `mcp` is the remaining planned command.
+    const result = await invoke('mcp', '--json');
     const payload = JSON.parse(result.stdout) as {
       ok: boolean;
       error: { code: string; details: { plannedIn: string[] } };
@@ -118,7 +120,7 @@ describe('planned commands', () => {
 
     expect(payload.ok).toBe(false);
     expect(payload.error.code).toBe('E_NOT_IMPLEMENTED');
-    expect(payload.error.details.plannedIn).toContain('EPIC-004');
+    expect(payload.error.details.plannedIn).toContain('EPIC-064');
   });
 
   it('does nothing silently — every planned command reports its status', async () => {

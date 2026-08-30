@@ -57,7 +57,12 @@ export async function run(options: RunOptions = {}): Promise<number> {
   if (options.stdout !== undefined) Object.assign(programOptions, { stdout: options.stdout });
   if (options.stderr !== undefined) Object.assign(programOptions, { stderr: options.stderr });
 
-  const program = buildProgram(programOptions);
+  // A command may report a non-zero outcome without failing — `ferret status`
+  // reporting an unreachable database is a successful run with an unhealthy
+  // verdict. Captured here rather than through `process.exitCode`, which would
+  // leak between in-process test cases.
+  let reported: number | undefined;
+  const program = buildProgram({ ...programOptions, onExitCode: (code) => (reported = code) });
   const json = argv.includes('--json');
   const output = {
     json,
@@ -73,7 +78,7 @@ export async function run(options: RunOptions = {}): Promise<number> {
 
   try {
     await program.parseAsync([...argv]);
-    return ExitCode.OK;
+    return reported ?? ExitCode.OK;
   } catch (error) {
     if (error instanceof CommanderError) {
       const code = commanderExitCode(error);

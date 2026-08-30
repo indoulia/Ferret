@@ -1,6 +1,8 @@
 # EPIC-004 — Runtime Health & Diagnostics
 
-**Status: APPROVED | Priority: P0**
+**Status: VALIDATED | Priority: P0**
+
+Evidence: [`validation/EPIC-004-VALIDATION.md`](validation/EPIC-004-VALIDATION.md) · Decisions: [`../Architecture/EPIC-004-DECISIONS.md`](../Architecture/EPIC-004-DECISIONS.md) · Checkpoint: [`../Checkpoints/EPIC-004.md`](../Checkpoints/EPIC-004.md)
 
 ## Objective
 Give users and AI agents a dependable way to determine whether Ferret, its database, providers, synchronization, and indexes are healthy.
