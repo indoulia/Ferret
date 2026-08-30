@@ -1,0 +1,63 @@
+{
+  "epic": "EPIC-002",
+  "recordedAt": "2026-08-30T10:28:34.322Z",
+  "platform": "win32/x64",
+  "node": "22.23.2",
+  "note": "Budgets are regression ceilings, not targets. See tests/integration/storage/performance.test.ts.",
+  "measurements": [
+    {
+      "label": "fresh migration (empty database)",
+      "samples": 1,
+      "minMs": 156.33,
+      "medianMs": 156.33,
+      "p95Ms": 156.33,
+      "maxMs": 156.33,
+      "budgetMs": 5000
+    },
+    {
+      "label": "no-op migration (schema already current)",
+      "samples": 20,
+      "minMs": 6.08,
+      "medianMs": 6.8,
+      "p95Ms": 8.41,
+      "maxMs": 8.41,
+      "budgetMs": 750
+    },
+    {
+      "label": "readSchemaStatus (read-only)",
+      "samples": 30,
+      "minMs": 3.64,
+      "medianMs": 4.25,
+      "p95Ms": 5.04,
+      "maxMs": 5.1,
+      "budgetMs": 400
+    },
+    {
+      "label": "pool acquire + release (warm)",
+      "samples": 50,
+      "minMs": 0.02,
+      "medianMs": 0.02,
+      "p95Ms": 0.14,
+      "maxMs": 0.87,
+      "budgetMs": 50
+    },
+    {
+      "label": "SELECT 1 round trip",
+      "samples": 100,
+      "minMs": 1.06,
+      "medianMs": 1.26,
+      "p95Ms": 1.83,
+      "maxMs": 2.6,
+      "budgetMs": 25
+    },
+    {
+      "label": "provider initialize + shutdown",
+      "samples": 8,
+      "minMs": 38.44,
+      "medianMs": 44.49,
+      "p95Ms": 48.37,
+      "maxMs": 48.37,
+      "budgetMs": 2000
+    }
+  ]
+}

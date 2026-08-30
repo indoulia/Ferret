@@ -29,6 +29,20 @@ export const ErrorCode = {
   PROVIDER_INVALID: 'E_PROVIDER_INVALID',
   /** A provider failed during initialization. */
   PROVIDER_INIT_FAILED: 'E_PROVIDER_INIT_FAILED',
+  /** The database is unreachable, refused the connection, or dropped it. */
+  STORAGE_UNAVAILABLE: 'E_STORAGE_UNAVAILABLE',
+  /** The database rejected an operation because the role lacks a privilege. */
+  STORAGE_PERMISSION_DENIED: 'E_STORAGE_PERMISSION_DENIED',
+  /** A schema migration failed. The database is left at the last good version. */
+  MIGRATION_FAILED: 'E_MIGRATION_FAILED',
+  /** Another process holds the migration lock and did not release it in time. */
+  MIGRATION_LOCKED: 'E_MIGRATION_LOCKED',
+  /** Migrations are pending and the active policy forbids applying them. */
+  MIGRATION_PENDING: 'E_MIGRATION_PENDING',
+  /** The database schema is newer or otherwise unknown to this Ferret build. */
+  SCHEMA_UNSUPPORTED: 'E_SCHEMA_UNSUPPORTED',
+  /** An applied migration no longer matches the migration this build ships. */
+  SCHEMA_DRIFT: 'E_SCHEMA_DRIFT',
   /** The capability exists in the roadmap but is not implemented in this release. */
   NOT_IMPLEMENTED: 'E_NOT_IMPLEMENTED',
   /** The operation was interrupted by a signal. */

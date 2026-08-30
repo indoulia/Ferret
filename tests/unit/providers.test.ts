@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   DependencyStatus,
+  ErrorCode,
   FerretError,
   PROVIDER_CONTRACT_VERSION,
   ProviderKind,
@@ -178,6 +179,38 @@ describe('provider lifecycle', () => {
     expect(thrown?.code).toBe('E_PROVIDER_INIT_FAILED');
     expect(thrown?.details).toMatchObject({ providerId: 'bad' });
     expect(shutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the diagnosis a provider made, instead of relabelling it', async () => {
+    // The registry adds context; it must not destroy it. A storage provider
+    // that reports "database configuration is incomplete" has to keep its code,
+    // its remediation and its retryability, because those are what decide the
+    // process exit code and what `ferret doctor` shows the user.
+    const registry = new ProviderRegistry();
+    registry.register(
+      provider('picky', {
+        initialize: () => {
+          throw new FerretError(ErrorCode.CONFIG_MISSING, 'no database configured', {
+            details: { missing: ['host'] },
+            remediation: 'Set FERRET_DATABASE_HOST.',
+            retryable: true,
+          });
+        },
+      }),
+    );
+
+    let thrown: FerretError | undefined;
+    try {
+      await registry.initializeAll(context());
+    } catch (error) {
+      thrown = error as FerretError;
+    }
+
+    expect(thrown?.code).toBe('E_CONFIG_MISSING');
+    expect(thrown?.remediation).toBe('Set FERRET_DATABASE_HOST.');
+    expect(thrown?.retryable).toBe(true);
+    // and it still says which provider failed
+    expect(thrown?.details).toMatchObject({ providerId: 'picky', missing: ['host'] });
   });
 
   it('attempts every shutdown even when one throws, and reports the failures', async () => {
