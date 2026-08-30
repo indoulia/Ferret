@@ -202,6 +202,7 @@ export const RepositoryOperation = {
   LIST_WORKTREES: 'listWorktrees',
   LIST_BRANCHES: 'listBranches',
   READ_HISTORY: 'readHistory',
+  LIST_FILES: 'listFiles',
 } as const;
 
 export type RepositoryOperation =

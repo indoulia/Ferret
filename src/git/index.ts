@@ -17,6 +17,17 @@ export {
   type RepositoryIdentity,
 } from './identity.js';
 export {
+  MAX_FILES_PER_READ,
+  TreeEntryKind,
+  extensionOf,
+  gitContentHash,
+  listFiles,
+  parseTree,
+  type FileListing,
+  type ListFilesOptions,
+  type TreeEntry,
+} from './files.js';
+export {
   ChangeKind,
   MAX_COMMITS_PER_READ,
   assertSafeRevision,
