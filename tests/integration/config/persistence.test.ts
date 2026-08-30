@@ -363,9 +363,18 @@ describe('change auditing', () => {
 
 describe('performance', () => {
   // Configuration is resolved on every single Ferret invocation, and the AI
-  // client spawns Ferret per session. These are regression ceilings, set well
-  // above measured values so they catch a real change rather than jitter.
-  const BUDGET = { readMs: 25, writeMs: 250 } as const;
+  // client spawns Ferret per session. These are regression ceilings, not
+  // targets.
+  //
+  // The two budgets are deliberately very different. Reading is on the startup
+  // path, is pure CPU and page cache, and carries the meaningful limit. Writing
+  // is dominated by one `fsync`, whose cost belongs to the disk rather than to
+  // Ferret: a GitHub Windows runner measured 527 ms p95 where a local SSD
+  // measured well under 100 ms. A ceiling tight enough to flake on shared CI is
+  // a ceiling that gets deleted, so the write budget is coarse — it exists to
+  // catch an order-of-magnitude regression, such as re-reading the journal on
+  // every set, not to police disk latency.
+  const BUDGET = { readMs: 25, writeMs: 2_000 } as const;
 
   it(`reads the stored configuration in under ${String(BUDGET.readMs)} ms`, () => {
     store().setMany({ 'database.host': 'h', 'database.user': 'u', logLevel: 'info' });

@@ -72,11 +72,20 @@ Budgets are regression ceilings asserted by `persistence.test.ts`.
 | Measurement | Budget | Notes |
 | --- | --- | --- |
 | Read the stored configuration (p95 of 100) | 25 ms | Measured well under; the file is small and read once |
-| Locked, validated, journalled write (p95 of 20) | 250 ms | Includes lock acquisition, whole-document validation, `fsync` and rename |
+| Locked, validated, journalled write (p95 of 20) | 2 000 ms | Includes lock acquisition, whole-document validation, `fsync` and rename |
 
-The write budget is deliberately loose because it contains an `fsync`, whose cost
-is a property of the disk rather than of Ferret. The read path is the one on the
-hot path, and it is the tighter budget.
+The two budgets are deliberately very different, and the reason is worth
+recording. Reading is on the startup path, is pure CPU and page cache, and
+carries the meaningful limit. Writing is dominated by a single `fsync`, whose
+cost belongs to the disk: a GitHub Windows runner measured **527 ms p95** where a
+local SSD measured well under 100 ms. An initial 250 ms ceiling failed CI on
+Windows for that reason alone.
+
+Rather than delete the budget or special-case a platform, it was widened to a
+coarse ceiling that still catches an order-of-magnitude regression — re-reading
+the journal on every `set`, say — without policing disk latency Ferret does not
+control. A budget tight enough to flake is a budget that gets deleted, and then
+it catches nothing.
 
 ---
 
