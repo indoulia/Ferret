@@ -112,6 +112,21 @@ export function createLogger(options: LoggerOptions = {}): Logger {
       formatters: {
         level: (label) => ({ level: label }),
       },
+      serializers: {
+        // Identity, deliberately.
+        //
+        // `sanitize()` has already turned the error into a redacted plain
+        // object with its `cause` chain intact. Pino's default `err`
+        // serializer would then run over that object as well, concatenating
+        // every cause's message into one line and synthesising a `stack` from
+        // objects that have none — producing a log record strictly worse than
+        // what the same error prints to the terminal.
+        //
+        // Redaction happens before this point, so passing the value through
+        // cannot leak: what arrives here is already what Ferret is willing to
+        // show.
+        err: (value: unknown) => value,
+      },
     },
     destination({ dest: options.destination ?? 2, sync: true }),
   );

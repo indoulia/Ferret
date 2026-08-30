@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  ErrorCode,
+  FerretError,
   LOG_LEVELS,
   REDACTED,
   createLogger,
@@ -140,5 +142,39 @@ describe('createNullLogger', () => {
       logger.error({}, 'x');
       logger.fatal({}, 'x');
     }).not.toThrow();
+  });
+});
+
+describe('errors in a log record', () => {
+  it('keeps the cause chain intact instead of flattening it into one message', () => {
+    // Found by dogfooding: `ferret index` against Ferret's own repository with
+    // an incomplete configuration. The CLI printed one clear message; the *log
+    // line* printed the same sentence three times joined by colons, and a
+    // "stack" reading "\ncaused by: \ncaused by: ".
+    //
+    // `sanitize()` had already produced a redacted plain object with its cause
+    // chain, and pino's own `err` serializer then ran over it as well —
+    // concatenating every cause's message and synthesising a stack from objects
+    // that have none. An operator's log line was strictly worse than the
+    // terminal output of the same error, which is the opposite of what
+    // structured logging is for.
+    const inner = new FerretError(ErrorCode.CONFIG_MISSING, 'missing database');
+    const middle = new FerretError(ErrorCode.CONFIG_MISSING, 'missing database', { cause: inner });
+    const outer = new FerretError(ErrorCode.CONFIG_MISSING, 'provider failed: missing database', {
+      cause: middle,
+    });
+
+    const { logger, capture } = captureTo('error');
+    logger.error({ err: outer, operation: 'test' }, 'failed');
+
+    const [record] = capture.records();
+    const err = record?.['err'] as { message: string; stack?: unknown; cause?: { message: string } };
+    expect(err.message).toBe('provider failed: missing database');
+    // Not "message: message: message".
+    expect(err.message.split('missing database').length - 1).toBe(1);
+    // No fabricated stack from objects that never had one.
+    expect(err.stack).toBeUndefined();
+    // The chain is still there, as structure rather than as prose.
+    expect(err.cause?.message).toBe('missing database');
   });
 });

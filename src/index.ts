@@ -231,6 +231,22 @@ export {
 } from './providers/index.js';
 
 export {
+  INDEXER_PRODUCER,
+  INDEX_ARTIFACT_KIND,
+  RepositoryIndexer,
+  assertIndexed,
+  type EntityWriter,
+  type EvidenceWriter,
+  type IndexOptions,
+  type IndexReport,
+  type IndexableSource,
+  type IndexerDependencies,
+  type RelationshipWriter,
+  type WatermarkStore,
+  type WriteCounts,
+} from './indexing/index.js';
+
+export {
   DisposableStack,
   FerretRuntime,
   RuntimeState,

@@ -97,7 +97,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-028 — Spreadsheet Intelligence** — P1
 - **EPIC-029 — Text & Markdown Intelligence** — P1
 - **EPIC-030 — File Structure & Metadata** — P0
-- **EPIC-031 — Incremental Indexing** — P0
+- **EPIC-031 — Incremental Indexing** — P0 — VALIDATED ([spec](EPIC-031-Incremental-Indexing.md), [evidence](validation/EPIC-031-VALIDATION.md))
 - **EPIC-032 — Index Lifecycle & Tombstones** — P0
 
 ### Code Intelligence
