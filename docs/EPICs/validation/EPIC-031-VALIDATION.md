@@ -195,4 +195,4 @@ that were correct. It took reading real output.
 | No untracked working-directory state. | Everything indexed is committed state. "What am I working on right now" is a different read. | **EPIC-032** |
 | The watermark is per repository, not per branch. | Indexing `HEAD` then a feature branch advances one watermark, so a later `HEAD` run may skip commits it has not seen on that branch. **This is a real correctness gap, not just a performance one.** | **EPIC-032** |
 | A failed run repeats rather than resumes. | Deliberate: resuming from a position never reached would leave a permanent gap. Costly for a very large first index. | **EPIC-032** |
-| `--since` re-reads the boundary second. | Documented; the alternative risks losing history. | — |
+| `--since` re-reads the boundary second. | Documented; the alternative risks losing history. On a fast runner an entire small history can be created inside one second, in which case an "incremental" run legitimately re-reads all of it — which is why the test asserts that the second run *writes* nothing rather than that it *reads* less. | — |

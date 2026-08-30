@@ -328,12 +328,19 @@ describeEndToEnd('indexing a repository', () => {
     const second = await engine.index(fixture.discovered, {}, context);
     const secondRun = performance.now() - resumed;
 
-    // Not "zero", and not "at most one": `--since` has *second* granularity,
-    // and commits made in rapid succession share a second, so the boundary
-    // brings back everything committed in that second. What matters is that the
-    // incremental run reads far less and writes nothing new.
-    expect(second.commitsRead).toBeLessThan(report.commitsRead);
+    // Deliberately **not** an assertion about how many commits came back.
+    // `--since` has second granularity, and on a fast runner an entire fixture
+    // history is created inside one second — so the boundary legitimately
+    // returns all of it. That is the documented behaviour at its extreme, and
+    // the alternative (moving the boundary forward) risks losing a sibling
+    // commit, which is far worse than re-reading one.
+    //
+    // What the watermark actually promises is that the second run *writes*
+    // nothing and *finishes sooner*, and both of those are checked.
+    expect(second.incremental).toBe(true);
     expect(second.entities.created).toBe(0);
+    expect(second.relationships.created).toBe(0);
+    expect(second.evidence.recorded).toBe(0);
     // The second run must be cheaper than the first, or the watermark is
     // decorative. Not a tight ratio — the file tree is still read in full —
     // but a second run that were *slower* would mean the incremental path had
