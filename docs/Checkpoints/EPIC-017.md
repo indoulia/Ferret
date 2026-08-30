@@ -67,7 +67,7 @@ src/git/index.ts
 
 tests/support/git-fixtures.ts                      real repositories, created by real git
 tests/unit/git-identity.test.ts                    40 cases
-tests/integration/git/discovery.test.ts            39 cases
+tests/integration/git/discovery.test.ts            38 cases
 ```
 
 Modified: `src/providers/index.ts`, `src/index.ts` (contract exports),
@@ -76,7 +76,7 @@ Modified: `src/providers/index.ts`, `src/index.ts` (contract exports),
 
 ## Tests
 
-`npm run verify` — **1,033 passed, 3 skipped** across 41 files against a live
+`npm run verify` — **1,032 passed, 3 skipped** across 41 files against a live
 PostgreSQL 17 + pgvector and real `git`, zero unhandled errors. `npm audit` —
 **0 vulnerabilities**.
 
@@ -87,7 +87,13 @@ PostgreSQL 17 + pgvector and real `git`, zero unhandled errors. `npm audit` —
    layout every Git server uses — found nothing.
 2. **…and then still failed**, because `rev-parse --show-toplevel` exits 128 in a
    bare repository and the partial answer was discarded.
-3. **An architecture rule that quietly found nothing** — it matched call syntax
+3. **A security test that passed for the wrong reason on Windows.** The
+   fixture applied its hostile config *before* its first commit, so the
+   fixture's own `git add` ran the program; on Windows a `#!/bin/sh` script
+   does not run, so it passed locally and failed on Linux CI. Now the config
+   goes on last, and the test carries a control proving the fixture can execute
+   before concluding anything from Ferret's behaviour.
+4. **An architecture rule that quietly found nothing** — it matched call syntax
    and so missed a promisified `execFile`. Rewritten to detect the import.
 
 ## Notes for whoever picks this up
@@ -97,6 +103,9 @@ PostgreSQL 17 + pgvector and real `git`, zero unhandled errors. `npm audit` —
   test will stop you.
 - **Never build a command string.** There is no quoting or escaping anywhere in
   this Epic, because there is nothing to quote.
+- **A security test needs a control.** "Nothing bad happened" is also what you
+  observe when the platform could not have done the bad thing. Prove the fixture
+  is hostile first.
 - **Never set `safe.directory=*`.** Git's ownership refusal is a protection, and
   it is surfaced as a reported skip.
 - **Identity comes from `repositoryIdentity`,** not from an inline `replace` at a

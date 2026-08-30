@@ -98,10 +98,6 @@ export async function createRepository(
     shell: false,
   });
 
-  for (const entry of options.config ?? []) {
-    const index = entry.indexOf('=');
-    await git(path, ['config', entry.slice(0, index), entry.slice(index + 1)]);
-  }
   if (options.origin !== undefined) {
     await git(path, ['remote', 'add', 'origin', options.origin]);
   }
@@ -112,6 +108,17 @@ export async function createRepository(
     await writeFile(join(path, 'README.md'), `# ${name}\n`, 'utf8');
     await git(path, ['add', 'README.md']);
     await git(path, ['commit', '-m', 'initial']);
+  }
+
+  // Last, deliberately. `config` is how the hostile fixtures are built, and an
+  // earlier version of this function applied it *before* the first commit — so
+  // the fixture's own `git add` ran the file-system monitor it had just
+  // installed, and the security test read that as Ferret having executed the
+  // program. It passed on Windows (where a `#!/bin/sh` script will not run) and
+  // failed on Linux, which is the worst possible way round.
+  for (const entry of options.config ?? []) {
+    const index = entry.indexOf('=');
+    await git(path, ['config', entry.slice(0, index), entry.slice(index + 1)]);
   }
   return path;
 }

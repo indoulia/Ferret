@@ -285,46 +285,60 @@ withGit('security', () => {
     expect(repository.identityKey).toBe('github.com/indoulia/private');
   });
 
-  it('does not run a program a repository nominates as a hook', async () => {
-    // The classic "clone this and lose" vector. `core.hooksPath` names a
-    // directory of programs Git runs; a repository can set it in its own config.
-    const root = await scope('hostile-hooks');
-    const marker = join(root, 'hook-ran.txt');
+  it('does not run a program a repository nominates in its own configuration', async () => {
+    // The vector: `core.hooksPath`, `core.fsmonitor`, `core.pager`,
+    // `credential.helper` and `core.sshCommand` each name a program, and a
+    // repository sets them in its own `.git/config`. A repository Ferret clones
+    // for indexing can therefore execute code by being looked at.
+    //
+    // The test has a **control**, because the version without one was worthless:
+    // it passed on Windows purely because a `#!/bin/sh` script will not run
+    // there, and would have passed just as happily if Ferret had no protection
+    // at all. The control proves the fixture is genuinely hostile *before*
+    // anything is concluded from Ferret's behaviour.
+    const root = await scope('hostile-config');
+    const marker = join(root, 'program-ran.txt');
+    const script = join(root, 'evil.sh');
     const hooks = join(root, 'evil-hooks');
     await mkdir(hooks, { recursive: true });
-    await writeFile(
-      join(hooks, 'post-checkout'),
-      `#!/bin/sh\necho ran > "${marker}"\n`,
-      { mode: 0o755 },
-    );
-
-    await createRepository(root, 'hooked', {
-      origin: 'https://github.com/indoulia/hooked.git',
-      config: [`core.hooksPath=${hooks}`],
-    });
-
-    const result = await provider.discoverRepositories({ roots: [root] }, context);
-    expect(result.items).toHaveLength(1);
-
-    const { readFile } = await import('node:fs/promises');
-    await expect(readFile(marker, 'utf8')).rejects.toThrow();
-  });
-
-  it('does not run a program a repository nominates as a pager or monitor', async () => {
-    const root = await scope('hostile-programs');
-    const marker = join(root, 'pager-ran.txt');
-    const script = join(root, 'evil.sh');
     await writeFile(script, `#!/bin/sh\necho ran > "${marker}"\n`, { mode: 0o755 });
+    await writeFile(join(hooks, 'post-checkout'), `#!/bin/sh\necho ran > "${marker}"\n`, { mode: 0o755 });
 
-    await createRepository(root, 'papered', {
-      origin: 'https://github.com/indoulia/papered.git',
-      config: [`core.pager=${script}`, `core.fsmonitor=${script}`, `credential.helper=!${script}`],
+    const repository = await createRepository(root, 'hostile', {
+      origin: 'https://github.com/indoulia/hostile.git',
+      config: [
+        `core.fsmonitor=${script}`,
+        `core.pager=${script}`,
+        `core.hooksPath=${hooks}`,
+        `credential.helper=!${script}`,
+      ],
     });
+
+    const { readFile, rm } = await import('node:fs/promises');
+
+    // Control: an ordinary Git invocation, with none of Ferret's overrides.
+    await git(repository, ['status', '--porcelain']).catch(() => '');
+    const vectorWorks = await readFile(marker, 'utf8').then(
+      () => true,
+      () => false,
+    );
+    await rm(marker, { force: true });
+
+    if (!vectorWorks) {
+      // Not a pass. This platform cannot run the fixture's program at all, so
+      // the test demonstrates nothing about Ferret and says so rather than
+      // reporting a protection it did not observe.
+      process.stderr.write(
+        '[EPIC-017] this platform did not execute the hostile fixture even without Ferret’s overrides;\n' +
+          '           the configuration-execution vector is NOT demonstrated here (it is on Linux CI).\n',
+      );
+    }
 
     const result = await provider.discoverRepositories({ roots: [root] }, context);
     expect(result.items).toHaveLength(1);
 
-    const { readFile } = await import('node:fs/promises');
+    // The assertion that matters: with Ferret's `-c` overrides in place, the
+    // same repository executes nothing.
     await expect(readFile(marker, 'utf8')).rejects.toThrow();
   });
 
