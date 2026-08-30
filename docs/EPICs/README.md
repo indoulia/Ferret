@@ -58,8 +58,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-001 — Core Runtime & Package** — P0 — VALIDATED ([evidence](validation/EPIC-001-VALIDATION.md))
 - **EPIC-002 — Database Bootstrap & Migrations** — P0 — VALIDATED ([evidence](validation/EPIC-002-VALIDATION.md))
 - **EPIC-003 — Configuration Engine** — P0 — VALIDATED ([evidence](validation/EPIC-003-VALIDATION.md))
-- **EPIC-004 — Runtime Health & Diagnostics** — P0
-- **EPIC-005 — Technology Evaluation & Selection** — P0
+- **EPIC-004 — Runtime Health & Diagnostics** — P0 — VALIDATED ([evidence](validation/EPIC-004-VALIDATION.md))
+- **EPIC-005 — Technology Evaluation & Selection** — P0 — DONE ([decisions](../TECHNOLOGY-DECISIONS.md))
 
 ### Canonical Knowledge Model
 

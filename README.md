@@ -6,13 +6,14 @@ Ferret unifies engineering context, files, history and external project-manageme
 knowledge into an evidence-backed, searchable model that AI clients can query
 without repeatedly traversing source systems.
 
-> **Status: early foundation.** This release delivers the core runtime and
-> package (EPIC-001), PostgreSQL bootstrap and migrations (EPIC-002), and the
-> configuration engine (EPIC-003). Indexing, retrieval, the canonical model and
-> the MCP server are defined by later Epics and are **not** implemented yet.
-> Commands that belong to those Epics are listed in `--help` as `(planned)` and
-> fail with a clear error rather than doing nothing. See
-> [What works today](#what-works-today).
+> **Status: foundation complete.** The Foundation & Runtime domain is delivered:
+> core runtime and package (EPIC-001), PostgreSQL bootstrap and migrations
+> (EPIC-002), the configuration engine (EPIC-003), health and diagnostics
+> (EPIC-004) and the technology selection they rest on (EPIC-005). Indexing,
+> retrieval, the canonical model and the MCP server are defined by later Epics
+> and are **not** implemented yet. Commands that belong to those Epics are
+> listed in `--help` as `(planned)` and fail with a clear error rather than
+> doing nothing. See [What works today](#what-works-today).
 
 ## Requirements
 
@@ -78,8 +79,8 @@ if the body throws — so a started runtime cannot leak.
 | `ferret env` | Implemented | EPIC-001 |
 | `ferret init` | Implemented | EPIC-002, EPIC-003 |
 | `ferret config` | Implemented | EPIC-003 |
-| `ferret status` | Planned | EPIC-004 |
-| `ferret doctor` | Planned | EPIC-004 |
+| `ferret status` | Implemented | EPIC-004 |
+| `ferret doctor` | Implemented | EPIC-004 |
 | `ferret mcp` | Planned | EPIC-064 |
 
 A planned command exits with code `5` and error code `E_NOT_IMPLEMENTED`, naming
@@ -214,6 +215,48 @@ $ FERRET_DATABASE_PASSWORD=hunter2 ferret env --json | jq .data.config.database
 }
 ```
 
+## Checking health
+
+```bash
+ferret status            # is Ferret working?
+ferret doctor            # ...and what do I do about it?
+ferret status --json     # the same report, machine-readable
+```
+
+Both are **read-only** and neither ever throws: an unreachable database, wrong
+credentials and a configuration file that will not parse are all *results*. A
+diagnostic that fails when the thing it diagnoses is broken would be useless.
+
+Every component reports one of four states, and the difference matters:
+
+| State | Meaning |
+| --- | --- |
+| `ok` | Observed working |
+| `degraded` | Working with reduced capability — Ferret is still usable |
+| `unavailable` | Observed not working |
+| `unknown` | **Could not be determined.** Never a synonym for `ok` |
+
+An *optional* component can never make Ferret unusable. An absent pgvector means
+semantic retrieval is unavailable, not that Ferret is.
+
+`ferret doctor` lists only findings, each with a stable id a script can branch on
+and a remediation you can act on:
+
+```console
+ERROR    database/postgres:unavailable
+         PostgreSQL rejected the credentials: password authentication failed
+      -> Check FERRET_DATABASE_USER and FERRET_DATABASE_PASSWORD against the server.
+```
+
+Exit codes identify what to go and fix, so a script need not parse text:
+
+| Code | Condition |
+| --- | --- |
+| `0` | Healthy, or degraded but usable (`--strict` makes degraded non-zero) |
+| `3` | Configuration — no database configured, or the file will not parse |
+| `4` | Dependency — the database is unreachable or rejected the credentials |
+| `6` | Schema — a migration failed or drifted, or the database is from a newer Ferret |
+
 ## Schema and recovery
 
 Migrations are versioned SQL, checksummed, and applied under a PostgreSQL
@@ -239,6 +282,8 @@ mismatch is refused as `E_SCHEMA_DRIFT` rather than silently re-applied.
   atomicity, locking, failure recovery and why each was chosen
 - [Configuration decisions](docs/Architecture/EPIC-003-DECISIONS.md) — precedence,
   the repository trust boundary, secret references and durable writes
+- [Diagnostics decisions](docs/Architecture/EPIC-004-DECISIONS.md) — why the
+  health model has four states and why a diagnostic may never fail
 - [Governance](docs/Governance/README.md) — the binding engineering rules
 - [Technology decisions](docs/TECHNOLOGY-DECISIONS.md) — the EPIC-005 stack
   selection and its evidence

@@ -40,7 +40,5 @@ export function plannedCommand(spec: PlannedCommandSpec): Command {
 
 /** The roadmap command surface, and the Epic that owns each entry. */
 export const PLANNED_COMMANDS: readonly PlannedCommandSpec[] = [
-  { name: 'status', summary: 'Report health of Ferret, its database and its providers', owners: ['EPIC-004'] },
-  { name: 'doctor', summary: 'Diagnose setup problems and suggest remediation', owners: ['EPIC-004'] },
   { name: 'mcp', summary: 'Serve the Model Context Protocol interface to AI clients', owners: ['EPIC-064'] },
 ];
