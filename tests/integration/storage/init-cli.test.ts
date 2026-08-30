@@ -1,3 +1,7 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ExitCode } from '../../../src/cli/exit-codes.js';
@@ -20,6 +24,7 @@ interface InitPayload {
   readonly applied: ReadonlyArray<{ version: number; name: string }>;
   readonly pending: ReadonlyArray<{ version: number; name: string }>;
   readonly extensions: ReadonlyArray<{ name: string; state: string }>;
+  readonly saved: string | null;
   readonly config: { database: Record<string, unknown> };
 }
 
@@ -153,6 +158,85 @@ describeDb(`\`ferret init\` end to end (${databaseAvailable() ? 'real PostgreSQL
     } finally {
       await fresh.drop();
     }
+  });
+
+  describe('--save', () => {
+    let home: string;
+
+    beforeAll(() => {
+      home = mkdtempSync(join(tmpdir(), 'ferret-init-save-'));
+    });
+    afterAll(() => {
+      rmSync(home, { recursive: true, force: true });
+    });
+
+    it('persists the connection so it need not be supplied again', async () => {
+      const result = await runCli(['init', '--save', '--json'], {
+        env: { ...db.env, FERRET_CONFIG_HOME: home },
+      });
+      expect(result.code).toBe(ExitCode.OK);
+
+      const stored = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8')) as {
+        config: { database: Record<string, unknown> };
+      };
+      expect(stored.config.database).toMatchObject({
+        host: db.host,
+        port: db.port,
+        database: db.database,
+        user: db.user,
+      });
+
+      // Proof it is genuinely enough on its own: no FERRET_DATABASE_* at all.
+      const withoutEnv = await runCli(['init', '--check', '--json'], {
+        env: {
+          FERRET_CONFIG_HOME: home,
+          FERRET_DATABASE_HOST: '',
+          FERRET_DATABASE_PORT: '',
+          FERRET_DATABASE_NAME: '',
+          FERRET_DATABASE_USER: '',
+          FERRET_DATABASE_PASSWORD: '',
+        },
+      });
+      expect(withoutEnv.code).toBe(ExitCode.OK);
+      expect(parse(withoutEnv.stdout).schemaVersion).toBe(targetSchemaVersion());
+    });
+
+    it('does not print the saved password, and journals the change without it', async () => {
+      const result = await runCli(['init', '--save', '--json', '--log-level', 'trace'], {
+        env: { ...db.env, FERRET_CONFIG_HOME: home },
+      });
+      expect(result.stdout).not.toContain(db.password);
+      expect(result.stderr).not.toContain(db.password);
+      expect(readFileSync(join(home, 'config-audit.log'), 'utf8')).not.toContain(db.password);
+    });
+
+    it('writes nothing when the connection could not be proven', async () => {
+      const clean = mkdtempSync(join(tmpdir(), 'ferret-init-nosave-'));
+      try {
+        // A typo must never be written down as if it were correct.
+        const result = await runCli(['init', '--save', '--json'], {
+          env: { ...db.env, FERRET_DATABASE_PORT: '1', FERRET_CONFIG_HOME: clean },
+        });
+        expect(result.code).toBe(ExitCode.DEPENDENCY);
+        expect(existsSync(join(clean, 'config.json'))).toBe(false);
+      } finally {
+        rmSync(clean, { recursive: true, force: true });
+      }
+    });
+
+    it('changes nothing under --check', async () => {
+      const clean = mkdtempSync(join(tmpdir(), 'ferret-init-check-'));
+      try {
+        const result = await runCli(['init', '--check', '--save', '--json'], {
+          env: { ...db.env, FERRET_CONFIG_HOME: clean },
+        });
+        expect(result.code).toBe(ExitCode.OK);
+        expect(parse(result.stdout).saved).toBeNull();
+        expect(existsSync(join(clean, 'config.json'))).toBe(false);
+      } finally {
+        rmSync(clean, { recursive: true, force: true });
+      }
+    });
   });
 
   it('exits 6 when the database was migrated by a newer Ferret', async () => {

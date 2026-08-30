@@ -3,6 +3,7 @@ import { Command, Option } from 'commander';
 import { LOG_LEVELS } from '../logging/index.js';
 import { PACKAGE_NAME, VERSION } from '../version.js';
 
+import { configCommand } from './commands/config.js';
 import { envCommand } from './commands/env.js';
 import { initCommand } from './commands/init.js';
 import { PLANNED_COMMANDS, plannedCommand } from './commands/planned.js';
@@ -58,6 +59,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     });
 
   program.addCommand(versionCommand(output));
+  program.addCommand(configCommand(output));
   program.addCommand(envCommand(output));
   program.addCommand(initCommand(output));
   for (const spec of PLANNED_COMMANDS) program.addCommand(plannedCommand(spec));

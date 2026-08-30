@@ -1,6 +1,6 @@
 import { Command, Option } from 'commander';
 
-import { describeConfig } from '../../config/index.js';
+import { ConfigStore, describeConfig, isDatabaseConfigured } from '../../config/index.js';
 import { createRuntime } from '../../runtime/index.js';
 import {
   MigrationPolicy,
@@ -31,8 +31,18 @@ import { emitResult, type OutputOptions } from '../output.js';
  * `ferret init` *is* the request to provision. A `verify` or `off` policy exists
  * to stop an ordinary start from migrating, not to stop the operator who asked.
  *
- * EPIC-003 extends this command with configuration persistence; EPIC-002 owns
- * only the database half.
+ * `--save` (EPIC-003) writes the connection details into the user configuration
+ * file, so the database has to be described once rather than on every
+ * invocation. That includes the password: Governance §3 has an AI client spawn
+ * Ferret per session with an environment Ferret does not control, so a password
+ * reachable only through the environment would make normal operation
+ * impossible. The file is written with `0600`. Moving credentials to an OS
+ * keychain is EPIC-081; a user who prefers indirection today can store a secret
+ * reference instead:
+ *
+ * ```bash
+ * ferret config set database.password '{"$secret":{"env":"FERRET_PG_PASSWORD"}}'
+ * ```
  */
 export function initCommand(output: (json: boolean) => OutputOptions): Command {
   return new Command('init')
@@ -43,8 +53,11 @@ export function initCommand(output: (json: boolean) => OutputOptions): Command {
     .addOption(
       new Option('--no-extensions', 'Skip enabling optional PostgreSQL extensions such as pgvector'),
     )
+    .addOption(
+      new Option('--save', 'Store the database connection in the user configuration file').default(false),
+    )
     .addOption(new Option('--lock-timeout <ms>', 'How long to wait for another migrating process').argParser(Number))
-    .action(async (options: { check: boolean; extensions: boolean; lockTimeout?: number }, command: Command) => {
+    .action(async (options: { check: boolean; extensions: boolean; save: boolean; lockTimeout?: number }, command: Command) => {
       const globals = command.optsWithGlobals<{ json?: boolean; logLevel?: LogLevel }>();
       const json = globals.json === true;
 
@@ -69,8 +82,24 @@ export function initCommand(output: (json: boolean) => OutputOptions): Command {
             ? report.extensions.map((entry) => ({ ...entry, created: false, reason: undefined }))
             : await provisionExtensions(storage.pool, context.logger);
 
+        // Persisted only after the connection has been proven to work, so a
+        // typo is never written down as if it were correct.
+        let saved: string | undefined;
+        if (options.save && !options.check && isDatabaseConfigured(context.config)) {
+          const store = new ConfigStore();
+          store.setMany({
+            'database.host': context.config.database.host,
+            'database.port': context.config.database.port,
+            'database.database': context.config.database.database,
+            'database.user': context.config.database.user,
+            'database.password': context.config.database.password,
+          });
+          saved = store.path;
+        }
+
         return {
           mode: options.check ? ('check' as const) : ('apply' as const),
+          saved: saved ?? null,
           connection: report.connection,
           server: { version: report.server.version, supported: report.server.supported },
           instanceId: report.schema.instanceId,
@@ -106,6 +135,7 @@ export function initCommand(output: (json: boolean) => OutputOptions): Command {
             `extension ${extension.name.padEnd(8)}${extension.state}${extension.reason === undefined ? '' : ` — ${extension.reason}`}`,
           );
         }
+        if (result.saved !== null) lines.push(`saved             ${result.saved}`);
         lines.push(
           result.mode === 'check'
             ? result.pending.length === 0

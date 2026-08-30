@@ -1,6 +1,6 @@
 import {
+  defaultConfigSourceList,
   describeConfig,
-  environmentSource,
   resolveConfig,
   type ConfigSource,
   type FerretConfig,
@@ -22,7 +22,14 @@ import { DisposableStack, type Disposable } from './disposables.js';
 import { RuntimeState } from './lifecycle.js';
 
 export interface RuntimeOptions {
-  /** Configuration layers, lowest precedence first. Defaults to the environment. */
+  /**
+   * Configuration layers, lowest precedence first.
+   *
+   * Defaults to the full Governance §16 stack — environment, user file,
+   * repository policy, session, explicit. Supplying a list replaces it
+   * entirely, which is how a test pins configuration to exactly what it means
+   * to exercise.
+   */
   readonly configSources?: readonly ConfigSource[];
   /** Overrides the resolved log level. */
   readonly logLevel?: LogLevel;
@@ -161,7 +168,7 @@ export class FerretRuntime {
   async #doInitialize(): Promise<void> {
     const startedAt = Date.now();
     try {
-      const { config, sources } = resolveConfig(this.#options.configSources ?? [environmentSource()]);
+      const { config, sources } = resolveConfig(this.#options.configSources ?? defaultConfigSourceList());
       const level = this.#options.logLevel ?? config.logLevel;
       this.#logger = this.#options.logger ?? createLogger({ level, base: { component: 'runtime' } });
 

@@ -1,6 +1,8 @@
 # EPIC-003 — Configuration Engine
 
-**Status: APPROVED | Priority: P0**
+**Status: VALIDATED | Priority: P0**
+
+Evidence: [`validation/EPIC-003-VALIDATION.md`](validation/EPIC-003-VALIDATION.md) · Decisions: [`../Architecture/EPIC-003-DECISIONS.md`](../Architecture/EPIC-003-DECISIONS.md) · Checkpoint: [`../Checkpoints/EPIC-003.md`](../Checkpoints/EPIC-003.md)
 
 ## Objective
 Provide one secure configuration system that makes ordinary Ferret setup require only database details and optional repository exclusions.

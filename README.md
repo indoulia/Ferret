@@ -7,11 +7,12 @@ knowledge into an evidence-backed, searchable model that AI clients can query
 without repeatedly traversing source systems.
 
 > **Status: early foundation.** This release delivers the core runtime and
-> package (EPIC-001) and PostgreSQL bootstrap and migrations (EPIC-002).
-> Indexing, retrieval, the canonical model and the MCP server are defined by
-> later Epics and are **not** implemented yet. Commands that belong to those
-> Epics are listed in `--help` as `(planned)` and fail with a clear error rather
-> than doing nothing. See [What works today](#what-works-today).
+> package (EPIC-001), PostgreSQL bootstrap and migrations (EPIC-002), and the
+> configuration engine (EPIC-003). Indexing, retrieval, the canonical model and
+> the MCP server are defined by later Epics and are **not** implemented yet.
+> Commands that belong to those Epics are listed in `--help` as `(planned)` and
+> fail with a clear error rather than doing nothing. See
+> [What works today](#what-works-today).
 
 ## Requirements
 
@@ -41,6 +42,7 @@ export FERRET_DATABASE_USER=ferret
 export FERRET_DATABASE_PASSWORD=...
 
 ferret init            # create the schema and apply pending migrations
+ferret init --save     # ...and remember the connection, so you need not repeat it
 ferret init --check    # report what would change, without touching anything
 ```
 
@@ -74,9 +76,8 @@ if the body throws — so a started runtime cannot leak.
 | `ferret --version` / `-v` | Implemented | EPIC-001 |
 | `ferret version` | Implemented | EPIC-001 |
 | `ferret env` | Implemented | EPIC-001 |
-| `ferret init` | Implemented (database half) | EPIC-002 |
-| `ferret init --check` | Implemented | EPIC-002 |
-| `ferret config` | Planned | EPIC-003 |
+| `ferret init` | Implemented | EPIC-002, EPIC-003 |
+| `ferret config` | Implemented | EPIC-003 |
 | `ferret status` | Planned | EPIC-004 |
 | `ferret doctor` | Planned | EPIC-004 |
 | `ferret mcp` | Planned | EPIC-064 |
@@ -135,10 +136,68 @@ default or is genuinely optional.
 | `FERRET_DATABASE_MIGRATE` | `auto` applies pending migrations on start, `verify` refuses to start behind, `off` neither migrates nor complains. `ferret init` always applies. | `auto` |
 | `FERRET_EXCLUDE` | Comma/semicolon-separated paths excluded from indexing | empty |
 | `FERRET_LOG_LEVEL` | Structured log verbosity | `warn` |
+| `FERRET_CONFIG` | Use this configuration file instead of the platform default | — |
+| `FERRET_CONFIG_HOME` | Use this directory instead of the platform default | — |
 
-Environment variables are the only configuration source in this release. Files,
-repository policy and session scope arrive with EPIC-003, which adds them behind
-the same `ConfigSource` interface without changing the runtime.
+### Where configuration comes from
+
+Ferret reads these layers, lowest precedence first (Governance §16):
+
+| Layer | Source | Notes |
+| --- | --- | --- |
+| Defaults | built in | Ferret starts with no configuration at all |
+| Environment discovery | `FERRET_*` variables | |
+| User configuration | `ferret config set` | **outranks the environment** — the file is what you chose |
+| Repository policy | `.ferret/config.json` | may set **only** `exclude` — see below |
+| Session scope | in memory | set by an AI client for one session |
+| Explicit operation | CLI flags | nothing stored overrides what you just asked for |
+
+`ferret config list --explain` reports which layer supplied each value.
+
+```bash
+ferret config set database.host db.example
+ferret config get database.host
+ferret config list --explain --json
+ferret config path              # where Ferret reads and writes
+ferret config audit             # what changed, when, and by whom
+```
+
+Changes are validated before they take effect: a rejected change leaves the
+stored file byte-identical. Writes are atomic and locked, so concurrent changes
+cannot lose one another and a crash cannot leave a torn file.
+
+### Keeping the password out of the file
+
+Instead of storing a secret, store where to find it:
+
+```bash
+ferret config set database.password '{"$secret":{"env":"FERRET_PG_PASSWORD"}}'
+ferret config set database.password '{"$secret":{"file":"/run/secrets/ferret-db"}}'
+```
+
+The reference is what gets written; the secret is read at startup. An
+unresolvable reference is an error, never a silently empty password.
+
+### Repository policy is not a configuration channel
+
+A `.ferret/config.json` inside a repository may set **only** `exclude`. It is
+committed and shared with everyone who clones that repository, so it must not be
+able to repoint your database, change your credentials, enable a provider or
+alter your log level. Anything else in the file is ignored and reported by
+`ferret config list`. Exclusion is additive and one-way, so the worst a
+repository can do is cause less of itself to be indexed.
+
+### Exclusions
+
+Exclusions govern indexing and retrieval. **They never delete evidence Ferret
+has already recorded** — a rule carries an `effectiveFrom` instant, so a question
+about the past is answered as policy stood then.
+
+```bash
+ferret config set exclude '["scratch/**"]'
+ferret config exclude list                    # yours plus Ferret's defaults
+ferret config exclude test path/to/file.ts    # which rule applies, and why
+```
 
 Secrets are redacted everywhere Ferret renders configuration — `ferret env`,
 error details and log records alike:
@@ -178,6 +237,8 @@ mismatch is refused as `E_SCHEMA_DRIFT` rather than silently re-applied.
   error model and the contracts later Epics extend
 - [Storage decisions](docs/Architecture/EPIC-002-DECISIONS.md) — migration
   atomicity, locking, failure recovery and why each was chosen
+- [Configuration decisions](docs/Architecture/EPIC-003-DECISIONS.md) — precedence,
+  the repository trust boundary, secret references and durable writes
 - [Governance](docs/Governance/README.md) — the binding engineering rules
 - [Technology decisions](docs/TECHNOLOGY-DECISIONS.md) — the EPIC-005 stack
   selection and its evidence

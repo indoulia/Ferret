@@ -1,4 +1,7 @@
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { TestProject } from 'vitest/node';
@@ -44,10 +47,22 @@ export default async function setup({ provide }: TestProject): Promise<() => Pro
   });
   execFileSync(process.execPath, ['scripts/copy-migrations.mjs'], { cwd: ROOT, stdio: 'inherit' });
 
+  // EPIC-003 made the runtime read a real user configuration file. Without this
+  // the suite would pick up whatever the developer running it has configured,
+  // and would pass or fail depending on their machine. Every process the suite
+  // starts inherits this, so nothing can reach the real config.
+  const configHome = mkdtempSync(join(tmpdir(), 'ferret-test-config-'));
+  process.env['FERRET_CONFIG_HOME'] = configHome;
+
+  const cleanConfigHome = (): void => rmSync(configHome, { recursive: true, force: true });
+
   const external = process.env['FERRET_TEST_DATABASE_URL'];
   if (external !== undefined && external !== '') {
     provide('ferretTestDatabaseUrl', external);
-    return () => Promise.resolve();
+    return () => {
+      cleanConfigHome();
+      return Promise.resolve();
+    };
   }
 
   // The cross-platform CI job sets this: it proves Ferret builds and its
@@ -57,7 +72,10 @@ export default async function setup({ provide }: TestProject): Promise<() => Pro
   // skip on Windows, which reads as coverage it does not have.
   if (process.env['FERRET_SKIP_DOCKER_POSTGRES'] === '1') {
     provide('ferretTestDatabaseUrl', null);
-    return () => Promise.resolve();
+    return () => {
+      cleanConfigHome();
+      return Promise.resolve();
+    };
   }
 
   try {
@@ -82,6 +100,7 @@ export default async function setup({ provide }: TestProject): Promise<() => Pro
     process.env['FERRET_TEST_DATABASE_URL'] = url;
 
     return async () => {
+      cleanConfigHome();
       await container.stop();
     };
   } catch (error) {
@@ -92,6 +111,9 @@ export default async function setup({ provide }: TestProject): Promise<() => Pro
       `\n[ferret] PostgreSQL integration tests will be skipped: ${(error as Error).message}\n\n`,
     );
     provide('ferretTestDatabaseUrl', null);
-    return () => Promise.resolve();
+    return () => {
+      cleanConfigHome();
+      return Promise.resolve();
+    };
   }
 }
