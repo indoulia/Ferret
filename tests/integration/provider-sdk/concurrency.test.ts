@@ -265,7 +265,20 @@ describe('rate limiter under contention', () => {
   });
 
   it('loses no budget to waiters that gave up', async () => {
-    const limiter = new RateLimiter({ perMinute: 6_000, burst: 1 });
+    // A **frozen clock**, injected. The first version of this used real time at
+    // 100 tokens a second, so tokens refilled while the twenty waiters were
+    // being queued and aborted, and the head was sometimes granted before its
+    // abort arrived. It passed alone and failed under load — which is the
+    // definition of a test nobody will trust the next time it goes red.
+    //
+    // With time held still, nothing can refill, so any grant here is the
+    // limiter losing track of its budget rather than the clock moving.
+    let frozen = true;
+    const limiter = new RateLimiter({
+      perMinute: 60_000,
+      burst: 1,
+      now: () => (frozen ? 0 : performance.now()),
+    });
     await limiter.acquire(never);
 
     const controllers = Array.from({ length: 20 }, () => new AbortController());
@@ -278,11 +291,15 @@ describe('rate limiter under contention', () => {
     const survivors = Array.from({ length: 5 }, () => limiter.acquire(never));
 
     for (const controller of controllers) controller.abort();
-
     expect(await Promise.all(abandoned)).toStrictEqual(Array.from({ length: 20 }, () => 'abandoned'));
+
+    // Only now does time move.
+    frozen = false;
     await Promise.all(survivors);
 
-    // A waiter that gave up must not have consumed a token on its way out.
+    // One at the start plus five survivors. Twenty abandoned waiters cost
+    // nothing, which is the property: a waiter that gives up must not consume a
+    // token on its way out, or the budget silently drains.
     expect(limiter.stats.granted).toBe(6);
     expect(limiter.stats.waiting).toBe(0);
   });

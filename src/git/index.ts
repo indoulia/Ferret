@@ -17,6 +17,14 @@ export {
   type RepositoryIdentity,
 } from './identity.js';
 export {
+  MAX_REFS_PER_READ,
+  listBranches,
+  listWorktrees,
+  sanitizeRefText,
+  type BranchListing,
+  type ListBranchesOptions,
+} from './refs.js';
+export {
   GIT_PROVIDER_ID,
   GIT_SOURCE_SYSTEM,
   GitSourceProvider,

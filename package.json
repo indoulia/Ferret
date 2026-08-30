@@ -56,7 +56,7 @@
     "tag": "next"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs",
     "clean": "node scripts/clean.mjs",
     "migration:generate": "node scripts/generate-migration.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
