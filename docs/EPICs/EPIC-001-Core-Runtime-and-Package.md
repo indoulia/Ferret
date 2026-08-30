@@ -12,7 +12,7 @@ NPM package layout; runtime bootstrap; dependency boundaries; startup/shutdown; 
 Database schema, provider implementations, indexing algorithms, MCP tools, and domain-specific parsers.
 
 ## Dependencies
-EPIC-004 Technology Evaluation may select the final runtime/language before implementation is locked.
+EPIC-005 Technology Evaluation & Selection may select the final runtime/language before implementation is locked.
 
 ## Acceptance criteria
 - `npm install -g ferret` installs a usable CLI/runtime package.
