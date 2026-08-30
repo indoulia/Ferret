@@ -1,0 +1,1495 @@
+{
+  "environment": {
+    "generated_utc": "2026-08-30T06:23:35Z",
+    "os": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "cpu_count": 16,
+    "node": "v22.23.2",
+    "npm": "10.9.8",
+    "python": "Python 3.12.10",
+    "git": "git version 2.55.0.windows.4",
+    "docker": "Docker version 29.6.2-rd, build ede120b",
+    "postgres_url_set": true
+  },
+  "footprint": {
+    "node": {
+      "bytes": 183420602,
+      "files": 7400,
+      "packages": 228
+    },
+    "python": {
+      "venv_bytes": 106310273,
+      "site_packages_bytes": 104484242,
+      "pip_bytes": 11027878,
+      "files": 5510,
+      "packages": 42
+    }
+  },
+  "startup": {
+    "node_runtime": {
+      "samples": [
+        286.0693000111496,
+        294.7866000031354,
+        300.5154999991646,
+        288.44950000348035,
+        290.6718999875011,
+        284.8240000021178,
+        294.1131999978097,
+        284.5803999953205,
+        303.9159999898402,
+        305.7859999971697,
+        324.1065000038361,
+        366.82520000613295,
+        348.82820000348147,
+        372.9452000115998,
+        364.60519999673124,
+        341.2984000024153,
+        338.8221000059275,
+        378.367099998286,
+        389.3654000130482,
+        407.2106999956304
+      ],
+      "median": 324.1065000038361,
+      "min": 284.5803999953205,
+      "max": 407.2106999956304,
+      "n": 20
+    },
+    "python_runtime": {
+      "samples": [
+        352.5221000018064,
+        336.3487000024179,
+        325.5490000010468,
+        324.9835000024177,
+        293.04429999319836,
+        331.2322999991011,
+        349.3644999980461,
+        315.09299999743234,
+        333.11340000364,
+        311.34519999613985,
+        292.00119999586605,
+        245.7663999957731,
+        272.57030000328086,
+        267.46499999717344,
+        307.62890000187326,
+        288.28610001073685,
+        311.6167999978643,
+        296.03700000734534,
+        260.4435000102967,
+        272.72950000769924
+      ],
+      "median": 311.34519999613985,
+      "min": 245.7663999957731,
+      "max": 352.5221000018064,
+      "n": 20
+    },
+    "node_app": {
+      "samples": [
+        1905.5075000069337,
+        1730.3355000040028,
+        1840.3293000010308,
+        1740.7415000052424,
+        1467.6632000046084,
+        1557.4969000008423,
+        1277.0960000052582,
+        1359.1429999942193,
+        1445.8306000015,
+        1312.133300001733
+      ],
+      "median": 1557.4969000008423,
+      "min": 1277.0960000052582,
+      "max": 1905.5075000069337,
+      "n": 10
+    },
+    "python_app": {
+      "samples": [
+        2271.6789999976754,
+        2093.6115000076825,
+        2110.322000007727,
+        2155.935100003262,
+        2151.091699997778,
+        2349.7105999995256,
+        3188.111099996604,
+        2888.774699997157,
+        2253.8465000106953,
+        2143.3891000051517
+      ],
+      "median": 2253.8465000106953,
+      "min": 2093.6115000076825,
+      "max": 3188.111099996604,
+      "n": 10
+    }
+  },
+  "benchmarks": {
+    "memory": {
+      "node": {
+        "wall_ms": 1268.551099987235,
+        "results": [
+          {
+            "benchmark": "memory",
+            "runtime": "node",
+            "unit": "bytes",
+            "samples": [
+              118706176
+            ],
+            "median": 118706176,
+            "min": 118706176,
+            "max": 118706176,
+            "n": 1,
+            "meta": {
+              "rss_before_imports": 48283648,
+              "heap_used": 30906192
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 2209.666999988258,
+        "results": [
+          {
+            "benchmark": "memory",
+            "runtime": "python",
+            "unit": "bytes",
+            "samples": [
+              107274240
+            ],
+            "median": 107274240,
+            "min": 107274240,
+            "max": 107274240,
+            "n": 1,
+            "meta": {
+              "rss_before_imports": 38088704
+            }
+          }
+        ]
+      }
+    },
+    "fsscan": {
+      "node": {
+        "wall_ms": 4135.331400000723,
+        "results": [
+          {
+            "benchmark": "fsscan",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              811.1831,
+              815.3908,
+              712.5188,
+              709.6294,
+              770.634
+            ],
+            "median": 770.634,
+            "min": 709.6294,
+            "max": 815.3908,
+            "n": 5,
+            "meta": {
+              "files": 2000,
+              "bytes": 5522426
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 3401.203899993561,
+        "results": [
+          {
+            "benchmark": "fsscan",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              615.1170000084676,
+              596.0055000032298,
+              578.9832000009483,
+              622.5052000081632,
+              604.2137999902479
+            ],
+            "median": 604.2137999902479,
+            "min": 578.9832000009483,
+            "max": 622.5052000081632,
+            "n": 5,
+            "meta": {
+              "files": 2000,
+              "bytes": 5522426
+            }
+          }
+        ]
+      }
+    },
+    "concurrency": {
+      "node": {
+        "wall_ms": 1355.1575000019511,
+        "results": [
+          {
+            "benchmark": "concurrency",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              225.9765,
+              264.675,
+              285.779
+            ],
+            "median": 264.675,
+            "min": 225.9765,
+            "max": 285.779,
+            "n": 3,
+            "meta": {
+              "files": 2000,
+              "workers": 4,
+              "model": "worker_threads"
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 2432.8920999978436,
+        "results": [
+          {
+            "benchmark": "concurrency",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              526.5526000002865,
+              583.9228999975603,
+              563.5769000073196
+            ],
+            "median": 563.5769000073196,
+            "min": 526.5526000002865,
+            "max": 583.9228999975603,
+            "n": 3,
+            "meta": {
+              "files": 2000,
+              "workers": 4,
+              "model": "ProcessPoolExecutor"
+            }
+          }
+        ]
+      }
+    },
+    "git": {
+      "node": {
+        "wall_ms": 2015.0423000013689,
+        "results": [
+          {
+            "benchmark": "git",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              169.1546,
+              164.6621,
+              162.4555,
+              163.7769,
+              172.0498,
+              174.8399,
+              169.5365,
+              161.5296,
+              155.1469,
+              152.2438
+            ],
+            "median": 164.2195,
+            "min": 152.2438,
+            "max": 174.8399,
+            "n": 10,
+            "meta": {
+              "commits": 44,
+              "tracked": 16,
+              "strategy": "git executable via child_process"
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 4832.04459999979,
+        "results": [
+          {
+            "benchmark": "git",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              382.74230000388343,
+              352.57519999868236,
+              423.10090000682976,
+              447.9371000052197,
+              519.7553000034532,
+              458.2036999927368,
+              481.3826000026893,
+              465.515800009598,
+              463.85330001066905,
+              439.57609999051783
+            ],
+            "median": 453.07039999897825,
+            "min": 352.57519999868236,
+            "max": 519.7553000034532,
+            "n": 10,
+            "meta": {
+              "commits": 44,
+              "tracked": 16,
+              "strategy": "git executable via subprocess"
+            }
+          }
+        ]
+      }
+    },
+    "pdf": {
+      "node": {
+        "wall_ms": 2298.3988000050886,
+        "results": [
+          {
+            "benchmark": "parse_pdf",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              734.4902,
+              467.4652,
+              445.5414
+            ],
+            "median": 467.4652,
+            "min": 445.5414,
+            "max": 734.4902,
+            "n": 3,
+            "meta": {
+              "files": 5,
+              "units": 4200
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 3944.830099993851,
+        "results": [
+          {
+            "benchmark": "parse_pdf",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              1120.7352000055835,
+              1152.1699000004446,
+              1075.2232000086224
+            ],
+            "median": 1120.7352000055835,
+            "min": 1075.2232000086224,
+            "max": 1152.1699000004446,
+            "n": 3,
+            "meta": {
+              "files": 5,
+              "units": 4200
+            }
+          }
+        ]
+      }
+    },
+    "docx": {
+      "node": {
+        "wall_ms": 1878.838499993435,
+        "results": [
+          {
+            "benchmark": "parse_docx",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              551.6701,
+              442.5928,
+              383.251
+            ],
+            "median": 442.5928,
+            "min": 383.251,
+            "max": 551.6701,
+            "n": 3,
+            "meta": {
+              "files": 5,
+              "units": 436502
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 1394.8881999967853,
+        "results": [
+          {
+            "benchmark": "parse_docx",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              288.46109998994507,
+              319.1755000007106,
+              304.1579999990063
+            ],
+            "median": 304.1579999990063,
+            "min": 288.46109998994507,
+            "max": 319.1755000007106,
+            "n": 3,
+            "meta": {
+              "files": 5,
+              "units": 429972
+            }
+          }
+        ]
+      }
+    },
+    "xlsx": {
+      "node": {
+        "wall_ms": 3318.3030999935,
+        "results": [
+          {
+            "benchmark": "parse_xlsx",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              889.3733,
+              822.2893,
+              840.8822
+            ],
+            "median": 840.8822,
+            "min": 822.2893,
+            "max": 889.3733,
+            "n": 3,
+            "meta": {
+              "files": 5,
+              "units": 40020
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 7461.457100012922,
+        "results": [
+          {
+            "benchmark": "parse_xlsx",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              2343.896999998833,
+              2222.899700005655,
+              1941.0606999881566
+            ],
+            "median": 2222.899700005655,
+            "min": 1941.0606999881566,
+            "max": 2343.896999998833,
+            "n": 3,
+            "meta": {
+              "files": 5,
+              "units": 40020
+            }
+          }
+        ]
+      }
+    },
+    "csv": {
+      "node": {
+        "wall_ms": 2981.2161000008928,
+        "results": [
+          {
+            "benchmark": "parse_csv",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              906.7934,
+              917.2931,
+              791.8346
+            ],
+            "median": 906.7934,
+            "min": 791.8346,
+            "max": 917.2931,
+            "n": 3,
+            "meta": {
+              "files": 5,
+              "units": 250005
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 1038.223099996685,
+        "results": [
+          {
+            "benchmark": "parse_csv",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              228.17610000493005,
+              229.04440001002513,
+              229.75930001121014
+            ],
+            "median": 229.04440001002513,
+            "min": 228.17610000493005,
+            "max": 229.75930001121014,
+            "n": 3,
+            "meta": {
+              "files": 5,
+              "units": 250005
+            }
+          }
+        ]
+      }
+    },
+    "treesitter": {
+      "node": {
+        "wall_ms": 7470.314199992572,
+        "results": [
+          {
+            "benchmark": "treesitter",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              2364.9703,
+              2160.8031,
+              2312.2222
+            ],
+            "median": 2312.2222,
+            "min": 2160.8031,
+            "max": 2364.9703,
+            "n": 3,
+            "meta": {
+              "parsed": 1590,
+              "named_nodes": 758096,
+              "binding": "web-tree-sitter (WASM)"
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 5881.504100005259,
+        "results": [
+          {
+            "benchmark": "treesitter",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              1652.304000002914,
+              1835.5845000041882,
+              1378.2677999988664
+            ],
+            "median": 1652.304000002914,
+            "min": 1378.2677999988664,
+            "max": 1835.5845000041882,
+            "n": 3,
+            "meta": {
+              "parsed": 1590,
+              "named_nodes": 749220,
+              "binding": "tree-sitter (native wheel)"
+            }
+          }
+        ]
+      }
+    },
+    "largefile": {
+      "node": {
+        "wall_ms": 18370.691300006,
+        "results": [
+          {
+            "benchmark": "largefile_csv",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              4476.9616,
+              5607.8941,
+              7937.0975
+            ],
+            "median": 5607.8941,
+            "min": 4476.9616,
+            "max": 7937.0975,
+            "n": 3,
+            "meta": {
+              "bytes": 84246690,
+              "rows": 2000001,
+              "peak_rss_bytes": 64860160,
+              "mode": "streaming"
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 7708.683899996686,
+        "results": [
+          {
+            "benchmark": "largefile_csv",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              2259.374899993418,
+              2810.1838000002317,
+              1997.2872999933315
+            ],
+            "median": 2259.374899993418,
+            "min": 1997.2872999933315,
+            "max": 2810.1838000002317,
+            "n": 3,
+            "meta": {
+              "bytes": 84246690,
+              "rows": 2000001,
+              "peak_rss_bytes": 38248448,
+              "mode": "streaming"
+            }
+          }
+        ]
+      }
+    },
+    "robustness": {
+      "node": {
+        "wall_ms": 18553.88479999965,
+        "results": [
+          {
+            "benchmark": "robustness",
+            "runtime": "node",
+            "unit": "cases",
+            "samples": [
+              16
+            ],
+            "median": 16,
+            "min": 16,
+            "max": 16,
+            "n": 1,
+            "meta": {
+              "tally": {
+                "clean_error": 13,
+                "ok": 3
+              },
+              "results": [
+                {
+                  "kind": "pdf",
+                  "case": "truncated50",
+                  "file": "pdf_truncated50.pdf",
+                  "bytes": 17777,
+                  "outcome": "clean_error",
+                  "error": "InvalidPDFException",
+                  "message": "Invalid PDF structure.",
+                  "ms": 1292
+                },
+                {
+                  "kind": "pdf",
+                  "case": "truncated05",
+                  "file": "pdf_truncated05.pdf",
+                  "bytes": 1777,
+                  "outcome": "clean_error",
+                  "error": "InvalidPDFException",
+                  "message": "Invalid PDF structure.",
+                  "ms": 1237
+                },
+                {
+                  "kind": "pdf",
+                  "case": "corrupt",
+                  "file": "pdf_corrupt.pdf",
+                  "bytes": 35554,
+                  "outcome": "clean_error",
+                  "error": "UnknownErrorException",
+                  "message": "Command token too long: 128",
+                  "ms": 1092
+                },
+                {
+                  "kind": "docx",
+                  "case": "truncated50",
+                  "file": "docx_truncated50.docx",
+                  "bytes": 24898,
+                  "outcome": "clean_error",
+                  "error": "Error",
+                  "message": "Corrupted zip: can't find end of central directory",
+                  "ms": 657
+                },
+                {
+                  "kind": "docx",
+                  "case": "truncated05",
+                  "file": "docx_truncated05.docx",
+                  "bytes": 2489,
+                  "outcome": "clean_error",
+                  "error": "Error",
+                  "message": "Corrupted zip: can't find end of central directory",
+                  "ms": 606
+                },
+                {
+                  "kind": "docx",
+                  "case": "corrupt",
+                  "file": "docx_corrupt.docx",
+                  "bytes": 49796,
+                  "outcome": "clean_error",
+                  "error": "Error",
+                  "message": "Bug : uncompressed data size mismatch",
+                  "ms": 540
+                },
+                {
+                  "kind": "xlsx",
+                  "case": "truncated50",
+                  "file": "xlsx_truncated50.xlsx",
+                  "bytes": 140540,
+                  "outcome": "clean_error",
+                  "error": "Error",
+                  "message": "Corrupted zip: can't find end of central directory",
+                  "ms": 849
+                },
+                {
+                  "kind": "xlsx",
+                  "case": "truncated05",
+                  "file": "xlsx_truncated05.xlsx",
+                  "bytes": 14054,
+                  "outcome": "clean_error",
+                  "error": "Error",
+                  "message": "Corrupted zip: can't find end of central directory",
+                  "ms": 853
+                },
+                {
+                  "kind": "xlsx",
+                  "case": "corrupt",
+                  "file": "xlsx_corrupt.xlsx",
+                  "bytes": 281081,
+                  "outcome": "clean_error",
+                  "error": "Error",
+                  "message": "Bug : uncompressed data size mismatch",
+                  "ms": 989
+                },
+                {
+                  "kind": "csv",
+                  "case": "truncated50",
+                  "file": "csv_truncated50.csv",
+                  "bytes": 1931070,
+                  "outcome": "ok",
+                  "units": 25139,
+                  "ms": 590
+                },
+                {
+                  "kind": "csv",
+                  "case": "truncated05",
+                  "file": "csv_truncated05.csv",
+                  "bytes": 193107,
+                  "outcome": "ok",
+                  "units": 2583,
+                  "ms": 554
+                },
+                {
+                  "kind": "csv",
+                  "case": "corrupt",
+                  "file": "csv_corrupt.csv",
+                  "bytes": 3862141,
+                  "outcome": "ok",
+                  "units": 49948,
+                  "ms": 792
+                },
+                {
+                  "kind": "pdf",
+                  "case": "empty",
+                  "file": "pdf_empty.pdf",
+                  "bytes": 0,
+                  "outcome": "clean_error",
+                  "error": "InvalidPDFException",
+                  "message": "The PDF file is empty, i.e. its size is zero bytes.",
+                  "ms": 1335
+                },
+                {
+                  "kind": "pdf",
+                  "case": "wrong_magic",
+                  "file": "pdf_wrongtype.pdf",
+                  "bytes": 281081,
+                  "outcome": "clean_error",
+                  "error": "InvalidPDFException",
+                  "message": "Invalid PDF structure.",
+                  "ms": 2150
+                },
+                {
+                  "kind": "docx",
+                  "case": "decompression_amplification",
+                  "file": "docx_amplification.docx",
+                  "bytes": 39243,
+                  "uncompressed_bytes": 40000000,
+                  "outcome": "clean_error",
+                  "error": "Error",
+                  "message": "Could not find the body element: are you sure this is a docx file?",
+                  "ms": 2333
+                },
+                {
+                  "kind": "docx",
+                  "case": "xxe_external_entity",
+                  "file": "docx_xxe.docx",
+                  "bytes": 866,
+                  "outcome": "clean_error",
+                  "error": "Error",
+                  "message": "error: [xmldom error]\tentity not found:&xxe;\n@#[line:undefined,col:undefined]",
+                  "ms": 1967
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 20657.714499990107,
+        "results": [
+          {
+            "benchmark": "robustness",
+            "runtime": "python",
+            "unit": "cases",
+            "samples": [
+              16
+            ],
+            "median": 16,
+            "min": 16,
+            "max": 16,
+            "n": 1,
+            "meta": {
+              "tally": {
+                "clean_error": 12,
+                "ok": 4
+              },
+              "results": [
+                {
+                  "kind": "pdf",
+                  "case": "truncated50",
+                  "file": "pdf_truncated50.pdf",
+                  "bytes": 17777,
+                  "outcome": "clean_error",
+                  "error": "PdfStreamError",
+                  "message": "Stream has ended unexpectedly",
+                  "ms": 3073.4742999920854
+                },
+                {
+                  "kind": "pdf",
+                  "case": "truncated05",
+                  "file": "pdf_truncated05.pdf",
+                  "bytes": 1777,
+                  "outcome": "clean_error",
+                  "error": "PdfStreamError",
+                  "message": "Stream has ended unexpectedly",
+                  "ms": 1795.8823999942979
+                },
+                {
+                  "kind": "pdf",
+                  "case": "corrupt",
+                  "file": "pdf_corrupt.pdf",
+                  "bytes": 35554,
+                  "outcome": "clean_error",
+                  "error": "ValueError",
+                  "message": "Non-Ascii85 digit found: \u00cf",
+                  "ms": 1878.6213000130374
+                },
+                {
+                  "kind": "docx",
+                  "case": "truncated50",
+                  "file": "docx_truncated50.docx",
+                  "bytes": 24898,
+                  "outcome": "clean_error",
+                  "error": "PackageNotFoundError",
+                  "message": "Package not found at 'C:\\AIAgent\\Ferret\\spikes\\corpus\\malformed\\docx_truncated50.docx'",
+                  "ms": 1041.201000000001
+                },
+                {
+                  "kind": "docx",
+                  "case": "truncated05",
+                  "file": "docx_truncated05.docx",
+                  "bytes": 2489,
+                  "outcome": "clean_error",
+                  "error": "PackageNotFoundError",
+                  "message": "Package not found at 'C:\\AIAgent\\Ferret\\spikes\\corpus\\malformed\\docx_truncated05.docx'",
+                  "ms": 801.9016000034753
+                },
+                {
+                  "kind": "docx",
+                  "case": "corrupt",
+                  "file": "docx_corrupt.docx",
+                  "bytes": 49796,
+                  "outcome": "clean_error",
+                  "error": "error",
+                  "message": "Error -3 while decompressing data: invalid distance too far back",
+                  "ms": 694.6848999941722
+                },
+                {
+                  "kind": "xlsx",
+                  "case": "truncated50",
+                  "file": "xlsx_truncated50.xlsx",
+                  "bytes": 140540,
+                  "outcome": "clean_error",
+                  "error": "BadZipFile",
+                  "message": "File is not a zip file",
+                  "ms": 2315.8005000004778
+                },
+                {
+                  "kind": "xlsx",
+                  "case": "truncated05",
+                  "file": "xlsx_truncated05.xlsx",
+                  "bytes": 14054,
+                  "outcome": "clean_error",
+                  "error": "BadZipFile",
+                  "message": "File is not a zip file",
+                  "ms": 2291.1463000054937
+                },
+                {
+                  "kind": "xlsx",
+                  "case": "corrupt",
+                  "file": "xlsx_corrupt.xlsx",
+                  "bytes": 281081,
+                  "outcome": "clean_error",
+                  "error": "ParseError",
+                  "message": "not well-formed (invalid token): line 1, column 151747",
+                  "ms": 1419.8655999935
+                },
+                {
+                  "kind": "csv",
+                  "case": "truncated50",
+                  "file": "csv_truncated50.csv",
+                  "bytes": 1931070,
+                  "outcome": "ok",
+                  "units": 25139,
+                  "ms": 413.35000000253785
+                },
+                {
+                  "kind": "csv",
+                  "case": "truncated05",
+                  "file": "csv_truncated05.csv",
+                  "bytes": 193107,
+                  "outcome": "ok",
+                  "units": 2583,
+                  "ms": 384.004499996081
+                },
+                {
+                  "kind": "csv",
+                  "case": "corrupt",
+                  "file": "csv_corrupt.csv",
+                  "bytes": 3862141,
+                  "outcome": "ok",
+                  "units": 49948,
+                  "ms": 457.7217999903951
+                },
+                {
+                  "kind": "pdf",
+                  "case": "empty",
+                  "file": "pdf_empty.pdf",
+                  "bytes": 0,
+                  "outcome": "clean_error",
+                  "error": "EmptyFileError",
+                  "message": "Cannot read an empty file",
+                  "ms": 780.2047000004677
+                },
+                {
+                  "kind": "pdf",
+                  "case": "wrong_magic",
+                  "file": "pdf_wrongtype.pdf",
+                  "bytes": 281081,
+                  "outcome": "clean_error",
+                  "error": "PdfStreamError",
+                  "message": "Stream has ended unexpectedly",
+                  "ms": 753.0689999985043
+                },
+                {
+                  "kind": "docx",
+                  "case": "decompression_amplification",
+                  "file": "docx_amplification.docx",
+                  "bytes": 39243,
+                  "uncompressed_bytes": 40000000,
+                  "outcome": "clean_error",
+                  "error": "KeyError",
+                  "message": "\"no relationship of type 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument' in collection\"",
+                  "ms": 575.0754000036977
+                },
+                {
+                  "kind": "docx",
+                  "case": "xxe_external_entity",
+                  "file": "docx_xxe.docx",
+                  "bytes": 866,
+                  "outcome": "ok",
+                  "units": 0,
+                  "ms": 558.413599996129
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "postgres": {
+      "node": {
+        "wall_ms": 2993.173499999102,
+        "results": [
+          {
+            "benchmark": "postgres_insert",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              985.0421
+            ],
+            "median": 985.0421,
+            "min": 985.0421,
+            "max": 985.0421,
+            "n": 1,
+            "meta": {
+              "rows": 50000,
+              "driver": "pg"
+            }
+          },
+          {
+            "benchmark": "postgres_index",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              1208.4053
+            ],
+            "median": 1208.4053,
+            "min": 1208.4053,
+            "max": 1208.4053,
+            "n": 1,
+            "meta": {
+              "rows": 50000,
+              "driver": "pg"
+            }
+          },
+          {
+            "benchmark": "postgres_fts_query",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              9.6408,
+              8.0631,
+              7.9211,
+              8.3212,
+              8.4073,
+              7.88,
+              7.836,
+              7.9594,
+              8.2438,
+              7.9535,
+              8.0902,
+              8.2313,
+              8.3333,
+              7.9947,
+              7.8815,
+              8.761,
+              10.5439,
+              8.143,
+              7.72,
+              8.1586
+            ],
+            "median": 8.1166,
+            "min": 7.72,
+            "max": 10.5439,
+            "n": 20,
+            "meta": {
+              "hits": 100,
+              "driver": "pg"
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 3542.133599999943,
+        "results": [
+          {
+            "benchmark": "postgres_insert",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              1120.3213999979198
+            ],
+            "median": 1120.3213999979198,
+            "min": 1120.3213999979198,
+            "max": 1120.3213999979198,
+            "n": 1,
+            "meta": {
+              "rows": 50000,
+              "driver": "psycopg3"
+            }
+          },
+          {
+            "benchmark": "postgres_index",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              1274.2525000066962
+            ],
+            "median": 1274.2525000066962,
+            "min": 1274.2525000066962,
+            "max": 1274.2525000066962,
+            "n": 1,
+            "meta": {
+              "rows": 50000,
+              "driver": "psycopg3"
+            }
+          },
+          {
+            "benchmark": "postgres_fts_query",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              19.83410000684671,
+              12.986300003831275,
+              13.72639999317471,
+              11.319700002786703,
+              13.083500001812354,
+              11.342900004819967,
+              14.56480000342708,
+              12.025000003632158,
+              8.980500002508052,
+              12.274699998670258,
+              13.24699999531731,
+              12.148800000431947,
+              10.065099995699711,
+              15.918000004603527,
+              14.591699989978224,
+              12.501200006227009,
+              14.46560000476893,
+              10.677400001441129,
+              9.292799994000234,
+              10.449599998537451
+            ],
+            "median": 12.387950002448633,
+            "min": 8.980500002508052,
+            "max": 19.83410000684671,
+            "n": 20,
+            "meta": {
+              "hits": 100,
+              "driver": "psycopg3"
+            }
+          }
+        ]
+      }
+    },
+    "mcp": {
+      "node": {
+        "wall_ms": 5243.621999994502,
+        "results": [
+          {
+            "benchmark": "mcp_startup",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              1026.12,
+              812.0184,
+              803.4752,
+              743.3762,
+              649.9026
+            ],
+            "median": 803.4752,
+            "min": 649.9026,
+            "max": 1026.12,
+            "n": 5,
+            "meta": {
+              "tools": 2,
+              "transport": "stdio",
+              "sdk": "@modelcontextprotocol/sdk"
+            }
+          },
+          {
+            "benchmark": "mcp_tool_small",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              8.3412,
+              1.7896,
+              1.4442,
+              2.1573,
+              2.9076,
+              1.7785,
+              2.4418,
+              1.3127,
+              1.5921,
+              1.2696,
+              1.0045,
+              0.8204,
+              0.7569,
+              0.8285,
+              0.8051,
+              0.7942,
+              0.8589,
+              0.731,
+              0.9423,
+              0.8154,
+              0.8262,
+              0.8063,
+              0.6878,
+              0.666,
+              0.6928,
+              0.7951,
+              0.8847,
+              0.6582,
+              0.6816,
+              0.6805,
+              0.707,
+              0.6751,
+              0.6772,
+              0.6362,
+              0.938,
+              0.7653,
+              0.6876,
+              0.7718,
+              0.8586,
+              0.8847,
+              0.9749,
+              0.842,
+              0.7771,
+              0.7787,
+              0.5516,
+              0.6507,
+              0.6239,
+              0.6264,
+              0.6673,
+              0.5896,
+              0.5012,
+              0.7615,
+              0.5815,
+              0.5335,
+              0.9096,
+              0.7423,
+              0.5675,
+              0.5516,
+              0.5175,
+              0.6542,
+              0.6578,
+              0.7643,
+              0.7245,
+              0.7,
+              0.6472,
+              0.6408,
+              0.6583,
+              0.549,
+              0.5598,
+              0.4691,
+              0.6296,
+              0.5008,
+              0.4824,
+              0.5226,
+              0.5046,
+              0.5219,
+              0.4537,
+              0.4691,
+              0.4772,
+              0.4458,
+              0.6549,
+              0.716,
+              0.571,
+              0.5044,
+              0.4972,
+              0.4522,
+              0.5236,
+              0.4798,
+              0.4519,
+              0.4975,
+              0.5982,
+              0.867,
+              0.889,
+              0.8365,
+              0.7892,
+              0.8385,
+              0.719,
+              0.7571,
+              0.6297,
+              0.6809
+            ],
+            "median": 0.6877,
+            "min": 0.4458,
+            "max": 8.3412,
+            "n": 100,
+            "meta": {
+              "calls": 100,
+              "payload": "echo"
+            }
+          },
+          {
+            "benchmark": "mcp_tool_large",
+            "runtime": "node",
+            "unit": "ms",
+            "samples": [
+              5.926,
+              5.9077,
+              5.4781,
+              5.5116,
+              6.168,
+              8.1082,
+              8.3291,
+              8.5311,
+              6.8189,
+              5.9697,
+              6.6986,
+              5.9632,
+              6.5324,
+              8.2663,
+              8.2054,
+              8.0081,
+              7.4917,
+              6.5935,
+              7.8013,
+              7.1967
+            ],
+            "median": 6.75875,
+            "min": 5.4781,
+            "max": 8.5311,
+            "n": 20,
+            "meta": {
+              "calls": 20,
+              "payload": "5000 rows json"
+            }
+          }
+        ]
+      },
+      "python": {
+        "wall_ms": 13466.230999998515,
+        "results": [
+          {
+            "benchmark": "mcp_startup",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              1568.9679000061005,
+              2021.5482999919914,
+              2773.9432000089437,
+              2224.5332000020426,
+              1807.823199997074
+            ],
+            "median": 2021.5482999919914,
+            "min": 1568.9679000061005,
+            "max": 2773.9432000089437,
+            "n": 5,
+            "meta": {
+              "tools": 2,
+              "transport": "stdio",
+              "sdk": "mcp (python)"
+            }
+          },
+          {
+            "benchmark": "mcp_tool_small",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              76.85879999189638,
+              2.628100002766587,
+              1.91939999058377,
+              1.921500006574206,
+              1.8367000011494383,
+              1.6733000084059313,
+              1.6795999981695786,
+              1.5933999966364354,
+              1.6707000031601638,
+              1.588699989952147,
+              1.6267000028165057,
+              2.0243999897502363,
+              1.5270000003511086,
+              1.639699999941513,
+              1.4959999971324578,
+              1.5454999957000837,
+              1.549900000100024,
+              1.6602999967290089,
+              1.7567999893799424,
+              1.6690000047674403,
+              1.5668999985791743,
+              1.549200009321794,
+              1.626500001293607,
+              1.4774000010220334,
+              1.9982999947387725,
+              1.4741000049980357,
+              1.5061999874887988,
+              1.6230000037467107,
+              1.62830000044778,
+              1.6466000088257715,
+              1.5404999867314473,
+              1.7545000009704381,
+              1.6543999954592437,
+              1.6025000077206641,
+              1.561299999593757,
+              1.626800003577955,
+              1.5138000017032027,
+              1.9767000048886985,
+              1.73789999098517,
+              1.7362000071443617,
+              1.778100006049499,
+              1.5743999974802136,
+              1.6250999906333163,
+              1.5980000025592744,
+              1.5312999894376844,
+              1.6656000079819933,
+              1.7205000040121377,
+              1.6503999941051006,
+              1.7184000025736168,
+              1.803999999538064,
+              1.71639998734463,
+              1.7663000035099685,
+              1.6718999977456406,
+              1.6687999886926264,
+              1.6337999986717477,
+              1.4781999925617129,
+              1.6279999981634319,
+              1.7587000038474798,
+              1.7687999934423715,
+              1.7097999952966347,
+              1.745899993693456,
+              1.7364000086672604,
+              1.6625999996904284,
+              1.7248000076506287,
+              1.7374000017298386,
+              1.6758000128902495,
+              1.5696000045863912,
+              1.6317999979946762,
+              1.5178000030573457,
+              1.5550999960396439,
+              1.5893999952822924,
+              1.483700005337596,
+              1.5731000021332875,
+              1.572300010593608,
+              1.5639000048395246,
+              1.5296999918064103,
+              1.5708999999333173,
+              1.9062999926973134,
+              1.74610000976827,
+              1.7051000031642616,
+              1.8202999926870689,
+              1.9357999990461394,
+              1.8458999984432012,
+              1.6838999872561544,
+              1.778700010618195,
+              1.6804000042611733,
+              1.6768999921623617,
+              1.7332999996142462,
+              1.864899997599423,
+              1.7725999932736158,
+              1.9181999959982932,
+              1.9352999952388927,
+              1.9017000013263896,
+              2.0053000043844804,
+              1.6841000033309683,
+              1.8558000010671094,
+              1.651700004003942,
+              1.673899998422712,
+              1.7150000057881698,
+              1.80309999268502
+            ],
+            "median": 1.672600003075786,
+            "min": 1.4741000049980357,
+            "max": 76.85879999189638,
+            "n": 100,
+            "meta": {
+              "calls": 100,
+              "payload": "echo"
+            }
+          },
+          {
+            "benchmark": "mcp_tool_large",
+            "runtime": "python",
+            "unit": "ms",
+            "samples": [
+              12.116099998820573,
+              8.498499999404885,
+              8.326800001668744,
+              8.006500007468276,
+              10.09130000602454,
+              8.336400002008304,
+              7.971600003656931,
+              8.122500003082678,
+              8.442799997283146,
+              34.43840000545606,
+              9.50830000510905,
+              8.075999998254701,
+              8.351399999810383,
+              7.824000000255182,
+              8.280099995317869,
+              7.803000000421889,
+              8.311300000059418,
+              7.742400004644878,
+              8.137800003169104,
+              8.023800008231774
+            ],
+            "median": 8.295699997688644,
+            "min": 7.742400004644878,
+            "max": 34.43840000545606,
+            "n": 20,
+            "meta": {
+              "calls": 20,
+              "payload": "5000 rows json"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "failures": []
+}

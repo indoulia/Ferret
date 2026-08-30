@@ -1,0 +1,68 @@
+{
+  "_note": "Licence, vulnerability and maintenance evidence gathered 2026-08-30. Vulnerabilities from `npm audit` and `pip-audit`; recency from the npm registry and the PyPI JSON API.",
+  "audited_utc": "2026-08-30",
+  "node": {
+    "direct": [
+      { "name": "@modelcontextprotocol/sdk", "version": "1.30.0", "licence": "MIT", "last_publish": "2026-07-27", "role": "MCP" },
+      { "name": "pdfjs-dist", "version": "6.3.289", "licence": "Apache-2.0", "last_publish": "2026-08-29", "role": "PDF" },
+      { "name": "mammoth", "version": "1.12.2", "licence": "BSD-2-Clause", "last_publish": "2026-08-28", "role": "DOCX" },
+      { "name": "exceljs", "version": "4.4.0", "licence": "MIT", "last_publish": "2024-12-20", "role": "XLSX" },
+      { "name": "csv-parse", "version": "6.2.1", "licence": "MIT", "last_publish": "2026-08-02", "role": "CSV" },
+      { "name": "pg", "version": "8.23.0", "licence": "MIT", "last_publish": "2026-08-08", "role": "PostgreSQL" },
+      { "name": "web-tree-sitter", "version": "0.25.10", "licence": "MIT", "last_publish": "2026-08-23", "role": "code parsing (WASM)" },
+      { "name": "tree-sitter-wasms", "version": "0.1.13", "licence": "Unlicense", "last_publish": "2025-10-07", "role": "grammars (WASM)" }
+    ],
+    "licence_spread": { "MIT": 158, "ISC": 18, "BSD-2-Clause": 5, "BSD-3-Clause": 5, "Apache-2.0": 3, "Unlicense": 2, "MIT/X11": 2, "UNKNOWN": 1, "BSD": 1, "(MIT OR GPL-3.0-or-later)": 1, "(MIT AND Zlib)": 1 },
+    "licence_concerns": [
+      { "package": "buffers@0.1.1", "issue": "no licence declared (UNKNOWN)", "reached_via": "exceljs -> unzipper -> buffers", "severity": "distribution risk for a redistributed product" },
+      { "package": "jszip@3.10.1", "issue": "dual (MIT OR GPL-3.0-or-later)", "assessment": "acceptable - MIT is electable" },
+      { "package": "tree-sitter-wasms@0.1.13", "issue": "Unlicense (public-domain dedication)", "assessment": "permissive, acceptable" }
+    ],
+    "vulnerabilities": {
+      "initial": { "critical": 0, "high": 1, "moderate": 2, "low": 0 },
+      "after_remediation": { "critical": 0, "high": 0, "moderate": 2, "low": 0 },
+      "detail": [
+        { "id": "GHSA-hq66-cqwq-w95j", "package": "pdfjs-dist", "severity": "high", "summary": "arbitrary JavaScript execution when opening a malicious PDF", "remediation": "upgraded pdfjs-dist ^5.4.0 -> 6.3.289; additionally set isEvalSupported:false to disable the PDF JS engine", "status": "FIXED" },
+        { "id": "GHSA-w5hq-g745-h8pq", "package": "uuid <11.1.1 via exceljs", "severity": "moderate", "summary": "missing buffer bounds check in v3/v5/v6", "remediation": "only fix is exceljs@3.4.0, a breaking downgrade", "status": "OPEN - accepted risk, Ferret does not call the affected uuid buffer API" }
+      ]
+    },
+    "deprecated_transitives": ["rimraf@2.7.1", "inflight@1.0.6", "glob@7.2.3", "fstream@1.0.12", "lodash.isequal@4.5.0", "uuid@8.3.2"],
+    "deprecated_source": "all six arrive through exceljs (via unzipper/archiver)",
+    "native_builds_required": 0,
+    "notes": "web-tree-sitter is WASM so no toolchain is needed. The native `tree-sitter` binding was also tested and installed successfully on Windows from prebuilt binaries in 8 s (45.5 MB, 5 packages, no MSVC required)."
+  },
+  "python": {
+    "direct": [
+      { "name": "mcp", "version": "2.1.1", "licence": "MIT", "last_publish": "2026-08-25", "role": "MCP" },
+      { "name": "pypdf", "version": "6.16.2", "licence": "BSD-3-Clause", "last_publish": "2026-08-23", "role": "PDF" },
+      { "name": "python-docx", "version": "1.2.0", "licence": "MIT", "last_publish": "2025-06-16", "role": "DOCX" },
+      { "name": "openpyxl", "version": "3.1.5", "licence": "MIT", "last_publish": "2024-06-28", "role": "XLSX" },
+      { "name": "psycopg", "version": "3.3.4", "licence": "LGPL-3.0-only", "last_publish": "2026-05-01", "role": "PostgreSQL" },
+      { "name": "tree-sitter", "version": "0.26.0", "licence": "MIT", "last_publish": "2026-06-30", "role": "code parsing (native wheel)" },
+      { "name": "tree-sitter-typescript", "version": "0.23.2", "licence": "MIT", "last_publish": "2024-11-11", "role": "grammar" },
+      { "name": "psutil", "version": "7.2.2", "licence": "BSD-3-Clause", "last_publish": "2026-01-28", "role": "diagnostics" }
+    ],
+    "licence_spread": { "MIT": 23, "BSD-3-Clause": 11, "Apache-2.0": 3, "LGPL-3.0-only": 2, "MIT-0": 1, "Apache-2.0 OR BSD-3-Clause": 1, "PSF": 1, "PSF-2.0": 1 },
+    "licence_concerns": [
+      { "package": "psycopg / psycopg-binary 3.3.4", "issue": "LGPL-3.0-only - the only copyleft licence in either stack, and it sits on the mandatory PostgreSQL path", "assessment": "usable when dynamically linked and unmodified, but it imposes redistribution obligations that the MIT-licensed `pg` does not", "severity": "material for a redistributed product" }
+    ],
+    "vulnerabilities": {
+      "initial": { "note": "the first pinned set (pypdf 6.1.3, mcp 1.19.0) carried 21 pypdf advisories and 4 mcp advisories" },
+      "after_remediation": { "critical": 0, "high": 0, "moderate": 0, "low": 0, "tool": "pip-audit reports: No known vulnerabilities found" },
+      "detail": [
+        { "package": "pypdf", "remediation": "floor raised to >=6.15.0, resolved 6.16.2", "status": "FIXED" },
+        { "package": "mcp", "remediation": "floor raised to >=1.28.1, resolved 2.1.1", "status": "FIXED" }
+      ]
+    },
+    "deprecated_transitives": [],
+    "native_builds_required": 0,
+    "notes": "psycopg[binary] and the tree-sitter grammars ship prebuilt wheels; no compiler was needed on Windows or Linux."
+  },
+  "cross_stack_observations": [
+    "Node pulls 228 packages to Python's 42 for the same capability set - a 5.4x larger transitive attack and maintenance surface.",
+    "Every deprecated package and both remaining moderate CVEs in the Node stack trace to a single dependency, exceljs, which is also the stalest direct dependency in either stack (last published 2024-12-20).",
+    "Python's only licence problem, psycopg's LGPL-3.0, sits on the mandatory database path and cannot be avoided by swapping a parser; Node's licence problem (unlicensed `buffers`) is confined to exceljs and disappears if the XLSX library is replaced.",
+    "Both stacks reached a zero-high-severity state after remediation.",
+    "tree-sitter grammar versions differ between the two ecosystems (Node counted 758,096 named nodes vs Python 749,220 over the identical 1,590 files, ~1.2% apart). Ferret must pin grammar versions explicitly, since AST shape is part of its canonical model."
+  ]
+}

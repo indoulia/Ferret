@@ -1,0 +1,132 @@
+{
+  "_note": "Weighted decision matrix for EPIC-005. Weights derive from Ferret's approved governance, not from benchmark outcomes, and were fixed before scoring. Scores are 1-5, higher is better, each justified by measured evidence or a governance constraint. Computed by spikes/tools/decide.py.",
+  "scale": "1 = clearly worse, 3 = adequate, 5 = clearly better",
+  "criteria": [
+    {
+      "id": "mcp_ai_control_plane",
+      "name": "MCP / AI control plane fit and performance",
+      "weight": 5,
+      "governance": "Governance 3 (AI-Operated by Default); MCP is the primary interface and the AI client spawns the server per session",
+      "node": 5,
+      "python": 3,
+      "evidence": "MCP cold start 496 ms vs 1,485 ms (3.0x); small tool call 0.4 ms vs 1.6 ms (4.0x); large payload 4.0 ms vs 7.4 ms (1.9x). Both have official SDKs. The Python SDK also shipped a breaking 1.x->2.x rename (FastMCP -> MCPServer) that broke this spike mid-build; the Node SDK line was stable."
+    },
+    {
+      "id": "distribution_install",
+      "name": "Distribution and installation simplicity",
+      "weight": 5,
+      "governance": "Governance 2 (Simplicity Is a Product Requirement); TECHNOLOGY-DECISIONS 1 freezes NPM-first distribution; EPIC-102/EPIC-103 are approved P0",
+      "node": 5,
+      "python": 2,
+      "evidence": "NPM-first distribution is a FROZEN direction, not a candidate. Node satisfies it natively via `npm install -g`. A Python implementation must either ship through NPM wrapping an interpreter, require a host Python, or trigger a governance amendment to the frozen direction. Any of those adds provisioning steps that Governance 2 explicitly rules out for ordinary use."
+    },
+    {
+      "id": "security_posture",
+      "name": "Security posture and licence risk",
+      "weight": 5,
+      "governance": "Governance 12 (Security); repository content is untrusted data",
+      "node": 3,
+      "python": 4,
+      "evidence": "After remediation: Node 0 high / 2 moderate open (uuid via exceljs, fixable only by a breaking downgrade); Python 0 across the board (pip-audit clean). Node carries an undeclared-licence transitive (buffers@0.1.1) and 228 packages vs 42 - a 5.4x larger surface. Against that, Python's psycopg is LGPL-3.0-only on the mandatory database path, the only copyleft in either stack. Node's pdfjs-dist required a major upgrade plus isEvalSupported:false to close an arbitrary-JS-execution advisory."
+    },
+    {
+      "id": "document_parsing",
+      "name": "Document and file parsing capability",
+      "weight": 4,
+      "governance": "Governance 8 (Files Are First-Class)",
+      "node": 4,
+      "python": 4,
+      "evidence": "Split decision. Node faster on PDF (2.7x) and XLSX (2.8x); Python faster on CSV (3.6x), DOCX (1.2x) and the 84 MB single file (3.5x). Rankings held on Linux. Python's ecosystem is deeper for future OCR/extraction work, but that work is not in any current Epic."
+    },
+    {
+      "id": "code_intelligence",
+      "name": "Code intelligence (tree-sitter)",
+      "weight": 3,
+      "governance": "EPIC-033/034 AST and symbol index",
+      "node": 3,
+      "python": 4,
+      "evidence": "Python 1.9x faster on the same 1,590 files (1.31 s vs 2.50 s), using native wheels. Node's WASM binding is slower but needs no native artefact; the native Node binding also installed cleanly from prebuilts (8 s, 45.5 MB, no MSVC), so Node has a faster path available if needed."
+    },
+    {
+      "id": "ingestion_throughput",
+      "name": "Filesystem and Git ingestion throughput",
+      "weight": 3,
+      "governance": "Governance 15 (Automatic Operation); EPIC-017/018/019 discovery and ingestion",
+      "node": 4,
+      "python": 4,
+      "evidence": "Platform-dependent and therefore a tie. Windows: Node fsscan 345 ms vs 563 ms; Linux: Python 95 ms vs 483 ms (5.1x the other way). Git is effectively tied once both parallelise (183 ms vs 166 ms). Concurrency: Python wins on both platforms after using its best model (194 ms vs 277 ms Windows; 48 ms vs 492 ms Linux)."
+    },
+    {
+      "id": "postgres",
+      "name": "PostgreSQL access",
+      "weight": 3,
+      "governance": "Governance 14 (PostgreSQL is the default persistence target)",
+      "node": 4,
+      "python": 4,
+      "evidence": "Statistically indistinguishable: insert 871 ms vs 956 ms, index build 956 ms vs 949 ms, FTS query 6.1 ms vs 6.0 ms. Both drivers are mature. Licence difference is scored under security, not double-counted here."
+    },
+    {
+      "id": "footprint",
+      "name": "Memory and package footprint",
+      "weight": 3,
+      "governance": "Governance 14 (Lightweight Infrastructure)",
+      "node": 3,
+      "python": 4,
+      "evidence": "Python 101 MB venv (89 MB excluding pip), 42 packages, 102 MB RSS. Node 175 MB, 228 packages, 113 MB RSS. Node's figure includes 50 MB of tree-sitter WASM grammars of which Ferret needs 3; a targeted set would close most of the gap but not the package-count gap."
+    },
+    {
+      "id": "startup",
+      "name": "Runtime and application startup",
+      "weight": 3,
+      "governance": "Governance 2; the CLI and MCP server start per invocation",
+      "node": 4,
+      "python": 3,
+      "evidence": "Dependency load cost 1,020 ms vs 1,918 ms (Node 1.9x faster). Bare runtime spawn favours Python slightly (318 vs 277 ms) but is masked by this machine's ~350-420 ms process-spawn floor."
+    },
+    {
+      "id": "cross_platform",
+      "name": "Cross-platform behaviour",
+      "weight": 4,
+      "governance": "EPIC-105 Cross-Platform Packaging",
+      "node": 5,
+      "python": 3,
+      "evidence": "Both validated on Windows 11 and Linux containers with zero native builds. Node ships one self-contained runtime per platform through a single channel; Python requires an interpreter to exist or be bundled per platform. macOS was NOT measured for either - an open gap."
+    },
+    {
+      "id": "operational_complexity",
+      "name": "Operational and development complexity",
+      "weight": 4,
+      "governance": "Governance 2, Governance 14, Governance 23 (avoid accumulating infrastructure)",
+      "node": 5,
+      "python": 2,
+      "evidence": "Node gives one runtime for CLI, MCP server and indexing, with types shared across provider contracts (Governance 4). Because NPM-first distribution is frozen, choosing Python means shipping and supporting two runtimes - Node for distribution plus Python for the product - which is strictly more install, test, packaging and support surface."
+    },
+    {
+      "id": "maintenance_health",
+      "name": "Dependency maintenance health",
+      "weight": 3,
+      "governance": "AI Development Rules 16 (Dependency Discipline)",
+      "node": 3,
+      "python": 4,
+      "evidence": "Node carries 6 deprecated transitive packages, all arriving through exceljs, which is itself the stalest direct dependency in either stack (last published 2024-12-20). Python has zero deprecated transitives; its stalest direct dependency is openpyxl (2024-06-28). Python's MCP SDK churn (breaking 2.x rename) counts against it."
+    },
+    {
+      "id": "evidence_integrity",
+      "name": "Evidence integrity on malformed input",
+      "weight": 4,
+      "governance": "Governance 6 (Evidence Before Inference - never manufacture certainty)",
+      "node": 4,
+      "python": 3,
+      "evidence": "Neither stack crashed, hung or resolved the XXE entity across 16 adversarial cases. But on the XXE document mammoth raised an error while python-docx returned empty text with no error, which would let Ferret record 'no content' as a fact. A loud failure is the safer mode under Governance 6."
+    },
+    {
+      "id": "native_dependencies",
+      "name": "Native dependency burden",
+      "weight": 2,
+      "governance": "Governance 2; AI Development Rules 16",
+      "node": 5,
+      "python": 5,
+      "evidence": "Zero source builds required on either stack, on either platform. Python uses prebuilt wheels (psycopg[binary], tree-sitter grammars); Node uses WASM, with prebuilt native binaries also available and verified."
+    }
+  ]
+}

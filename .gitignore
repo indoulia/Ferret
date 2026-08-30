@@ -1,0 +1,15 @@
+.tokensave
+
+# Node
+node_modules/
+*.tsbuildinfo
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# EPIC-005 evaluation spike: generated inputs and transient state.
+# Measured results under spikes/results/ ARE committed as evidence.
+spikes/corpus/
+spikes/.state/
