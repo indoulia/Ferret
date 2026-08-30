@@ -1,0 +1,71 @@
+{
+  "name": "@indoulia/ferret",
+  "version": "0.1.0",
+  "description": "Persistent engineering context and knowledge layer for AI-assisted development.",
+  "keywords": [
+    "mcp",
+    "ai",
+    "context",
+    "knowledge",
+    "developer-tools"
+  ],
+  "homepage": "https://github.com/indoulia/Ferret#readme",
+  "bugs": {
+    "url": "https://github.com/indoulia/Ferret/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indoulia/Ferret.git"
+  },
+  "license": "MIT",
+  "author": "Indoulia",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "bin": {
+    "ferret": "dist/cli/main.js"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "node scripts/clean.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "baseline": "node scripts/baseline.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run build && npm run test"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "pino": "^10.3.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.18.13",
+    "eslint": "^10.9.1",
+    "globals": "^16.5.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^4.1.11"
+  }
+}

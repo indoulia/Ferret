@@ -55,7 +55,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Foundation & Runtime
 
-- **EPIC-001 — Core Runtime & Package** — P0
+- **EPIC-001 — Core Runtime & Package** — P0 — IMPLEMENTED ([evidence](validation/EPIC-001-VALIDATION.md))
 - **EPIC-002 — Database Bootstrap & Migrations** — P0
 - **EPIC-003 — Configuration Engine** — P0
 - **EPIC-004 — Runtime Health & Diagnostics** — P0

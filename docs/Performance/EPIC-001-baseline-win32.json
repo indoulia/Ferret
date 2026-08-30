@@ -1,0 +1,43 @@
+{
+  "recordedAt": "2026-08-30T09:14:42.667Z",
+  "platform": "win32/x64",
+  "node": "22.23.2",
+  "timings": [
+    {
+      "label": "cli startup (--version)",
+      "samples": 10,
+      "minMs": 499.1,
+      "medianMs": 608.3,
+      "maxMs": 672.1
+    },
+    {
+      "label": "cli help (--help)",
+      "samples": 10,
+      "minMs": 491,
+      "medianMs": 539.8,
+      "maxMs": 569
+    },
+    {
+      "label": "runtime initialize + shutdown (env)",
+      "samples": 10,
+      "minMs": 784.6,
+      "medianMs": 843.4,
+      "maxMs": 901
+    },
+    {
+      "label": "runtime.initialize (in process)",
+      "samples": 10,
+      "medianMs": 274.2
+    },
+    {
+      "label": "runtime.shutdown (in process)",
+      "samples": 10,
+      "medianMs": 0.1
+    }
+  ],
+  "package": {
+    "tarballBytes": 43090,
+    "unpackedBytes": 139439,
+    "fileCount": 96
+  }
+}

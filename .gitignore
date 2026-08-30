@@ -4,6 +4,11 @@
 node_modules/
 *.tsbuildinfo
 
+# Build output and test artefacts
+dist/
+coverage/
+*.tgz
+
 # Python
 .venv/
 __pycache__/

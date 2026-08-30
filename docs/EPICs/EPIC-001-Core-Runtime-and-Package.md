@@ -1,6 +1,11 @@
 # EPIC-001 — Core Runtime & Package
 
-**Status: APPROVED | Priority: P0**
+**Status: IMPLEMENTED | Priority: P0**
+
+**Implementation:** branch `feat/epic-001-core-runtime`. 
+**Validation evidence:** [`validation/EPIC-001-VALIDATION.md`](validation/EPIC-001-VALIDATION.md). 
+**Implementation decisions:** [`../Architecture/EPIC-001-DECISIONS.md`](../Architecture/EPIC-001-DECISIONS.md). 
+**Runtime architecture:** [`../Architecture/RUNTIME.md`](../Architecture/RUNTIME.md).
 
 ## Objective
 Deliver the minimal installable Ferret runtime and stable application boundary.
@@ -27,3 +32,25 @@ Fresh install; startup/shutdown; malformed configuration; missing optional depen
 
 ## Definition of Done
 All acceptance criteria pass; package-size/dependency footprint is reviewed; public boundaries are documented; CI validates the package.
+
+---
+
+## Implementation notes
+
+Added after implementation. The scope, non-scope, acceptance criteria, tests and
+Definition of Done above are unchanged.
+
+All six acceptance criteria PASS. One deviation is recorded: the package is
+published as `@indoulia/ferret` rather than the unscoped `ferret`, which belongs
+to an unrelated npm package and is unobtainable. The binary is `ferret`, so a
+global install yields exactly the CLI the criterion describes. Carried to
+EPIC-102 — see decision D-001.
+
+`ferret status` and `ferret doctor` (EPIC-004), `ferret init` and `ferret config`
+(EPIC-002/EPIC-003) and `ferret mcp` (EPIC-064) appear in `--help` marked
+`(planned)` and exit with `E_NOT_IMPLEMENTED` / code 5. The command *structure*
+is EPIC-001's; the *behaviour* remains with the owning Epic.
+
+The Epic moves to VALIDATING once CI is green on both platforms, and to DONE
+only after post-merge verification. macOS remains unvalidated and is carried to
+EPIC-105, as already established by EPIC-005.
