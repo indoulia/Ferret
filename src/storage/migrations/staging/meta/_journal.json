@@ -22,6 +22,13 @@
       "when": 1788096833362,
       "tag": "0002_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788098178294,
+      "tag": "0003_identity_aliases",
+      "breakpoints": true
     }
   ]
 }

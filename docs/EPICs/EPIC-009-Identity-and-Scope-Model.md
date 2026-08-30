@@ -1,6 +1,8 @@
 # EPIC-009 — Identity & Scope Model
 
-**Status: APPROVED | Priority: P0**
+**Status: VALIDATED | Priority: P0**
+
+Evidence: [`validation/EPIC-009-VALIDATION.md`](validation/EPIC-009-VALIDATION.md) · Decisions: [`../Architecture/EPIC-009-DECISIONS.md`](../Architecture/EPIC-009-DECISIONS.md) · Checkpoint: [`../Checkpoints/EPIC-009.md`](../Checkpoints/EPIC-009.md)
 
 ## Objective
 Represent developers, AI agents, repositories, worktrees, sessions, and configuration scopes independently and consistently across providers.

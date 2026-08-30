@@ -114,3 +114,36 @@ export {
   type EvidenceInput,
   type EvidenceLocator,
 } from './evidence.js';
+
+export {
+  ACTOR_CLASSES,
+  ActorClass,
+  actorClassForKind,
+  assertSameActorClass,
+  createIdentityAlias,
+  entityKindForActor,
+  identityAliasInputSchema,
+  isActorClass,
+  aliasKey,
+  type IdentityAlias,
+  type IdentityAliasInput,
+  type IdentityCollision,
+} from './actor.js';
+
+export {
+  GLOBAL_SCOPE,
+  SCOPE_KINDS,
+  ScopeDecision,
+  ScopeKind,
+  constrains,
+  evaluateScope,
+  isInScope,
+  mergeSelectors,
+  scopeContextSchema,
+  scopeSchema,
+  scopeSelectorSchema,
+  type Scope,
+  type ScopeContext,
+  type ScopeEvaluation,
+  type ScopeSelector,
+} from './scope.js';

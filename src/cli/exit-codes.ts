@@ -64,6 +64,8 @@ const BY_ERROR_CODE: Readonly<Record<ErrorCode, ExitCode>> = {
   [ErrorCode.EVIDENCE_INVALID]: ExitCode.ERROR,
   // Tampered evidence is a data-integrity failure, which is the storage class.
   [ErrorCode.EVIDENCE_TAMPERED]: ExitCode.STORAGE,
+  [ErrorCode.IDENTITY_INVALID]: ExitCode.ERROR,
+  [ErrorCode.IDENTITY_COLLISION]: ExitCode.ERROR,
   [ErrorCode.NOT_IMPLEMENTED]: ExitCode.NOT_IMPLEMENTED,
   [ErrorCode.INTERRUPTED]: ExitCode.INTERRUPTED,
 };
