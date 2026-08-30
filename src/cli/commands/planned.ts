@@ -39,6 +39,11 @@ export function plannedCommand(spec: PlannedCommandSpec): Command {
 }
 
 /** The roadmap command surface, and the Epic that owns each entry. */
-export const PLANNED_COMMANDS: readonly PlannedCommandSpec[] = [
-  { name: 'mcp', summary: 'Serve the Model Context Protocol interface to AI clients', owners: ['EPIC-064'] },
-];
+/**
+ * Commands the roadmap approves and this build does not implement.
+ *
+ * Empty as of EPIC-064: `ferret mcp` is served rather than planned. The
+ * mechanism stays, because the honest answer to "is this coming" is worth more
+ * than an unknown-command error — and the next planned command will want it.
+ */
+export const PLANNED_COMMANDS: readonly PlannedCommandSpec[] = [];

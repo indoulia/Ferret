@@ -8,6 +8,7 @@ import { doctorCommand } from './commands/doctor.js';
 import { envCommand } from './commands/env.js';
 import { indexCommand } from './commands/index-command.js';
 import { initCommand } from './commands/init.js';
+import { mcpCommand } from './commands/mcp.js';
 import { statusCommand } from './commands/status.js';
 import { PLANNED_COMMANDS, plannedCommand } from './commands/planned.js';
 import { versionCommand } from './commands/version.js';
@@ -78,6 +79,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program.addCommand(envCommand(output));
   program.addCommand(indexCommand(output));
   program.addCommand(initCommand(output));
+  program.addCommand(mcpCommand());
   program.addCommand(statusCommand(output, reportExitCode));
   for (const spec of PLANNED_COMMANDS) program.addCommand(plannedCommand(spec));
 
