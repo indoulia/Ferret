@@ -6,14 +6,15 @@ Ferret unifies engineering context, files, history and external project-manageme
 knowledge into an evidence-backed, searchable model that AI clients can query
 without repeatedly traversing source systems.
 
-> **Status: foundation complete.** The Foundation & Runtime domain is delivered:
-> core runtime and package (EPIC-001), PostgreSQL bootstrap and migrations
-> (EPIC-002), the configuration engine (EPIC-003), health and diagnostics
-> (EPIC-004) and the technology selection they rest on (EPIC-005). Indexing,
-> retrieval, the canonical model and the MCP server are defined by later Epics
-> and are **not** implemented yet. Commands that belong to those Epics are
-> listed in `--help` as `(planned)` and fail with a clear error rather than
-> doing nothing. See [What works today](#what-works-today).
+> **Status: foundation complete, model started.** The Foundation & Runtime
+> domain is delivered — core runtime and package (EPIC-001), PostgreSQL
+> bootstrap and migrations (EPIC-002), the configuration engine (EPIC-003),
+> health and diagnostics (EPIC-004), and the technology selection they rest on
+> (EPIC-005) — along with the canonical entity model (EPIC-006). Indexing,
+> retrieval and the MCP server are defined by later Epics and are **not**
+> implemented yet. Commands that belong to those Epics are listed in `--help` as
+> `(planned)` and fail with a clear error rather than doing nothing. See
+> [What works today](#what-works-today).
 
 ## Requirements
 
@@ -284,6 +285,9 @@ mismatch is refused as `E_SCHEMA_DRIFT` rather than silently re-applied.
   the repository trust boundary, secret references and durable writes
 - [Diagnostics decisions](docs/Architecture/EPIC-004-DECISIONS.md) — why the
   health model has four states and why a diagnostic may never fail
+- [Canonical model decisions](docs/Architecture/EPIC-006-DECISIONS.md) — derived
+  identity, why not UUIDv5, and how unknown source fields are kept without
+  corrupting the model
 - [Governance](docs/Governance/README.md) — the binding engineering rules
 - [Technology decisions](docs/TECHNOLOGY-DECISIONS.md) — the EPIC-005 stack
   selection and its evidence
@@ -298,6 +302,17 @@ npm run build
 npm test
 npm run baseline   # record startup and package-size baselines
 ```
+
+Schema changes are generated, not hand-written:
+
+```bash
+npm run migration:generate -- add_something
+```
+
+That diffs `src/storage/schema/` with drizzle-kit and writes the next
+`NNNN_name.sql`. **Read the result before committing it** — a schema diff knows
+what changed, not what else already exists, and it does not know that dropping a
+column loses evidence.
 
 Database integration tests need PostgreSQL. They use `FERRET_TEST_DATABASE_URL`
 when it is set, otherwise start a `pgvector/pgvector:pg17` container through

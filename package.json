@@ -50,6 +50,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs",
     "clean": "node scripts/clean.mjs",
+    "migration:generate": "node scripts/generate-migration.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
@@ -71,11 +72,17 @@
     "@types/node": "^22.18.13",
     "@types/pg": "^8.23.1",
     "@types/picomatch": "^4.0.3",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^10.9.1",
     "globals": "^16.5.0",
     "testcontainers": "^12.1.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    }
   }
 }

@@ -1,6 +1,8 @@
 # EPIC-006 — Canonical Entity Model
 
-**Status: APPROVED | Priority: P0**
+**Status: VALIDATED | Priority: P0**
+
+Evidence: [`validation/EPIC-006-VALIDATION.md`](validation/EPIC-006-VALIDATION.md) · Decisions: [`../Architecture/EPIC-006-DECISIONS.md`](../Architecture/EPIC-006-DECISIONS.md) · Checkpoint: [`../Checkpoints/EPIC-006.md`](../Checkpoints/EPIC-006.md)
 
 ## Objective
 Define the provider-neutral durable entity model that represents Ferret's knowledge without coupling core logic to GitHub, Jira, files, or any future source.

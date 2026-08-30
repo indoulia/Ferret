@@ -92,7 +92,12 @@ const ALLOWED_CORE_PACKAGES: ReadonlySet<string> = new Set(['picomatch', 'pino',
  * reachable through `@indoulia/ferret/storage` and through the CLI, which
  * composes providers, but never from `@indoulia/ferret` itself.
  */
-const STORAGE_PACKAGES: readonly string[] = ['drizzle-orm/node-postgres', 'pg'];
+const STORAGE_PACKAGES: readonly string[] = [
+  'drizzle-orm',
+  'drizzle-orm/node-postgres',
+  'drizzle-orm/pg-core',
+  'pg',
+];
 
 /**
  * Substrings that identify a provider-, vendor- or parser-specific dependency.
@@ -202,7 +207,54 @@ describe('storage provider boundary', () => {
     // TECHNOLOGY-DECISIONS §3 selected `pg` + `drizzle-orm`. A second driver or
     // query builder appearing here is a technology decision, not a refactor.
     expect([...storage.packages].filter((name) => name.startsWith('drizzle')).sort()).toStrictEqual([
+      'drizzle-orm',
       'drizzle-orm/node-postgres',
+      'drizzle-orm/pg-core',
     ]);
+  });
+
+  it('does not ship drizzle-kit, which is a development tool', () => {
+    // drizzle-kit generates migrations at development time. Reaching it from
+    // runtime code would put a build tool into every installation.
+    expect([...storage.packages].some((name) => name.startsWith('drizzle-kit'))).toBe(false);
+  });
+});
+
+describe('canonical model boundary', () => {
+  const domain = importGraph('domain/index.ts');
+
+  it('is provider-neutral — it names no source system anywhere', () => {
+    // EPIC-006's objective: the canonical model must not couple to GitHub, Jira,
+    // files or any future source. A *pull request* is a canonical concept that
+    // several systems map onto, and the mapping belongs to the provider. The
+    // moment the model knows about a specific source, replacing that source
+    // becomes a redesign rather than a provider swap.
+    const sources = ['github', 'gitlab', 'bitbucket', 'jira', 'octokit', 'atlassian'];
+    for (const file of domain.files) {
+      const text = readFileSync(resolve(SRC, file), 'utf8').toLowerCase();
+      for (const source of sources) {
+        // Named in a comment as an example is fine; imported is not.
+        expect([...domain.packages].some((name) => name.includes(source))).toBe(false);
+        expect(text.includes(`from '${source}`)).toBe(false);
+      }
+    }
+  });
+
+  it('depends on nothing but the error model and zod', () => {
+    const external = [...domain.packages].filter((name) => !name.startsWith('node:'));
+    expect(external.sort()).toStrictEqual(['zod']);
+  });
+
+  it('does not reach storage, the CLI, or any provider', () => {
+    const forbidden = [...domain.files].filter(
+      (file) => file.startsWith('storage/') || file.startsWith('cli/') || file.startsWith('providers/'),
+    );
+    expect(forbidden).toStrictEqual([]);
+  });
+
+  it('is reachable from the core entry point, because it is the core', () => {
+    const core = importGraph('index.ts');
+    expect(core.files).toContain('domain/entity.ts');
+    expect(core.files).toContain('domain/identity.ts');
   });
 });
