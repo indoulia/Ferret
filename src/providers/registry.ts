@@ -2,8 +2,10 @@ import { ErrorCode, FerretError, toFerretError } from '../errors/index.js';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
 
 import {
+  MINIMUM_PROVIDER_CONTRACT_VERSION,
   PROVIDER_CONTRACT_VERSION,
   PROVIDER_ID_PATTERN,
+  isSupportedContractVersion,
   describeProvider,
   isProviderKind,
   type Provider,
@@ -64,7 +66,7 @@ export class ProviderRegistry {
     const invalid = (message: string, details: Record<string, unknown>): FerretError =>
       new FerretError(ErrorCode.PROVIDER_INVALID, message, {
         details,
-        remediation: `Providers must declare a unique dotted id, a known kind and contractVersion ${PROVIDER_CONTRACT_VERSION}.`,
+        remediation: `Providers must declare a unique dotted id, a known kind and a contractVersion between ${MINIMUM_PROVIDER_CONTRACT_VERSION} and ${PROVIDER_CONTRACT_VERSION}.`,
       });
 
     if (typeof provider !== 'object' || provider === null) {
@@ -81,13 +83,18 @@ export class ProviderRegistry {
         kind: String(provider.kind),
       });
     }
-    if (provider.contractVersion !== PROVIDER_CONTRACT_VERSION) {
+    if (!isSupportedContractVersion(provider.contractVersion)) {
+      // A stated range rather than exact equality (EPIC-010 AC-4): a contract
+      // change should not be a flag day for providers that use nothing it
+      // altered. The range is currently a single version, so this is the same
+      // behaviour with the rule made explicit.
       throw invalid(
-        `Provider "${provider.id}" targets contract version ${String(provider.contractVersion)}, but this runtime implements ${PROVIDER_CONTRACT_VERSION}`,
+        `Provider "${provider.id}" targets contract version ${String(provider.contractVersion)}, but this runtime supports ${MINIMUM_PROVIDER_CONTRACT_VERSION}–${PROVIDER_CONTRACT_VERSION}`,
         {
           providerId: provider.id,
           declared: provider.contractVersion,
           supported: PROVIDER_CONTRACT_VERSION,
+          minimumSupported: MINIMUM_PROVIDER_CONTRACT_VERSION,
         },
       );
     }

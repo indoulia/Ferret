@@ -115,3 +115,16 @@ export {
   type IdentityAliasRow,
   type NewIdentityAliasRow,
 } from './schema/identities.js';
+
+export {
+  ArtifactState,
+  CompatibilityService,
+  type DerivedArtifact,
+  type DerivedArtifactInput,
+} from './compatibility.js';
+
+export {
+  derivedArtifact,
+  type DerivedArtifactRow,
+  type NewDerivedArtifactRow,
+} from './schema/derived.js';

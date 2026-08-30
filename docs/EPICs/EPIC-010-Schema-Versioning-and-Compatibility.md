@@ -1,6 +1,8 @@
 # EPIC-010 — Schema Versioning & Compatibility
 
-**Status: APPROVED | Priority: P0**
+**Status: VALIDATED | Priority: P0**
+
+Evidence: [`validation/EPIC-010-VALIDATION.md`](validation/EPIC-010-VALIDATION.md) · Matrix: [`../Architecture/COMPATIBILITY.md`](../Architecture/COMPATIBILITY.md) · Checkpoint: [`../Checkpoints/EPIC-010.md`](../Checkpoints/EPIC-010.md)
 
 ## Objective
 Allow Ferret's canonical schema, provider contracts, indexes, and persisted data to evolve without corrupting existing knowledge or forcing unsafe manual migrations.

@@ -1,6 +1,8 @@
 export {
+  MINIMUM_PROVIDER_CONTRACT_VERSION,
   PROVIDER_CONTRACT_VERSION,
   PROVIDER_ID_PATTERN,
+  isSupportedContractVersion,
   ProviderKind,
   describeProvider,
   isProviderKind,

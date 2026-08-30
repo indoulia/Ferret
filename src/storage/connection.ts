@@ -161,10 +161,30 @@ const UNREACHABLE_CODES: ReadonlySet<string> = new Set([
   'EAI_AGAIN',
 ]);
 
+/**
+ * The driver or socket code for an error, unwrapping any wrapper around it.
+ *
+ * Drizzle wraps a failing query in its own error and puts the `pg` error in
+ * `cause`, so reading `error.code` directly finds nothing. Every error arriving
+ * through a Drizzle query was therefore falling through to the generic
+ * `E_STORAGE_UNAVAILABLE` branch — losing the SQLSTATE, the specific
+ * classification and the remediation that EPIC-002 built. Found while making
+ * compatibility checking work on a partially migrated database, where a missing
+ * table has to be recognised rather than treated as an outage.
+ *
+ * The chain is walked to a bounded depth: a cycle in `cause` should not be
+ * possible, and a classifier that hangs on a malformed error would be worse than
+ * one that gives up.
+ */
 function errorCodeOf(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const code = (error as { code?: unknown }).code;
-  return typeof code === 'string' ? code : undefined;
+  let current: unknown = error;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (typeof current !== 'object' || current === null) return undefined;
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
 }
 
 /**
