@@ -29,6 +29,8 @@ export const ErrorCode = {
   PROVIDER_INVALID: 'E_PROVIDER_INVALID',
   /** A provider failed during initialization. */
   PROVIDER_INIT_FAILED: 'E_PROVIDER_INIT_FAILED',
+  /** No registered provider offers a capability the operation needs. */
+  CAPABILITY_UNAVAILABLE: 'E_CAPABILITY_UNAVAILABLE',
   /** The database is unreachable, refused the connection, or dropped it. */
   STORAGE_UNAVAILABLE: 'E_STORAGE_UNAVAILABLE',
   /** The database rejected an operation because the role lacks a privilege. */

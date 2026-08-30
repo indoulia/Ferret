@@ -151,8 +151,13 @@ describe('core public entry point', () => {
   it('lets providers depend on the core, never the reverse', () => {
     // A provider is registered through ProviderRegistry, so nothing in the core
     // graph may name a concrete provider module.
+    //
+    // `capabilities.ts` joined the allowlist with EPIC-011: it is the capability
+    // *contract*, which is core by definition — the core has to be able to ask
+    // for a capability. What it still may not reach is an implementation, which
+    // the "capability boundary" block below asserts separately.
     const concreteProviders = [...graph.files].filter((file) =>
-      /providers\/(?!contract|registry|index)/.test(file),
+      /providers\/(?!contract|registry|capabilities|index)/.test(file),
     );
     expect(concreteProviders).toStrictEqual([]);
   });
@@ -217,6 +222,39 @@ describe('storage provider boundary', () => {
     // drizzle-kit generates migrations at development time. Reaching it from
     // runtime code would put a build tool into every installation.
     expect([...storage.packages].some((name) => name.startsWith('drizzle-kit'))).toBe(false);
+  });
+});
+
+describe('capability boundary', () => {
+  const core = importGraph('index.ts');
+
+  it('does not reach a concrete provider from the core entry point', () => {
+    // EPIC-011's central rule: the core asks for a *capability* and is handed
+    // whichever provider offers it. `PostgresStorageProvider` is a concrete
+    // provider, and the moment the core names one, "replacing a provider does
+    // not require unrelated core changes" stops being true.
+    expect([...core.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+  });
+
+  it('publishes the capability contract from the core, because it is core', () => {
+    // The contract belongs to the core; the implementations do not.
+    expect(core.files).toContain('providers/capabilities.ts');
+    expect(core.files).toContain('providers/registry.ts');
+  });
+
+  it('keeps the capability contract free of any provider implementation', () => {
+    const capabilities = importGraph('providers/capabilities.ts');
+    expect([...capabilities.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+    const external = [...capabilities.packages].filter((name) => !name.startsWith('node:'));
+    expect(external).toStrictEqual([]);
+  });
+
+  it('lets a provider depend on the contract, never the contract on a provider', () => {
+    const storage = importGraph('storage/index.ts');
+    expect(storage.files).toContain('providers/capabilities.ts');
+
+    const capabilities = importGraph('providers/capabilities.ts');
+    expect(capabilities.files).not.toContain('storage/provider.ts');
   });
 });
 

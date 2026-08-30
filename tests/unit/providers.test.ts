@@ -122,6 +122,10 @@ describe('provider lookup', () => {
         contractVersion: PROVIDER_CONTRACT_VERSION,
         description: 'test provider',
         initialized: false,
+        // EPIC-011 added capability declaration. This provider declares none,
+        // so it is registered and lifecycle-managed but never selected for a
+        // capability — the honest outcome rather than a silent one.
+        capabilities: [],
       },
     ]);
 

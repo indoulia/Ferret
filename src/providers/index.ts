@@ -1,4 +1,20 @@
 export {
+  CAPABILITIES,
+  CAPABILITY_VERSIONS,
+  Capability,
+  CapabilitySupport,
+  MINIMUM_CAPABILITY_VERSIONS,
+  assertSupported,
+  declares,
+  describeSupport,
+  isCapability,
+  isSupportedCapabilityVersion,
+  validateCapabilityDeclaration,
+  type CapabilityDeclaration,
+  type CapabilityLimits,
+  type CapabilityVerdict,
+} from './capabilities.js';
+export {
   MINIMUM_PROVIDER_CONTRACT_VERSION,
   PROVIDER_CONTRACT_VERSION,
   PROVIDER_ID_PATTERN,

@@ -3,6 +3,8 @@ import type { DependencyCheckResult } from '../diagnostics/index.js';
 import type { EnvironmentReport } from '../environment/index.js';
 import type { Logger } from '../logging/index.js';
 
+import type { Capability, CapabilityDeclaration } from './capabilities.js';
+
 /**
  * Version of the provider contract itself.
  *
@@ -102,6 +104,19 @@ export interface Provider {
   /** The {@link PROVIDER_CONTRACT_VERSION} this provider was built against. */
   readonly contractVersion: number;
   readonly description?: string;
+  /**
+   * What this provider can do, and at which contract version.
+   *
+   * The core selects a provider by *capability*, never by identity, so this is
+   * how a provider becomes reachable at all. `kind` remains as the coarse
+   * category EPIC-001 established — useful for grouping and for shutdown order —
+   * but it is not what a consumer asks for.
+   *
+   * Optional so EPIC-001-era providers keep working unchanged; a provider that
+   * declares nothing is registered and lifecycle-managed but is never selected
+   * for a capability, which is the honest outcome rather than a silent one.
+   */
+  readonly capabilities?: readonly CapabilityDeclaration[];
   /** Prepare the provider. Throwing here fails runtime initialization. */
   initialize?(context: ProviderContext): Promise<void> | void;
   /** Report on external systems this provider depends on. Must not mutate. */
@@ -119,6 +134,8 @@ export interface ProviderDescriptor {
   readonly contractVersion: number;
   readonly description?: string;
   readonly initialized: boolean;
+  /** Capabilities declared, so diagnostics can report what a provider offers. */
+  readonly capabilities: readonly Capability[];
 }
 
 export function describeProvider(provider: Provider, initialized: boolean): ProviderDescriptor {
@@ -128,11 +145,13 @@ export function describeProvider(provider: Provider, initialized: boolean): Prov
     contractVersion: number;
     description?: string;
     initialized: boolean;
+    capabilities: readonly Capability[];
   } = {
     id: provider.id,
     kind: provider.kind,
     contractVersion: provider.contractVersion,
     initialized,
+    capabilities: (provider.capabilities ?? []).map((declaration) => declaration.capability),
   };
   if (provider.description !== undefined) descriptor.description = provider.description;
   return descriptor;
