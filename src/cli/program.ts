@@ -6,6 +6,7 @@ import { PACKAGE_NAME, VERSION } from '../version.js';
 import { configCommand } from './commands/config.js';
 import { doctorCommand } from './commands/doctor.js';
 import { envCommand } from './commands/env.js';
+import { indexCommand } from './commands/index-command.js';
 import { initCommand } from './commands/init.js';
 import { statusCommand } from './commands/status.js';
 import { PLANNED_COMMANDS, plannedCommand } from './commands/planned.js';
@@ -75,6 +76,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program.addCommand(configCommand(output));
   program.addCommand(doctorCommand(output, reportExitCode));
   program.addCommand(envCommand(output));
+  program.addCommand(indexCommand(output));
   program.addCommand(initCommand(output));
   program.addCommand(statusCommand(output, reportExitCode));
   for (const spec of PLANNED_COMMANDS) program.addCommand(plannedCommand(spec));

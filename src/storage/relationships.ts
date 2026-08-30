@@ -3,6 +3,7 @@ import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import {
   createRelationship,
   relationshipTypeDefinition,
+  stableStringify,
   type CanonicalRelationship,
   type RelationshipInput,
 } from '../domain/index.js';
@@ -49,8 +50,16 @@ import { relationship, type RelationshipRow } from './schema/relationships.js';
  * NULL` — was rejected: the index would be table-wide, and would wrongly forbid
  * a commit from having several open `commit_modifies_file` relationships.
  */
-async function lockExclusive(tx: FerretDatabase, fromId: string, type: string): Promise<void> {
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${fromId}:${type}`}, 0))`);
+/**
+ * Serialises the read-decide-write for one key.
+ *
+ * A transaction-scoped advisory lock: released at commit or rollback, with no
+ * unlock to forget and nothing left behind by a crashed session. The lock space
+ * is Ferret's own `hashtextextended` of the key, which is a different space
+ * from the two-argument locks the migrator uses.
+ */
+async function lockEdge(tx: FerretDatabase, key: string): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
 }
 
 export const AssertOutcome = {
@@ -133,7 +142,24 @@ export class RelationshipStore {
         // Taken before the read, not after: the point is to make the
         // read-decide-write sequence atomic against other writers, and a lock
         // acquired afterwards would protect nothing.
-        if (definition.exclusiveFrom) await lockExclusive(tx, canonical.fromId, canonical.type);
+        //
+        // Taken for *every* type, not only exclusive ones. The open-interval
+        // deduplication below is itself a read-decide-write, and without a lock
+        // three concurrent indexers all read "nothing open", all insert, and —
+        // since identity includes `validFrom` and each has its own instant —
+        // all three succeed. Three open intervals for one edge is exactly the
+        // contradiction the deduplication exists to prevent.
+        //
+        // The key differs by kind because the granularity does: exclusivity is
+        // about one entity's outgoing edges of a type, deduplication is about
+        // one specific edge. A narrower lock for the common case keeps a bulk
+        // index from serialising on a repository's own id.
+        await lockEdge(
+          tx,
+          definition.exclusiveFrom
+            ? `${canonical.fromId}:${canonical.type}`
+            : `${canonical.fromId}:${canonical.type}:${canonical.toId}`,
+        );
 
         const [existing] = await tx.select().from(relationship).where(eq(relationship.id, canonical.id)).limit(1);
 
@@ -142,6 +168,30 @@ export class RelationshipStore {
           // measured from that — but change nothing else.
           await tx.update(relationship).set({ lastIndexedAt: now }).where(eq(relationship.id, canonical.id));
           return { relationship: toCanonical(existing), outcome: AssertOutcome.UNCHANGED, closed: [] };
+        }
+
+        // Re-observing something that is already open and unchanged.
+        //
+        // Identity includes `validFrom`, so an indexer that runs hourly against
+        // an unchanged repository produces a new id every hour and the check
+        // above never fires. Without this, a repository that never changes
+        // accumulates a row per edge per run for ever — and for an exclusive
+        // type the reconciliation below would close the old interval and open a
+        // new one, making an unchanged checkout look like the developer
+        // switching to the same branch every hour.
+        //
+        // An open interval already says "true since then, and not yet ended".
+        // Seeing it again does not make it a new fact; it confirms the existing
+        // one, which is exactly what `last_indexed_at` records.
+        if (canonical.validTo === null) {
+          const stillOpen = await this.#findOpenEquivalent(tx, canonical);
+          if (stillOpen !== undefined) {
+            await tx
+              .update(relationship)
+              .set({ lastIndexedAt: now })
+              .where(eq(relationship.id, stillOpen.id));
+            return { relationship: toCanonical(stillOpen), outcome: AssertOutcome.UNCHANGED, closed: [] };
+          }
         }
 
         const closed: string[] = [];
@@ -199,6 +249,49 @@ export class RelationshipStore {
     } catch (error) {
       throw classifyDatabaseError(error, 'storage.relationship.assert');
     }
+  }
+
+  /**
+   * An open interval that already asserts the same fact.
+   *
+   * "The same fact" deliberately excludes time: the endpoints, the metadata and
+   * the source. Comparing content hashes would not work, because the hash
+   * includes `validFrom` — which is the whole reason this method exists.
+   *
+   * Ordering is deliberately **not** part of the match. Two indexers started
+   * milliseconds apart carry different observation instants, and the one with
+   * the earlier instant may commit second; requiring the open interval to start
+   * first meant that run opened a *second* open interval for the same edge.
+   * There is no ordering of two concurrent observations in which two open
+   * intervals is the right answer.
+   *
+   * What an earlier observation legitimately says — that the fact began before
+   * Ferret thought it did — is not lost silently: the caller is told the row was
+   * `updated`, and moving an interval's start backwards is left to EPIC-076,
+   * which is where reconciling out-of-order observations belongs.
+   */
+  async #findOpenEquivalent(
+    tx: FerretDatabase,
+    canonical: CanonicalRelationship,
+  ): Promise<RelationshipRow | undefined> {
+    const [open] = await tx
+      .select()
+      .from(relationship)
+      .where(
+        and(
+          eq(relationship.fromId, canonical.fromId),
+          eq(relationship.type, canonical.type),
+          eq(relationship.toId, canonical.toId),
+          isNull(relationship.validTo),
+        ),
+      )
+      .limit(1);
+
+    if (open === undefined) return undefined;
+    if (open.sourceSystem !== canonical.sourceSystem) return undefined;
+    if ((open.sourceId ?? undefined) !== canonical.sourceId) return undefined;
+    if (stableStringify(open.metadata) !== stableStringify(canonical.metadata)) return undefined;
+    return open;
   }
 
   /**
