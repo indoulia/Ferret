@@ -1,8 +1,8 @@
 # EPIC-001 — Core Runtime & Package
 
-**Status: IMPLEMENTED | Priority: P0**
+**Status: VALIDATED | Priority: P0**
 
-**Implementation:** branch `feat/epic-001-core-runtime`. 
+**Implementation:** merged to `main` as `4cbead2` (PR #2). 
 **Validation evidence:** [`validation/EPIC-001-VALIDATION.md`](validation/EPIC-001-VALIDATION.md). 
 **Implementation decisions:** [`../Architecture/EPIC-001-DECISIONS.md`](../Architecture/EPIC-001-DECISIONS.md). 
 **Runtime architecture:** [`../Architecture/RUNTIME.md`](../Architecture/RUNTIME.md).
@@ -51,6 +51,22 @@ EPIC-102 — see decision D-001.
 `(planned)` and exit with `E_NOT_IMPLEMENTED` / code 5. The command *structure*
 is EPIC-001's; the *behaviour* remains with the owning Epic.
 
-The Epic moves to VALIDATING once CI is green on both platforms, and to DONE
-only after post-merge verification. macOS remains unvalidated and is carried to
-EPIC-105, as already established by EPIC-005.
+### Validation
+
+Every acceptance criterion is verified with evidence, CI is green on
+`ubuntu-latest` and `windows-latest`, and post-merge verification passed from a
+clean checkout of `main`: build, lint, typecheck, 253 passed / 3 skipped,
+`npm pack`, global install, and the installed `ferret` binary exercised for
+help, version, lifecycle, planned-command and unknown-command behaviour, with a
+real credential confirmed absent from output at trace level.
+
+The Epic is **VALIDATED**, not DONE. One item needs ratification rather than
+work: AC-1 is written as `npm install -g ferret`, and that unscoped npm name is
+permanently unobtainable, so the package ships as `@indoulia/ferret` with the
+binary `ferret`. The criterion's substance is delivered and evidenced, but its
+literal text is not met, and accepting that deviation is a product decision
+rather than one the implementation can make for itself. It is recorded as
+decision D-001 and owned by EPIC-102 (NPM Distribution).
+
+macOS remains unvalidated and is carried to EPIC-105, as already established by
+EPIC-005 §11.

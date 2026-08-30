@@ -1,7 +1,7 @@
 # EPIC-001 — Validation Evidence
 
 **Epic:** EPIC-001 — Core Runtime & Package
-**Branch:** `feat/epic-001-core-runtime`
+**Merged:** `4cbead2` on `main` (PR #2)
 **Recorded:** 2026-08-30
 
 Evidence for every acceptance criterion and every Definition-of-Done item. No
@@ -24,6 +24,12 @@ reworded to make the implementation appear complete.
 | AC-6 | Package contents are reproducible and do not contain development secrets | **PASS** | `tests/integration/packaging.test.ts`: "is reproducible — packing twice yields byte-identical tarballs" (SHA-256 comparison); 16 `ships no …` cases (tests, fixtures, sources, spikes, docs, CI config, node_modules, lockfile, `.env`, databases, archives, coverage, tool config, scripts); "ships only dist output plus the three root files"; and 5 secret-shape scans over every installed byte. |
 
 **6 / 6 PASS.** One recorded deviation (AC-1), carried to EPIC-102.
+
+AC-1's deviation is why this Epic is **VALIDATED rather than DONE**: the
+criterion's substance is delivered and evidenced, but its literal text —
+`npm install -g ferret` — cannot be met because that npm name is permanently
+unobtainable. Accepting the deviation is a product decision, not one the
+implementation should make for itself.
 
 ---
 
@@ -152,7 +158,23 @@ would have written a credential to the log stream. Found by
 | All acceptance criteria pass | **PASS** | 6/6, with AC-1's deviation recorded |
 | Package-size / dependency footprint reviewed | **PASS** | Section 4 |
 | Public boundaries documented | **PASS** | `docs/Architecture/RUNTIME.md` |
-| CI validates the package | **PENDING CI** | `.github/workflows/ci.yml` runs lint, typecheck, build, tests (packaging included) and baseline on `ubuntu-latest` and `windows-latest`, plus a dependency audit job. Marked PASS only once the workflow is green on the PR. |
+| CI validates the package | **PASS** | `.github/workflows/ci.yml` green on `ubuntu-latest` and `windows-latest` (run 33304237921), plus the dependency-audit job. Linux ran all 7 signal cases that skip on Windows. |
+
+### Post-merge verification
+
+Run from a clean checkout of `main` at `4cbead2`, after `npm ci`:
+
+| Step | Result |
+| --- | --- |
+| Build | PASS |
+| Lint | PASS |
+| Typecheck | PASS |
+| Tests | PASS — 253 passed, 3 skipped |
+| `npm pack` + global install | PASS |
+| `ferret --help` / `version` / `env` | PASS — exit 0 |
+| `ferret status` (planned) | PASS — exit 5, `E_NOT_IMPLEMENTED` |
+| `ferret bogus` | PASS — exit 2 |
+| Credential in environment at `--log-level trace` | PASS — absent from output; `[redacted]` present |
 
 ---
 
