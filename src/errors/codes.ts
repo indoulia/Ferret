@@ -53,6 +53,10 @@ export const ErrorCode = {
   EVIDENCE_INVALID: 'E_EVIDENCE_INVALID',
   /** A stored evidence record no longer matches its integrity hash. */
   EVIDENCE_TAMPERED: 'E_EVIDENCE_TAMPERED',
+  /** An identity alias or reconciliation is not valid. */
+  IDENTITY_INVALID: 'E_IDENTITY_INVALID',
+  /** Two actors claim the same external identity. Never merged silently. */
+  IDENTITY_COLLISION: 'E_IDENTITY_COLLISION',
   /** The capability exists in the roadmap but is not implemented in this release. */
   NOT_IMPLEMENTED: 'E_NOT_IMPLEMENTED',
   /** The operation was interrupted by a signal. */

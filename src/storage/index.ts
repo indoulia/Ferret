@@ -102,3 +102,16 @@ export {
   type EvidenceRow,
   type NewEvidenceRow,
 } from './schema/evidence.js';
+
+export {
+  IdentityStore,
+  LinkOutcome,
+  type LinkResult,
+  type MergeResult,
+} from './identities.js';
+
+export {
+  identityAlias,
+  type IdentityAliasRow,
+  type NewIdentityAliasRow,
+} from './schema/identities.js';
