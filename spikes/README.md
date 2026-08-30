@@ -72,3 +72,21 @@ database benchmark.
 These artefacts are the evidence behind an architectural decision and are kept
 for as long as that decision stands (Governance §22, AI Development Rules §19).
 They are not maintained as product code and are not covered by product CI.
+
+## Dependency advisories in the spikes
+
+The spikes are EPIC-005 evaluation code. They are `private`, they are not built,
+not published, not installed by the repository's `npm ci`, and not run in CI —
+but their lockfiles are still scanned, so an advisory against one of them appears
+alongside advisories against the product.
+
+That is worth keeping true rather than filtering away. An alert list with a
+permanent known-ignorable entry is an alert list people stop reading, which is a
+worse outcome than the advisory itself.
+
+**GHSA-w5hq-g745-h8pq** (`uuid` < 11.1.1, a missing buffer bounds check in the
+v3/v5/v6 generators when a `buf` argument is supplied) reached the TypeScript
+spike transitively through `exceljs`, which requires `uuid@^8.3.0`. Ferret itself
+has never depended on `uuid`. Resolved by pinning `uuid@^11.1.1` through an
+`overrides` entry in `spikes/typescript/package.json`, so the spike is
+reproducible and the alert list stays meaningful.
