@@ -214,6 +214,17 @@ export {
   type RateLimiterStats,
   type RetryAttemptInfo,
   type RetryOptions,
+  // EPIC-017 — the source.repository capability contract. The Git provider that
+  // implements it ships separately, at `@indoulia/ferret/git`.
+  RepositoryIdentityKind,
+  RepositoryOperation,
+  SkipReason,
+  type DiscoveredRepository,
+  type RepositoryDiscoveryRequest,
+  type RepositoryDiscoveryResult,
+  type RepositoryRemote,
+  type RepositorySource,
+  type SkippedPath,
 } from './providers/index.js';
 
 export {

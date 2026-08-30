@@ -155,12 +155,14 @@ describe('core public entry point', () => {
     // `capabilities.ts` joined the allowlist with EPIC-011: it is the capability
     // *contract*, which is core by definition — the core has to be able to ask
     // for a capability. `sdk/` joined it with EPIC-012 for the same reason: it
-    // is machinery built *on* the contract, and depends on no implementation,
-    // which the "provider SDK boundary" block below asserts separately.
+    // is machinery built *on* the contract, and depends on no implementation.
+    // `contracts/` joined it with EPIC-017, which pinned the first capability's
+    // method signatures; each is a contract, and each has its own boundary block
+    // below.
     //
     // What the core still may not reach is an implementation.
     const concreteProviders = [...graph.files].filter((file) =>
-      /^providers\/(?!contract|registry|capabilities|index|sdk\/)/.test(file),
+      /^providers\/(?!contract\.ts|contracts\/|registry|capabilities|index|sdk\/)/.test(file),
     );
     expect(concreteProviders).toStrictEqual([]);
   });
@@ -335,3 +337,83 @@ describe('provider SDK boundary', () => {
     expect([...sdk.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
   });
 });
+
+describe('git source provider boundary', () => {
+  const core = importGraph('index.ts');
+  const git = importGraph('git/index.ts');
+
+  it('is not reachable from the core entry point', () => {
+    // EPIC-017's central rule, and the first real test of EPIC-011's claim. The
+    // core asks the registry for `source.repository` and is handed whichever
+    // provider offers it. If this fails, the core knows Git exists, and
+    // "replacing a provider does not require unrelated core changes" is false.
+    expect([...core.files].filter((file) => file.startsWith('git/'))).toStrictEqual([]);
+  });
+
+  it('publishes the capability contract from the core, because it is a contract', () => {
+    expect(core.files).toContain('providers/contracts/source-repository.ts');
+    // The contract must not reach the implementation, or importing the contract
+    // would drag Git in behind it.
+    const contract = importGraph('providers/contracts/source-repository.ts');
+    expect([...contract.files].filter((file) => file.startsWith('git/'))).toStrictEqual([]);
+  });
+
+  it('builds on the contract and the SDK', () => {
+    expect(git.files).toContain('providers/contracts/source-repository.ts');
+    expect(git.files).toContain('providers/sdk/base.ts');
+    expect(git.files).toContain('providers/sdk/emit.ts');
+  });
+
+  it('adds no runtime dependency of its own', () => {
+    // TECHNOLOGY-DECISIONS §5 selected the Git *executable* via subprocess. A
+    // package appearing here means an in-process Git implementation was adopted
+    // without that decision being revisited.
+    const external = [...git.packages].filter((name) => !name.startsWith('node:'));
+    expect(external.sort()).toStrictEqual([...ALLOWED_CORE_PACKAGES].sort());
+  });
+
+  it('does not reach the storage provider or the CLI', () => {
+    // Two providers must not know about each other, or replacing one would
+    // require changing the other.
+    expect([...git.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+    expect([...git.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
+  });
+
+  it('can start a subprocess from exactly two modules, both named', () => {
+    // Governance §12: no unsafe subprocess primitive that later Epics inherit.
+    // Four Git Epics follow this one, and each of them will reach for whatever
+    // is here. Keeping execution in one reviewed place is what makes the safety
+    // overrides unavoidable rather than conventional.
+    //
+    // `environment/detect.ts` is named deliberately rather than excluded by a
+    // pattern: it has run `git --version` since EPIC-001, with the same
+    // argument-vector discipline, and it is reachable from here because the
+    // provider contract carries an environment report. Listing it means adding
+    // a third executor is a visible decision.
+    expect(executorsIn(git.files)).toStrictEqual(['environment/detect.ts', 'git/runner.ts']);
+  });
+
+  it('never runs a subprocess through a shell', () => {
+    const source = readFileSync(resolve(SRC, 'git/runner.ts'), 'utf8');
+    // `exec` and `execSync` take a command *string* and run it through a shell.
+    // A directory named `foo; rm -rf ~` is then a command.
+    expect(/\bexecSync\s*\(/.test(source)).toBe(false);
+    expect(/[^A-Za-z]exec\s*\(/.test(stripComments(source))).toBe(false);
+    expect(source).toContain('shell: false');
+  });
+});
+
+/**
+ * Modules in a graph that can start a subprocess.
+ *
+ * Detected by the **import**, not by call syntax. The first version of this
+ * matched `execFile(` and friends, and missed `environment/detect.ts` entirely
+ * because it calls a promisified alias — a control that quietly finds nothing is
+ * worse than no control, since it reports success either way. Nothing can launch
+ * a process without reaching `node:child_process`, so that is what is counted.
+ */
+function executorsIn(files: ReadonlySet<string>): string[] {
+  return [...files]
+    .filter((file) => /['"]node:child_process['"]/.test(stripComments(readFileSync(resolve(SRC, file), 'utf8'))))
+    .sort();
+}

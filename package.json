@@ -36,6 +36,10 @@
       "types": "./dist/storage/index.d.ts",
       "default": "./dist/storage/index.js"
     },
+    "./git": {
+      "types": "./dist/git/index.d.ts",
+      "default": "./dist/git/index.js"
+    },
     "./testing": {
       "types": "./dist/providers/sdk/testing.d.ts",
       "default": "./dist/providers/sdk/testing.js"
