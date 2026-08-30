@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -76,10 +79,29 @@ describe('detectGit', () => {
     }
   });
 
-  it('returns unavailable rather than throwing when the probe cannot complete', async () => {
-    // A 1 ms budget cannot complete a process spawn; absence must be reported,
-    // not raised.
-    await expect(detectGit(1)).resolves.toMatchObject({ available: false });
+  it('reports unavailable rather than throwing when git cannot be found', async () => {
+    // Point PATH at an empty directory so the executable genuinely cannot be
+    // resolved. Absence is a fact to report, not an error to raise.
+    const empty = mkdtempSync(join(tmpdir(), 'ferret-no-git-'));
+    const originalPath = process.env.PATH;
+    const originalPathUpper = process.env.Path;
+    try {
+      process.env.PATH = empty;
+      // Windows resolves the variable case-insensitively but Node exposes both.
+      if (originalPathUpper !== undefined) process.env.Path = empty;
+      await expect(detectGit()).resolves.toStrictEqual({ available: false });
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+      if (originalPathUpper === undefined) delete process.env.Path;
+      else process.env.Path = originalPathUpper;
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves rather than throwing when the probe times out', async () => {
+    // Whatever a 1 ms budget produces on this host, detectGit must settle.
+    await expect(detectGit(1)).resolves.toHaveProperty('available');
   });
 });
 
