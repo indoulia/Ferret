@@ -6,4 +6,7 @@ import { fileURLToPath } from 'node:url';
 for (const target of ['../dist', '../coverage']) {
   rmSync(fileURLToPath(new URL(target, import.meta.url)), { recursive: true, force: true });
 }
-console.log('cleaned dist/ and coverage/');
+// stderr, not stdout. `prepack` runs this during `npm pack --json`, whose
+// stdout is parsed as JSON — the same rule the MCP transport lives by, for the
+// same reason.
+process.stderr.write('cleaned dist/ and coverage/\n');

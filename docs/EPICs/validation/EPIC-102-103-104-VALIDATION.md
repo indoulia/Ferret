@@ -80,6 +80,26 @@ already built, so what they pack is current — and the *existence* of `prepack`
 is asserted separately, which is the right split: the guarantee is about
 publishing, not about that test.
 
+### …and then broke the performance baseline too
+
+CI caught what the local suite did not: `scripts/baseline.mjs` also runs
+`npm pack --json`, and with `prepack` in place the build's own progress lines
+landed in the middle of the JSON it parses.
+
+```
+SyntaxError: Unexpected token 'c', "cleaned di"... is not valid JSON
+```
+
+Two fixes rather than one, because the first is the principle and the second is
+the belt:
+
+- **Build scripts write to stderr, not stdout.** `npm pack --json` parses
+  stdout, so anything a build script prints corrupts it — the same rule the MCP
+  transport already lives by, for the same reason, and it should have been the
+  rule here from the start.
+- The baseline packs with `--ignore-scripts`, because rebuilding inside the
+  measurement would time the build rather than the package.
+
 ---
 
 ## 4. Post-deployment verification
