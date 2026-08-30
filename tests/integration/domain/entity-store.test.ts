@@ -72,6 +72,10 @@ describeDb(`canonical entity persistence (${databaseAvailable() ? 'real PostgreS
         'last_indexed_at',
         'lifecycle',
         'schema_version',
+        // EPIC-053. A generated `tsvector`, which Drizzle cannot express, so it
+        // is absent from the TypeScript schema by necessity rather than by
+        // drift — and named here so the parity check stays a real check.
+        'search_vector',
         'source_id',
         'source_observed_at',
         'source_scope',

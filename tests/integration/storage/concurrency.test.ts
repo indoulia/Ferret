@@ -380,7 +380,15 @@ describeDb(`concurrency and connection safety (${databaseAvailable() ? 'real Pos
         if (found !== undefined) expect(found.kind).toBe(EntityKind.PULL_REQUEST);
       });
 
-      await Promise.all([...writes, ...reads]);
+      // Settled, not raced. `Promise.all` rejects on the first failure and
+      // discards the reason, so a lock timeout under load and a genuine
+      // isolation bug produced the same unhelpful line — see issue #21, where
+      // this test has failed twice under full-suite contention and never in
+      // isolation. Naming the reasons is the difference between a diagnosis and
+      // another guess.
+      const settled = await Promise.allSettled([...writes, ...reads]);
+      const failures = settled.filter((outcome) => outcome.status === 'rejected');
+      expect(failures.map((outcome) => String(outcome.reason))).toStrictEqual([]);
 
       const rows = await db.pool.query<{ count: string }>(
         "SELECT count(*)::text AS count FROM ferret.entity WHERE source_id = 'atomic-read'",

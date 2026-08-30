@@ -154,6 +154,40 @@ describeEndToEnd('indexing a repository', () => {
     ]);
   });
 
+  it('stores every commit in full, not just the newest one', async () => {
+    // Found by dogfooding, not by testing: 60 of 61 commits in Ferret's own
+    // index held nothing but a SHA.
+    //
+    // `git log` returns commits newest first, so each one emits its parent as a
+    // placeholder before the loop reaches that parent properly — and the
+    // placeholder won. The graph had exactly the right shape and was almost
+    // entirely empty, which is the worst way for it to be wrong, because every
+    // structural assertion still passed.
+    const fixture = await repository('full-commits');
+    for (let i = 0; i < 3; i += 1) {
+      await writeFile(join(fixture.path, `c${String(i)}.txt`), `${String(i)}\n`);
+      await git(fixture.path, ['add', '-A']);
+      await git(fixture.path, ['commit', '-m', `message number ${String(i)}`]);
+    }
+
+    const report = await indexer().index(fixture.discovered, {}, context);
+
+    const rows = await database.pool.query(
+      `SELECT count(*) FILTER (WHERE attributes ? 'message') AS with_message,
+              count(*) AS total
+         FROM ferret.entity e
+        WHERE e.kind = 'commit'
+          AND e.id IN (SELECT to_id FROM ferret.relationship
+                        WHERE type = 'repository_contains_commit' AND from_id = $1)`,
+      [report.repositoryId],
+    );
+    const counts = rows.rows[0] as { with_message: string; total: string };
+
+    expect(Number(counts.total)).toBe(4);
+    // Every one of them, not just the newest.
+    expect(Number(counts.with_message)).toBe(4);
+  });
+
   it('does not grow the database when nothing changed', async () => {
     // The invariant EPIC-018 recorded as its most important limitation, and the
     // reason EPIC-007's store now treats an open interval with identical
