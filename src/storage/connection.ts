@@ -105,6 +105,28 @@ export function createPool(config: FerretConfig, logger: Logger): Pool {
     );
   });
 
+  // And an error on a *checked-out* client is emitted on the client, not on the
+  // pool — `pg` attaches its own handler only while a client sits idle. Anything
+  // holding a client across an await is therefore exposed: the migrator holds
+  // one for a whole migration, and every Drizzle transaction holds one for its
+  // duration. If PostgreSQL terminates such a backend — an administrator
+  // command, a failover, a restart — the resulting `57P01` arrives on a client
+  // with no listener, and Node turns that into an uncaught exception that ends
+  // the process.
+  //
+  // Attaching here rather than at each borrow covers every borrower, including
+  // ones inside Drizzle that Ferret never sees. The operation still fails, and
+  // still fails with a classified error; what it no longer does is take the
+  // process down with it.
+  pool.on('connect', (client) => {
+    client.on('error', (error: Error) => {
+      logger.warn(
+        { operation: 'storage.client.error', err: { name: error.name, message: error.message } },
+        'PostgreSQL connection failed while in use; the operation using it will fail and can be retried',
+      );
+    });
+  });
+
   return pool;
 }
 

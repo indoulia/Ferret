@@ -73,3 +73,23 @@ export {
   type EntitySource,
   type ExternalId,
 } from './entity.js';
+
+export {
+  OPEN_INTERVAL,
+  RELATIONSHIP_TYPE_PATTERN,
+  RELATIONSHIP_TYPES,
+  RelationshipType,
+  createRelationship,
+  isOpen,
+  isValidAt,
+  registerRelationshipType,
+  registeredRelationshipTypes,
+  relationshipInputSchema,
+  relationshipKey,
+  relationshipTypeDefinition,
+  resetRelationshipTypeRegistry,
+  type CanonicalRelationship,
+  type RegisterRelationshipTypeOptions,
+  type RelationshipInput,
+  type RelationshipTypeDefinition,
+} from './relationship.js';

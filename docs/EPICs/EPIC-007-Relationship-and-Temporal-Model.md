@@ -1,6 +1,8 @@
 # EPIC-007 — Relationship & Temporal Model
 
-**Status: APPROVED | Priority: P0**
+**Status: VALIDATED | Priority: P0**
+
+Evidence: [`validation/EPIC-007-VALIDATION.md`](validation/EPIC-007-VALIDATION.md) · Decisions: [`../Architecture/EPIC-007-DECISIONS.md`](../Architecture/EPIC-007-DECISIONS.md) · Checkpoint: [`../Checkpoints/EPIC-007.md`](../Checkpoints/EPIC-007.md)
 
 ## Objective
 Represent typed relationships and historical validity so Ferret can answer how repositories, branches, worktrees, files, commits, PRs, issues, releases, developers, and sessions relate over time.

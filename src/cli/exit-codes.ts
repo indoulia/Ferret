@@ -60,6 +60,7 @@ const BY_ERROR_CODE: Readonly<Record<ErrorCode, ExitCode>> = {
   // it means a source object could not be represented. Unclassified is honest.
   [ErrorCode.ENTITY_INVALID]: ExitCode.ERROR,
   [ErrorCode.ENTITY_NOT_FOUND]: ExitCode.ERROR,
+  [ErrorCode.RELATIONSHIP_INVALID]: ExitCode.ERROR,
   [ErrorCode.NOT_IMPLEMENTED]: ExitCode.NOT_IMPLEMENTED,
   [ErrorCode.INTERRUPTED]: ExitCode.INTERRUPTED,
 };

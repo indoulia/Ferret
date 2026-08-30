@@ -47,6 +47,8 @@ export const ErrorCode = {
   ENTITY_INVALID: 'E_ENTITY_INVALID',
   /** An entity that was expected to exist does not. */
   ENTITY_NOT_FOUND: 'E_ENTITY_NOT_FOUND',
+  /** A relationship failed validation, or names an unregistered type. */
+  RELATIONSHIP_INVALID: 'E_RELATIONSHIP_INVALID',
   /** The capability exists in the roadmap but is not implemented in this release. */
   NOT_IMPLEMENTED: 'E_NOT_IMPLEMENTED',
   /** The operation was interrupted by a signal. */
