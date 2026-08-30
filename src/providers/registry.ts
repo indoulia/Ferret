@@ -2,6 +2,13 @@ import { ErrorCode, FerretError, toFerretError } from '../errors/index.js';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
 
 import {
+  describeSupport,
+  validateCapabilityDeclaration,
+  type Capability,
+  type CapabilityDeclaration,
+  type CapabilityVerdict,
+} from './capabilities.js';
+import {
   MINIMUM_PROVIDER_CONTRACT_VERSION,
   PROVIDER_CONTRACT_VERSION,
   PROVIDER_ID_PATTERN,
@@ -29,6 +36,14 @@ export class ProviderRegistry {
   readonly #providers = new Map<string, Provider>();
   readonly #order: string[] = [];
   readonly #initialized = new Set<string>();
+  /**
+   * Capability index, built at registration.
+   *
+   * A map rather than a scan because selection is on the hot path of every
+   * operation that reaches a provider, and because it makes "which provider
+   * offers this" a lookup rather than a search through declarations.
+   */
+  readonly #byCapability = new Map<Capability, Array<{ providerId: string; declaration: CapabilityDeclaration }>>();
   #sealed = false;
 
   /**
@@ -53,8 +68,28 @@ export class ProviderRegistry {
         { details: { providerId: provider.id } },
       );
     }
+    // Validated *before* anything is recorded, so a rejected provider leaves no
+    // trace. Registering it first and validating after would leave a
+    // half-registered provider behind on failure — present in `size` and in
+    // `describe()`, absent from the capability index — and the inconsistency
+    // would outlive the error that caused it.
+    //
+    // Validation happens at registration rather than at first use because a
+    // provider declaring a capability it cannot honour is a defect: every caller
+    // that selected it would fail, far from the cause. Here it is a startup
+    // error naming the provider.
+    for (const declaration of provider.capabilities ?? []) {
+      validateCapabilityDeclaration(provider.id, declaration);
+    }
+
     this.#providers.set(provider.id, provider);
     this.#order.push(provider.id);
+
+    for (const declaration of provider.capabilities ?? []) {
+      const offered = this.#byCapability.get(declaration.capability) ?? [];
+      offered.push({ providerId: provider.id, declaration });
+      this.#byCapability.set(declaration.capability, offered);
+    }
   }
 
   /** Registers several providers. Registration is not transactional. */
@@ -112,6 +147,49 @@ export class ProviderRegistry {
   list(kind?: ProviderKind): readonly Provider[] {
     const all = this.#order.map((id) => this.#providers.get(id)).filter((p): p is Provider => p !== undefined);
     return kind === undefined ? all : all.filter((provider) => provider.kind === kind);
+  }
+
+  /**
+   * The provider offering a capability, or `undefined` when none does.
+   *
+   * **Registration order decides**, and deliberately: the first provider
+   * registered for a capability wins, so composition — which is explicit and
+   * visible at the call site — determines selection rather than a scoring
+   * heuristic nobody can predict. EPIC-013 adds discovery, and will need to make
+   * the resulting order equally explicit.
+   */
+  forCapability(capability: Capability): Provider | undefined {
+    const offered = this.#byCapability.get(capability);
+    const first = offered?.[0];
+    return first === undefined ? undefined : this.#providers.get(first.providerId);
+  }
+
+  /** Every provider offering a capability, in registration order. */
+  allForCapability(capability: Capability): readonly Provider[] {
+    return (this.#byCapability.get(capability) ?? [])
+      .map((entry) => this.#providers.get(entry.providerId))
+      .filter((provider): provider is Provider => provider !== undefined);
+  }
+
+  /** What a provider declared about a capability it offers. */
+  declarationFor(capability: Capability): CapabilityDeclaration | undefined {
+    return this.#byCapability.get(capability)?.[0]?.declaration;
+  }
+
+  /**
+   * Whether a capability — optionally a specific operation — is usable.
+   *
+   * Returns a verdict rather than throwing, because a missing capability is a
+   * *reportable state*: Ferret should say semantic retrieval is unavailable
+   * rather than failing when someone happens to search (Governance §13).
+   */
+  supports(capability: Capability, operation?: string): CapabilityVerdict {
+    return describeSupport(capability, this.#byCapability.get(capability)?.[0], operation);
+  }
+
+  /** Capabilities at least one registered provider offers. */
+  capabilities(): readonly Capability[] {
+    return [...this.#byCapability.keys()];
   }
 
   describe(): readonly ProviderDescriptor[] {

@@ -5,8 +5,11 @@ import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/ind
 import { ErrorCode, FerretError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 import {
+  Capability,
+  CAPABILITY_VERSIONS,
   ProviderKind,
   PROVIDER_CONTRACT_VERSION,
+  type CapabilityDeclaration,
   type Provider,
   type ProviderContext,
 } from '../providers/index.js';
@@ -68,6 +71,31 @@ export class PostgresStorageProvider implements Provider {
   readonly kind = ProviderKind.STORAGE;
   readonly contractVersion = PROVIDER_CONTRACT_VERSION;
   readonly description = 'PostgreSQL persistence, schema migration and schema version tracking';
+
+  /**
+   * What this provider offers, declared for capability-based selection.
+   *
+   * The core asks the registry for `storage` and is handed this; nothing outside
+   * `src/storage` names `PostgresStorageProvider`. Replacing PostgreSQL means
+   * registering a different provider that declares the same capability.
+   *
+   * The declared limits are honest rather than aspirational: PostgreSQL pages
+   * and filters server-side, has no rate limit of its own, and incremental reads
+   * are the caller's to express through a query — so `supportsIncremental` is
+   * deliberately absent rather than optimistically true.
+   */
+  readonly capabilities: readonly CapabilityDeclaration[] = [
+    {
+      capability: Capability.STORAGE,
+      version: CAPABILITY_VERSIONS[Capability.STORAGE],
+      systems: ['postgresql'],
+      limits: {
+        supportsPagination: true,
+        supportsServerSideFilter: true,
+        notes: 'Bounded by the configured pool size; a burst queues rather than failing.',
+      },
+    },
+  ];
 
   readonly #options: StorageProviderOptions;
   #pool: Pool | undefined;

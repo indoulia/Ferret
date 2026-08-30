@@ -71,7 +71,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Provider Platform
 
-- **EPIC-011 — Provider Contracts** — P0
+- **EPIC-011 — Provider Contracts** — P0 — VALIDATED ([spec](EPIC-011-Provider-Contracts.md), [evidence](validation/EPIC-011-VALIDATION.md))
 - **EPIC-012 — Provider SDK** — P0
 - **EPIC-013 — Provider Registry & Discovery** — P0
 - **EPIC-014 — Provider Lifecycle & Health** — P1
@@ -227,6 +227,20 @@ The broad delivery direction is:
 **Foundation → Configuration → Technology Evaluation → Canonical Model → Provider Platform → Source/File/Context → Indexing → Retrieval → Context Compilation → MCP → External Providers → Security/Reliability/Quality → Distribution.**
 
 Individual Epics may proceed in parallel when their contracts and dependencies permit.
+
+## Specification files
+
+Epics 001–010 were specified before implementation. Epics 011 onward are approved
+here by name, domain and priority; **each one's specification is written to the
+[Epic Specification Standard](EPIC-SPECIFICATION-STANDARD.md) as the first part of
+its own change**, from this registry entry and the governance documents, and is
+reviewed in that Epic's pull request alongside the implementation.
+
+This is recorded because it means an Epic's acceptance criteria and the work that
+satisfies them are authored together. Each validation document states it plainly.
+Scope is drawn from the registry entry and the approved governance rules; a
+specification that would expand scope beyond what this registry approved is a
+governance change and must be raised rather than written.
 
 ## Epic Definition of Done
 
