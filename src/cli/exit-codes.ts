@@ -19,6 +19,12 @@ export const ExitCode = {
   DEPENDENCY: 4,
   /** The command is planned but not implemented in this release. */
   NOT_IMPLEMENTED: 5,
+  /**
+   * The database is reachable but its schema is not usable: a migration
+   * failed, is pending under a policy that forbids applying it, was applied by
+   * a newer Ferret, or was edited after being applied.
+   */
+  STORAGE: 6,
   /** Interrupted (SIGINT). */
   INTERRUPTED: 130,
   /** Terminated (SIGTERM). */
@@ -40,6 +46,16 @@ const BY_ERROR_CODE: Readonly<Record<ErrorCode, ExitCode>> = {
   [ErrorCode.PROVIDER_DUPLICATE]: ExitCode.ERROR,
   [ErrorCode.PROVIDER_INVALID]: ExitCode.ERROR,
   [ErrorCode.PROVIDER_INIT_FAILED]: ExitCode.ERROR,
+  // An unreachable database is an unavailable external dependency, which is
+  // exit code 4; a *reachable* database whose schema Ferret cannot use is a
+  // distinct condition an operator resolves differently, so it gets its own.
+  [ErrorCode.STORAGE_UNAVAILABLE]: ExitCode.DEPENDENCY,
+  [ErrorCode.STORAGE_PERMISSION_DENIED]: ExitCode.STORAGE,
+  [ErrorCode.MIGRATION_FAILED]: ExitCode.STORAGE,
+  [ErrorCode.MIGRATION_LOCKED]: ExitCode.STORAGE,
+  [ErrorCode.MIGRATION_PENDING]: ExitCode.STORAGE,
+  [ErrorCode.SCHEMA_UNSUPPORTED]: ExitCode.STORAGE,
+  [ErrorCode.SCHEMA_DRIFT]: ExitCode.STORAGE,
   [ErrorCode.NOT_IMPLEMENTED]: ExitCode.NOT_IMPLEMENTED,
   [ErrorCode.INTERRUPTED]: ExitCode.INTERRUPTED,
 };

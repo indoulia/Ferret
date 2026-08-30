@@ -128,10 +128,22 @@ export class ProviderRegistry {
         await provider.initialize?.(context);
         this.#initialized.add(provider.id);
       } catch (error) {
+        // A provider that already classified its own failure keeps that
+        // classification. Re-labelling "your database password is missing" as
+        // "a provider failed to initialize" would cost the user the exit code,
+        // the remediation and the retryability that make the error actionable —
+        // exactly what EPIC-004 turns into `ferret doctor` advice. The provider
+        // identity is added to the details rather than replacing the diagnosis.
+        const classified = error instanceof FerretError ? error : undefined;
         const failure = new FerretError(
-          ErrorCode.PROVIDER_INIT_FAILED,
+          classified?.code ?? ErrorCode.PROVIDER_INIT_FAILED,
           `Provider "${provider.id}" failed to initialize: ${toFerretError(error).message}`,
-          { details: { providerId: provider.id, kind: provider.kind }, cause: error },
+          {
+            details: { ...(classified?.details ?? {}), providerId: provider.id, kind: provider.kind },
+            ...(classified?.remediation === undefined ? {} : { remediation: classified.remediation }),
+            retryable: classified?.retryable ?? false,
+            cause: error,
+          },
         );
         await this.shutdownAll();
         throw failure;

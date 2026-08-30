@@ -18,6 +18,14 @@ export const databaseConfigSchema = z.object({
   database: z.string().min(1).optional(),
   user: z.string().min(1).optional(),
   password: z.string().optional(),
+  /**
+   * What EPIC-002 does when the database is behind the code.
+   *
+   * `auto` is the default because Governance §15 requires Ferret to provision
+   * itself; the other values exist for operators who need a change window and
+   * are never required for ordinary use.
+   */
+  migrate: z.enum(['auto', 'verify', 'off']).default('auto'),
 });
 
 /**
@@ -28,7 +36,7 @@ export const databaseConfigSchema = z.object({
  */
 export const ferretConfigSchema = z.object({
   logLevel: z.enum(LOG_LEVELS).default('warn'),
-  database: databaseConfigSchema.default({ port: DEFAULT_DATABASE_PORT }),
+  database: databaseConfigSchema.default({ port: DEFAULT_DATABASE_PORT, migrate: 'auto' }),
   /** Repository paths or globs excluded from indexing. Applied by EPIC-022. */
   exclude: z.array(z.string().min(1)).default([]),
 });

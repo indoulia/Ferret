@@ -57,6 +57,7 @@ describe('resolveConfig — environment source', () => {
       database: 'ferretdb',
       user: 'ferret',
       password: 'hunter2',
+      migrate: 'auto',
     });
     expect(config.exclude).toStrictEqual(['node_modules', 'dist', 'coverage']);
     expect(isDatabaseConfigured(config)).toBe(true);
@@ -155,7 +156,14 @@ describe('describeConfig', () => {
     expect(JSON.stringify(described)).not.toContain('hunter2');
     expect(described).toStrictEqual({
       logLevel: 'warn',
-      database: { host: 'db', port: 5432, database: 'ferretdb', user: 'ferret', password: REDACTED },
+      database: {
+        host: 'db',
+        port: 5432,
+        database: 'ferretdb',
+        user: 'ferret',
+        password: REDACTED,
+        migrate: 'auto',
+      },
       exclude: [],
     });
   });

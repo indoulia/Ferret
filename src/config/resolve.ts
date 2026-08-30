@@ -43,6 +43,7 @@ export const ENV_BINDINGS: ReadonlyArray<readonly [string, readonly string[]]> =
   ['FERRET_DATABASE_NAME', ['database', 'database']],
   ['FERRET_DATABASE_USER', ['database', 'user']],
   ['FERRET_DATABASE_PASSWORD', ['database', 'password']],
+  ['FERRET_DATABASE_MIGRATE', ['database', 'migrate']],
   ['FERRET_EXCLUDE', ['exclude']],
 ];
 

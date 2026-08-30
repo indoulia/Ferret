@@ -4,6 +4,7 @@ import { LOG_LEVELS } from '../logging/index.js';
 import { PACKAGE_NAME, VERSION } from '../version.js';
 
 import { envCommand } from './commands/env.js';
+import { initCommand } from './commands/init.js';
 import { PLANNED_COMMANDS, plannedCommand } from './commands/planned.js';
 import { versionCommand } from './commands/version.js';
 import type { OutputOptions } from './output.js';
@@ -58,6 +59,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
 
   program.addCommand(versionCommand(output));
   program.addCommand(envCommand(output));
+  program.addCommand(initCommand(output));
   for (const spec of PLANNED_COMMANDS) program.addCommand(plannedCommand(spec));
 
   // Commander's `addCommand` does not propagate `exitOverride` or the output

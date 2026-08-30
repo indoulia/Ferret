@@ -1,6 +1,8 @@
 # EPIC-002 — Database Bootstrap & Migrations
 
-**Status: APPROVED | Priority: P0**
+**Status: VALIDATED | Priority: P0**
+
+Evidence: [`validation/EPIC-002-VALIDATION.md`](validation/EPIC-002-VALIDATION.md) · Decisions: [`../Architecture/EPIC-002-DECISIONS.md`](../Architecture/EPIC-002-DECISIONS.md) · Checkpoint: [`../Checkpoints/EPIC-002.md`](../Checkpoints/EPIC-002.md)
 
 ## Objective
 Make PostgreSQL provisioning and schema evolution automatic, safe, repeatable, and recoverable.

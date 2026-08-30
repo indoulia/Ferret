@@ -121,6 +121,20 @@ describe('package contents', () => {
     expect(paths).toContain('dist/index.js');
     expect(paths).toContain('dist/index.d.ts');
     expect(paths).toContain('dist/cli/main.js');
+    expect(paths).toContain('dist/storage/index.js');
+  });
+
+  it('ships every migration, because `tsc` alone would not copy them', () => {
+    // A published package with a migrator and no migrations installs cleanly and
+    // then fails at `ferret init` — the worst moment to discover a build gap.
+    // `scripts/copy-migrations.mjs` is what puts them here.
+    const migrations = pack.files
+      .map((file) => file.path)
+      .filter((path) => path.startsWith('dist/storage/migrations/'));
+
+    expect(migrations.length).toBeGreaterThan(0);
+    expect(migrations).toContain('dist/storage/migrations/0001_bootstrap.sql');
+    for (const path of migrations) expect(path).toMatch(/\/\d{4}_[a-z0-9_]+\.sql$/);
   });
 
   it.each(FORBIDDEN_PATTERNS)('ships no %s', (_label, pattern) => {

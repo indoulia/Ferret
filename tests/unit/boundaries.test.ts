@@ -57,6 +57,15 @@ function importGraph(entry: string): Graph {
 const ALLOWED_CORE_PACKAGES: ReadonlySet<string> = new Set(['pino', 'zod']);
 
 /**
+ * Packages the storage provider adds on top of the core set.
+ *
+ * EPIC-002 keeps these out of the core entry point deliberately: they are
+ * reachable through `@indoulia/ferret/storage` and through the CLI, which
+ * composes providers, but never from `@indoulia/ferret` itself.
+ */
+const STORAGE_PACKAGES: readonly string[] = ['drizzle-orm/node-postgres', 'pg'];
+
+/**
  * Substrings that identify a provider-, vendor- or parser-specific dependency.
  * EPIC-001 acceptance criterion: core imports must not depend on these.
  */
@@ -127,8 +136,44 @@ describe('cli entry point', () => {
     expect(graph.packages.has('commander')).toBe(true);
   });
 
-  it('adds no runtime dependency beyond commander and the core set', () => {
+  it('adds no runtime dependency beyond commander, storage and the core set', () => {
     const external = [...graph.packages].filter((name) => !name.startsWith('node:'));
-    expect(external.sort()).toStrictEqual(['commander', ...ALLOWED_CORE_PACKAGES].sort());
+    expect(external.sort()).toStrictEqual(
+      ['commander', ...STORAGE_PACKAGES, ...ALLOWED_CORE_PACKAGES].sort(),
+    );
+  });
+});
+
+describe('storage provider boundary', () => {
+  const core = importGraph('index.ts');
+  const storage = importGraph('storage/index.ts');
+
+  it('is not reachable from the core entry point', () => {
+    // The whole point of the provider contract: the core gains a database by
+    // being handed one, never by importing it. If this fails, `pg` and Drizzle
+    // have leaked into every consumer of `@indoulia/ferret`.
+    expect([...core.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+  });
+
+  it('depends on the core rather than the reverse', () => {
+    expect(storage.files).toContain('providers/contract.ts');
+    expect(storage.files).toContain('errors/ferret-error.ts');
+  });
+
+  it('does not reach any CLI module', () => {
+    expect([...storage.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
+  });
+
+  it('adds only its database packages on top of the core set', () => {
+    const external = [...storage.packages].filter((name) => !name.startsWith('node:'));
+    expect(external.sort()).toStrictEqual([...STORAGE_PACKAGES, ...ALLOWED_CORE_PACKAGES].sort());
+  });
+
+  it('reaches PostgreSQL only through the selected driver and query layer', () => {
+    // TECHNOLOGY-DECISIONS §3 selected `pg` + `drizzle-orm`. A second driver or
+    // query builder appearing here is a technology decision, not a refactor.
+    expect([...storage.packages].filter((name) => name.startsWith('drizzle')).sort()).toStrictEqual([
+      'drizzle-orm/node-postgres',
+    ]);
   });
 });

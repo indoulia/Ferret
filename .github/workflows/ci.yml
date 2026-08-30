@@ -46,11 +46,70 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Database suites are deliberately skipped here and owned by the
+      # `storage` job below, which pins a PostgreSQL service container.
+      # GitHub's Windows runners cannot run Linux containers, so attempting it
+      # in this matrix would produce coverage on Linux and a silent skip on
+      # Windows — an asymmetry that is easy to mistake for a passing gate.
       - name: Test (unit and integration, including packaging)
         run: npm test
+        env:
+          FERRET_SKIP_DOCKER_POSTGRES: '1'
 
       - name: Performance baseline
         run: npm run baseline
+        env:
+          FERRET_SKIP_DOCKER_POSTGRES: '1'
+
+  storage:
+    name: storage integration (PostgreSQL 17 + pgvector)
+    runs-on: ubuntu-latest
+
+    # The image EPIC-005 benchmarked and validated pgvector 0.8.6 against, so a
+    # green run here means green against a server Ferret has actually measured.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: ferret_test
+          POSTGRES_PASSWORD: ferret_test_password
+          POSTGRES_DB: ferret_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Migration, concurrency, crash-recovery, permission and performance
+      # suites, all against the real server. EPIC-002's Definition of Done
+      # requires this to pass before the Epic can be considered complete.
+      - name: Storage integration, durability, reliability and performance
+        run: npm test
+        env:
+          FERRET_TEST_DATABASE_URL: postgres://ferret_test:ferret_test_password@localhost:5432/ferret_test
+
+      - name: Upload measured performance baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-performance-baseline
+          path: docs/Performance/EPIC-002-storage-baseline-*.json
+          if-no-files-found: warn
 
   audit:
     name: dependency audit
