@@ -49,7 +49,7 @@ application boundary that later Epics extend without breaking.
   `E_NOT_IMPLEMENTED` / exit 5. Exit-code contract 0/1/2/3/4/5/130/143.
 - **Signals.** `SIGINT`/`SIGTERM` → graceful shutdown, second signal exits
   immediately, unref'd grace timer.
-- **Tests.** 13 files, 254 cases. Integration tests use the real artefact:
+- **Tests.** 13 files, 256 cases. Integration tests use the real artefact:
   `npm pack`, `npm install -g`, spawned processes, real OS signals.
 - **CI.** `.github/workflows/ci.yml` — lint, typecheck, build, test, baseline on
   `ubuntu-latest` and `windows-latest`; separate dependency-audit job.
@@ -95,7 +95,7 @@ Windows 11, Node 22.23.2, npm 10.9.8:
 Lint       PASS  (0 problems)
 Typecheck  PASS  (0 errors)
 Build      PASS
-Tests      PASS  (13 files, 251 passed, 3 skipped)
+Tests      PASS  (13 files, 253 passed, 3 skipped)
 Packaging  PASS  (pack, byte-identical repack, global install, smoke)
 Audit      PASS  (0 vulnerabilities, 147 packages)
 Baseline   recorded → docs/Performance/EPIC-001-baseline-win32.json

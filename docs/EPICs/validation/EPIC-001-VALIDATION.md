@@ -43,6 +43,7 @@ The Epic names six test areas. All six exist:
 ### Additional coverage beyond the required list
 
 - Real OS signal delivery (`signals.test.ts`) — POSIX only, see limitations.
+- Git-absent detection, forced by pointing `PATH` at an empty directory.
 - Stream discipline: stdout stays parseable JSON while logs flow to stderr.
 - Exit-code totality: every `ErrorCode` maps to a defined `ExitCode`.
 - Provider contract conformance: id validation, kind validation, contract-version
@@ -59,7 +60,7 @@ Recorded on Windows 11 (`win32/x64`), Node 22.23.2, npm 10.9.8.
 | Lint (`eslint .`) | **PASS** — 0 problems |
 | Typecheck (`tsc --noEmit`, src + tests) | **PASS** — 0 errors |
 | Build (`tsc -p tsconfig.build.json`) | **PASS** |
-| Tests | **PASS** — 13 files, 251 passed, 3 skipped |
+| Tests | **PASS** — 13 files, 253 passed, 3 skipped |
 | Packaging | **PASS** — pack, reproducibility, global install, smoke |
 | Dependency audit (`npm audit`) | **PASS** — 0 vulnerabilities, 147 packages |
 
@@ -181,7 +182,7 @@ Recorded rather than glossed over.
 | §12 Security | Redaction at the serialization boundary; `execFile` with no shell; no secrets in source or package |
 | §16 Configuration | Precedence ladder implemented with the later rungs reserved for EPIC-003 |
 | §17 Performance discipline | Baselines recorded; nothing optimised speculatively |
-| §19 Testing and quality | 254 test cases; failure and boundary cases covered; integration tests use the real artefact, not mocks |
+| §19 Testing and quality | 256 test cases; failure and boundary cases covered; integration tests use the real artefact, not mocks |
 | §20 Observability | Structured NDJSON diagnostics separable from human output |
 | §21 Versioning | `RUNTIME_CONTRACT_VERSION` and `PROVIDER_CONTRACT_VERSION` are independent of the package version |
 | AI Rule §3 Epic scope is a contract | No database, provider, parser, indexing or MCP implementation; only the boundaries the Epic names |
