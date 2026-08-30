@@ -65,3 +65,72 @@ Repeatable benchmark harness; representative corpus; clean-machine install; Wind
 
 ## Governance alignment
 Governance §5 (Reuse Before Reinvent), §14 (Lightweight Infrastructure), §21 (Versioning and Reproducibility), §22 (Change Management); AI Development Rules §4 (Search Before Building), §5 (No Reinvention), §6 (Evidence-Driven Decisions), §16 (Dependency Discipline).
+
+---
+
+## Implementation evidence (2026-08-30)
+
+**Status: IMPLEMENTED → VALIDATING.** Not DONE: two criteria are partially
+satisfied and are listed explicitly below rather than glossed over.
+
+Decisions recorded in `docs/TECHNOLOGY-DECISIONS.md` v2.0.
+Measured evidence in `spikes/results/RESULTS.md`; raw data in `spikes/results/raw/`.
+
+### Outcome
+
+TypeScript on Node.js 22 LTS **SELECTED**; Python **REJECTED** for the primary
+stack; mixed-language architecture **REJECTED** for now. On measured merit the
+stacks tie (weighted 145 vs 142, 2.1% apart); the decision is carried by three
+governance-structural criteria — frozen NPM-first distribution, operational
+complexity, and cross-platform reach.
+
+### Acceptance criteria
+
+| # | Criterion | Status | Evidence |
+|---|---|---|---|
+| 1 | Comparable TypeScript and Python spikes exist | MET | `spikes/typescript/`, `spikes/python/` — same corpus, iteration counts and result contract |
+| 2 | Startup, memory, footprint, MCP latency, PostgreSQL throughput, filesystem, Git, parsing, concurrency, packaging measured | MET | 13 benchmarks × 2 runtimes × 3 runs; `report-run{1,2,3-final}.json` |
+| 3 | Material libraries evaluated for correctness, maintenance, licensing, security, performance, native dependencies | MET | `dependency-assessment.json` |
+| 4 | Each material technology decision has documented alternatives | MET | TECHNOLOGY-DECISIONS §2–§5, each with SELECTED / REJECTED / REASON / EVIDENCE / KNOWN TRADEOFFS |
+| 5 | Parser candidates evaluated on correctness, structure preservation, provenance, malformed input, licensing, maintenance, performance, native dependencies | **PARTIAL** | Malformed input, licensing, maintenance, performance and native deps measured for one parser per format per stack. **Structure preservation and provenance fidelity were not directly measured** — text-extraction volume was compared, not structural fidelity. |
+| 6 | Data-access candidates evaluated against required PostgreSQL behaviour | MET | `data-access-evaluation.json` — Drizzle and Kysely against all six required behaviours |
+| 7 | MCP uses an established SDK | MET | `@modelcontextprotocol/sdk` 1.30.0; no custom protocol code |
+| 8 | Rejected alternatives and reasons documented | MET | TECHNOLOGY-DECISIONS §2–§5, §12 |
+| 9 | Final choice preserves the minimal-configuration requirement | MET | NPM-first, single runtime, no added infrastructure |
+| 10 | No unnecessary queue/cache/search/graph infrastructure introduced | MET | None introduced; PostgreSQL FTS answered retrieval at 6.1 ms median |
+| 11 | Final decisions recorded in `docs/TECHNOLOGY-DECISIONS.md` | MET | v2.0 |
+
+### Definition of Done
+
+| Item | Status |
+|---|---|
+| Benchmark/spike results committed | MET |
+| Evidence reviewed | MET |
+| Final technologies recorded | MET |
+| Rejected alternatives documented | MET |
+| Licensing checked | MET — one unlicensed transitive found (`buffers@0.1.1`), tracked as a condition on the XLSX selection |
+| Dependency footprint reviewed | MET |
+| Cross-platform packaging validated | **PARTIAL — macOS was not validated.** Windows 11 and Linux containers both pass with no native builds. No macOS host was available. |
+| Governance alignment confirmed | MET |
+
+### Open items blocking DONE
+
+1. **macOS packaging unvalidated.** Recommend accepting this as EPIC-105
+   (Cross-Platform Packaging) scope rather than holding EPIC-005 open, since
+   EPIC-105 owns packaging validation. Requires governance acceptance.
+2. **Parser structure-preservation and provenance fidelity unmeasured.** Recommend
+   folding into EPIC-024 (Parser Framework) and EPIC-097 (Parser Quality Harness),
+   which own structural correctness and golden-dataset validation.
+
+Neither gap affects the language decision, which was the gate blocking
+implementation Epics.
+
+### Conditions carried forward
+
+- **`pdfjs-dist` must be configured with `isEvalSupported: false`** (Governance §12).
+- **`exceljs` is a conditional selection** — replace it or obtain governance
+  acceptance of the unlicensed `buffers@0.1.1` transitive before EPIC-027/EPIC-028.
+- **tree-sitter grammar versions must be pinned and version-stamped** in the index
+  (Governance §21); the two ecosystems' grammars disagreed by ~1.2% on node counts.
+- **Re-measure indexing throughput on Linux** during EPIC-031; Node's filesystem
+  scan is 1.6× faster than Python on Windows but 5.1× slower on Linux.

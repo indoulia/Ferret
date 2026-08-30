@@ -1,0 +1,42 @@
+{
+  "_note": "Drizzle vs Kysely evaluation for TECHNOLOGY-DECISIONS section 3, run against PostgreSQL 17.11 + pgvector 0.8.6 after TypeScript/Node was selected. Probe source: spikes/.state/dataaccess/probe.mjs (transient working directory; the findings are recorded here).",
+  "evaluated_utc": "2026-08-30",
+  "candidates": {
+    "drizzle-orm": { "version": "0.45.2", "licence": "Apache-2.0", "runtime_mb": 9.9 },
+    "drizzle-kit": { "version": "0.31.10", "licence": "MIT", "mb": 9.8, "scope": "devDependency only - not shipped at runtime" },
+    "kysely": { "version": "0.29.5", "licence": "MIT", "runtime_mb": 1.6 }
+  },
+  "required_postgres_behaviour": {
+    "_note": "Every capability Ferret's knowledge engine depends on. Both candidates passed all six.",
+    "raw_sql_ddl_with_tsvector_and_vector": { "drizzle": "PASS", "kysely": "PASS" },
+    "bulk_insert_and_gin_index_build": { "drizzle": "PASS", "kysely": "PASS" },
+    "full_text_query_via_tsquery": { "drizzle": "PASS (10 rows)", "kysely": "PASS (10 rows, builder + raw predicate)" },
+    "pgvector_similarity_operator": { "drizzle": "PASS (5 rows via <->)", "kysely": "PASS (5 rows via <->)" },
+    "advisory_lock_for_migration_locking": { "drizzle": "PASS (pg_try_advisory_lock -> true)", "kysely": "PASS (pg_try_advisory_lock -> true)" },
+    "transaction_rollback": { "drizzle": "PASS (0 rows after rollback)", "kysely": "PASS (0 rows after rollback)" }
+  },
+  "migration_generation": {
+    "drizzle": {
+      "result": "PASS",
+      "detail": "drizzle-kit generate produced correct DDL for a schema containing tsvector and vector(3) columns plus a GIN index, once both non-builtin types were declared via customType. Generated: CREATE TABLE doc (id integer PRIMARY KEY NOT NULL, body text, tsv \"tsvector\", embedding vector(3)); CREATE INDEX doc_tsv_idx ON doc USING gin (tsv).",
+      "significance": "This was the decisive test. Ferret's schema is not ordinary relational - it needs tsvector, pgvector and GIN. Drizzle's schema diffing handles them rather than forcing an escape hatch for the core model."
+    },
+    "kysely": {
+      "result": "N/A by design",
+      "detail": "Kysely ships a Migrator that runs migration files but performs no schema diffing; every migration is hand-written SQL/TypeScript.",
+      "significance": "No risk of the generator mis-modelling an exotic type, but every schema change across the canonical-model Epics is manual."
+    }
+  },
+  "assessment": {
+    "selected": "drizzle-orm (+ drizzle-kit as a devDependency)",
+    "rejected": "kysely",
+    "reason": "TECHNOLOGY-DECISIONS section 3 lists migration quality first among the selection criteria. Ferret's canonical model spans EPIC-006 through EPIC-010 and will change repeatedly under EPIC-010 schema versioning; generated, diffed, versioned migrations materially reduce that burden, and drizzle-kit was verified to handle Ferret's non-standard column types. Both candidates cover 100% of the required PostgreSQL behaviour, so coverage did not separate them.",
+    "known_tradeoffs": [
+      "Drizzle's runtime is 6x larger than Kysely (9.9 MB vs 1.6 MB), though drizzle-kit's 9.8 MB stays out of the shipped package.",
+      "Apache-2.0 rather than MIT - permissive, but a second licence family in the tree.",
+      "tsvector and pgvector are not Drizzle builtins and must be declared via customType; that declaration is now proven but is a maintenance point if Drizzle changes the customType API.",
+      "Schema-first diffing can hide PostgreSQL behaviour, which TECHNOLOGY-DECISIONS section 3 explicitly warns against. Mitigation: FTS and vector queries are written as raw `sql` templates (verified working), keeping the query path explicit even where the schema path is generated."
+    ],
+    "reversal_condition": "If drizzle-kit diffing proves unreliable for partial indexes, temporal tables or the provenance schema during EPIC-002 or EPIC-010, fall back to Kysely with hand-written migrations. Both were verified against identical requirements, so the fallback is a known-good path rather than a fresh evaluation."
+  }
+}

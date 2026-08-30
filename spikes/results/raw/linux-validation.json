@@ -1,0 +1,33 @@
+{
+  "_note": "Linux validation. Both stacks installed from their committed manifests inside official slim containers with the corpus copied in, then the corrected (fairness-fixed) benchmarks were run. Recorded from the container runs on 2026-08-30. macOS was NOT measured - no macOS host was available.",
+  "method": {
+    "node_image": "node:22-slim",
+    "python_image": "python:3.12-slim",
+    "host": "Docker 29.6.2-rd on Windows 11, container filesystem (not a bind mount) for the corpus",
+    "corpus": "code + docs + malformed (the 84 MB large-file case was excluded to keep container copies fast)"
+  },
+  "install": {
+    "node": { "ok": true, "node_modules_mb": 195, "top_level_packages": 195, "native_build_required": false },
+    "python": { "ok": true, "venv_mb": 105, "packages": 40, "native_build_required": false, "wheels_used": true }
+  },
+  "benchmarks_median_ms": {
+    "fsscan":       { "node": 483.1, "python": 94.6,   "node_strategy": "parallel64", "python_strategy": "sequential" },
+    "concurrency":  { "node": 491.7, "python": 48.3,   "node_model": "worker_threads", "python_model": "ProcessPoolExecutor" },
+    "treesitter":   { "node": 2052.2, "python": 1329.4 },
+    "parse_csv":    { "node": 890.5, "python": 259.3 },
+    "parse_xlsx":   { "node": 714.7, "python": 2060.2 },
+    "parse_docx":   { "node": 356.9, "python": 261.2 },
+    "parse_pdf":    { "node": 406.6, "python": 1049.8 }
+  },
+  "robustness_tally": {
+    "node":   { "clean_error": 13, "ok": 3 },
+    "python": { "clean_error": 12, "ok": 4 }
+  },
+  "findings": [
+    "Both stacks install and run on Linux with no native toolchain and no source builds.",
+    "Python's filesystem scan is 5x faster than Node's on Linux (94.6 vs 483.1 ms) but 1.6x SLOWER on Windows (596 vs 363 ms). The ranking reverses by platform.",
+    "Python's process-pool concurrency is 10x faster than Node's worker_threads on Linux (48.3 vs 491.7 ms), but on Windows process spawn is expensive and Python's thread pool (231 ms) is its best model against Node's 316 ms.",
+    "Parser rankings are stable across platforms: Node faster on PDF and XLSX, Python faster on CSV, DOCX and tree-sitter.",
+    "Robustness outcomes are identical across platforms for both stacks - no platform-specific parser failure appeared."
+  ]
+}
