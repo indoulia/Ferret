@@ -1,6 +1,8 @@
 # EPIC-008 — Evidence & Provenance Model
 
-**Status: APPROVED | Priority: P0**
+**Status: VALIDATED | Priority: P0**
+
+Evidence: [`validation/EPIC-008-VALIDATION.md`](validation/EPIC-008-VALIDATION.md) · Decisions: [`../Architecture/EPIC-008-DECISIONS.md`](../Architecture/EPIC-008-DECISIONS.md) · Checkpoint: [`../Checkpoints/EPIC-008.md`](../Checkpoints/EPIC-008.md)
 
 ## Objective
 Ensure every important fact can be traced back to source evidence and that Ferret distinguishes observed evidence from derived knowledge.

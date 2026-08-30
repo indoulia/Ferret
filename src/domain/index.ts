@@ -93,3 +93,24 @@ export {
   type RelationshipInput,
   type RelationshipTypeDefinition,
 } from './relationship.js';
+
+export {
+  Completeness,
+  EVIDENCE_METHODS,
+  EVIDENCE_STATES,
+  EvidenceMethod,
+  EvidenceState,
+  createEvidence,
+  detectConflicts,
+  evidenceInputSchema,
+  evidenceKey,
+  evidenceLocatorSchema,
+  integrityHashOf,
+  isDirectObservation,
+  preferredEvidence,
+  redactStatement,
+  type CanonicalEvidence,
+  type ConflictGroup,
+  type EvidenceInput,
+  type EvidenceLocator,
+} from './evidence.js';

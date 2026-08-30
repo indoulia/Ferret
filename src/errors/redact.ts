@@ -68,8 +68,24 @@ const SECRET_VALUE_PATTERNS: readonly RegExp[] = [
 /** The userinfo segment of a URI, such as the credentials in a `postgres://` connection URL. */
 const URI_USERINFO = /\b([a-z][a-z0-9+.-]*):\/\/([^\s/:@]+)(:[^\s/@]*)?@/gi;
 
-/** Key/value pairs inside connection strings, such as an assigned `password=` entry. */
-const KEYVALUE_SECRET = /\b(password|passwd|pwd|secret|token|api[_-]?key)\s*=\s*[^;,\s]+/gi;
+/**
+ * Key/value pairs inside strings, such as an assigned `password=` entry.
+ *
+ * The leading `[A-Za-z0-9_]*` is load-bearing. `\b(password)` alone does **not**
+ * match `DATABASE_PASSWORD=hunter2`: the character before `PASSWORD` is an
+ * underscore, which is a word character, so there is no boundary there. That is
+ * exactly the shape secrets take in the environment Ferret runs in —
+ * `FERRET_DATABASE_PASSWORD`, `PG_PASSWORD`, `GITHUB_TOKEN` — so the original
+ * pattern missed the cases most likely to occur.
+ *
+ * Found by an EPIC-008 test that expected a masked value in evidence content and
+ * got the real one. The gap affected logs, errors and configuration output too,
+ * since they all redact through here.
+ *
+ * The alternation must still be followed immediately by `=`, so `MY_TOKENIZER=x`
+ * and `keyword=fine` are left alone.
+ */
+const KEYVALUE_SECRET = /\b([A-Za-z0-9_]*(?:passwd|password|pwd|secret|token|api[_-]?key))\s*=\s*[^;,\s]+/gi;
 
 function tokenizeKey(key: string): string[] {
   return key

@@ -88,3 +88,17 @@ export {
   type NewRelationshipRow,
   type RelationshipRow,
 } from './schema/relationships.js';
+
+export {
+  EvidenceStore,
+  type EvidenceQuery,
+  type RecordedEvidence,
+} from './evidence.js';
+
+export {
+  evidence,
+  evidenceDerivation,
+  type EvidenceDerivationRow,
+  type EvidenceRow,
+  type NewEvidenceRow,
+} from './schema/evidence.js';

@@ -73,6 +73,39 @@ describe('redactString', () => {
   });
 });
 
+describe('redactString — prefixed secret names', () => {
+  // The shape secrets actually take in the environment Ferret runs in. The
+  // original pattern anchored on `(password)`, which does not match after an
+  // underscore, so it missed every one of these. Found by an EPIC-008 evidence
+  // test that expected a masked value and got the real one.
+  it.each([
+    'DATABASE_PASSWORD=hunter2',
+    'FERRET_DATABASE_PASSWORD=hunter2',
+    'PG_PASSWORD=hunter2',
+    'GITHUB_TOKEN=hunter2',
+    'MY_API_KEY=hunter2',
+    'app_secret=hunter2',
+  ])('masks %s', (input) => {
+    const output = redactString(input);
+    expect(output).not.toContain('hunter2');
+    expect(output).toContain(REDACTED);
+    // The name survives, so a log still says *which* setting was involved.
+    expect(output.split('=')[0]).toBe(input.split('=')[0]);
+  });
+
+  it('still masks the unprefixed form', () => {
+    expect(redactString('password=hunter2')).not.toContain('hunter2');
+  });
+
+  it('leaves an innocent assignment alone', () => {
+    // The alternation must be followed immediately by `=`, so a name that
+    // merely contains "token" is not treated as one.
+    expect(redactString('MY_TOKENIZER=lexer')).toBe('MY_TOKENIZER=lexer');
+    expect(redactString('keyword=search')).toBe('keyword=search');
+    expect(redactString('PASSWORD_POLICY_URL=https://example')).toContain('PASSWORD_POLICY_URL');
+  });
+});
+
 describe('redact', () => {
   it('redacts secret-named properties at every depth', () => {
     const result = redact({

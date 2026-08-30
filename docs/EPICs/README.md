@@ -65,7 +65,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 - **EPIC-006 — Canonical Entity Model** — P0 — VALIDATED ([evidence](validation/EPIC-006-VALIDATION.md))
 - **EPIC-007 — Relationship & Temporal Model** — P0 — VALIDATED ([evidence](validation/EPIC-007-VALIDATION.md))
-- **EPIC-008 — Evidence & Provenance Model** — P0
+- **EPIC-008 — Evidence & Provenance Model** — P0 — VALIDATED ([evidence](validation/EPIC-008-VALIDATION.md))
 - **EPIC-009 — Identity & Scope Model** — P0
 - **EPIC-010 — Schema Versioning & Compatibility** — P0
 
