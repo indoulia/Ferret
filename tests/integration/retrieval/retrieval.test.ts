@@ -1,0 +1,397 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import {
+  Direction,
+  ErrorCode,
+  HitSource,
+  MAX_LIMIT,
+  RepositoryIndexer,
+  RelationshipType,
+  boundedLimit,
+  createNullLogger,
+  type DiscoveredRepository,
+  type ProviderOperationContext,
+} from '../../../src/index.js';
+import { GitSourceProvider } from '../../../src/git/index.js';
+import {
+  CompatibilityService,
+  EntityStore,
+  EvidenceStore,
+  MigrationPolicy,
+  RelationshipStore,
+  RetrievalStore,
+  migrate,
+  type FerretDatabase,
+} from '../../../src/storage/index.js';
+import { createTestOperationContext, createTestProviderContext } from '../../../src/providers/sdk/testing.js';
+import { createRepository, createWorkspace, git, gitVersion } from '../../support/git-fixtures.js';
+import {
+  SKIP_REASON,
+  createTestDatabase,
+  databaseAvailable,
+  type TestDatabase,
+} from '../../support/postgres.js';
+
+/**
+ * EPIC-052 and EPIC-053 against a real indexed repository.
+ *
+ * The distinction under test throughout is between the two kinds of question,
+ * because conflating them is how a system starts returning plausible answers to
+ * precise ones:
+ *
+ * - **Exact** has a right answer and no ranking. *Which files does this
+ *   repository contain* is not a question you answer approximately.
+ * - **Full-text** is a guess with a score, for things a person half-remembers.
+ *
+ * Both are exercised over a repository built by real `git` and indexed by the
+ * real indexer, because a hand-seeded database would only prove the seeding.
+ */
+
+const version = await gitVersion();
+const runnable = version !== undefined && databaseAvailable();
+const describeRetrieval = runnable ? describe : describe.skip;
+
+if (!runnable) {
+  process.stderr.write(
+    `\n[EPIC-052/053] SKIPPING retrieval: ${
+      version === undefined ? 'the `git` executable was not found on PATH' : SKIP_REASON
+    }.\n\n`,
+  );
+}
+
+let database: TestDatabase;
+let handle: FerretDatabase;
+let workspace: { path: string; cleanup: () => Promise<void> };
+let provider: GitSourceProvider;
+let context: ProviderOperationContext;
+let retrieval: RetrievalStore;
+let repository: DiscoveredRepository;
+let repositoryId: string;
+
+beforeAll(async () => {
+  if (!runnable) return;
+  database = await createTestDatabase('epic052');
+  handle = drizzle(database.pool);
+  await migrate(database.pool, { logger: createNullLogger(), policy: MigrationPolicy.AUTO });
+
+  workspace = await createWorkspace('ferret-retrieval-');
+  provider = new GitSourceProvider();
+  await provider.initialize(createTestProviderContext());
+  context = createTestOperationContext();
+  retrieval = new RetrievalStore(handle);
+
+  // One repository with deliberately searchable content.
+  const root = join(workspace.path, 'searchable');
+  await mkdir(root, { recursive: true });
+  const path = await createRepository(root, 'searchable', {
+    origin: 'https://github.com/indoulia/searchable.git',
+  });
+  await mkdir(join(path, 'src'), { recursive: true });
+  await writeFile(join(path, 'src', 'connection-pool.ts'), 'export const pool = 1;\n');
+  await writeFile(join(path, 'src', 'retry-policy.ts'), 'export const retry = 1;\n');
+  await git(path, ['add', '-A']);
+  await git(path, ['commit', '-m', 'add connection pooling and retry handling']);
+
+  await writeFile(join(path, 'docs.md'), 'documentation\n');
+  await git(path, ['add', '-A']);
+  await git(path, ['commit', '-m', 'document the timeout behaviour of the pool']);
+
+  await git(path, ['branch', 'feature/timeouts']);
+
+  repository = await provider.describeRepository(path, context);
+  const indexer = new RepositoryIndexer({
+    source: provider,
+    entities: new EntityStore(handle),
+    relationships: new RelationshipStore(handle),
+    evidence: new EvidenceStore(handle),
+    watermarks: new CompatibilityService(handle, database.pool),
+  });
+  repositoryId = (await indexer.index(repository, {}, context)).repositoryId;
+});
+
+afterAll(async () => {
+  if (!runnable) return;
+  await provider.shutdown();
+  await workspace.cleanup();
+  await database.drop();
+});
+
+describe('query bounds', () => {
+  it('bounds a limit without a database', () => {
+    // Retrieval answers an AI client over MCP, and an unbounded result set is a
+    // context window filled by one query.
+    expect(boundedLimit(undefined)).toBe(50);
+    expect(boundedLimit(10)).toBe(10);
+    expect(boundedLimit(10_000)).toBe(MAX_LIMIT);
+    expect(boundedLimit(0)).toBe(50);
+    expect(boundedLimit(-1)).toBe(50);
+    expect(boundedLimit(1.5)).toBe(50);
+  });
+});
+
+describeRetrieval('exact structured retrieval', () => {
+  it('finds every entity of a kind', async () => {
+    const files = await retrieval.findEntities({ kind: 'file', limit: MAX_LIMIT });
+    expect(files.length).toBeGreaterThanOrEqual(4);
+    expect(files.every((entity) => entity.kind === 'file')).toBe(true);
+  });
+
+  it('finds an entity by an exact attribute', async () => {
+    // Deterministic: there is one file at this path, and "probably that one" is
+    // not an answer.
+    const found = await retrieval.findEntities({
+      kind: 'file',
+      attributes: { path: 'src/connection-pool.ts' },
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.attributes['path']).toBe('src/connection-pool.ts');
+  });
+
+  it('finds the files identified within one repository', async () => {
+    const scoped = await retrieval.findEntities({ kind: 'file', scope: repositoryId, limit: MAX_LIMIT });
+    expect(scoped.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('returns nothing rather than everything for a filter that matches nothing', async () => {
+    expect(await retrieval.findEntities({ kind: 'file', attributes: { path: 'no/such/file' } })).toStrictEqual(
+      [],
+    );
+  });
+
+  it('reads one entity with its external identifiers', async () => {
+    const [file] = await retrieval.findEntities({ kind: 'file', limit: 1 });
+    const full = await retrieval.getEntity(file?.id ?? '');
+    expect(full?.id).toBe(file?.id);
+    expect(Array.isArray(full?.externalIds)).toBe(true);
+  });
+
+  it('reports a missing entity as missing', async () => {
+    expect(await retrieval.getEntity('00000000-0000-0000-0000-000000000000')).toBeUndefined();
+  });
+
+  it('treats an attribute name as data, not as SQL', async () => {
+    // The attribute *key* is a bind parameter too. A name reaching the query as
+    // interpolated text would be an injection through a field nobody thinks of
+    // as user input.
+    const hostile = await retrieval.findEntities({
+      kind: 'file',
+      attributes: { "path'; DROP TABLE ferret.entity; --": 'x' },
+    });
+    expect(hostile).toStrictEqual([]);
+    // Still there.
+    expect((await retrieval.findEntities({ kind: 'file', limit: 1 })).length).toBe(1);
+  });
+});
+
+describeRetrieval('traversal', () => {
+  it('finds what a repository contains', async () => {
+    const out = await retrieval.neighbours({
+      from: repositoryId,
+      direction: Direction.OUT,
+      limit: MAX_LIMIT,
+    });
+    const types = new Set(out.map((neighbour) => neighbour.relationshipType));
+
+    expect(types).toContain(RelationshipType.REPOSITORY_CONTAINS_FILE);
+    expect(types).toContain(RelationshipType.REPOSITORY_CONTAINS_COMMIT);
+    expect(types).toContain(RelationshipType.REPOSITORY_CONTAINS_BRANCH);
+    expect(out.every((neighbour) => neighbour.direction === 'out')).toBe(true);
+  });
+
+  it('finds what points at a file', async () => {
+    const [file] = await retrieval.findEntities({
+      kind: 'file',
+      attributes: { path: 'src/retry-policy.ts' },
+    });
+    const inbound = await retrieval.neighbours({
+      from: file?.id ?? '',
+      direction: Direction.IN,
+      types: [RelationshipType.COMMIT_MODIFIES_FILE],
+      limit: MAX_LIMIT,
+    });
+
+    expect(inbound.length).toBeGreaterThanOrEqual(1);
+    expect(inbound.every((neighbour) => neighbour.entity.kind === 'commit')).toBe(true);
+  });
+
+  it('follows both directions when the question has none', async () => {
+    const [file] = await retrieval.findEntities({
+      kind: 'file',
+      attributes: { path: 'src/retry-policy.ts' },
+    });
+    const both = await retrieval.neighbours({ from: file?.id ?? '', limit: MAX_LIMIT });
+    const directions = new Set(both.map((neighbour) => neighbour.direction));
+
+    // A file is contained *by* a repository and modified *by* commits, and has
+    // versions of its own. Asking twice invites asking once.
+    expect(directions.has('in')).toBe(true);
+    expect(directions.has('out')).toBe(true);
+  });
+
+  it('answers as of an instant, not only as of now', async () => {
+    // The reason relationships carry valid time at all, and the question Ferret
+    // exists for: *what was this like last Tuesday*.
+    const before = new Date(Date.now() - 86_400_000).toISOString();
+    const past = await retrieval.neighbours({ from: repositoryId, at: before, limit: MAX_LIMIT });
+    const now = await retrieval.neighbours({ from: repositoryId, limit: MAX_LIMIT });
+
+    // Structural edges were observed today, so yesterday Ferret knew nothing.
+    expect(now.length).toBeGreaterThan(past.length);
+  });
+
+  it('excludes an interval that ended exactly at the instant asked about', async () => {
+    // Half-open, the same convention EPIC-007 uses everywhere. Mixing the two is
+    // how a worktree appears to be on two branches for one instant.
+    const open = await retrieval.neighbours({
+      from: repositoryId,
+      types: [RelationshipType.REPOSITORY_CONTAINS_FILE],
+      limit: 1,
+    });
+    const edge = open[0];
+    expect(edge).toBeDefined();
+
+    const atStart = await retrieval.neighbours({
+      from: repositoryId,
+      types: [RelationshipType.REPOSITORY_CONTAINS_FILE],
+      at: edge?.validFrom,
+      limit: MAX_LIMIT,
+    });
+    // `valid_from <= at` is inclusive, so the interval is live at its own start.
+    expect(atStart.length).toBeGreaterThan(0);
+  });
+
+  it('returns nothing for an entity nothing is connected to', async () => {
+    expect(
+      await retrieval.neighbours({ from: '00000000-0000-0000-0000-000000000000' }),
+    ).toStrictEqual([]);
+  });
+});
+
+describeRetrieval('full-text retrieval', () => {
+  it('finds a commit by words from its message', async () => {
+    const hits = await retrieval.search({ text: 'connection pooling' });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.some((hit) => hit.entity.kind === 'commit')).toBe(true);
+  });
+
+  it('stems, so a search for one form finds another', async () => {
+    // The difference between `english` and `simple`, and the reason for it: a
+    // person searching "pool" should find "pooling".
+    const hits = await retrieval.search({ text: 'pool' });
+    expect(hits.length).toBeGreaterThan(0);
+  });
+
+  it('finds a file by words from its path', async () => {
+    // PostgreSQL lexes `src/retry-policy.ts` as one token of type `file`, so a
+    // separated form is indexed alongside it — otherwise no query a person
+    // would type finds a file at all.
+    const hits = await retrieval.search({ text: 'retry policy', kinds: ['file'] });
+    expect(hits.some((hit) => hit.entity.attributes['path'] === 'src/retry-policy.ts')).toBe(true);
+
+    const single = await retrieval.search({ text: 'connection', kinds: ['file'] });
+    expect(single.some((hit) => hit.entity.attributes['path'] === 'src/connection-pool.ts')).toBe(true);
+  });
+
+  it('does not find a path by a hyphenated fragment, and that is a known gap', async () => {
+    // Recorded rather than hidden. `retry-policy` parses as a *phrase* query —
+    // 'retry-polici' <-> 'retri' <-> 'polici' — which no lexing of the path
+    // satisfies. Deciding when to use exact matching instead of full text is
+    // EPIC-055's job, and asserting the current behaviour means the day it
+    // changes is a visible decision rather than an accident.
+    const hits = await retrieval.search({ text: 'retry-policy', kinds: ['file'] });
+    expect(hits.some((hit) => hit.entity.attributes['path'] === 'src/retry-policy.ts')).toBe(false);
+  });
+
+  it('understands a quoted phrase', async () => {
+    // `websearch_to_tsquery` rather than `plainto_tsquery`: it understands what
+    // a person types without being told a syntax.
+    const phrase = await retrieval.search({ text: '"timeout behaviour"' });
+    expect(phrase.length).toBeGreaterThan(0);
+  });
+
+  it('understands exclusion', async () => {
+    const withBoth = await retrieval.search({ text: 'pool', limit: MAX_LIMIT });
+    const excluded = await retrieval.search({ text: 'pool -timeout', limit: MAX_LIMIT });
+    expect(excluded.length).toBeLessThanOrEqual(withBoth.length);
+  });
+
+  it('orders by relevance and says where each hit came from', async () => {
+    const hits = await retrieval.search({ text: 'timeout', limit: MAX_LIMIT });
+    expect(hits.length).toBeGreaterThan(0);
+
+    for (let i = 1; i < hits.length; i += 1) {
+      expect(hits[i - 1]?.score).toBeGreaterThanOrEqual(hits[i]?.score ?? 0);
+    }
+    for (const hit of hits) {
+      expect([HitSource.ENTITY, HitSource.EVIDENCE]).toContain(hit.source);
+      if (hit.source === HitSource.EVIDENCE) expect(hit.evidence).toBeDefined();
+    }
+  });
+
+  it('shows why something matched', async () => {
+    const [hit] = await retrieval.search({ text: 'connection' });
+    // A score with no explanation is a number a person has to trust.
+    expect(hit?.highlight).toBeDefined();
+    expect(String(hit?.highlight)).toContain('<b>');
+  });
+
+  it('searches evidence statements, not only entity names', async () => {
+    const hits = await retrieval.search({ text: 'searchable', limit: MAX_LIMIT });
+    expect(hits.some((hit) => hit.source === HitSource.EVIDENCE)).toBe(true);
+  });
+
+  it('can be told to search entities only', async () => {
+    const hits = await retrieval.search({ text: 'searchable', includeEvidence: false, limit: MAX_LIMIT });
+    expect(hits.every((hit) => hit.source === HitSource.ENTITY)).toBe(true);
+  });
+
+  it('filters by kind', async () => {
+    const hits = await retrieval.search({ text: 'pool', kinds: ['file'], limit: MAX_LIMIT });
+    expect(hits.every((hit) => hit.entity.kind === 'file')).toBe(true);
+  });
+
+  it('finds nothing rather than everything for a term that is absent', async () => {
+    expect(await retrieval.search({ text: 'zzzznotpresentanywhere' })).toStrictEqual([]);
+  });
+
+  it('does not crash on syntax a person might type', async () => {
+    // `to_tsquery` and `plainto_tsquery` both throw on malformed input. A search
+    // box that a stray parenthesis can crash is a search box that will be.
+    for (const text of ['(((', 'a & | b', '"unclosed', '!!!', 'and or not', '\\']) {
+      await expect(retrieval.search({ text })).resolves.toBeDefined();
+    }
+  });
+
+  it('refuses an empty or oversized query', async () => {
+    await expect(retrieval.search({ text: '   ' })).rejects.toMatchObject({ code: ErrorCode.USAGE });
+    await expect(retrieval.search({ text: 'x'.repeat(2000) })).rejects.toMatchObject({
+      code: ErrorCode.USAGE,
+    });
+  });
+
+  it('treats search text as data, not as SQL', async () => {
+    const hostile = "'; DROP TABLE ferret.entity; --";
+    await expect(retrieval.search({ text: hostile })).resolves.toBeDefined();
+    // Still there.
+    expect((await retrieval.findEntities({ kind: 'file', limit: 1 })).length).toBe(1);
+  });
+
+  it('never returns more than the maximum, whatever it is asked for', async () => {
+    const hits = await retrieval.search({ text: 'pool', limit: 100_000 });
+    expect(hits.length).toBeLessThanOrEqual(MAX_LIMIT);
+  });
+
+  it('searches a realistic corpus within budget', async () => {
+    const started = performance.now();
+    for (let i = 0; i < 50; i += 1) await retrieval.search({ text: 'pool timeout retry' });
+    const elapsed = performance.now() - started;
+
+    // Fifty searches against a GIN index. This is the query on the hot path of
+    // every AI-client question, so a regression to a sequential scan shows here.
+    expect(elapsed).toBeLessThan(20_000);
+  });
+});

@@ -515,13 +515,24 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     const repositoryEntity = this.emit(repository).entity;
 
     const entities = new Map<string, CanonicalEntity>();
+    const placeholders = new Set<string>();
     const relationships = new Map<string, CanonicalRelationship>();
     const evidence: CanonicalEvidence[] = [];
 
-    const add = (entity: CanonicalEntity): CanonicalEntity => {
+    // `placeholder` marks a record emitted only so that an edge has an
+    // endpoint — a parent commit Ferret has not read yet. It fills a gap and
+    // never displaces a record read from the source, and it is displaced by one
+    // the moment the loop reaches it.
+    //
+    // Without the distinction, `git log`'s newest-first order guarantees that
+    // every commit which is a parent of a newer one is stored as its stub: the
+    // right shape, and empty.
+    const add = (entity: CanonicalEntity, placeholder = false): CanonicalEntity => {
       const existing = entities.get(entity.id);
-      if (existing !== undefined) return existing;
+      if (existing !== undefined && (placeholder || !placeholders.has(entity.id))) return existing;
       entities.set(entity.id, entity);
+      if (placeholder) placeholders.add(entity.id);
+      else placeholders.delete(entity.id);
       return entity;
     };
     const link = (relationship: CanonicalRelationship): void => {
@@ -598,6 +609,9 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       for (const parent of commit.parents) {
         const parentEntity = add(
           emitter.entity({ kind: 'commit', source: { id: parent }, attributes: { sha: parent } }),
+          // A placeholder: this parent may be read properly later in the same
+          // page, and when it is, the full record must win.
+          true,
         );
         link(
           emitter.relationship(

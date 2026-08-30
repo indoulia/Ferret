@@ -231,6 +231,20 @@ export {
 } from './providers/index.js';
 
 export {
+  DEFAULT_LIMIT,
+  Direction,
+  HitSource,
+  MAX_LIMIT,
+  boundedLimit,
+  type EntityQuery,
+  type Neighbour,
+  type RetrievalPort,
+  type SearchHit,
+  type SearchQuery,
+  type TraversalQuery,
+} from './retrieval/index.js';
+
+export {
   INDEXER_PRODUCER,
   INDEX_ARTIFACT_KIND,
   RepositoryIndexer,

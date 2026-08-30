@@ -128,3 +128,5 @@ export {
   type DerivedArtifactRow,
   type NewDerivedArtifactRow,
 } from './schema/derived.js';
+
+export { RetrievalStore } from './retrieval.js';

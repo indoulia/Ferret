@@ -136,8 +136,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Search & Retrieval
 
-- **EPIC-052 — Exact Structured Retrieval** — P0
-- **EPIC-053 — Full-Text Retrieval** — P0
+- **EPIC-052 — Exact Structured Retrieval** — P0 — VALIDATED ([spec](EPIC-052-053-Retrieval.md), [evidence](validation/EPIC-052-053-VALIDATION.md))
+- **EPIC-053 — Full-Text Retrieval** — P0 — VALIDATED ([spec](EPIC-052-053-Retrieval.md), [evidence](validation/EPIC-052-053-VALIDATION.md))
 - **EPIC-054 — Semantic Retrieval** — P1
 - **EPIC-055 — Hybrid Query Planner** — P0
 - **EPIC-056 — Ranking & Reranking** — P1
