@@ -1,6 +1,6 @@
 # EPIC-013 — Provider Registry & Discovery
 
-**Status: APPROVED | Priority: P0**
+**Status: VALIDATED | Priority: P0** — [evidence](validation/EPIC-013-VALIDATION.md)
 
 > **Specification note.** This specification is authored from the approved
 > registry entry and Governance §4, §5, §12, §13, §15 and §22, following the

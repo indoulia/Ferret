@@ -171,11 +171,13 @@ describe('core public entry point', () => {
     // is machinery built *on* the contract, and depends on no implementation.
     // `contracts/` joined it with EPIC-017, which pinned the first capability's
     // method signatures; each is a contract, and each has its own boundary block
-    // below.
+    // below. `discovery.ts` joined it with EPIC-013 on the same ground as
+    // `sdk/`: it is machinery over the contract and the registry, it imports no
+    // concrete provider, and the Epic requires the package to export it.
     //
     // What the core still may not reach is an implementation.
     const concreteProviders = [...graph.files].filter((file) =>
-      /^providers\/(?!contract\.ts|contracts\/|registry|capabilities|index|sdk\/)/.test(file),
+      /^providers\/(?!contract\.ts|contracts\/|registry|capabilities|index|sdk\/|discovery\.ts)/.test(file),
     );
     expect(concreteProviders).toStrictEqual([]);
   });
