@@ -418,7 +418,7 @@ export interface ConflictGroup {
 export function detectConflicts(evidence: readonly CanonicalEvidence[]): ConflictGroup[] {
   const groups = new Map<string, CanonicalEvidence[]>();
   for (const record of evidence) {
-    const key = `${record.subjectId} ${record.field ?? ''}`;
+    const key = `${record.subjectId}\u0000${record.field ?? ''}`;
     const list = groups.get(key) ?? [];
     list.push(record);
     groups.set(key, list);

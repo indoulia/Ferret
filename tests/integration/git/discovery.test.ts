@@ -441,7 +441,7 @@ withGit('security', () => {
   it('refuses a Git argument carrying a null byte', async () => {
     const root = await scope('null-byte');
     await expect(
-      runGit(['status', 'a b'], { cwd: root, signal: context.signal }),
+      runGit(['status', 'a\u0000b'], { cwd: root, signal: context.signal }),
     ).rejects.toMatchObject({ code: ErrorCode.USAGE });
   });
 
