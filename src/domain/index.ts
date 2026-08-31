@@ -36,8 +36,8 @@ export {
   issueAttributes,
   pullRequestAttributes,
   releaseAttributes,
-  repositoryAttributes,
   reviewAttributes,
+  repositoryAttributes,
   sessionAttributes,
   worktreeAttributes,
   type EntityAttributes,
@@ -90,7 +90,6 @@ export {
   resetRelationshipTypeRegistry,
   type CanonicalRelationship,
   type RegisterRelationshipTypeOptions,
-  type RelationshipTypeDefinition,
   type RelationshipTypeDefinition,
 } from './relationship.js';
 
