@@ -120,7 +120,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-040 — Session Capture** — P0 — VALIDATED ([evidence](validation/EPIC-040-VALIDATION.md))
 - **EPIC-041 — Durable Checkpoints** — P0 — VALIDATED ([evidence](validation/EPIC-041-VALIDATION.md))
 - **EPIC-042 — Decision & Engineering Memory** — P0 — VALIDATED ([spec](EPIC-042-Decision-And-Engineering-Memory.md), [evidence](validation/EPIC-042-VALIDATION.md))
-- **EPIC-043 — Session Recovery** — P0
+- **EPIC-043 — Session Recovery** — P0 — VALIDATED ([spec](EPIC-043-Session-Recovery.md), [evidence](validation/EPIC-043-VALIDATION.md))
 
 ### Evidence & Provenance
 

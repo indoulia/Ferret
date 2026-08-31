@@ -216,3 +216,17 @@ export {
   type ExtractOptions,
   type MemoryMarker,
 } from './memory-extraction.js';
+
+export {
+  DEFAULT_MEMORY_LIMIT,
+  MAX_LINEAGE_DEPTH,
+  RECOVERY_KIND_ORDER,
+  recoverSession,
+  resumeSession,
+  type RecoverOptions,
+  type RecoveredMemory,
+  type RecoveryBundle,
+  type RecoveryOmission,
+  type ResumeResult,
+  type SessionRecoveryPort,
+} from './session-recovery.js';
