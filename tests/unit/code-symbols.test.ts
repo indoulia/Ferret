@@ -39,7 +39,7 @@ function outline(
   return { title, kind, span: at, children };
 }
 
-function segment(text: string, at: ContentSpan, kind = SegmentKind.CODE): ContentSegment {
+function segment(text: string, at: ContentSpan, kind: SegmentKind = SegmentKind.CODE): ContentSegment {
   return { kind, text, span: at };
 }
 
