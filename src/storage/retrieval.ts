@@ -5,6 +5,7 @@ import { ErrorCode, FerretError } from '../errors/index.js';
 import {
   Direction,
   HitSource,
+  DEFAULT_LIMIT,
   boundedLimit,
   type EntityQuery,
   type Neighbour,
@@ -94,6 +95,19 @@ const ENTITY_COLUMNS = sql`e.id, e.kind, e.canonical_key, e.schema_version, e.so
   e.source_id, e.source_url, e.source_scope, e.lifecycle, e.attributes, e.unknown_fields,
   e.source_observed_at, e.content_hash`;
 
+/**
+ * An abbreviated Git object id, or `undefined` if the text is not one.
+ *
+ * Seven is Git's own abbreviation floor; forty is a full SHA-1. Admitting only
+ * hexadecimal is what makes the resulting `LIKE` pattern safe: `%` and `_` are
+ * wildcards, so a pattern built from arbitrary caller text would be
+ * caller-controlled matching. The value is still bound as a parameter — the
+ * test is what makes the *pattern* trustworthy, not the binding.
+ */
+function abbreviatedObjectId(text: string): string | undefined {
+  return /^[0-9a-f]{7,40}$/i.test(text) ? text.toLowerCase() : undefined;
+}
+
 export class RetrievalStore implements RetrievalPort {
   readonly #db: FerretDatabase;
 
@@ -147,6 +161,58 @@ export class RetrievalStore implements RetrievalPort {
       return rows.rows.map(toEntity);
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.findEntities');
+    }
+  }
+
+  /**
+   * Entities a caller named rather than described — EPIC-055's exact strategy.
+   *
+   * An object id prefix, a path, or a Ferret entity id. All three have a single
+   * right answer, so the result is unranked and every hit carries the same
+   * score: ordering by relevance would imply a judgement that was never made.
+   *
+   * The planner decides *when* this runs. This decides only what an identifier
+   * matches, which is why the three shapes are handled together — a caller who
+   * pasted something has not told Ferret which kind of thing it is.
+   */
+  async byIdentifier(term: string, limit = DEFAULT_LIMIT): Promise<readonly SearchHit[]> {
+    const bounded = boundedLimit(limit);
+    const abbreviated = abbreviatedObjectId(term);
+
+    // A path is compared exactly rather than by prefix. `src/` would otherwise
+    // match every file beneath it and turn a key into a directory listing,
+    // which is a different question with a different answer.
+    const conditions = [
+      sql`e.id::text = ${term}`,
+      sql`e.attributes->>'path' = ${term}`,
+      ...(abbreviated === undefined
+        ? []
+        : [
+            sql`e.source_id LIKE ${`${abbreviated}%`}`,
+            sql`e.attributes->>'sha' LIKE ${`${abbreviated}%`}`,
+          ]),
+    ];
+
+    try {
+      const rows = await this.#db.execute<EntityRowShape>(sql`
+        SELECT ${ENTITY_COLUMNS}
+          FROM ferret.entity e
+         WHERE ${sql.join(conditions, sql` OR `)}
+         ORDER BY e.kind, e.source_id
+         LIMIT ${bounded}
+      `);
+
+      return rows.rows.map((row) => ({
+        source: HitSource.ENTITY,
+        entity: toEntity(row),
+        evidence: undefined,
+        // Identical across the result set, deliberately. These matched a key;
+        // none of them is a better match than another.
+        score: 1,
+        highlight: row.source_id,
+      }));
+    } catch (error) {
+      throw classifyDatabaseError(error, 'retrieval.byIdentifier');
     }
   }
 
@@ -289,6 +355,26 @@ export class RetrievalStore implements RetrievalPort {
     const systemFilter =
       query.sourceSystem === undefined ? sql`true` : sql`e.source_system = ${query.sourceSystem}`;
 
+    // Relaxing turns AND into OR, and does it by rewriting a tsquery PostgreSQL
+    // itself produced rather than by building one from the caller's text. The
+    // input has already been through `websearch_to_tsquery`, so the value being
+    // rewritten contains only lexemes and operators the parser emitted —
+    // assembling a `to_tsquery` string from raw input would be injection into a
+    // query language, and `to_tsquery` additionally throws on malformed input,
+    // which a search box can be made to do with one stray parenthesis.
+    //
+    // Ranking still favours documents matching more terms, so the strict answer
+    // stays on top when it exists.
+    //
+    // Wrapped in a subselect because only a function call may stand alone in a
+    // `FROM` clause; `replace(...)::tsquery` is a scalar expression and needs a
+    // select around it. Both branches take the same shape so the two call sites
+    // below do not have to know which one they were given.
+    const tsquery =
+      query.relax === true
+        ? sql`(SELECT replace(websearch_to_tsquery('english', ${text})::text, ' & ', ' | ')::tsquery) AS q(query)`
+        : sql`(SELECT websearch_to_tsquery('english', ${text})) AS q(query)`;
+
     const entityMatches = sql`
       SELECT ${ENTITY_COLUMNS},
              'entity'::text AS hit_source,
@@ -301,7 +387,7 @@ export class RetrievalStore implements RetrievalPort {
                          coalesce(e.attributes->>'shortName', '') || ' ' || e.source_id,
                          q.query,
                          'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
-        FROM ferret.entity e, websearch_to_tsquery('english', ${text}) AS q(query)
+        FROM ferret.entity e, ${tsquery}
        WHERE e.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}`;
 
     const evidenceMatches = sql`
@@ -312,7 +398,7 @@ export class RetrievalStore implements RetrievalPort {
              ts_headline('english', coalesce(ev.statement #>> '{}', ''), q.query,
                          'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
         FROM ferret.evidence ev
-        JOIN ferret.entity e ON e.id = ev.subject_id, websearch_to_tsquery('english', ${text}) AS q(query)
+        JOIN ferret.entity e ON e.id = ev.subject_id, ${tsquery}
        WHERE ev.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}`;
 
     // An abbreviated object id — how every person and every tool refers to a
@@ -328,7 +414,7 @@ export class RetrievalStore implements RetrievalPort {
     // pattern built from caller text would otherwise be caller-controlled
     // matching. The value is still a bind parameter; the regex is what makes
     // the *pattern* trustworthy, not the binding.
-    const abbreviated = /^[0-9a-f]{7,40}$/i.test(text) ? text.toLowerCase() : undefined;
+    const abbreviated = abbreviatedObjectId(text);
     const objectIdMatches =
       abbreviated === undefined
         ? undefined
@@ -341,8 +427,8 @@ export class RetrievalStore implements RetrievalPort {
              1.0::real AS score,
              e.source_id AS highlight
         FROM ferret.entity e
-       WHERE (e.source_id LIKE ${`${abbreviated}%`} ESCAPE '\\'
-              OR e.attributes->>'sha' LIKE ${`${abbreviated}%`} ESCAPE '\\')
+       WHERE (e.source_id LIKE ${`${abbreviated}%`}
+              OR e.attributes->>'sha' LIKE ${`${abbreviated}%`})
          AND ${kindFilter} AND ${systemFilter}`;
 
     const textual =

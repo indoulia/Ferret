@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import type { LogLevel } from '../../logging/index.js';
 import { createMcpServer, serveStdio } from '../../mcp/index.js';
 import { Capability, assertSupported } from '../../providers/index.js';
+import { QueryPlanner } from '../../retrieval/index.js';
 import { createRuntime } from '../../runtime/index.js';
 import { MigrationPolicy, RetrievalStore, createStorageProvider } from '../../storage/index.js';
 
@@ -37,8 +38,20 @@ export function mcpCommand(): Command {
       await runtime.run(async (context) => {
         assertSupported(runtime.providers.supports(Capability.STORAGE));
 
+        const retrieval = new RetrievalStore(storage.db);
+
+        // EPIC-055. `semantic` is deliberately absent: Ferret ships no embedding
+        // provider, so the planner reports semantic retrieval as unavailable
+        // with the reason, rather than returning an empty result that reads as
+        // "nothing was similar". When an operator registers one, it is passed
+        // here and nothing else changes.
         const server = createMcpServer({
-          retrieval: new RetrievalStore(storage.db),
+          retrieval,
+          planner: new QueryPlanner({
+            exact: retrieval,
+            text: { search: (query) => retrieval.search(query) },
+            logger: context.logger,
+          }),
           logger: context.logger,
         });
 

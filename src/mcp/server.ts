@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { CONTENT_NOTICE, ContextPackBuilder, MAX_BUDGET, renderPack } from '../context/index.js';
 import { serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
-import { MAX_LIMIT, type RetrievalPort } from '../retrieval/index.js';
+import { MAX_LIMIT, type QueryPlanner, type RetrievalPort, type SearchHit } from '../retrieval/index.js';
 import { VERSION } from '../version.js';
 
 /**
@@ -43,6 +43,14 @@ const TOOL_RESULT_LIMIT = 50;
 
 export interface McpServerDependencies {
   readonly retrieval: RetrievalPort;
+  /**
+   * EPIC-055's planner, when one is wired.
+   *
+   * Optional so that a caller with only a `RetrievalPort` still gets a working
+   * server — the planner is an improvement to how a question is routed, not a
+   * new requirement for answering one.
+   */
+  readonly planner?: QueryPlanner;
   readonly logger: Logger;
 }
 
@@ -53,7 +61,7 @@ export interface McpServerDependencies {
  * which is most of what is worth testing.
  */
 export function createMcpServer(dependencies: McpServerDependencies): McpServer {
-  const { retrieval, logger } = dependencies;
+  const { retrieval, planner, logger } = dependencies;
   const packs = new ContextPackBuilder(retrieval);
 
   const server = new McpServer(
@@ -89,9 +97,11 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
     {
       title: 'Search indexed knowledge',
       description:
-        'Full-text search across indexed repositories: commit messages, file ' +
-        'paths, branch names and recorded evidence. Returns ranked results. ' +
-        'Use this when you half-remember something and need to find it. ' +
+        'Search indexed repositories: commit messages, file paths, branch names ' +
+        'and recorded evidence. Understands an abbreviated commit id or a file ' +
+        'path as an exact lookup, and prose as a ranked search. Use this when ' +
+        'you half-remember something and need to find it. The response reports ' +
+        'which strategies ran and which could not, so a partial answer says so. ' +
         CONTENT_NOTICE,
       inputSchema: z.strictObject({
         query: z.string().min(1).max(1024).describe('What to search for. Supports "quoted phrases" and -exclusion.'),
@@ -106,23 +116,49 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
     },
     async ({ query, kinds, limit }) =>
       guard('search', async () => {
-        const hits = await retrieval.search({
-          text: query,
+        const bounded = Math.min(limit ?? 20, TOOL_RESULT_LIMIT);
+
+        // Without a planner the behaviour is exactly what it was: one ranked
+        // full-text search. The planner is an improvement to routing, not a new
+        // requirement for answering, so its absence changes nothing a caller
+        // depends on.
+        if (planner === undefined) {
+          const hits = await retrieval.search({
+            text: query,
+            ...(kinds === undefined ? {} : { kinds }),
+            limit: bounded,
+          });
+          return {
+            notice: CONTENT_NOTICE,
+            count: hits.length,
+            results: hits.map(describeHit),
+          };
+        }
+
+        const { plan, hits } = await planner.search({
+          question: query,
           ...(kinds === undefined ? {} : { kinds }),
-          limit: Math.min(limit ?? 20, TOOL_RESULT_LIMIT),
+          limit: bounded,
         });
+
         return {
           notice: CONTENT_NOTICE,
           count: hits.length,
-          results: hits.map((hit) => ({
-            id: hit.entity.id,
-            kind: hit.entity.kind,
-            source: hit.entity.source,
-            attributes: hit.entity.attributes,
-            matchedIn: hit.source,
-            highlight: hit.highlight,
-            score: hit.score,
-          })),
+          // Reported, not hidden. A caller cannot tell a complete answer from a
+          // partial one unless the answer says which it is, and `partial` is the
+          // single field that says so.
+          plan: {
+            interpretedAs: plan.shape,
+            why: plan.reason,
+            partial: plan.partial,
+            strategies: plan.strategies.map((outcome) => ({
+              strategy: outcome.strategy,
+              ran: outcome.ran,
+              returned: outcome.returned,
+              ...(outcome.skipped === undefined ? {} : { skipped: outcome.skipped }),
+            })),
+          },
+          results: hits.map((hit) => ({ ...describeHit(hit), foundBy: hit.foundBy })),
         };
       }),
   );
@@ -310,4 +346,24 @@ export async function serveStdio(server: McpServer): Promise<StdioServerTranspor
   const transport = new StdioServerTransport();
   await server.connect(transport);
   return transport;
+}
+
+/**
+ * One search hit, as a client sees it.
+ *
+ * Shared by the planned and unplanned paths so the two cannot drift into
+ * describing the same thing differently — which is how a client ends up with a
+ * field that exists only sometimes.
+ */
+function describeHit(hit: SearchHit): Record<string, unknown> {
+  return {
+    id: hit.entity.id,
+    kind: hit.entity.kind,
+    lifecycle: hit.entity.lifecycle,
+    source: hit.entity.source,
+    attributes: hit.entity.attributes,
+    matchedIn: hit.source,
+    highlight: hit.highlight,
+    score: hit.score,
+  };
 }

@@ -19,3 +19,17 @@ export {
   type SearchQuery,
   type TraversalQuery,
 } from './query.js';
+
+export { QueryShape, classify, type Classification } from './classify.js';
+export { RRF_K, fuse, type FusedHit, type RankedList } from './fuse.js';
+export {
+  QueryPlanner,
+  type ExactStrategy,
+  type PlannedQuery,
+  type PlannedResults,
+  type PlannerDependencies,
+  type QueryPlan,
+  type SemanticStrategy,
+  type StrategyOutcome,
+  type TextStrategy,
+} from './planner.js';
