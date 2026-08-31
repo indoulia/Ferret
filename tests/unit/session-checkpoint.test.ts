@@ -52,6 +52,29 @@ describe('durable session checkpoints', () => {
     expect(() => advanceSessionCheckpoint(first, { ...second, checkpointSequence: 3, checkpointedAt: '2026-08-31T06:59:59.000Z' })).toThrow();
   });
 
+  it('orders checkpoint timestamps by instant, not by their written form', () => {
+    // The schema accepts an offset, so '…T23:00:00+05:30' (17:30Z) precedes
+    // '…T18:00:00Z' even though it sorts after it as text.
+    const offset = createSessionCheckpoint({ ...input, checkpointedAt: '2026-08-31T23:00:00.000+05:30' });
+    const later = advanceSessionCheckpoint(offset, {
+      checkpointSequence: 2,
+      capturedThroughSequence: 20,
+      checkpointedAt: '2026-08-31T18:00:00.000Z',
+      summary: 'Recorded from a client reporting UTC.',
+      continuationState: { nextAction: 'continue EPIC-041' },
+    });
+    expect(later.checkpointSequence).toBe(2);
+    expect(() =>
+      advanceSessionCheckpoint(offset, {
+        checkpointSequence: 3,
+        capturedThroughSequence: 20,
+        checkpointedAt: '2026-08-31T17:00:00.000Z',
+        summary: 'Earlier instant, later text.',
+        continuationState: { nextAction: 'reject' },
+      }),
+    ).toThrow();
+  });
+
   it('serializes stably and verifies integrity', () => {
     const checkpoint = createSessionCheckpoint(input);
     const serialized = serializeSessionCheckpoint(checkpoint);

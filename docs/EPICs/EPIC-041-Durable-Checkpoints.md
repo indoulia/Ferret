@@ -2,7 +2,7 @@
 
 **Priority:** P0  
 **Domain:** Session & Agent Memory  
-**Status:** IN_PROGRESS
+**Status:** VALIDATED — [evidence](validation/EPIC-041-VALIDATION.md)
 
 ## Outcome
 

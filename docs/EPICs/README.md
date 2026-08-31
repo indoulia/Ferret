@@ -118,7 +118,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 - **EPIC-039 — Session Model** — P0 — MERGED (PR #29; CI passed; validation evidence still required before DONE)
 - **EPIC-040 — Session Capture** — P0 — MERGED (PR #30; CI passed; validation evidence still required before DONE)
-- **EPIC-041 — Durable Checkpoints** — P0 — IN_PROGRESS
+- **EPIC-041 — Durable Checkpoints** — P0 — VALIDATED ([evidence](validation/EPIC-041-VALIDATION.md))
 - **EPIC-042 — Decision & Engineering Memory** — P0
 - **EPIC-043 — Session Recovery** — P0
 

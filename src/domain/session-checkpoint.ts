@@ -104,7 +104,9 @@ export function advanceSessionCheckpoint(
       'Advance the capture watermark or create a new session.',
     );
   }
-  if (input.checkpointedAt < previous.checkpointedAt) {
+  // Compared as instants: the schema accepts an offset, and offset strings do
+  // not sort chronologically as text.
+  if (Date.parse(input.checkpointedAt) < Date.parse(previous.checkpointedAt)) {
     throw invalid(
       'Checkpoint timestamp cannot move backwards',
       { sessionId: previous.sessionId, previousCheckpointedAt: previous.checkpointedAt, attemptedCheckpointedAt: input.checkpointedAt },
