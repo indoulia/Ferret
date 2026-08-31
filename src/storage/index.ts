@@ -138,3 +138,5 @@ export {
   SemanticRetrieval,
   type StoredEmbedding,
 } from './embeddings.js';
+
+export { SymbolStore, escapeLikePrefix } from './symbols.js';
