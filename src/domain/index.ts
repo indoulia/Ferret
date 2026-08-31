@@ -161,3 +161,15 @@ export {
   type CompatibilityVerdict,
   type SurfacePolicy,
 } from './compatibility.js';
+
+export {
+  SessionStatus,
+  continueSession,
+  createSession,
+  endSession,
+  sessionInputSchema,
+  sessionKey,
+  touchSession,
+  type Session,
+  type SessionInput,
+} from './session.js';
