@@ -90,7 +90,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 - **EPIC-022 — File Discovery** — P0 — VALIDATED ([spec](EPIC-022-023-File-Discovery-Identity.md), [evidence](validation/EPIC-022-023-VALIDATION.md))
 - **EPIC-023 — File Identity & Content Hashing** — P0 — VALIDATED ([spec](EPIC-022-023-File-Discovery-Identity.md), [evidence](validation/EPIC-022-023-VALIDATION.md))
-- **EPIC-024 — Parser Framework** — P0
+- **EPIC-024 — Parser Framework** — P0 — VALIDATED ([spec](EPIC-024-Parser-Framework.md), [evidence](validation/EPIC-024-VALIDATION.md))
 - **EPIC-025 — Code File Parsing** — P0
 - **EPIC-026 — PDF Intelligence** — P1
 - **EPIC-027 — Office Document Intelligence** — P1
