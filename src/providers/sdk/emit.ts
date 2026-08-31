@@ -1,4 +1,5 @@
 import {
+  authorityFor,
   createEntity,
   createEvidence,
   createRelationship,
@@ -51,6 +52,19 @@ export interface EmissionIdentity {
    * unresolvable.
    */
   readonly producerVersion: string;
+  /**
+   * This provider is the system of record for what it observes — EPIC-045.
+   *
+   * Raises the authority of *observed* and *parsed* evidence to
+   * `SYSTEM_OF_RECORD`; it cannot promote an inference or a model's output,
+   * because authority is a property of how a fact was obtained rather than of
+   * who is claiming it.
+   *
+   * Off by default. A provider says this when it reads the system that owns the
+   * fact — Git about a commit's contents, Jira about an issue's status — and
+   * nothing is the system of record for everything.
+   */
+  readonly systemOfRecord?: boolean;
 }
 
 /** An entity input whose `source.system` the emitter fills in. */
@@ -155,6 +169,17 @@ export class Emitter {
       producer: this.#identity.producer,
       producerVersion: this.#identity.producerVersion,
       sourceSystem: input.sourceSystem ?? this.#identity.sourceSystem,
+      // EPIC-045. Before this, every record defaulted to authority 0, so
+      // `preferredEvidence` ranked by authority first and that comparison never
+      // discriminated — every source in Ferret was equally authoritative. A
+      // caller that has already decided a rank keeps it.
+      authority:
+        input.authority ??
+        authorityFor(method, {
+          ...(this.#identity.systemOfRecord === undefined
+            ? {}
+            : { systemOfRecord: this.#identity.systemOfRecord }),
+        }),
     });
   }
 }

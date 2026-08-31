@@ -230,3 +230,12 @@ export {
   type ResumeResult,
   type SessionRecoveryPort,
 } from './session-recovery.js';
+
+export {
+  AUTHORITY_BY_METHOD,
+  SOURCE_AUTHORITIES,
+  SourceAuthority,
+  authorityFor,
+  isUnknownAuthority,
+  type AuthorityOptions,
+} from './authority.js';
