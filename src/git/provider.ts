@@ -8,7 +8,14 @@ import {
   type CanonicalRelationship,
 } from '../domain/index.js';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
+import { ActorClass } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
+import {
+  applyMailmap,
+  classifyIdentity,
+  normalizeGitIdentity,
+  type Mailmap,
+} from '../identity/index.js';
 import { fileAttributesFrom, fileVersionAttributesFrom, type FileStructure } from '../files/index.js';
 import { isSecretPath, redactSecrets } from '../security/index.js';
 import { VERSION } from '../version.js';
@@ -507,7 +514,18 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
   emitHistory(
     repository: DiscoveredRepository,
     commits: readonly CommitRecord[],
-    options: { observedAt?: Date } = {},
+    options: {
+      observedAt?: Date;
+      /**
+       * The repository's `.mailmap`, when the caller has read one.
+       *
+       * Optional because nothing here opens a file — the provider is handed
+       * commit records, not a working tree. A caller that has the checkout
+       * passes it and gets the project's own identity mapping applied
+       * (EPIC-036); one that does not gets the raw identities, as before.
+       */
+      mailmap?: Mailmap;
+    } = {},
   ): {
     entities: readonly CanonicalEntity[];
     relationships: readonly CanonicalRelationship[];
@@ -544,25 +562,54 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
 
     add(repositoryEntity);
 
-    const developerFor = (name: string, email: string): CanonicalEntity | undefined => {
-      const normalized = email.trim().toLowerCase();
+    /**
+     * The actor behind a commit — a person, or a machine.
+     *
+     * EPIC-036: bots are not developers. `dependabot[bot]` recorded as a human
+     * contributor makes "who has worked on this file" answer with a machine,
+     * and EPIC-009 made the two identity classes distinct so that would not
+     * happen. `.mailmap` is applied first where the caller supplied one,
+     * because it is the project's own maintained answer.
+     */
+    const actorFor = (
+      name: string,
+      email: string,
+    ): { entity: CanonicalEntity; actorClass: ActorClass } | undefined => {
+      const raw = normalizeGitIdentity(name, email);
       // No address means no identity. Inventing one from a display name would
       // merge every "unknown" author in the repository into one person.
-      if (normalized.length === 0) return undefined;
-      return add(
-        emitter.entity({
-          kind: 'developer',
-          source: { id: normalized },
-          attributes: {
-            // `name` is the canonical model's field for a human-readable name
-            // (EPIC-006). `emails` is a *list* because one person commits as
-            // several addresses and EPIC-036 resolves them — collapsing it to
-            // one would destroy the evidence resolution depends on.
-            name: name.length === 0 ? normalized : name,
-            emails: [normalized],
-          },
-        }),
-      );
+      if (raw === undefined) return undefined;
+      const identity = options.mailmap === undefined ? raw : applyMailmap(options.mailmap, raw);
+      const { actorClass, reason } = classifyIdentity(identity);
+
+      const display = identity.name.length === 0 ? identity.comparable : identity.name;
+      const entity =
+        actorClass === ActorClass.AGENT
+          ? emitter.entity({
+              kind: 'agent',
+              source: { id: identity.comparable },
+              attributes: {
+                name: display,
+                agentType: 'bot',
+                // Why this is a machine, so the classification is answerable
+                // without re-deriving it.
+                description: reason,
+              },
+            })
+          : emitter.entity({
+              kind: 'developer',
+              source: { id: identity.comparable },
+              attributes: {
+                // `emails` is a *list* because one person commits as several
+                // addresses; collapsing it would destroy the evidence
+                // resolution depends on. The address as written is kept
+                // alongside the comparable form when they differ.
+                name: display,
+                emails: [...new Set([identity.comparable, identity.email.toLowerCase()])],
+                ...(identity.login === undefined ? {} : { usernames: [identity.login] }),
+              },
+            });
+      return { entity: add(entity), actorClass };
     };
 
     const fileFor = (path: string): CanonicalEntity =>
@@ -633,15 +680,18 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         );
       }
 
-      const author = developerFor(commit.authorName, commit.authorEmail);
+      const author = actorFor(commit.authorName, commit.authorEmail);
       if (author !== undefined) {
+        const human = author.actorClass === ActorClass.DEVELOPER;
         link(
           emitter.relationship(
             {
-              fromId: author.id,
-              type: RelationshipType.DEVELOPER_AUTHORED_COMMIT,
+              fromId: author.entity.id,
+              type: human
+                ? RelationshipType.DEVELOPER_AUTHORED_COMMIT
+                : RelationshipType.AGENT_AUTHORED_COMMIT,
               toId: commitEntity.id,
-              fromKind: 'developer',
+              fromKind: human ? 'developer' : 'agent',
               toKind: 'commit',
             },
             commitTime,

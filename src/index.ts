@@ -118,6 +118,24 @@ export {
 } from './config/index.js';
 
 export {
+  EMPTY_MAILMAP,
+  LinkRule,
+  MAX_MAILMAP_LINES,
+  RULE_CONFIDENCE,
+  applyMailmap,
+  classifyIdentity,
+  normalizeGitIdentity,
+  parseMailmap,
+  proposeIdentityLinks,
+  type IdentityClassification,
+  type IdentityLinkProposal,
+  type Mailmap,
+  type MailmapEntry,
+  type NormalizedIdentity,
+  type RawIdentity,
+} from './identity/index.js';
+
+export {
   CODE_MODIFIERS,
   CODE_SYMBOL_KIND,
   CODE_SYMBOL_KINDS,

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   ErrorCode,
   RelationshipType,
+  parseMailmap,
   type DiscoveredRepository,
   type ProviderOperationContext,
 } from '../../../src/index.js';
@@ -372,6 +373,64 @@ withGit('the commit graph', () => {
     expect(
       graph.relationships.filter((r) => r.type === RelationshipType.DEVELOPER_AUTHORED_COMMIT),
     ).toStrictEqual([]);
+  });
+
+  it('emits an agent for a bot author, never a developer — EPIC-036 AC-11', async () => {
+    // The failure this replaces: `dependabot[bot]` recorded as a human
+    // contributor, so "who has worked on this file" answers with a machine.
+    const fixture = await history('bot-author');
+    await writeFile(join(fixture.path, 'deps.txt'), 'bump\n');
+    await git(fixture.path, ['add', '-A']);
+    await commit(
+      fixture.path,
+      'chore(deps): bump left-pad',
+      'dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>',
+    );
+
+    const { commits } = await provider.readHistory(fixture.discovered, {}, context);
+    const bump = commits.find((c) => c.subject.startsWith('chore(deps)'));
+    const graph = provider.emitHistory(fixture.discovered, [bump!]);
+
+    const agents = graph.entities.filter((entity) => entity.kind === 'agent');
+    expect(agents).toHaveLength(1);
+    expect(agents[0]?.attributes).toMatchObject({ agentType: 'bot' });
+    // And it says why, so the classification is answerable without re-deriving.
+    expect(String(agents[0]?.attributes['description'])).toContain('github-app-noreply-address');
+
+    expect(graph.entities.filter((entity) => entity.kind === 'developer')).toStrictEqual([]);
+    expect(
+      graph.relationships.filter((r) => r.type === RelationshipType.DEVELOPER_AUTHORED_COMMIT),
+    ).toStrictEqual([]);
+    expect(
+      graph.relationships.filter((r) => r.type === RelationshipType.AGENT_AUTHORED_COMMIT),
+    ).toHaveLength(1);
+  });
+
+  it('applies a .mailmap the caller supplies, and nothing when it does not — EPIC-036 AC-7', async () => {
+    const fixture = await history('mailmap-history');
+    await writeFile(join(fixture.path, 'm.txt'), 'm\n');
+    await git(fixture.path, ['add', '-A']);
+    await commit(fixture.path, 'from an old address', 'A. L. <old@example.invalid>');
+
+    const { commits } = await provider.readHistory(fixture.discovered, {}, context);
+    const old = commits.find((c) => c.subject === 'from an old address');
+
+    const withoutMap = provider.emitHistory(fixture.discovered, [old!]);
+    expect(
+      withoutMap.entities
+        .filter((entity) => entity.kind === 'developer')
+        .flatMap((entity) => entity.attributes['emails'] as string[]),
+    ).toContain('old@example.invalid');
+
+    const mailmap = parseMailmap('Ada Lovelace <ada@example.invalid> <old@example.invalid>');
+    const withMap = provider.emitHistory(fixture.discovered, [old!], { mailmap });
+    const ada = withMap.entities.find(
+      (entity) => entity.kind === 'developer' && entity.attributes['name'] === 'Ada Lovelace',
+    );
+
+    expect(ada).toBeDefined();
+    expect(ada?.attributes['emails']).toContain('ada@example.invalid');
+    expect(JSON.stringify(withMap.entities)).not.toContain('old@example.invalid');
   });
 
   it('collapses many commits by one address into one developer, and keeps two addresses apart', async () => {
