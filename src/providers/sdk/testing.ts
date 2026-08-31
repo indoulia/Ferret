@@ -210,3 +210,21 @@ export function createBarrier(): { promise: Promise<void>; release: () => void; 
   });
   return { promise, release, fail };
 }
+
+/**
+ * The conformance suite (EPIC-016).
+ *
+ * Re-exported here so `@indoulia/ferret/testing` is the single import a provider
+ * author needs: the doubles to build a scenario, and the suite that checks the
+ * contract. The cycle between the two modules is evaluation-safe — conformance
+ * touches these doubles only inside functions.
+ */
+export {
+  CONFORMANCE_CHECK_IDS,
+  assertConformant,
+  runConformance,
+  type ConformanceCheck,
+  type ConformanceOptions,
+  type ConformanceReport,
+  type ConformanceStatus,
+} from './conformance.js';
