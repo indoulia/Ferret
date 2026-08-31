@@ -109,8 +109,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 ### Engineering Context
 
 - **EPIC-036 — Developer Identity** — P0 — VALIDATED ([spec](EPIC-036-Developer-Identity.md), [evidence](validation/EPIC-036-VALIDATION.md))
-- **EPIC-037 — Repository Context** — P0
-- **EPIC-038 — Worktree Context** — P0
+- **EPIC-037 — Repository Context** — P0 — VALIDATED ([spec](EPIC-037-038-Repository-And-Worktree-Context.md), [evidence](validation/EPIC-037-038-VALIDATION.md))
+- **EPIC-038 — Worktree Context** — P0 — VALIDATED ([spec](EPIC-037-038-Repository-And-Worktree-Context.md), [evidence](validation/EPIC-037-038-VALIDATION.md))
 
 ### Session & Agent Memory
 
