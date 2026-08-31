@@ -99,6 +99,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-030 — File Structure & Metadata** — P0 — VALIDATED ([spec](EPIC-030-File-Structure-And-Metadata.md), [evidence](validation/EPIC-030-VALIDATION.md))
 - **EPIC-031 — Incremental Indexing** — P0 — VALIDATED ([spec](EPIC-031-Incremental-Indexing.md), [evidence](validation/EPIC-031-VALIDATION.md))
 - **EPIC-032 — Index Lifecycle & Tombstones** — P0 — VALIDATED ([spec](EPIC-032-Index-Lifecycle-And-Tombstones.md), [evidence](validation/EPIC-032-VALIDATION.md))
+- **EPIC-108 — Content Indexing Integration** — P0 — APPROVED ([spec](EPIC-108-Content-Indexing-Integration.md))
 
 ### Code Intelligence
 
