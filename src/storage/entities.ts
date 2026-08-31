@@ -13,6 +13,7 @@ import {
 import { ErrorCode, FerretError } from '../errors/index.js';
 
 import { classifyDatabaseError } from './connection.js';
+import { withConflictRetry } from './conflict-retry.js';
 import { entity, entityExternalId, type EntityRow } from './schema/entities.js';
 
 /**
@@ -115,6 +116,17 @@ export class EntityStore {
   async upsert(input: EntityInput, now: Date = new Date()): Promise<UpsertResult> {
     const canonical = createEntity(input);
 
+    // Retried around the whole transaction — EPIC-079. Concurrent writers of one
+    // entity contend for one row, and PostgreSQL resolves that by rolling one of
+    // them back. That is the database working correctly; treating it as a
+    // failure made an indexing run depend on how many writers happened to touch
+    // the same file at once. Issues #21 and #55.
+    return withConflictRetry(() => this.#upsertOnce(canonical, now), {
+      label: 'storage.entity.upsert',
+    });
+  }
+
+  async #upsertOnce(canonical: CanonicalEntity, now: Date): Promise<UpsertResult> {
     try {
       return await this.#db.transaction(async (tx) => {
         const [existing] = await tx.select().from(entity).where(eq(entity.id, canonical.id)).limit(1);

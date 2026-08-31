@@ -226,6 +226,39 @@ describeDb(`concurrency and connection safety (${databaseAvailable() ? 'real Pos
       expect(attempts).toContain(stored.rows[0]?.attributes.name);
     }, 60_000);
 
+    it('survives repeated contention on one row — EPIC-079', async () => {
+      // Sixteen writers, five rounds: eighty contended writes, none of which may
+      // fail. `EntityStore.upsert` retries a transaction PostgreSQL rolled back
+      // for conflicting, and this is what that is for.
+      //
+      // Deliberately **not** labelled a regression test for #21. This passes
+      // without the retry too — 480 contended upserts in isolation produce zero
+      // failures — so calling it one would claim a fix nobody has evidence for.
+      // #21 reproduces only under full-suite load and is still open.
+      for (let round = 0; round < 5; round += 1) {
+        const names = Array.from({ length: 16 }, (_, index) => `round-${String(round)}-${String(index)}`);
+        const results = await Promise.all(
+          names.map((name) =>
+            entities.upsert({
+              kind: EntityKind.REPOSITORY,
+              source: { system: 'git', id: 'race-contended' },
+              attributes: { name },
+            }),
+          ),
+        );
+
+        // Not one of them failed. That is the whole Epic: a conflict costs a
+        // retry, not a run.
+        expect(results).toHaveLength(names.length);
+
+        const stored = await db.pool.query<{ attributes: { name: string }; count: string }>(
+          `SELECT attributes, count(*) OVER ()::text AS count FROM ferret.entity WHERE source_id = 'race-contended'`,
+        );
+        expect(stored.rows).toHaveLength(1);
+        expect(names).toContain(stored.rows[0]?.attributes.name);
+      }
+    }, 120_000);
+
     it('does not lose a tombstone to a concurrent update', async () => {
       const created = await entities.upsert({
         kind: EntityKind.FILE,
