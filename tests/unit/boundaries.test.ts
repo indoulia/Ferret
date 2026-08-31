@@ -322,6 +322,45 @@ describe('canonical model boundary', () => {
   });
 });
 
+describe('parser framework boundary', () => {
+  const parsing = importGraph('parsing/index.ts');
+
+  it('builds on the parser contract, never on a parser', () => {
+    // EPIC-024 is selection, bounds, isolation and redaction. The moment it
+    // names a format it stops being a framework and becomes that format's
+    // loader — and the next four Epics each add a format.
+    expect(parsing.files).toContain('providers/contracts/parser.ts');
+    expect([...parsing.files].filter((file) => /^parsing\/parsers\//.test(file))).toStrictEqual([]);
+  });
+
+  it('reaches the secret detector, because redaction is enforced here', () => {
+    // §8 of the Epic: a parser is not trusted to redact, and a parser added
+    // later cannot forget. Losing this import would silently move the
+    // responsibility back to every parser author.
+    expect(parsing.files).toContain('security/secrets.ts');
+  });
+
+  it('adds no runtime dependency beyond the core set', () => {
+    // Detection is a byte sniff and a table; parsing is dispatch. Neither needs
+    // a library. A package appearing here beyond what the core already carries
+    // means someone reached for a format parser inside the framework, which is
+    // exactly the boundary this Epic draws.
+    const external = [...parsing.packages].filter((name) => !name.startsWith('node:'));
+    expect(external.sort()).toStrictEqual([...ALLOWED_CORE_PACKAGES].sort());
+  });
+
+  it.each(FORBIDDEN_IN_CORE)('does not import anything matching %s', (fragment) => {
+    expect([...parsing.packages].filter((name) => name.toLowerCase().includes(fragment))).toStrictEqual([]);
+  });
+
+  it('does not reach storage or the CLI', () => {
+    const forbidden = [...parsing.files].filter(
+      (file) => file.startsWith('storage/') || file.startsWith('cli/'),
+    );
+    expect(forbidden).toStrictEqual([]);
+  });
+});
+
 describe('provider SDK boundary', () => {
   const core = importGraph('index.ts');
   const sdk = importGraph('providers/sdk/index.ts');

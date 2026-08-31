@@ -64,6 +64,21 @@ export { ProviderRegistry } from './registry.js';
 export * from './sdk/index.js';
 
 export {
+  ParserSupport,
+  SegmentKind,
+  isContentParser,
+  isSegmentKind,
+  type ContentParser,
+  type ContentSegment,
+  type ContentSpan,
+  type OutlineNode,
+  type ParseOutput,
+  type ParseRequest,
+  type ParseTarget,
+  type ParseWarning,
+} from './contracts/parser.js';
+
+export {
   assertUsable,
   type EmbeddingModel,
   type EmbeddingRequest,
