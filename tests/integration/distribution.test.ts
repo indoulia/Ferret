@@ -106,11 +106,14 @@ describe('the package a consumer installs', () => {
     // `pg` and Drizzle, the Git executable path, the MCP SDK, the test doubles.
     // `./providers` is EPIC-013's: a host composing Ferret needs the registry
     // and discovery without importing anything that loads a provider for it.
+    // `./parsers` is EPIC-025's: the grammars are 5.6 MB of WASM, and the core
+    // must be importable without any of them.
     expect(Object.keys(pkg.exports).sort()).toStrictEqual([
       '.',
       './git',
       './mcp',
       './package.json',
+      './parsers',
       './providers',
       './storage',
       './testing',

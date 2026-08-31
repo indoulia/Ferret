@@ -148,6 +148,25 @@ describe('package contents', () => {
     for (const path of migrations) expect(path).toMatch(/\/\d{4}_[a-z0-9_]+\.sql$/);
   });
 
+  it('ships the four grammars the code parser uses, and no others', () => {
+    // Same failure mode as the migrations, one step later: a published parser
+    // with no grammars installs cleanly and fails on the first file.
+    // `scripts/copy-grammars.mjs` is what puts them here, and it copies four of
+    // the forty `tree-sitter-wasms` carries — which is why that package is a
+    // dev dependency and these bytes are in `dist/`.
+    const grammars = pack.files
+      .map((file) => file.path)
+      .filter((path) => path.startsWith('dist/parsers/code/grammars/'))
+      .sort();
+
+    expect(grammars).toStrictEqual([
+      'dist/parsers/code/grammars/tree-sitter-javascript.wasm',
+      'dist/parsers/code/grammars/tree-sitter-python.wasm',
+      'dist/parsers/code/grammars/tree-sitter-tsx.wasm',
+      'dist/parsers/code/grammars/tree-sitter-typescript.wasm',
+    ]);
+  });
+
   it.each(FORBIDDEN_PATTERNS)('ships no %s', (_label, pattern) => {
     const offenders = pack.files.map((file) => file.path).filter((path) => pattern.test(path));
     expect(offenders).toStrictEqual([]);
@@ -186,10 +205,24 @@ describe('package contents', () => {
     // contains exactly the files it declared, and nothing secret-shaped.
     //
     // EPIC-001 set this at 1 MB when the package was a CLI skeleton over ~50 kB
-    // of JavaScript. It now ships the canonical model, a storage provider, the
-    // provider SDK and a Git provider, and it will ship more. Raised to 2 MB
-    // rather than nudged each Epic, which would make it a number nobody trusts.
-    expect(pack.unpackedSize).toBeLessThan(2_000_000);
+    // of JavaScript, and EPIC-024 at 2 MB once it shipped the canonical model,
+    // a storage provider, the provider SDK and a Git provider.
+    //
+    // EPIC-025 is the step change: 5.6 MB of it is four tree-sitter grammars,
+    // which is the cost of parsing code at all and was accepted with the
+    // technology decision. It is already the *reduced* figure —
+    // `tree-sitter-wasms` carries about forty grammars and 50 MB, and
+    // `scripts/copy-grammars.mjs` copies the four Ferret uses. The separate
+    // grammar assertion above is the real guard on that number; this one
+    // catches everything else, so it is set just above the grammars plus
+    // today's JavaScript rather than at a round figure with room to hide in.
+    expect(pack.unpackedSize).toBeLessThan(9_000_000);
+    // And the grammars must stay the bulk of it: if the non-grammar output ever
+    // approaches this, something is leaking.
+    const grammarBytes = pack.files
+      .filter((file) => file.path.startsWith('dist/parsers/code/grammars/'))
+      .reduce((total, file) => total + file.size, 0);
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_000_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {

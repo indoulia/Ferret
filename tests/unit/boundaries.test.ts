@@ -322,6 +322,38 @@ describe('canonical model boundary', () => {
   });
 });
 
+describe('code parser boundary', () => {
+  const core = importGraph('index.ts');
+  const cli = importGraph('cli/main.ts');
+  const parsers = importGraph('parsers/index.ts');
+
+  it('is the only graph that carries a grammar runtime — AC-12', () => {
+    // 5.6 MB of WASM and a WebAssembly runtime. `@indoulia/ferret` must be
+    // importable without any of it, which is why EPIC-025 ships on its own
+    // subpath rather than from the package root.
+    expect(parsers.packages.has('web-tree-sitter')).toBe(true);
+    expect(core.packages.has('web-tree-sitter')).toBe(false);
+    expect(cli.packages.has('web-tree-sitter')).toBe(false);
+  });
+
+  it('is not reachable from the core or the CLI', () => {
+    expect([...core.files].filter((file) => file.startsWith('parsers/'))).toStrictEqual([]);
+    expect([...cli.files].filter((file) => file.startsWith('parsers/'))).toStrictEqual([]);
+  });
+
+  it('builds on the contract and the SDK, not on storage', () => {
+    expect(parsers.files).toContain('providers/contracts/parser.ts');
+    expect(parsers.files).toContain('providers/sdk/base.ts');
+    expect([...parsers.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+    expect([...parsers.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
+  });
+
+  it('adds only the grammar runtime to the core dependency set', () => {
+    const external = [...parsers.packages].filter((name) => !name.startsWith('node:'));
+    expect(external.sort()).toStrictEqual([...ALLOWED_CORE_PACKAGES, 'web-tree-sitter'].sort());
+  });
+});
+
 describe('parser framework boundary', () => {
   const parsing = importGraph('parsing/index.ts');
 
