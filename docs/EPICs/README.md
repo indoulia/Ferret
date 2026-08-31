@@ -140,8 +140,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 - **EPIC-052 — Exact Structured Retrieval** — P0 — VALIDATED ([spec](EPIC-052-053-Retrieval.md), [evidence](validation/EPIC-052-053-VALIDATION.md))
 - **EPIC-053 — Full-Text Retrieval** — P0 — VALIDATED ([spec](EPIC-052-053-Retrieval.md), [evidence](validation/EPIC-052-053-VALIDATION.md))
-- **EPIC-054 — Semantic Retrieval** — P1
-- **EPIC-055 — Hybrid Query Planner** — P0
+- **EPIC-054 — Semantic Retrieval** — P1 — VALIDATED ([spec](EPIC-054-055-Semantic-And-Planner.md), [evidence](validation/EPIC-054-055-VALIDATION.md))
+- **EPIC-055 — Hybrid Query Planner** — P0 — VALIDATED ([spec](EPIC-054-055-Semantic-And-Planner.md), [evidence](validation/EPIC-054-055-VALIDATION.md))
 - **EPIC-056 — Ranking & Reranking** — P1
 - **EPIC-057 — Freshness & Authority Ranking** — P1
 - **EPIC-058 — Permission-Aware Retrieval** — P0
@@ -183,7 +183,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 ### Security & Authorization
 
 - **EPIC-081 — Credential Isolation** — P0
-- **EPIC-082 — Secret Detection & Exclusion** — P0
+- **EPIC-082 — Secret Detection & Exclusion** — P0 — VALIDATED ([spec](EPIC-082-Secret-Detection.md), [evidence](validation/EPIC-082-VALIDATION.md))
 - **EPIC-083 — Authorization Enforcement** — P0
 - **EPIC-084 — Prompt-Injection Resistance** — P0
 - **EPIC-085 — Audit Events** — P1

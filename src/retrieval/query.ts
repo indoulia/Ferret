@@ -113,6 +113,20 @@ export interface SearchQuery {
   readonly limit?: number;
   /** Search evidence statements as well as entity attributes. Default true. */
   readonly includeEvidence?: boolean;
+  /**
+   * Match documents containing *any* of the terms rather than all of them.
+   *
+   * `websearch_to_tsquery` joins terms with AND, so "how are deleted files
+   * tombstoned" requires every one of `deleted`, `files` and `tombstoned` in a
+   * single document. Measured on Ferret's own index: `tombstone` found a
+   * result, `deleted files` found a result, and the full question found
+   * nothing — the more context a person gave, the worse the answer got, in a
+   * search box whose own description invites a half-remembered question.
+   *
+   * Relaxing is a fallback rather than the default: when every term does match,
+   * that is a better answer, and starting loose would bury it.
+   */
+  readonly relax?: boolean;
 }
 
 /** Where a hit came from, so a caller can tell an observation from a name. */
