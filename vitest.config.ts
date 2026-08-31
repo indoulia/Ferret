@@ -1,6 +1,17 @@
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // The specifier `ferret index --content` composes the parser with
+      // (EPIC-108 §8.5). Node resolves it by self-reference to `dist/`; the
+      // suite runs against `src/`, and a test that silently exercised the last
+      // build rather than the working tree would be worse than no test.
+      '@indoulia/ferret/parsers': fileURLToPath(new URL('./src/parsers/index.ts', import.meta.url)),
+    },
+  },
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',

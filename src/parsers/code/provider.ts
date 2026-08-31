@@ -108,6 +108,28 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
       : ParserSupport.NATIVE;
   }
 
+  /**
+   * The grammar that would parse this file, identified without parsing it.
+   *
+   * EPIC-108 AC-17. The gate needs grammar identity *before* it decides whether
+   * to read a file, and `grammarBinaryHash` travels in a parse result — which
+   * is after the read and the parse it was supposed to avoid.
+   *
+   * Goes through `#language`, the same accessor `parse` uses, rather than
+   * reading and hashing the binary a second time. That is the whole of "the
+   * parser is entered through exactly one path": grammars are cached per
+   * language per process, so this costs one load per language per run and the
+   * load is not wasted — the files that provoked it are about to be parsed with
+   * it.
+   */
+  async producerIdentity(target: ParseTarget): Promise<string | undefined> {
+    const spec = languageFor(target.path, target.mediaType);
+    if (spec === undefined) return undefined;
+    const loaded = await this.#language(spec);
+    const { grammar, abiVersion, binaryHash } = loaded.identity;
+    return `${grammar}@${String(abiVersion)}/${binaryHash}`;
+  }
+
   async parse(request: ParseRequest, context: ProviderOperationContext): Promise<ParseOutput> {
     const spec = languageFor(request.target.path, request.target.mediaType);
     if (spec === undefined) {

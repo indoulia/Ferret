@@ -20,6 +20,7 @@ import { fileAttributesFrom, fileVersionAttributesFrom, type FileStructure } fro
 import { isSecretPath, redactSecrets } from '../security/index.js';
 import { VERSION } from '../version.js';
 import {
+  ContentUnavailable,
   RepositoryIdentityKind,
   RepositoryOperation,
   SkipReason,
@@ -27,6 +28,8 @@ import {
   type DiscoveredBranch,
   type DiscoveredRepository,
   type DiscoveredWorktree,
+  type FileContent,
+  type FileContentRequest,
   type RepositoryDiscoveryRequest,
   type RepositoryDiscoveryResult,
   type RepositoryRemote,
@@ -49,10 +52,12 @@ import {
 
 import { walkForRepositories, type RepositoryCandidate } from './discovery.js';
 import {
+  BlobUnavailable,
   TreeEntryKind,
   extensionOf,
   gitContentHash,
   listFiles,
+  readBlob,
   type TreeEntry,
 } from './files.js';
 import { ChangeKind, readHistory, type CommitRecord } from './history.js';
@@ -79,6 +84,19 @@ export const GIT_PROVIDER_ID = 'ferret.source.git';
 
 /** The system these observations are about, for evidence and identity. */
 export const GIT_SOURCE_SYSTEM = 'git';
+
+/**
+ * Git's reasons for not producing a blob, in the contract's vocabulary.
+ *
+ * Exhaustive by type: adding a `BlobUnavailable` value without deciding what a
+ * caller should be told about it is a compile error rather than a silent
+ * `undefined` in a report.
+ */
+const CONTENT_REASON: Readonly<Record<BlobUnavailable, ContentUnavailable>> = Object.freeze({
+  [BlobUnavailable.TOO_LARGE]: ContentUnavailable.TOO_LARGE,
+  [BlobUnavailable.NOT_FOUND]: ContentUnavailable.NOT_FOUND,
+  [BlobUnavailable.UNREADABLE]: ContentUnavailable.UNREADABLE,
+});
 
 export interface GitProviderOptions {
   /** Milliseconds any single Git invocation may take. Default 30s. */
@@ -117,6 +135,11 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         RepositoryOperation.LIST_BRANCHES,
         RepositoryOperation.READ_HISTORY,
         RepositoryOperation.LIST_FILES,
+        // EPIC-108. Named explicitly, like the six before it: this provider
+        // declares what it implements rather than claiming the capability
+        // wholesale, so the next operation added does not arrive already
+        // claimed.
+        RepositoryOperation.READ_CONTENT,
       ],
       systems: [GIT_SOURCE_SYSTEM],
       limits: {
@@ -826,6 +849,38 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         ? encodeCursor(this.id, Capability.SOURCE_REPOSITORY, { offset: offset + listing.entries.length })
         : undefined,
     };
+  }
+
+  /**
+   * Reads one file's bytes at a revision — EPIC-108 §8.3.
+   *
+   * Against the object store, addressed by the object id `listFiles` returned.
+   * That is what makes the read answer for the *revision* rather than for
+   * whatever happens to be on disk: a bare repository has no working tree at
+   * all, and a checkout with uncommitted edits would otherwise silently index
+   * content no commit contains.
+   *
+   * `revision` is accepted and deliberately unused for the lookup. An object id
+   * is already absolute — a blob is the same blob at every revision that
+   * references it — so re-resolving `revision:path` would ask a question
+   * `listFiles` already answered, and would answer it against the tree as it
+   * stands now. It is kept on the request because a provider that *cannot*
+   * address by object id needs it, and because dropping it from the contract
+   * would make this provider's shortcut everyone's requirement.
+   */
+  async readFileContent(
+    repository: DiscoveredRepository,
+    request: FileContentRequest,
+    context: ProviderOperationContext,
+  ): Promise<FileContent> {
+    const blob = await readBlob({
+      ...this.#gitOptions(repository, context),
+      oid: request.oid,
+      ...(request.maxBytes === undefined ? {} : { maxBytes: request.maxBytes }),
+    });
+
+    if (blob.read) return { read: true, bytes: blob.bytes, sizeBytes: blob.sizeBytes };
+    return { read: false, reason: CONTENT_REASON[blob.reason], detail: blob.detail };
   }
 
   /**

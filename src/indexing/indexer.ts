@@ -14,7 +14,15 @@ import type {
 import { throwIfAborted } from '../providers/index.js';
 import { VERSION } from '../version.js';
 
+import type { SymbolIndexPort } from '../code/index.js';
+import type { FileStructure } from '../files/index.js';
+import type { ParserFramework } from '../parsing/index.js';
+
+import { runContentStage, type ContentCounts } from './content.js';
+import { ContentStageSkip } from './ports.js';
 import type {
+  ContentArtifactStore,
+  ContentReader,
   EntityWriter,
   EvidenceWriter,
   LifecycleStore,
@@ -71,6 +79,18 @@ export interface IndexOptions {
    * be full would be indistinguishable from one that had lost its place.
    */
   readonly full?: boolean;
+  /**
+   * Read file content, and derive structure and symbols from it. Default false.
+   *
+   * **Off unless asked for**, and it is the one option here whose default is a
+   * decision rather than a convenience. Content indexing reads and parses every
+   * file in the repository, which is a materially different cost model from a
+   * tree listing (EPIC-108 §13), and it is the first path on which
+   * attacker-controlled bytes reach a parser in production (§11). Both are
+   * reasons for an operator to opt in deliberately rather than to discover the
+   * change in a bill or an incident.
+   */
+  readonly withContent?: boolean;
   /** Instant recorded as the observation time for the whole run. */
   readonly observedAt?: Date;
 }
@@ -117,6 +137,15 @@ export interface IndexReport {
    * Governance §6 asks for the difference to be visible.
    */
   readonly lifecycle: LifecycleCounts;
+  /**
+   * What the content stage read, parsed and stored — EPIC-108 §8.8.
+   *
+   * `undefined` when the stage did not run, and never a block of zeroes: zeroes
+   * would claim the stage ran and found nothing, and "no result" and "nothing
+   * there" must not look the same (Governance §6). The log says why it did not
+   * run.
+   */
+  readonly content: ContentCounts | undefined;
   /** The newest commit instant now on record, when there is one. */
   readonly watermark: string | undefined;
   readonly durationMs: number;
@@ -168,7 +197,20 @@ export interface IndexableSource {
   emitFiles(
     repository: DiscoveredRepository,
     entries: readonly never[],
-    options?: { revision?: string; observedAt?: Date },
+    options?: {
+      revision?: string;
+      observedAt?: Date;
+      /**
+       * EPIC-030 structure by path, for a caller that has read the content.
+       *
+       * Named here by EPIC-108 so the option `GitProvider.emitFiles` has
+       * accepted since EPIC-030 can finally be filled. It widens what the
+       * indexer may *pass*, not what a source must implement: the field is
+       * optional on both sides, so a source that ignores it is unaffected and
+       * every existing implementation still satisfies this interface.
+       */
+      structure?: ReadonlyMap<string, FileStructure>;
+    },
   ): Graph & { skipped: readonly { path: string; reason: string }[] };
 }
 
@@ -190,6 +232,41 @@ export interface IndexerDependencies {
    * report says why the reconciliation did not run.
    */
   readonly lifecycle?: LifecycleStore;
+  /**
+   * Where file content comes from — EPIC-108.
+   *
+   * Optional, and its absence is the metadata-only fallback: a source that
+   * cannot read content must not be made to pretend it can, so the composition
+   * root asks `supports(capability, operation)` and omits this rather than
+   * supplying something that will throw at the call. Same shape as
+   * `lifecycle`, and for the same reason.
+   */
+  readonly content?: ContentReader;
+  /**
+   * Where the symbols a parse produced are stored — EPIC-108.
+   *
+   * The second of this Epic's two ports. Optional alongside `content` because
+   * neither is useful without the other: reading content with nowhere to put
+   * what it yields would be cost without a result.
+   */
+  readonly symbols?: SymbolIndexPort;
+  /**
+   * The parser framework a content run parses through — EPIC-108.
+   *
+   * A collaborator rather than a port: it abstracts nothing external, it is core
+   * code, and the indexer could construct one if it had the parsers. It does not
+   * have them — they are *composed* into the registry (§8.5) — so the
+   * composition root builds the framework and hands it over, which is what keeps
+   * the indexer from knowing a registry exists.
+   */
+  readonly parser?: ParserFramework;
+  /**
+   * Where the re-parse gate records what it derived — EPIC-108 §8.7.
+   *
+   * EPIC-010's derived-artefact store, reached through the narrowest interface
+   * that fits, exactly as `watermarks` is. The same service satisfies both.
+   */
+  readonly artifacts?: ContentArtifactStore;
   readonly logger?: Logger;
 }
 
@@ -200,6 +277,10 @@ export class RepositoryIndexer {
   readonly #evidence: EvidenceWriter;
   readonly #watermarks: WatermarkStore;
   readonly #lifecycle: LifecycleStore | undefined;
+  readonly #content: ContentReader | undefined;
+  readonly #symbols: SymbolIndexPort | undefined;
+  readonly #parser: ParserFramework | undefined;
+  readonly #artifacts: ContentArtifactStore | undefined;
   readonly #logger: Logger | undefined;
 
   constructor(dependencies: IndexerDependencies) {
@@ -209,6 +290,10 @@ export class RepositoryIndexer {
     this.#evidence = dependencies.evidence;
     this.#watermarks = dependencies.watermarks;
     this.#lifecycle = dependencies.lifecycle;
+    this.#content = dependencies.content;
+    this.#symbols = dependencies.symbols;
+    this.#parser = dependencies.parser;
+    this.#artifacts = dependencies.artifacts;
     this.#logger = dependencies.logger;
   }
 
@@ -275,6 +360,25 @@ export class RepositoryIndexer {
       }
     };
 
+    // The content stage decision, taken before anything is read.
+    //
+    // Up here rather than beside the stage it gates, because a run that cannot
+    // read content must say so whether or not it ever reaches the file tree.
+    const contentStage = this.#contentStage(options);
+    let content: ContentCounts | undefined;
+    let contentStructure: ReadonlyMap<string, FileStructure> | undefined;
+    if (!contentStage.run) {
+      this.#logger?.info(
+        {
+          operation: 'index.content',
+          repository: repository.identityKey,
+          requested: options.withContent === true,
+          skipped: contentStage.reason,
+        },
+        `Content indexing did not run: ${String(contentStage.reason)}`,
+      );
+    }
+
     throwIfAborted(context.signal, 'index');
 
     // Stage 1 — the repository, its checkouts and its branches.
@@ -287,6 +391,117 @@ export class RepositoryIndexer {
         observedAt,
       }),
     );
+
+    // Stage 3 — the file tree at the revision, and the content it holds.
+    let filesRead = 0;
+    let treeComplete = false;
+    /**
+     * Files observed to exist at the indexed revision.
+     *
+     * Direct evidence of presence, and stronger than any older statement that
+     * the file was deleted — a re-add on this branch, or a branch that still
+     * has what another removed.
+     */
+    const present = new Set<string>();
+    /**
+     * `file` entities this run has already written from the tree.
+     *
+     * Only populated on a content run, and only so the history stage can be
+     * told not to write them again — see `runFileStage` below.
+     */
+    const writtenFiles = new Set<string>();
+
+    const runFileStage = async (): Promise<void> => {
+      if (options.withFiles === false) return;
+      throwIfAborted(context.signal, 'index.files');
+      const listing = await this.#source.listFiles(
+        repository,
+        options.revision === undefined ? {} : { revision: options.revision },
+        context,
+      );
+      filesRead = listing.entries.length;
+      treeComplete = listing.cursor === undefined;
+      const emitOptions = {
+        ...(options.revision === undefined ? {} : { revision: options.revision }),
+        observedAt,
+      };
+      const base = this.#source.emitFiles(repository, listing.entries as readonly never[], emitOptions);
+
+      // Content, when it was asked for and the source can supply it.
+      //
+      // Between the listing and the write, deliberately. The structure EPIC-030
+      // derives belongs on the same `file` and `file_version` entities the
+      // listing produces, through the `structure` option `emitFiles` already
+      // accepts and no caller has ever filled — so the content has to be read
+      // before the graph is written, not after.
+      if (
+        contentStage.run &&
+        this.#content !== undefined &&
+        this.#symbols !== undefined &&
+        this.#parser !== undefined &&
+        this.#artifacts !== undefined
+      ) {
+        const stage = await runContentStage(
+          {
+            content: this.#content,
+            symbols: this.#symbols,
+            parser: this.#parser,
+            artifacts: this.#artifacts,
+            ...(this.#logger === undefined ? {} : { logger: this.#logger }),
+          },
+          {
+            repository,
+            repositoryId: repositoryEntity.id,
+            entries: listing.entries,
+            emitted: base,
+            revision: options.revision,
+            observedAt,
+          },
+          context,
+        );
+        content = stage.counts;
+        contentStructure = stage.structure;
+      }
+
+      // Re-emitted with structure when there is any, and emitted once when
+      // there is not. `emitFiles` is a pure function of its inputs, so the
+      // second call costs a hash per entry and nothing else — and it is what
+      // keeps identity derivation in the provider rather than duplicated here.
+      const graph =
+        contentStructure === undefined
+          ? base
+          : this.#source.emitFiles(repository, listing.entries as readonly never[], {
+              ...emitOptions,
+              structure: contentStructure,
+            });
+
+      skipped.push(...graph.skipped);
+      for (const entity of graph.entities) {
+        if (entity.kind !== 'file') continue;
+        present.add(entity.id);
+        if (contentStage.run) writtenFiles.add(entity.id);
+      }
+      await write(graph);
+    };
+
+    // On a content run the file tree is read and written **before** history.
+    //
+    // Not a preference — a correctness fix, and the reason is worth stating
+    // because it is invisible until content indexing exists. EPIC-020 emits a
+    // `file` entity for every path a commit touched, carrying `{ path,
+    // extension }` and nothing else. The content stage puts EPIC-030's
+    // structure on that same entity, and an entity upsert *replaces*
+    // attributes rather than merging them. With history written second, every
+    // run would strip the structure and then put it back: two writes per file
+    // per run, for ever, and AC-6's "a second run writes no rows" would be
+    // false. The watermark's boundary is inclusive, so the newest commit is
+    // re-read on every run and the churn never settles.
+    //
+    // Writing the tree first makes those entities exist before history needs
+    // them as relationship targets, which is what lets the history graph drop
+    // its poorer copies below. A metadata-only run keeps the original order
+    // exactly, so nothing about it changes (AC-1).
+    if (contentStage.run) await runFileStage();
 
     // Stage 2 — history, bounded by the watermark unless a full run was asked
     // for.
@@ -312,39 +527,11 @@ export class RepositoryIndexer {
       );
       commitsRead = page.commits.length;
       newestCommitAt = newest(page.commits, since);
-      await write(this.#source.emitHistory(repository, page.commits as readonly never[], { observedAt }));
+      const graph = this.#source.emitHistory(repository, page.commits as readonly never[], { observedAt });
+      await write(withoutRewrittenFiles(graph, writtenFiles));
     }
 
-    // Stage 3 — the file tree at the revision.
-    let filesRead = 0;
-    let treeComplete = false;
-    /**
-     * Files observed to exist at the indexed revision.
-     *
-     * Direct evidence of presence, and stronger than any older statement that
-     * the file was deleted — a re-add on this branch, or a branch that still
-     * has what another removed.
-     */
-    const present = new Set<string>();
-    if (options.withFiles !== false) {
-      throwIfAborted(context.signal, 'index.files');
-      const listing = await this.#source.listFiles(
-        repository,
-        options.revision === undefined ? {} : { revision: options.revision },
-        context,
-      );
-      filesRead = listing.entries.length;
-      treeComplete = listing.cursor === undefined;
-      const graph = this.#source.emitFiles(repository, listing.entries as readonly never[], {
-        ...(options.revision === undefined ? {} : { revision: options.revision }),
-        observedAt,
-      });
-      skipped.push(...graph.skipped);
-      for (const entity of graph.entities) {
-        if (entity.kind === 'file') present.add(entity.id);
-      }
-      await write(graph);
-    }
+    if (!contentStage.run) await runFileStage();
 
     // Stage 4 — reconcile what Ferret believes exists with what it observed.
     const lifecycle = await this.#reconcile(
@@ -373,6 +560,7 @@ export class RepositoryIndexer {
       worktreesRead: worktrees.length,
       skipped,
       lifecycle,
+      content,
       watermark: newestCommitAt,
       durationMs: performance.now() - started,
     };
@@ -393,6 +581,32 @@ export class RepositoryIndexer {
     );
 
     return report;
+  }
+
+  /**
+   * Whether the content stage runs on this run, and why not when it does not.
+   *
+   * Asked once per run, before anything is read, and answered from what the
+   * indexer was *given* rather than from what a provider turns out to have. That
+   * is AC-16: a source that cannot read content is detected before it is called,
+   * and the run proceeds as a metadata-only index — never a missing method
+   * discovered halfway through a repository.
+   *
+   * The composition root does the capability check and simply does not supply a
+   * content port when the answer is no, so this reads as "was I given one".
+   * Keeping the check there and the consequence here is what lets the indexer
+   * stay ignorant of the registry, which EPIC-031's port design requires.
+   */
+  #contentStage(options: IndexOptions): { run: boolean; reason: ContentStageSkip | undefined } {
+    if (options.withContent !== true) {
+      return { run: false, reason: ContentStageSkip.NOT_REQUESTED };
+    }
+    if (options.withFiles === false) return { run: false, reason: ContentStageSkip.NO_FILE_TREE };
+    if (this.#content === undefined) return { run: false, reason: ContentStageSkip.NO_CONTENT_PORT };
+    if (this.#symbols === undefined) return { run: false, reason: ContentStageSkip.NO_SYMBOL_PORT };
+    if (this.#parser === undefined) return { run: false, reason: ContentStageSkip.NO_PARSER };
+    if (this.#artifacts === undefined) return { run: false, reason: ContentStageSkip.NO_GATE_STORE };
+    return { run: true, reason: undefined };
   }
 
   /**
@@ -526,6 +740,28 @@ export class RepositoryIndexer {
 export function watermarkScopeId(repositoryId: string, revision: string | undefined): string {
   if (revision === undefined || revision === 'HEAD') return repositoryId;
   return canonicalId(encodeKeyParts([INDEX_ARTIFACT_KIND, repositoryId, revision]));
+}
+
+/**
+ * A history graph without the `file` entities the tree stage already wrote.
+ *
+ * EPIC-020's history emitter produces a `file` entity per path a commit
+ * touched, holding `{ path, extension }`. That is the right entity and the
+ * poorer description of it, and an upsert replaces attributes rather than
+ * merging them — so on a content run it would overwrite the structure the tree
+ * stage just recorded on the same entity.
+ *
+ * Dropping it is safe precisely because the tree stage ran first: the entity
+ * exists, so every relationship in this graph still has its target. Only ids
+ * this run actually wrote are dropped, so a file that appears in history and
+ * *not* in the tree — a deleted one — is still created here, which is what
+ * EPIC-032 needs in order to have something to tombstone.
+ */
+function withoutRewrittenFiles(graph: Graph, written: ReadonlySet<string>): Graph {
+  if (written.size === 0) return graph;
+  const entities = graph.entities.filter((entity) => !(entity.kind === 'file' && written.has(entity.id)));
+  if (entities.length === graph.entities.length) return graph;
+  return { entities, relationships: graph.relationships, evidence: graph.evidence };
 }
 
 function counter(): { record(outcome: string): void; readonly counts: WriteCounts } {

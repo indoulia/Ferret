@@ -2,11 +2,25 @@ import { resolve } from 'node:path';
 
 import { Command, Option } from 'commander';
 
-import { createGitSourceProvider } from '../../git/index.js';
-import { RepositoryIndexer, type IndexReport } from '../../indexing/index.js';
-import type { LogLevel } from '../../logging/index.js';
-import { Capability, assertSupported } from '../../providers/index.js';
-import { createRuntime } from '../../runtime/index.js';
+import type { SymbolIndexPort } from '../../code/index.js';
+import { createGitSourceProvider, type GitSourceProvider } from '../../git/index.js';
+import {
+  RepositoryIndexer,
+  type ContentArtifactStore,
+  type ContentReader,
+  type IndexReport,
+} from '../../indexing/index.js';
+import { ParserFramework } from '../../parsing/index.js';
+import type { LogLevel, Logger } from '../../logging/index.js';
+import {
+  Capability,
+  CapabilitySupport,
+  RepositoryOperation,
+  assertSupported,
+  discoverProviders,
+  type ProviderDiscoveryResult,
+} from '../../providers/index.js';
+import { createRuntime, type FerretRuntime } from '../../runtime/index.js';
 import {
   CompatibilityService,
   EntityStore,
@@ -14,9 +28,12 @@ import {
   EvidenceStore,
   MigrationPolicy,
   RelationshipStore,
+  SymbolStore,
   createStorageProvider,
+  type FerretDatabase,
 } from '../../storage/index.js';
 import { emitResult, type OutputOptions } from '../output.js';
+import { FERRET_PARSERS_MODULE, loadFerretParsers } from './parser-composition.js';
 
 /**
  * `ferret index` — read a repository and store what it holds.
@@ -44,6 +61,12 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
       new Option('--no-changes', 'Skip per-commit file changes, which cost Git a diff per commit'),
     )
     .addOption(new Option('--limit <n>', 'Commits to read in this run').argParser(Number))
+    .addOption(
+      new Option(
+        '--content',
+        'Read file content, and derive structure and symbols from it. Off by default.',
+      ).default(false),
+    )
     .action(
       async (
         path: string | undefined,
@@ -54,6 +77,7 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
           files: boolean;
           changes: boolean;
           limit?: number;
+          content: boolean;
         },
         command: Command,
       ) => {
@@ -67,6 +91,17 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
           providers: [storage, source],
           ...(globals.logLevel === undefined ? {} : { logLevel: globals.logLevel }),
         });
+
+        // Discovery happens **before** the runtime starts, and the ordering is
+        // load-bearing rather than tidy: `ProviderRegistry` refuses to register
+        // anything once the runtime has initialized, so a parser composed inside
+        // `runtime.run` is a parser that never registers — and content indexing
+        // would then read nothing while reporting success. That is exactly the
+        // silent no-op EPIC-108 §8.5 requires a positive test to rule out, and it
+        // is what a dogfooding run caught.
+        const discovery = options.content
+          ? await discoverProviders(runtime.providers, [FERRET_PARSERS_MODULE], loadFerretParsers)
+          : undefined;
 
         const report = await runtime.run(async (context) => {
           // Asked for by capability, never by name. This command is the only
@@ -84,13 +119,28 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
           const operation = { logger: context.logger, signal: context.signal };
           const repository = await source.describeRepository(root, operation);
 
+          // One service, two roles: EPIC-031's watermark and EPIC-108's
+          // re-parse gate are both derived artefacts, which is exactly why
+          // neither needed a table of its own.
+          const compatibility = new CompatibilityService(storage.db, storage.pool);
+          const contentPorts = composeContent(
+            options.content,
+            runtime,
+            source,
+            storage,
+            compatibility,
+            discovery,
+            context.logger,
+          );
+
           const indexer = new RepositoryIndexer({
             source,
             entities: new EntityStore(storage.db),
             relationships: new RelationshipStore(storage.db),
             evidence: new EvidenceStore(storage.db),
-            watermarks: new CompatibilityService(storage.db, storage.pool),
+            watermarks: compatibility,
             lifecycle: new IndexLifecycleStore(storage.db),
+            ...contentPorts,
             logger: context.logger,
           });
 
@@ -102,6 +152,7 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
               withHistory: options.history,
               withFiles: options.files,
               withChanges: options.changes,
+              withContent: options.content,
               ...(options.limit === undefined || Number.isNaN(options.limit)
                 ? {}
                 : { historyLimit: options.limit }),
@@ -113,6 +164,99 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
         emitResult(output(json), report, () => summarize(report));
       },
     );
+}
+
+/**
+ * Composes the content stage, or explains why it is not composed.
+ *
+ * EPIC-108 AC-16. The capability question is asked **here**, in the composition
+ * root, and answered before the indexer exists — not inside it, and not at the
+ * call site. Two reasons, and the second is the architectural one:
+ *
+ * - A source that cannot read content must not be made to pretend it can. The
+ *   run degrades to a metadata-only index and says so, rather than failing on a
+ *   missing method somewhere in the middle of a repository.
+ * - The indexer must not know the registry exists. It takes ports; deciding
+ *   which ports it gets is this file's job, and that is what keeps EPIC-031's
+ *   "the indexer depends on no provider" true with a content stage present.
+ *
+ * Returns the ports to hand the indexer, which is nothing at all when content
+ * was not asked for or cannot be served.
+ */
+function composeContent(
+  requested: boolean,
+  runtime: FerretRuntime,
+  source: GitSourceProvider,
+  storage: { db: FerretDatabase },
+  artifacts: ContentArtifactStore,
+  discovery: ProviderDiscoveryResult | undefined,
+  logger: Logger,
+): {
+  content?: ContentReader;
+  symbols?: SymbolIndexPort;
+  parser?: ParserFramework;
+  artifacts?: ContentArtifactStore;
+} {
+  if (!requested || discovery === undefined) return {};
+
+  // Asked before it is called, never discovered by exception. A version-1
+  // provider lands here too: the operation was introduced at version 2, and
+  // `declares()` will not infer it from an older declaration however that
+  // declaration is written.
+  const verdict = runtime.providers.supports(
+    Capability.SOURCE_REPOSITORY,
+    RepositoryOperation.READ_CONTENT,
+  );
+  if (verdict.support !== CapabilitySupport.SUPPORTED) {
+    logger.info(
+      {
+        operation: 'index.content.compose',
+        support: verdict.support,
+        providerId: verdict.providerId,
+        detail: verdict.detail,
+      },
+      `Content indexing was requested but is unavailable: ${verdict.detail}`,
+    );
+    return {};
+  }
+
+  for (const skip of discovery.skipped) {
+    logger.warn(
+      { operation: 'index.content.compose', module: skip.module, reason: skip.reason, detail: skip.detail },
+      `Parser module "${skip.module}" was not loaded: ${skip.detail}`,
+    );
+  }
+
+  const parser = runtime.providers.supports(Capability.PARSER);
+  if (parser.support !== CapabilitySupport.SUPPORTED) {
+    // Discovery is best-effort by design (EPIC-013), so a parser that failed to
+    // load leaves the run metadata-only rather than failing it. Reading every
+    // file in order to parse none of them would be cost with no result.
+    logger.info(
+      { operation: 'index.content.compose', support: parser.support, detail: parser.detail },
+      `Content indexing was requested but no parser is available: ${parser.detail}`,
+    );
+    return {};
+  }
+
+  logger.info(
+    {
+      operation: 'index.content.compose',
+      module: FERRET_PARSERS_MODULE,
+      providers: discovery.providers,
+      parser: parser.providerId,
+    },
+    'Content indexing composed',
+  );
+
+  return {
+    content: source,
+    symbols: new SymbolStore(storage.db),
+    // Built from the registry, so it holds whatever the discovery above
+    // composed and this file never names a parser.
+    parser: new ParserFramework({ registry: runtime.providers }),
+    artifacts,
+  };
 }
 
 function summarize(report: IndexReport): string {
@@ -146,6 +290,32 @@ function summarize(report: IndexReport): string {
       `skipped           ${[...reasons].map(([reason, count]) => `${String(count)} ${reason}`).join(', ')}`,
     );
   }
+  // Reported only when the stage ran. A run with content off says nothing here
+  // rather than printing zeroes, because "not asked for" and "found nothing"
+  // are different facts (§8.8, Governance §6).
+  const content = report.content;
+  if (content !== undefined) {
+    lines.push(
+      `content           ${String(content.filesRead)} read, ${String(content.filesSkippedUnchanged)} unchanged, ${String(content.filesFailed)} unreadable, of ${String(content.filesConsidered)} considered`,
+    );
+    lines.push(
+      `parsed            ${String(content.filesParsed)} parsed, ${String(content.filesUnparsed)} unparsed`,
+    );
+    // The breakdown, so "how much of this repository is unparsed, and why"
+    // stays a lookup rather than an investigation (§12). Only the reasons that
+    // actually occurred: a wall of zeroes hides the one number that is not.
+    const reasons = Object.entries(content.unparsedReasons).filter(([, count]) => count > 0);
+    if (reasons.length > 0) {
+      lines.push(
+        `unparsed by       ${reasons.map(([reason, count]) => `${String(count)} ${reason}`).join(', ')}`,
+      );
+    }
+    const { created, updated, unchanged, tombstoned, reinstated } = content.symbols;
+    lines.push(
+      `symbols           ${String(created)} new, ${String(updated)} changed, ${String(unchanged)} unchanged, ${String(tombstoned)} deleted, ${String(reinstated)} restored`,
+    );
+  }
+
   if (report.watermark !== undefined) lines.push(`watermark         ${report.watermark}`);
   lines.push(`took              ${String(Math.round(report.durationMs))}ms`);
   return lines.join('\n');

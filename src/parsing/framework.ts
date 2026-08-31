@@ -152,6 +152,43 @@ export class ParserFramework {
     return fallback;
   }
 
+  /**
+   * What would produce a result for this target, without producing one.
+   *
+   * The identity EPIC-108's re-parse gate keys on: the parser that would be
+   * chosen, its version, and whatever else determines its output — for the code
+   * parser, the grammar binary. All three change the result, so all three must
+   * invalidate a cached one.
+   *
+   * **It never parses.** The gate has to decide whether to *read* a file, and an
+   * identity learned from a parse result is learned after the cost it exists to
+   * avoid. `select` is the same selection `parse` performs, so this is the
+   * same parser the run would use — and `producerIdentity` is the parser's own
+   * read-only accessor, not a second way in.
+   *
+   * `undefined` when nothing claims the target. That is itself a stable answer
+   * — "no parser handles this" — and it changes the moment a parser is added,
+   * so a file is reconsidered rather than skipped for ever.
+   */
+  async producerVersion(target: ParseTarget): Promise<string | undefined> {
+    const parser = this.select(target);
+    if (parser === undefined) return undefined;
+
+    let identity: string | undefined;
+    try {
+      identity = await parser.producerIdentity?.(target);
+    } catch {
+      // A parser that cannot say what it is does not get to stop the run. The
+      // version alone still invalidates on a parser upgrade; what is lost is
+      // invalidation on a grammar change, and the parse that follows will
+      // report the same failure with its own reason attached.
+      identity = undefined;
+    }
+    return identity === undefined
+      ? `${parser.parserId}@${parser.parserVersion}`
+      : `${parser.parserId}@${parser.parserVersion}+${identity}`;
+  }
+
   async parse(input: ParseInput, context: ProviderOperationContext): Promise<ParseOutcome> {
     const detection = detectContent(input.path, input.bytes);
     const unparsed = (

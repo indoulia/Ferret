@@ -105,6 +105,43 @@ const MCP_PACKAGES: readonly string[] = [
   '@modelcontextprotocol/sdk/server/stdio.js',
 ];
 
+/**
+ * Packages the CLI loads **dynamically**, only for a run that asked for them.
+ *
+ * EPIC-108 §8.5, and this entry is the whole of that Epic's permitted amendment
+ * to this file. It is a stated decision, not an allowlist widened to get a suite
+ * green, so the reason is recorded here where the next reader will be standing.
+ *
+ * **What it permits:** `ferret index --content` composes Ferret's own code
+ * parser through EPIC-013's `discoverProviders`, naming the package's own
+ * published subpath. The specifier is written as a literal `import(...)` in
+ * `cli/commands/parser-composition.ts` so that the package's `exports` map, a
+ * bundler and this scanner all see the same edge — an edge only the runtime
+ * knows about is one no review can check.
+ *
+ * **What it does not permit, and what still holds unchanged:**
+ *
+ * - `core.packages.has('web-tree-sitter')` is still false. EPIC-025 AC-12 is
+ *   untouched, and the package root still installs no grammar runtime.
+ * - `cli.packages.has('web-tree-sitter')` is still false. The 5.6 MB WASM
+ *   runtime is loaded on demand, for the one flag that needs it, and never by
+ *   `ferret status` or `ferret config`.
+ * - `cli.files` still contains no `parsers/` module. The CLI's *static* graph
+ *   names no parser, which is the assertion that would have caught a relative
+ *   `import('../../parsers/index.js')` — the scanner treats a literal relative
+ *   dynamic import exactly as it treats a static one, so that route was never
+ *   an escape and is not one now.
+ *
+ * The rejected larger amendment, recorded so it is not re-proposed: letting the
+ * CLI import `parsers/` statically. It works, and it puts a WebAssembly runtime
+ * into the static graph of every `ferret` invocation to serve one optional flag.
+ *
+ * An entry here is meaningful on its face — the CLI may load Ferret's own parser
+ * subpath at runtime — and adding a second one is a new architectural decision,
+ * not a fix.
+ */
+const CLI_DYNAMIC_PACKAGES: readonly string[] = ['@indoulia/ferret/parsers'];
+
 const STORAGE_PACKAGES: readonly string[] = [
   'drizzle-orm',
   'drizzle-orm/node-postgres',
@@ -201,10 +238,29 @@ describe('cli entry point', () => {
   });
 
   it('adds no runtime dependency beyond commander, storage, MCP and the core set', () => {
+    // `CLI_DYNAMIC_PACKAGES` is EPIC-108 §8.5's single approved amendment; see
+    // the reason recorded at its declaration. Everything else in this set is
+    // statically imported.
     const external = [...graph.packages].filter((name) => !name.startsWith('node:'));
     expect(external.sort()).toStrictEqual(
-      ['commander', ...STORAGE_PACKAGES, ...MCP_PACKAGES, ...ALLOWED_CORE_PACKAGES].sort(),
+      [
+        'commander',
+        ...STORAGE_PACKAGES,
+        ...MCP_PACKAGES,
+        ...ALLOWED_CORE_PACKAGES,
+        ...CLI_DYNAMIC_PACKAGES,
+      ].sort(),
     );
+  });
+
+  it('loads the parser subpath dynamically and names no parser module statically — AC-13', () => {
+    // The amendment above is only safe while both halves hold. Asserted here
+    // together, rather than trusting the two blocks that assert them apart,
+    // because it is *this pair* that makes "the CLI may load the parser"
+    // different from "the CLI ships the parser".
+    expect(graph.packages.has('@indoulia/ferret/parsers')).toBe(true);
+    expect(graph.packages.has('web-tree-sitter')).toBe(false);
+    expect([...graph.files].filter((file) => file.startsWith('parsers/'))).toStrictEqual([]);
   });
 });
 

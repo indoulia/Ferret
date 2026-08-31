@@ -185,17 +185,35 @@ called or extended:
 
 **Not a dependency, recorded because the review examined it:**
 
-- **EPIC-045 — Source Authority.** As of this writing the authority policy is on
-  **open PR #46** (`feat/epic-044-045-evidence`, all four checks green) and
-  **not on `main`**; the registry on `main` still lists EPIC-044 and EPIC-045 as
-  P0 with no status. **EPIC-108 does not depend on it and must not be sequenced
-  behind it.** The relationship is one-directional and automatic: once #46
-  merges, evidence emitted through `Emitter` for content-derived facts receives
-  its rank from `authorityFor(method)` with no work here — a `parsed` method
-  ranking below a directly-read observation, which is the correct ordering for
-  facts a grammar produced. If #46 does not merge, content evidence carries the
-  same default authority every other record carries today and nothing in this
-  Epic behaves differently. **EPIC-045 is not modified by this Epic.**
+- **EPIC-045 — Source Authority.** Merged to `main` in PR #46
+  (`feat/epic-044-045-evidence`), so the authority policy is on the branch this
+  Epic is built on: `src/domain/authority.ts` exports `authorityFor`, and
+  `Emitter` applies it to every record it emits. **EPIC-108 does not depend on it
+  and was not sequenced behind it**, which the earlier draft of this section
+  recorded while #46 was still open; that wording is superseded here rather than
+  left to read as current.
+
+  What the relationship actually is, now that the code can be read rather than
+  predicted:
+
+  - `AUTHORITY_BY_METHOD` ranks `observed` at 80 and `parsed` at 60, so evidence
+    a grammar produced would rank below a directly-read observation. That is the
+    correct ordering, and it is automatic — `Emitter.parsed()` calls
+    `authorityFor('parsed')` and no caller passes a rank.
+  - **This Epic emits no `parsed` evidence, so that ordering does not yet apply
+    to anything it writes.** Structure lands on `file` and `file_version`
+    *attributes* through the `structure` option `emitFiles` already accepts, and
+    the only evidence `emitFiles` records is the `observed` content-hash
+    statement it recorded before this Epic. Symbols reach the database through
+    `SymbolIndexPort.indexFileSymbols`, which writes canonical entities and no
+    evidence at all. See §18.
+
+  The correction matters because the two statements are easy to conflate: the
+  authority mechanism is present and correct, and there is nothing in this
+  Epic's output for it to rank. Recording that a mechanism applies to facts that
+  are not emitted would be exactly the manufactured certainty Governance §6
+  forbids. **EPIC-045 is not modified by this Epic**, and nothing here is
+  sequenced behind it.
 
 ## 8. Contracts
 
@@ -801,3 +819,150 @@ for the implementation when it is authorised:
 - making content indexing a default;
 - changing a provider contract without its version and conformance treatment;
 - renaming or rebranding unrelated runtime infrastructure.
+
+## 18. Limitations recorded during implementation
+
+Added as implementation proceeds, so that a limitation is written down where it
+is found rather than reconstructed at validation time. Each says what is true,
+why it was accepted, and who would own changing it. None of these alters §3, §4
+or §9; the validation document §14 requires will restate them per criterion.
+
+### 18.1 Symbols carry no evidence (R2)
+
+**What is true.** `SymbolIndexPort.indexFileSymbols` writes canonical
+`code_symbol` entities through `EntityStore.upsert` and records no
+`CanonicalEvidence` for any of them. A symbol therefore has identity, attributes,
+lifecycle and provenance-by-producer, and no evidence row stating *how* Ferret
+came to believe it. This is EPIC-034's shape as built and validated; nothing in
+this Epic changed it.
+
+**Why it is not corrected here.** No approved EPIC-108 acceptance criterion
+requires it. Every criterion in §9 was checked: AC-14 is the only one that uses
+the word "evidence", and it means the validation document's evidence — that a
+dogfooding run records real counts — not an evidence row per symbol. §6 does not
+list evidence among this Epic's outputs, and §12 asks for counts and reasons in
+the report and the log rather than in the evidence store.
+
+Adding it would also be a larger change than it looks. Evidence names a subject,
+a field, a statement and a locator; deciding what a symbol's evidentiary
+statement *is* — the declaration, the signature, the span — is a modelling
+decision, and asserting one here would be this Epic settling a question EPIC-034
+left open. §8.6 is emphatic that this Epic derives no symbol identity and builds
+no `code_symbol` entity input; inventing an evidence record for one is the same
+class of overreach.
+
+**What it costs.** Three things are unavailable for symbols that are available
+for files: the authority ranking of §7 has nothing to apply to, so a symbol from
+a grammar and a symbol from any future source would not be rankable against each
+other; `derivedFrom` cannot trace a symbol back to the parse that produced it;
+and EPIC-008's evidence-based conflict resolution has no input for symbols. The
+practical effect today is nil, because there is exactly one producer of symbols.
+It becomes real at the second one.
+
+**Who owns it.** Whichever Epic first needs to rank or reconcile symbols from
+two producers — EPIC-035 is the nearest candidate, since references and call
+sites are the first symbol-level facts with more than one plausible source. It
+should be raised there rather than absorbed here.
+
+### 18.2 Git cannot distinguish a missing object from a non-blob object
+
+`git cat-file blob <oid>` answers `fatal: git cat-file <oid>: bad file` for both
+an object the store does not have and an object that exists and is not a blob —
+verified directly against Git rather than assumed. `ContentUnavailable` therefore
+has one `not-found` reason covering both, carrying Git's own words in `detail`.
+Separating them would need a second `cat-file -t` invocation per failure, and
+inventing the distinction without one would be manufacturing certainty
+(Governance §6). Accepted: the caller feeds object ids that `listFiles` reported
+for entries it had already classified as files, so a non-blob reaching the read
+means the tree listing is stale, which is the same remedy either way.
+
+### 18.3 The Git provider ignores `revision` when reading content
+
+`FileContentRequest.revision` is accepted and unused by the Git implementation:
+an object id is already absolute, so a blob is the same blob at every revision
+that references it, and re-resolving `revision:path` would re-ask a question
+`listFiles` answered and answer it against the tree as it stands now. The field
+stays on the contract because a provider that cannot address content by object
+id needs it, and because dropping it would make this provider's shortcut every
+provider's requirement.
+
+### 18.4 The gate is keyed per path, not per file version — §8.7 amended
+
+§8.7 specifies "one artefact per indexed file version", with the scope derived
+from the `file_version` identity. Implementing it that way and running the AC-8
+sequence showed it is wrong:
+
+1. index a file — symbols stored, artefact recorded for version **A**;
+2. edit it — symbols for the removed declarations tombstoned, artefact recorded
+   for version **B**;
+3. revert it — the content is version **A** again, the per-version scope finds
+   **A**'s artefact, `validateArtifact` says valid, and the file is skipped.
+
+The symbols tombstoned at step 2 are never reinstated. Nothing fails; the file
+simply keeps a set of deleted symbols for ever. The artefact was truthful — that
+content *was* derived once — but what it recorded had since been undone by a
+later run, and a per-version scope cannot express that.
+
+**One artefact per `(repository, path)`, carrying the content hash as
+`sourceContentHash`**, is what `validateArtifact` was built for and fixes it: a
+revert is a hash that differs from the recorded one, so the file is re-read and
+its symbols reinstated. AC-8 now passes; under the specified scoping it did not.
+
+Two consequences, both improvements: the table grows with distinct *paths*
+rather than distinct file versions, which is strictly smaller than the cost §8.7
+accepted; and the artefact for a path always describes that path's current
+derived state, which is the question the gate actually asks.
+
+The other half of §8.7 is unchanged and was implemented as written: the scope is
+derived through EPIC-009's identity function in the pattern `watermarkScopeId`
+established, and is **not** the `file_version` entity id — §8.6 forbids this Epic
+deriving an identity another component owns, and reusing that id would have the
+indexer and the provider each computing a value that must agree.
+
+### 18.5 EPIC-030 structure and EPIC-020 history contend for the `file` entity
+
+Found by AC-6 and fixed here, because EPIC-108 is what makes it reachable.
+
+EPIC-020's history emitter creates a `file` entity for every path a commit
+touched, holding `{ path, extension }`. The content stage puts EPIC-030's
+structure — media type, classification, generated, vendored — on that **same**
+entity, and `EntityStore.upsert` *replaces* attributes rather than merging them.
+With history written after the file tree, as the indexer originally ordered it,
+every run stripped the structure and then wrote it back: two rows per file per
+run, permanently. The watermark's boundary is inclusive, so the newest commit is
+re-read on every run and the churn never settles.
+
+Before this Epic the two emitters produced identical attributes, so the collision
+existed and cost nothing. It is not a latent EPIC-020 defect so much as an
+unstated assumption that only one emitter would ever describe a `file`.
+
+**The fix, confined to a content run:** the file tree is read and written
+*before* history, and the history graph then drops the `file` entities this run
+already wrote. Dropping them is safe precisely because the tree stage ran first —
+the entity exists, so every relationship in the history graph still has its
+target — and only ids this run actually wrote are dropped, so a file that appears
+in history and not in the tree is still created, which EPIC-032 needs in order to
+have something to tombstone. A metadata-only run keeps the original stage order
+exactly, so AC-1 is unaffected.
+
+### 18.6 An unrelated commit-stub rewrite on every incremental second run
+
+Found while proving AC-6, **not caused by this Epic, and not fixed here.**
+
+An incremental second run re-reads the watermark commit and emits a stub `commit`
+entity — `{ sha, parents: [] }` — for that commit's *parent*, which overwrites
+the fully described entity a previous run stored. The parent commit loses its
+message, its author and its timestamps until something re-reads it in full.
+
+Confirmed pre-existing by reproducing it with content indexing **off**: the same
+single `entities.updated` appears on the second run of a metadata-only index. It
+settles after that run, because the stub then matches what is stored — which is
+also why it has gone unnoticed: `IndexReport.entities.created` is 0, and only the
+`updated` counter shows it.
+
+It belongs to EPIC-020 or EPIC-031 and should be raised against whichever owns
+the parent-reference emission. This Epic records it and works around it in its
+own evidence: AC-6 is proved by snapshotting the `file`, `file_version` and
+`code_symbol` rows either side of a second run and asserting they are byte-for-
+byte identical, which is what AC-6 is actually about and is a stronger assertion
+than the counter it replaces.
