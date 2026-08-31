@@ -274,7 +274,7 @@ export function createEntity(input: EntityInput): CanonicalEntity {
 function dedupeExternalIds(ids: readonly ExternalId[]): ExternalId[] {
   const seen = new Map<string, ExternalId>();
   for (const id of ids) {
-    const key = `${id.system} ${id.id}`;
+    const key = `${id.system}\u0000${id.id}`;
     if (!seen.has(key)) seen.set(key, id);
   }
   // Sorted so two ingestions that report the same ids in a different order

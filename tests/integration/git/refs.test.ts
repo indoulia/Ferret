@@ -442,10 +442,10 @@ withGit('untrusted ref content', () => {
     // A lock reason and an upstream name are free-form, they reach a terminal,
     // and an ANSI escape in a branch listing can rewrite what an operator
     // believes they are looking at. Governance §12.
-    const hostile = `main[2K[1Grm -rf / `;
+    const hostile = `main[2K[1Grm -rf /\u0000`;
     const cleaned = sanitizeRefText(hostile);
     expect(cleaned).not.toContain('');
-    expect(cleaned).not.toContain(' ');
+    expect(cleaned).not.toContain('\u0000');
     expect(cleaned).toContain('main');
   });
 
