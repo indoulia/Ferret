@@ -353,6 +353,13 @@ describe('provider SDK boundary', () => {
     expect(sdk.files.has('providers/sdk/testing.ts')).toBe(false);
   });
 
+  it('keeps the conformance suite out of the core entry point', () => {
+    // EPIC-016 ships beside the doubles, on the same subpath and for the same
+    // reason: it exists to *run* provider code, which is a development act.
+    expect(core.files.has('providers/sdk/conformance.ts')).toBe(false);
+    expect(sdk.files.has('providers/sdk/conformance.ts')).toBe(false);
+  });
+
   it('does not reach any CLI module', () => {
     expect([...sdk.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
   });

@@ -76,7 +76,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-013 — Provider Registry & Discovery** — P0 — VALIDATED ([evidence](validation/EPIC-013-VALIDATION.md))
 - **EPIC-014 — Provider Lifecycle & Health** — P1
 - **EPIC-015 — Provider Configuration & Secrets** — P0 — VALIDATED ([spec](EPIC-015-Provider-Configuration-And-Secrets.md), [evidence](validation/EPIC-015-VALIDATION.md))
-- **EPIC-016 — Provider Conformance Testing** — P0
+- **EPIC-016 — Provider Conformance Testing** — P0 — VALIDATED ([spec](EPIC-016-Provider-Conformance-Testing.md), [evidence](validation/EPIC-016-VALIDATION.md))
 
 ### Source Discovery & Git
 
