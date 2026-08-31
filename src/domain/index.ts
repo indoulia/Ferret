@@ -173,3 +173,12 @@ export {
   type Session,
   type SessionInput,
 } from './session.js';
+
+export {
+  SessionCaptureKind,
+  createSessionCapture,
+  sessionCaptureInputSchema,
+  sessionCaptureKey,
+  type SessionCapture,
+  type SessionCaptureInput,
+} from './session-capture.js';
