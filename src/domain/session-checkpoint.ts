@@ -3,11 +3,11 @@ import { z } from 'zod';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import { canonicalId, contentHash, encodeKeyParts, stableStringify } from './identity.js';
 
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+const jsonValueSchema: z.ZodType<JsonValue, JsonValue> = z.lazy(() =>
   z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(jsonValueSchema), z.record(z.string(), jsonValueSchema)]),
 );
 
-export type JsonValue = string | number | boolean | null | JsonValue[] | { readonly [key: string]: JsonValue };
+export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 export const sessionCheckpointInputSchema = z
   .object({

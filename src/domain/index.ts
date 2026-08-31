@@ -90,6 +90,7 @@ export {
   resetRelationshipTypeRegistry,
   type CanonicalRelationship,
   type RegisterRelationshipTypeOptions,
+  type RelationshipInput,
   type RelationshipTypeDefinition,
 } from './relationship.js';
 
