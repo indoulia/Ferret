@@ -54,3 +54,22 @@ export {
   type GitProviderOptions,
 } from './provider.js';
 export { GIT_SAFETY_CONFIG, GIT_STRIPPED_ENV, runGit, scrubEnvironment, type GitResult, type GitRunOptions } from './runner.js';
+
+export {
+  MAX_SAMPLED_PATHS,
+  parseStatus,
+  readWorktreeState,
+  type UpstreamState,
+  type WorkingTreeState,
+  type WorktreeStateResult,
+} from './worktree-state.js';
+
+export {
+  describeEngineeringContext,
+  localIdentityOf,
+  repositoryRootOf,
+  type EngineeringContext,
+  type EngineeringContextOptions,
+  type LocalIdentityContext,
+  type WorktreeContext,
+} from './engineering-context.js';
