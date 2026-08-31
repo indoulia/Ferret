@@ -9,6 +9,7 @@ import {
   buildCodeSymbols,
   codeSymbolAttributes,
   codeSymbolAttributesFrom,
+  codeSymbolEntityInput,
   codeSymbolId,
   codeSymbolKindOf,
   codeSymbolTree,
@@ -341,4 +342,50 @@ describe('against a real parse', () => {
     });
     expect(symbols[1]).toMatchObject({ kind: CodeSymbolKind.METHOD, signature: 'width(): number' });
   }, 60_000);
+});
+
+describe('the id an entity derives is the symbol’s id', () => {
+  it('holds for a plain symbol and for an overload — EPIC-034 depends on it', () => {
+    // Not a tidiness check. EPIC-034 reconciles a file by comparing the ids it
+    // has stored against the ids of the symbols it was just handed. When these
+    // two derivations disagreed — they were three files apart — every symbol
+    // was tombstoned on every run, and the integration suite was what caught
+    // it. This is the fast guard that keeps them together.
+    registerCodeSymbolKind();
+    const symbols = buildCodeSymbols(
+      {
+        segments: [],
+        outline: [
+          outline('handle', 'function', span(1)),
+          outline('handle', 'function', span(5)),
+          outline('Box', 'class', span(10), [outline('width', 'method', span(11))]),
+        ],
+      },
+      CONTEXT,
+    );
+
+    expect(symbols).toHaveLength(4);
+    for (const symbol of symbols) {
+      const entity = createEntity(codeSymbolEntityInput(symbol, CONTEXT));
+      expect(entity.id).toBe(symbol.id);
+    }
+  });
+
+  it('separates the same qualified name in two files', () => {
+    const here = buildCodeSymbols(
+      { segments: [], outline: [outline('run', 'function', span(1))] },
+      CONTEXT,
+    );
+    const there = buildCodeSymbols(
+      { segments: [], outline: [outline('run', 'function', span(1))] },
+      { ...CONTEXT, path: 'src/other.ts' },
+    );
+    const first = here[0];
+    const second = there[0];
+    if (first === undefined || second === undefined) throw new Error('expected symbols');
+
+    expect(createEntity(codeSymbolEntityInput(first, CONTEXT)).id).not.toBe(
+      createEntity(codeSymbolEntityInput(second, { ...CONTEXT, path: 'src/other.ts' })).id,
+    );
+  });
 });

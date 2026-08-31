@@ -1,10 +1,11 @@
-import { canonicalId, canonicalKey } from '../domain/identity.js';
 import type {
   ContentSegment,
   ContentSpan,
   OutlineNode,
   ParseOutput,
 } from '../providers/contracts/parser.js';
+
+import { codeSymbolId, type CodeSymbolContext } from './identity.js';
 
 /**
  * Ferret's model of what a file declares.
@@ -112,47 +113,6 @@ export interface CodeSymbol {
   readonly overload: number;
   /** The parser's own word for this, kept so a mapping gap is diagnosable. */
   readonly declaredKind: string;
-}
-
-export interface CodeSymbolContext {
-  /** Repository-relative path of the file these symbols were declared in. */
-  readonly path: string;
-  /**
-   * The entity the file is identified within — EPIC-006's scope.
-   *
-   * Usually the repository's canonical id. Two repositories containing the same
-   * file must not produce the same symbol ids.
-   */
-  readonly scope: string;
-  /** The system the content came from. Defaults to `git`. */
-  readonly sourceSystem?: string;
-}
-
-/**
- * The stable identifier for a symbol.
- *
- * `canonicalId` over the same key shape EPIC-006 uses for everything else, so a
- * symbol id is derived rather than assigned and two runs over unchanged content
- * agree. A rename produces a different id, which is correct: it is a different
- * symbol, and the graph — not the identifier — is what tracks that it replaced
- * the old one.
- */
-export function codeSymbolId(
-  context: CodeSymbolContext,
-  qualifiedName: string,
-  overload: number,
-): string {
-  const suffix = overload === 0 ? '' : `#${String(overload)}`;
-  return canonicalId(
-    canonicalKey({
-      kind: 'code_symbol',
-      sourceSystem: context.sourceSystem ?? 'git',
-      // The file, within the repository. A qualified name is unique in a file
-      // and nowhere else.
-      scope: `${context.scope}:${context.path}`,
-      sourceId: `${qualifiedName}${suffix}`,
-    }),
-  );
 }
 
 /** Comment segments indexed by the line they end on. */
