@@ -84,7 +84,9 @@ export function touchSession(session: Session, at: Date): Session {
       'Create a continuation session instead of reopening a terminal session.',
     );
   }
-  if (at.toISOString() < session.lastActivityAt) {
+  // Compared as instants: startedAt keeps the offset it arrived with, and an
+  // offset string does not sort chronologically against a UTC one.
+  if (at.getTime() < Date.parse(session.lastActivityAt)) {
     throw invalid(
       'Session activity cannot move backwards in time',
       { sessionId: session.sessionId, lastActivityAt: session.lastActivityAt, attemptedAt: at.toISOString() },
@@ -102,7 +104,7 @@ export function endSession(session: Session, status: Exclude<SessionStatus, 'act
       'Terminal sessions are immutable; create a continuation session for new work.',
     );
   }
-  if (at.toISOString() < session.lastActivityAt) {
+  if (at.getTime() < Date.parse(session.lastActivityAt)) {
     throw invalid(
       'Session end cannot precede last activity',
       { sessionId: session.sessionId, lastActivityAt: session.lastActivityAt, attemptedAt: at.toISOString() },

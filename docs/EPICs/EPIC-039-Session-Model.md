@@ -1,6 +1,6 @@
 # EPIC-039 — Session Model
 
-**Status:** IN_PROGRESS  
+**Status:** VALIDATED — [evidence](validation/EPIC-039-VALIDATION.md)  
 **Priority:** P0  
 **Domain:** Session & Agent Memory
 

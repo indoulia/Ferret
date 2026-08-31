@@ -116,8 +116,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 **P0 focus:** persistent AI-session memory is now a release-critical capability. Ferret must preserve useful AI context across session boundaries, make session state and durable checkpoints first-class, extract decisions and engineering knowledge from captured context, and support recovery/continuation without forcing the AI to rediscover prior work or consume the original session's full token budget. The raw session remains evidence; derived memory remains traceable to that evidence. AI-client-specific capture remains provider/adapter based so Claude is first, not exclusive.
 
-- **EPIC-039 — Session Model** — P0 — MERGED (PR #29; CI passed; validation evidence still required before DONE)
-- **EPIC-040 — Session Capture** — P0 — MERGED (PR #30; CI passed; validation evidence still required before DONE)
+- **EPIC-039 — Session Model** — P0 — VALIDATED ([evidence](validation/EPIC-039-VALIDATION.md))
+- **EPIC-040 — Session Capture** — P0 — VALIDATED ([evidence](validation/EPIC-040-VALIDATION.md))
 - **EPIC-041 — Durable Checkpoints** — P0 — VALIDATED ([evidence](validation/EPIC-041-VALIDATION.md))
 - **EPIC-042 — Decision & Engineering Memory** — P0
 - **EPIC-043 — Session Recovery** — P0

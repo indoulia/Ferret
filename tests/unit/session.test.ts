@@ -52,6 +52,18 @@ describe('session model', () => {
     expect(() => touchSession(touched, new Date('2026-08-31T05:04:59.000Z'))).toThrow();
   });
 
+  it('orders activity by instant, not by the written form of startedAt', () => {
+    // startedAt keeps the offset it arrived with, and an offset string does not
+    // sort chronologically against the UTC form of the timestamps compared to it.
+    const ahead = createSession({ ...input, startedAt: '2026-08-31T23:00:00.000+05:30' }); // 17:30Z
+    expect(touchSession(ahead, new Date('2026-08-31T18:00:00.000Z')).lastActivityAt).toBe('2026-08-31T18:00:00.000Z');
+    expect(() => touchSession(ahead, new Date('2026-08-31T17:00:00.000Z'))).toThrow();
+
+    const behind = createSession({ ...input, startedAt: '2026-08-31T01:00:00.000-05:00' }); // 06:00Z
+    expect(() => touchSession(behind, new Date('2026-08-31T05:00:00.000Z'))).toThrow();
+    expect(() => endSession(behind, SessionStatus.COMPLETED, new Date('2026-08-31T05:00:00.000Z'))).toThrow();
+  });
+
   it('supports completed and abandoned terminal transitions', () => {
     const session = createSession(input);
     const completed = endSession(session, SessionStatus.COMPLETED, new Date('2026-08-31T06:00:00.000Z'));
