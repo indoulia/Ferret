@@ -1,4 +1,11 @@
 export {
+  CONFLICT_INITIAL_DELAY_MS,
+  CONFLICT_MAX_ATTEMPTS,
+  CONFLICT_MAX_DELAY_MS,
+  withConflictRetry,
+  type ConflictRetryOptions,
+} from './conflict-retry.js';
+export {
   DEFAULT_CONNECT_TIMEOUT_MS,
   DEFAULT_IDLE_TIMEOUT_MS,
   DEFAULT_POOL_SIZE,
@@ -7,6 +14,7 @@ export {
   createPool,
   describeConnection,
   isMissingRelation,
+  isTransientConflict,
   poolConfigFor,
   readServerVersion,
   type ConnectionDescription,

@@ -147,7 +147,36 @@ const SQLSTATE = {
   CRASH_SHUTDOWN: '57P02',
   CONNECTION_FAILURE: '08006',
   TOO_MANY_CONNECTIONS: '53300',
+  /**
+   * The transaction lost a race and PostgreSQL rolled it back — EPIC-079.
+   *
+   * Both of these are errors PostgreSQL documents as *expected*, and expects an
+   * application to retry. Their absence from this table is what made a contended
+   * upsert a failed run rather than a second attempt: `classifyDatabaseError`
+   * fell through to its generic branch, and the error arrived with `retryable`
+   * unset. Issues #21 and #55.
+   */
+  SERIALIZATION_FAILURE: '40001',
+  DEADLOCK_DETECTED: '40P01',
 } as const;
+
+/** SQLSTATEs that mean "try the whole transaction again". */
+const TRANSIENT_CONFLICTS: ReadonlySet<string> = new Set([
+  SQLSTATE.SERIALIZATION_FAILURE,
+  SQLSTATE.DEADLOCK_DETECTED,
+]);
+
+/**
+ * True when an error is a transaction conflict worth retrying.
+ *
+ * Exported so a caller can decide *where* to retry without re-deriving *what* is
+ * retryable. The unit of retry is the transaction, and only the caller knows
+ * where its transaction begins.
+ */
+export function isTransientConflict(error: unknown): boolean {
+  const code = errorCodeOf(error);
+  return code !== undefined && TRANSIENT_CONFLICTS.has(code);
+}
 
 /** Node socket error codes that mean "the server is not reachable". */
 const UNREACHABLE_CODES: ReadonlySet<string> = new Set([
@@ -256,7 +285,30 @@ export function classifyDatabaseError(error: unknown, operation: string): Ferret
     });
   }
 
-  return new FerretError(ErrorCode.STORAGE_UNAVAILABLE, `PostgreSQL operation "${operation}" failed: ${message}`, {
+  if (code !== undefined && TRANSIENT_CONFLICTS.has(code)) {
+    // Retryable, and deliberately its own code rather than STORAGE_UNAVAILABLE:
+    // the database is entirely available, and a caller that logs "PostgreSQL is
+    // unavailable" for a contended row sends an operator to look at the wrong
+    // thing.
+    return new FerretError(
+      ErrorCode.STORAGE_CONFLICT,
+      `PostgreSQL rolled back "${operation}" because it conflicted with a concurrent transaction: ${message}`,
+      {
+        details,
+        remediation: 'Retry the transaction. Ferret does this automatically for its own writes.',
+        retryable: true,
+        cause: error,
+      },
+    );
+  }
+
+  // The SQLSTATE goes in the *message*, not only in the details. An unclassified
+  // error is by definition one nobody has looked at yet, and the first thing
+  // anyone will need is its code — which a test runner printing an error message
+  // does not show from `details`. This paragraph exists because diagnosing an
+  // intermittent CI failure took a round trip that the code could have saved.
+  const named = code === undefined ? message : `[${code}] ${message}`;
+  return new FerretError(ErrorCode.STORAGE_UNAVAILABLE, `PostgreSQL operation "${operation}" failed: ${named}`, {
     details,
     cause: error,
   });

@@ -178,7 +178,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-076 — Incremental Source Synchronization** — P0
 - **EPIC-077 — Event & Webhook Ingestion** — P1
 - **EPIC-078 — Periodic Reconciliation** — P1
-- **EPIC-079 — Retry & Backoff** — P0
+- **EPIC-079 — Retry & Backoff** — P0 — VALIDATED ([spec](EPIC-079-Retry-And-Backoff.md), [evidence](validation/EPIC-079-VALIDATION.md))
 - **EPIC-080 — Idempotent Ingestion** — P0
 
 ### Security & Authorization

@@ -37,6 +37,8 @@ export const ErrorCode = {
   STORAGE_UNAVAILABLE: 'E_STORAGE_UNAVAILABLE',
   /** The database rejected an operation because the role lacks a privilege. */
   STORAGE_PERMISSION_DENIED: 'E_STORAGE_PERMISSION_DENIED',
+  /** A transaction lost a race with a concurrent one. Retryable — EPIC-079. */
+  STORAGE_CONFLICT: 'E_STORAGE_CONFLICT',
   /** A schema migration failed. The database is left at the last good version. */
   MIGRATION_FAILED: 'E_MIGRATION_FAILED',
   /** Another process holds the migration lock and did not release it in time. */

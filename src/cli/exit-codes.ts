@@ -57,6 +57,11 @@ const BY_ERROR_CODE: Readonly<Record<ErrorCode, ExitCode>> = {
   // distinct condition an operator resolves differently, so it gets its own.
   [ErrorCode.STORAGE_UNAVAILABLE]: ExitCode.DEPENDENCY,
   [ErrorCode.STORAGE_PERMISSION_DENIED]: ExitCode.STORAGE,
+  // A conflict that outlived its retries is contention, not an unusable schema
+  // and not an unreachable server: the database did exactly what it should. The
+  // dependency class is right — the remedy is to reduce concurrency or try
+  // again, the same shape as a server that is busy.
+  [ErrorCode.STORAGE_CONFLICT]: ExitCode.DEPENDENCY,
   [ErrorCode.MIGRATION_FAILED]: ExitCode.STORAGE,
   [ErrorCode.MIGRATION_LOCKED]: ExitCode.STORAGE,
   [ErrorCode.MIGRATION_PENDING]: ExitCode.STORAGE,
