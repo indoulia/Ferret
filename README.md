@@ -404,7 +404,32 @@ npm run verify     # lint, typecheck, build, test
 npm run build
 npm test
 npm run baseline   # record startup and package-size baselines
+npm run dogfood    # index this repository, then check Ferret's answers against git
 ```
+
+### Dogfooding is a test, not a demo
+
+`npm run dogfood` indexes this repository with the built CLI, connects to it over
+MCP as a real client, and checks every answer against what `git` says. It is an
+**oracle**: each question it asks has an answer `git` can produce independently,
+so a disagreement is a defect rather than a matter of opinion.
+
+That distinction has earned its keep. Nineteen Epics of passing tests coexisted
+with sixty of sixty-one commits holding nothing but a SHA — every structural
+assertion passed, because every one of them checked shape. Later, three hundred
+and eighteen indexed files included thirteen that had not existed for months,
+each reported `active`, and each with a `change: deleted` record already in the
+graph. Running Ferret and reading the output would have shown neither. Comparing
+its output to `git ls-files` showed both immediately.
+
+It needs a configured database, like any other Ferret run:
+
+```bash
+npm run build && npm run dogfood
+npm run dogfood -- --check    # check what is already indexed, without re-indexing
+```
+
+It exits non-zero on any disagreement.
 
 Schema changes are generated, not hand-written:
 

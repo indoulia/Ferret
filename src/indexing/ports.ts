@@ -69,6 +69,33 @@ export interface WatermarkRecord {
   readonly producerVersion: string;
 }
 
+/**
+ * One entity whose recorded lifecycle disagrees with what was observed.
+ *
+ * The shape EPIC-032's store returns, named here so the indexer can reason
+ * about lifecycle without knowing a database exists.
+ */
+export interface PendingLifecycleChange {
+  readonly entityId: string;
+  readonly path: string;
+  readonly action: 'retire' | 'reinstate';
+  readonly at: Date;
+}
+
+/**
+ * Where the indexer reconciles what Ferret believes with what it observed.
+ *
+ * Deliberately a *reconciliation* rather than a delta. An incremental run reads
+ * no commit that mentions a file deleted years ago, so a port that only accepted
+ * this run's changes would leave every already-wrong entity wrong for ever —
+ * which is precisely the state EPIC-032 found Ferret's own index in.
+ */
+export interface LifecycleStore {
+  pendingChanges(repositoryId: string, limit?: number): Promise<readonly PendingLifecycleChange[]>;
+  retire(entityId: string, repositoryId: string, at: Date, now?: Date): Promise<boolean>;
+  reinstate(entityId: string, now?: Date): Promise<boolean>;
+}
+
 export interface WatermarkStore {
   getArtifact(kind: string, scopeId?: string): Promise<WatermarkRecord | undefined>;
   recordArtifact(

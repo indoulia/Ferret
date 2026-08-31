@@ -1,7 +1,9 @@
-import type {
-  CanonicalEntity,
-  CanonicalEvidence,
-  CanonicalRelationship,
+import {
+  canonicalId,
+  encodeKeyParts,
+  type CanonicalEntity,
+  type CanonicalEvidence,
+  type CanonicalRelationship,
 } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
@@ -15,6 +17,7 @@ import { VERSION } from '../version.js';
 import type {
   EntityWriter,
   EvidenceWriter,
+  LifecycleStore,
   RelationshipWriter,
   WatermarkStore,
 } from './ports.js';
@@ -78,6 +81,20 @@ export interface WriteCounts {
   readonly unchanged: number;
 }
 
+export interface LifecycleCounts {
+  /** Entities marked deleted, with their containment closed at the source instant. */
+  readonly retired: number;
+  /** Entities observed to exist again. */
+  readonly reinstated: number;
+  /**
+   * Why the reconciliation did not run, when it did not.
+   *
+   * Never silence. An operator wondering why deleted files persist should find
+   * the answer here and in the log, rather than having to read this file.
+   */
+  readonly skippedReason: string | undefined;
+}
+
 export interface IndexReport {
   readonly repositoryId: string;
   readonly repositoryKey: string;
@@ -92,6 +109,14 @@ export interface IndexReport {
   readonly worktreesRead: number;
   /** Entries the provider reported but Ferret did not model, with reasons. */
   readonly skipped: readonly { readonly path: string; readonly reason: string }[];
+  /**
+   * What stopped existing, and what came back.
+   *
+   * Reported rather than done silently: a run that quietly tombstoned four per
+   * cent of a repository is indistinguishable from one that did nothing, and
+   * Governance §6 asks for the difference to be visible.
+   */
+  readonly lifecycle: LifecycleCounts;
   /** The newest commit instant now on record, when there is one. */
   readonly watermark: string | undefined;
   readonly durationMs: number;
@@ -117,7 +142,19 @@ export interface IndexableSource {
     repository: DiscoveredRepository,
     request: { revision?: string; limit?: number },
     context: ProviderOperationContext,
-  ): Promise<{ entries: readonly unknown[] }>;
+  ): Promise<{
+    entries: readonly unknown[];
+    /**
+     * Present when the listing was cut short.
+     *
+     * The completeness signal the lifecycle reconciliation is gated on. A
+     * partial view of a tree cannot be allowed to condemn the files it did not
+     * reach, and the failure mode if it were is silent: a sweep on a truncated
+     * listing tombstones most of a large repository and looks exactly like a
+     * successful run.
+     */
+    cursor?: string | undefined;
+  }>;
   emit(repository: DiscoveredRepository): { entity: CanonicalEntity; evidence: readonly CanonicalEvidence[] };
   emitGraph(
     repository: DiscoveredRepository,
@@ -147,6 +184,12 @@ export interface IndexerDependencies {
   readonly relationships: RelationshipWriter;
   readonly evidence: EvidenceWriter;
   readonly watermarks: WatermarkStore;
+  /**
+   * Optional so that every existing caller keeps working, and so a source that
+   * cannot observe deletion is not forced to pretend it can. When absent the
+   * report says why the reconciliation did not run.
+   */
+  readonly lifecycle?: LifecycleStore;
   readonly logger?: Logger;
 }
 
@@ -156,6 +199,7 @@ export class RepositoryIndexer {
   readonly #relationships: RelationshipWriter;
   readonly #evidence: EvidenceWriter;
   readonly #watermarks: WatermarkStore;
+  readonly #lifecycle: LifecycleStore | undefined;
   readonly #logger: Logger | undefined;
 
   constructor(dependencies: IndexerDependencies) {
@@ -164,6 +208,7 @@ export class RepositoryIndexer {
     this.#relationships = dependencies.relationships;
     this.#evidence = dependencies.evidence;
     this.#watermarks = dependencies.watermarks;
+    this.#lifecycle = dependencies.lifecycle;
     this.#logger = dependencies.logger;
   }
 
@@ -184,7 +229,14 @@ export class RepositoryIndexer {
     const observedAt = options.observedAt ?? new Date();
     const repositoryEntity = this.#source.emit(repository).entity;
 
-    const previous = options.full === true ? undefined : await this.#readWatermark(repositoryEntity.id);
+    // Issue #19: the watermark is scoped to the *revision* that was read, not
+    // to the repository. One watermark per repository silently skips commits —
+    // index `HEAD`, then a feature branch, then `HEAD` again, and every `HEAD`
+    // commit older than the feature branch's tip is never read. Nothing fails;
+    // the graph is simply missing history and no later run goes back for it.
+    const watermarkScope = watermarkScopeId(repositoryEntity.id, options.revision);
+
+    const previous = options.full === true ? undefined : await this.#readWatermark(watermarkScope);
     const since = typeof previous?.lastCommitAt === 'string' ? previous.lastCommitAt : undefined;
 
     const entities = counter();
@@ -265,6 +317,7 @@ export class RepositoryIndexer {
 
     // Stage 3 — the file tree at the revision.
     let filesRead = 0;
+    let treeComplete = false;
     if (options.withFiles !== false) {
       throwIfAborted(context.signal, 'index.files');
       const listing = await this.#source.listFiles(
@@ -273,6 +326,7 @@ export class RepositoryIndexer {
         context,
       );
       filesRead = listing.entries.length;
+      treeComplete = listing.cursor === undefined;
       const graph = this.#source.emitFiles(repository, listing.entries as readonly never[], {
         ...(options.revision === undefined ? {} : { revision: options.revision }),
         observedAt,
@@ -281,10 +335,13 @@ export class RepositoryIndexer {
       await write(graph);
     }
 
+    // Stage 4 — reconcile what Ferret believes exists with what it observed.
+    const lifecycle = await this.#reconcile(repositoryEntity.id, treeComplete, options, observedAt, context);
+
     // The watermark moves only after everything above succeeded. A run that
     // failed halfway must be repeated, not resumed from a position it never
     // reached — Governance §6, never claim to know something you did not.
-    await this.#writeWatermark(repositoryEntity.id, newestCommitAt, observedAt);
+    await this.#writeWatermark(watermarkScope, newestCommitAt, observedAt);
 
     const report: IndexReport = {
       repositoryId: repositoryEntity.id,
@@ -298,6 +355,7 @@ export class RepositoryIndexer {
       branchesRead: branches.length,
       worktreesRead: worktrees.length,
       skipped,
+      lifecycle,
       watermark: newestCommitAt,
       durationMs: performance.now() - started,
     };
@@ -311,12 +369,77 @@ export class RepositoryIndexer {
         relationships: report.relationships,
         commitsRead,
         filesRead,
+        lifecycle: report.lifecycle,
         durationMs: Math.round(report.durationMs),
       },
       `Indexed ${repository.identityKey}`,
     );
 
     return report;
+  }
+
+  /**
+   * Makes what Ferret believes exists agree with what it observed.
+   *
+   * Reads the graph rather than this run's changes, deliberately. An incremental
+   * run reads no commit that mentions a file deleted years ago, so a delta-only
+   * reconciliation would leave every already-wrong entity wrong for ever — the
+   * exact state this found Ferret's own index in, thirteen files deep.
+   *
+   * **A partial observation retires nothing.** Every gate below fails closed and
+   * says why. The failure mode it guards is silent and unrecoverable: a sweep
+   * run against a truncated tree would tombstone most of a large repository, and
+   * the run would look like every successful one.
+   */
+  async #reconcile(
+    repositoryId: string,
+    treeComplete: boolean,
+    options: IndexOptions,
+    now: Date,
+    context: ProviderOperationContext,
+  ): Promise<LifecycleCounts> {
+    const store = this.#lifecycle;
+    const none = (reason: string): LifecycleCounts => {
+      this.#logger?.info(
+        { operation: 'index.lifecycle', repository: repositoryId, skipped: reason },
+        `Lifecycle reconciliation skipped: ${reason}`,
+      );
+      return { retired: 0, reinstated: 0, skippedReason: reason };
+    };
+
+    if (store === undefined) return none('no lifecycle store is configured');
+    if (options.withFiles === false) {
+      return none('the file tree was not read, so presence could not be corroborated');
+    }
+    if (!treeComplete) {
+      return none('the file tree listing was truncated, so absence proves nothing');
+    }
+    if (context.signal?.aborted === true) return none('the run was cancelled');
+
+    const pending = await store.pendingChanges(repositoryId);
+    let retired = 0;
+    let reinstated = 0;
+
+    for (const change of pending) {
+      // Checked per entity rather than per batch: a cancelled run must stop
+      // where it is, and every write so far is independently correct.
+      throwIfAborted(context.signal, 'index.lifecycle');
+
+      if (change.action === 'retire') {
+        if (await store.retire(change.entityId, repositoryId, change.at, now)) retired += 1;
+      } else if (await store.reinstate(change.entityId, now)) {
+        reinstated += 1;
+      }
+    }
+
+    if (retired > 0 || reinstated > 0) {
+      this.#logger?.info(
+        { operation: 'index.lifecycle', repository: repositoryId, retired, reinstated },
+        `Lifecycle reconciled: ${String(retired)} retired, ${String(reinstated)} reinstated`,
+      );
+    }
+
+    return { retired, reinstated, skippedReason: undefined };
   }
 
   async #readWatermark(repositoryId: string): Promise<Readonly<Record<string, unknown>> | undefined> {
@@ -350,6 +473,28 @@ export class RepositoryIndexer {
       now,
     );
   }
+}
+
+/**
+ * The scope a watermark belongs to — issue #19.
+ *
+ * A watermark records how far a *read* got, and `--revision` means two reads of
+ * one repository can be at different places. Sharing one watermark between them
+ * makes each run skip whatever the other had already passed, which loses commits
+ * with nothing failing and no later run going back for them.
+ *
+ * Derived through EPIC-009's identity function so that `derived_artifact`'s
+ * unique `(kind, scope_id)` index keeps holding without a schema change. The
+ * rejected alternative — recording the revision in metadata and forcing a full
+ * read whenever it differs — is simpler, and would re-read all of history every
+ * time someone alternated between two branches.
+ *
+ * The default revision keeps the bare repository id, so watermarks written
+ * before this existed are still found and the upgrade costs no re-read.
+ */
+export function watermarkScopeId(repositoryId: string, revision: string | undefined): string {
+  if (revision === undefined || revision === 'HEAD') return repositoryId;
+  return canonicalId(encodeKeyParts([INDEX_ARTIFACT_KIND, repositoryId, revision]));
 }
 
 function counter(): { record(outcome: string): void; readonly counts: WriteCounts } {
