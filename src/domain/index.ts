@@ -90,7 +90,7 @@ export {
   resetRelationshipTypeRegistry,
   type CanonicalRelationship,
   type RegisterRelationshipTypeOptions,
-  type RelationshipInput,
+  type RelationshipTypeDefinition,
   type RelationshipTypeDefinition,
 } from './relationship.js';
 
@@ -182,3 +182,13 @@ export {
   type SessionCapture,
   type SessionCaptureInput,
 } from './session-capture.js';
+
+export {
+  createSessionCheckpoint,
+  advanceSessionCheckpoint,
+  sessionCheckpointKey,
+  sessionCheckpointInputSchema,
+  type JsonValue,
+  type SessionCheckpoint,
+  type SessionCheckpointInput,
+} from './session-checkpoint.js';
