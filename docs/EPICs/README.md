@@ -124,8 +124,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Evidence & Provenance
 
-- **EPIC-044 — Evidence Store** — P0
-- **EPIC-045 — Source Authority** — P0
+- **EPIC-044 — Evidence Store** — P0 — VALIDATED ([spec](EPIC-044-045-Evidence-Store-And-Source-Authority.md), [evidence](validation/EPIC-044-045-VALIDATION.md))
+- **EPIC-045 — Source Authority** — P0 — VALIDATED ([spec](EPIC-044-045-Evidence-Store-And-Source-Authority.md), [evidence](validation/EPIC-044-045-VALIDATION.md))
 - **EPIC-046 — Confidence & Completeness** — P1
 - **EPIC-047 — Conflict Detection** — P1
 - **EPIC-048 — Answer Traceability** — P0
