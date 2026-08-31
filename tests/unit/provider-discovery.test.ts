@@ -19,9 +19,9 @@ describe('discoverProviders', () => {
     const registry = new ProviderRegistry();
     const loaded: string[] = [];
 
-    const result = await discoverProviders(registry, ['alpha', 'beta'], async (specifier): Promise<ProviderModuleExports> => {
+    const result = await discoverProviders(registry, ['alpha', 'beta'], (specifier): Promise<ProviderModuleExports> => {
       loaded.push(specifier);
-      return { default: provider(`ferret.source.${specifier}`) };
+      return Promise.resolve({ default: provider(`ferret.source.${specifier}`) });
     });
 
     expect(loaded).toEqual(['alpha', 'beta']);
@@ -34,11 +34,11 @@ describe('discoverProviders', () => {
   it('accepts named and multiple provider exports', async () => {
     const registry = new ProviderRegistry();
 
-    const result = await discoverProviders(registry, ['bundle', 'single'], async (specifier) => {
+    const result = await discoverProviders(registry, ['bundle', 'single'], (specifier): Promise<ProviderModuleExports> => {
       if (specifier === 'bundle') {
-        return { providers: [provider('ferret.source.one'), provider('ferret.source.two')] };
+        return Promise.resolve({ providers: [provider('ferret.source.one'), provider('ferret.source.two')] });
       }
-      return { provider: provider('ferret.source.three') };
+      return Promise.resolve({ provider: provider('ferret.source.three') });
     });
 
     expect(result.providers).toEqual([
@@ -52,7 +52,7 @@ describe('discoverProviders', () => {
     const registry = new ProviderRegistry();
     registry.register(provider('ferret.source.existing'));
 
-    const result = await discoverProviders(registry, ['missing'], async () => {
+    const result = await discoverProviders(registry, ['missing'], (): Promise<ProviderModuleExports> => {
       throw new Error('module not installed');
     });
 
@@ -67,9 +67,9 @@ describe('discoverProviders', () => {
     const registry = new ProviderRegistry();
     registry.register(provider('ferret.source.existing'));
 
-    const result = await discoverProviders(registry, ['bad', 'duplicate', 'duplicate'], async (specifier) => {
-      if (specifier === 'bad') return { default: {} as Provider };
-      return { default: provider('ferret.source.existing') };
+    const result = await discoverProviders(registry, ['bad', 'duplicate', 'duplicate'], (specifier): Promise<ProviderModuleExports> => {
+      if (specifier === 'bad') return Promise.resolve({ default: {} as Provider });
+      return Promise.resolve({ default: provider('ferret.source.existing') });
     });
 
     expect(result.providers).toEqual([]);
@@ -85,9 +85,9 @@ describe('discoverProviders', () => {
     const registry = new ProviderRegistry();
     let calls = 0;
 
-    const result = await discoverProviders(registry, ['  '], async () => {
+    const result = await discoverProviders(registry, ['  '], (): Promise<ProviderModuleExports> => {
       calls += 1;
-      return { default: provider('ferret.source.never') };
+      return Promise.resolve({ default: provider('ferret.source.never') });
     });
 
     expect(calls).toBe(0);

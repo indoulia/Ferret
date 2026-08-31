@@ -1,7 +1,7 @@
 import { ErrorCode, FerretError, toFerretError } from '../errors/index.js';
 
 import type { Provider } from './contract.js';
-import { ProviderRegistry } from './registry.js';
+import type { ProviderRegistry } from './registry.js';
 
 /**
  * A provider package may export one provider as its default, or a named
@@ -125,11 +125,18 @@ export async function discoverProviders(
   return { modules, providers, skipped };
 }
 
+// Array.isArray widens a `readonly Provider[]` union member to `any[]`, so the
+// spread that follows it needs a guard that keeps the element type.
+function isProviderList(value: Provider | readonly Provider[]): value is readonly Provider[] {
+  return Array.isArray(value);
+}
+
 function extractProviders(exports: ProviderModuleExports): readonly Provider[] {
   const candidates: Provider[] = [];
   const add = (value: Provider | readonly Provider[] | undefined): void => {
-    if (Array.isArray(value)) candidates.push(...value);
-    else if (value !== undefined) candidates.push(value);
+    if (value === undefined) return;
+    if (isProviderList(value)) candidates.push(...value);
+    else candidates.push(value);
   };
   add(exports.default);
   add(exports.provider);
