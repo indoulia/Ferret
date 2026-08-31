@@ -354,6 +354,41 @@ describe('code parser boundary', () => {
   });
 });
 
+describe('developer identity boundary', () => {
+  const identity = importGraph('identity/index.ts');
+
+  it('opens nothing and stores nothing', () => {
+    // EPIC-036 is handed names, addresses and a `.mailmap` as *text*. A
+    // filesystem or process import here would make classification depend on a
+    // checkout, and a storage one on a database; it depends on neither.
+    // `node:crypto` is reachable and fine — the canonical model hashes ids
+    // with it — so the assertion names what must be absent rather than
+    // demanding a graph with no built-ins at all.
+    const reaching = [...identity.packages].filter((name) =>
+      ['node:fs', 'node:fs/promises', 'node:path', 'node:child_process', 'node:net'].includes(name),
+    );
+    expect(reaching).toStrictEqual([]);
+    const forbidden = [...identity.files].filter(
+      (file) => file.startsWith('storage/') || file.startsWith('git/') || file.startsWith('cli/'),
+    );
+    expect(forbidden).toStrictEqual([]);
+  });
+
+  it('builds on the actor model, which is where the two identity classes live', () => {
+    expect(identity.files).toContain('domain/actor.ts');
+  });
+
+  it('exports nothing that merges', () => {
+    // The one thing that merges is EPIC-009's IdentityStore, which requires
+    // evidence. This module produces that evidence and must not grow a
+    // shortcut around it.
+    const source = readFileSync(resolve(SRC, 'identity/index.ts'), 'utf8');
+    const exported = [...source.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*),$/gm)].map((m) => m[1]);
+    expect(exported.filter((name) => name?.toLowerCase().includes('merge'))).toStrictEqual([]);
+    expect(exported.length).toBeGreaterThan(5);
+  });
+});
+
 describe('code intelligence boundary', () => {
   const code = importGraph('code/index.ts');
 

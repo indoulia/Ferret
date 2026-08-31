@@ -55,6 +55,16 @@ export const RelationshipType = {
 
   // People and agents
   DEVELOPER_AUTHORED_COMMIT: 'developer_authored_commit',
+  /**
+   * A non-human actor authored a commit — EPIC-036.
+   *
+   * Separate from the developer edge rather than widening it. EPIC-009 made the
+   * two identity classes distinct because "who wrote this code" and "which
+   * machine touched this file" are different questions; a single edge that
+   * accepted both would make the distinction unqueryable at exactly the point
+   * it matters.
+   */
+  AGENT_AUTHORED_COMMIT: 'agent_authored_commit',
   DEVELOPER_REVIEWED_PULL_REQUEST: 'developer_reviewed_pull_request',
   AGENT_RAN_SESSION: 'agent_ran_session',
   DEVELOPER_RAN_SESSION: 'developer_ran_session',
@@ -117,6 +127,7 @@ const BUILT_IN: ReadonlyArray<
   [RelationshipType.FILE_HAS_VERSION, [EntityKind.FILE], [EntityKind.FILE_VERSION], false],
 
   [RelationshipType.DEVELOPER_AUTHORED_COMMIT, [EntityKind.DEVELOPER], [EntityKind.COMMIT], false],
+  [RelationshipType.AGENT_AUTHORED_COMMIT, [EntityKind.AGENT], [EntityKind.COMMIT], false],
   [RelationshipType.DEVELOPER_REVIEWED_PULL_REQUEST, [EntityKind.DEVELOPER], [EntityKind.PULL_REQUEST], false],
   [RelationshipType.AGENT_RAN_SESSION, [EntityKind.AGENT], [EntityKind.SESSION], false],
   [RelationshipType.DEVELOPER_RAN_SESSION, [EntityKind.DEVELOPER], [EntityKind.SESSION], false],
