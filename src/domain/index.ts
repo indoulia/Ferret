@@ -194,3 +194,25 @@ export {
   type SessionCheckpoint,
   type SessionCheckpointInput,
 } from './session-checkpoint.js';
+
+export {
+  MAX_STATEMENT_LENGTH,
+  MEMORY_KINDS,
+  MemoryKind,
+  MemoryOrigin,
+  ORIGIN_CONFIDENCE,
+  createEngineeringMemory,
+  engineeringMemoryInputSchema,
+  engineeringMemoryKey,
+  supersede,
+  type EngineeringMemory,
+  type EngineeringMemoryInput,
+  type MemoryEvidence,
+} from './engineering-memory.js';
+
+export {
+  MEMORY_MARKERS,
+  extractMemories,
+  type ExtractOptions,
+  type MemoryMarker,
+} from './memory-extraction.js';
