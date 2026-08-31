@@ -1,4 +1,4 @@
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -42,6 +42,26 @@ function options(): Parameters<typeof describeEngineeringContext>[1] {
   };
 }
 
+/**
+ * Compares two paths as the filesystem sees them.
+ *
+ * Not a string comparison. On Windows the CI runner's temp directory is reached
+ * through its 8.3 short name — `C:\Users\RUNNER~1\...` — while
+ * `git rev-parse --show-toplevel` correctly returns the long form. Both name the
+ * same directory, and asserting on the spelling made a green suite fail on CI
+ * for a difference that is not a defect. `realpath` resolves both to the
+ * canonical form; case is folded because Windows paths are case-insensitive.
+ */
+async function expectSamePath(actual: string | undefined, expected: string): Promise<void> {
+  expect(actual).toBeDefined();
+  const canonical = async (path: string): Promise<string> => {
+    const resolved = await realpath(path);
+    const forward = resolved.replace(/\\/g, '/');
+    return process.platform === 'win32' ? forward.toLowerCase() : forward;
+  };
+  expect(await canonical(actual ?? '')).toBe(await canonical(expected));
+}
+
 /** Every ref and HEAD, so a mutation of any kind would be visible. */
 async function snapshot(path: string): Promise<string> {
   const refs = await git(path, ['show-ref', '--head']).catch(() => '');
@@ -72,9 +92,9 @@ withGit('resolving where we are', () => {
 
     expect(result).toBeDefined();
     expect(result?.repository.identityKey.length).toBeGreaterThan(0);
-    expect(result?.repository.root.replace(/\\/g, '/')).toBe(fixture.path.replace(/\\/g, '/'));
+    await expectSamePath(result?.repository.root, fixture.path);
     // The worktree is the checkout root, not the directory that was asked about.
-    expect(result?.worktree.path.replace(/\\/g, '/')).toBe(fixture.path.replace(/\\/g, '/'));
+    await expectSamePath(result?.worktree.path, fixture.path);
   });
 
   it('answers with nothing outside a repository, rather than failing — AC-2', async () => {
