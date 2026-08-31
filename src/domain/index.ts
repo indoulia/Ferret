@@ -36,8 +36,8 @@ export {
   issueAttributes,
   pullRequestAttributes,
   releaseAttributes,
-  reviewAttributes,
   repositoryAttributes,
+  reviewAttributes,
   sessionAttributes,
   worktreeAttributes,
   type EntityAttributes,
@@ -183,10 +183,12 @@ export {
 } from './session-capture.js';
 
 export {
-  createSessionCheckpoint,
   advanceSessionCheckpoint,
+  createSessionCheckpoint,
+  serializeSessionCheckpoint,
   sessionCheckpointKey,
   sessionCheckpointInputSchema,
+  verifySessionCheckpointIntegrity,
   type JsonValue,
   type SessionCheckpoint,
   type SessionCheckpointInput,
