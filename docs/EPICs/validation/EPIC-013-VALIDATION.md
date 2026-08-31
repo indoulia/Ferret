@@ -86,3 +86,8 @@ export, and both now record why.
 - **Trust is entirely the caller's.** A provider module is application code and
   runs with full privileges the moment it is imported. Discovery makes that
   explicit; it does not sandbox it.
+
+## Suite
+
+`59 files, 1076 passed, 288 skipped` with the database suites skipped, which is
+the `verify` job's configuration. `npm audit --omit=dev`: 0 vulnerabilities.
