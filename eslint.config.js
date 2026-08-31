@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'spikes/**', 'coverage/**', '.tokensave/**'],
+    ignores: ['dist/**', 'node_modules/**', 'spikes/**', 'coverage/**', '.tokensave/**', '.local/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
