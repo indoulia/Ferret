@@ -4,6 +4,7 @@ import {
   Capability,
   CapabilitySupport,
   ProviderRegistry,
+  createRuntime,
   isContentParser,
   ParserFramework,
   ParserSupport,
@@ -121,5 +122,42 @@ describe('composing the code parser through discovery', () => {
     expect(result.skipped).toHaveLength(1);
     expect(result.skipped[0]?.reason).toBe('unavailable');
     expect(registry.supports(Capability.PARSER).support).toBe(CapabilitySupport.UNAVAILABLE);
+  });
+});
+
+describe('composing through a real runtime lifecycle', () => {
+  it('registers the parser only when discovery runs before the runtime starts', async () => {
+    // The regression. A registry refuses providers once the runtime has
+    // initialized, so discovery inside `runtime.run` registers nothing, the
+    // parser capability is never available, and content indexing reads no files
+    // while reporting a successful run. Every assertion in this file above uses
+    // a bare registry and would have passed with that defect in place; a
+    // dogfooding run is what found it.
+    const runtime = createRuntime({ providers: [] });
+
+    await discoverProviders(runtime.providers, [FERRET_PARSERS_MODULE], loadFerretParsers);
+    await runtime.run(() => {
+      expect(runtime.providers.supports(Capability.PARSER).support).toBe(CapabilitySupport.SUPPORTED);
+    });
+  });
+
+  it('refuses a parser discovered after the runtime has started', async () => {
+    // Asserted rather than assumed, because it is the whole reason the order
+    // above matters. Discovery is best-effort, so this surfaces as a skip
+    // rather than a throw — which is precisely why the defect was silent.
+    const runtime = createRuntime({ providers: [] });
+
+    await runtime.run(async () => {
+      const late = await discoverProviders(
+        runtime.providers,
+        [FERRET_PARSERS_MODULE],
+        loadFerretParsers,
+      );
+      expect(late.providers).toStrictEqual([]);
+      expect(late.skipped[0]?.detail).toContain('after the runtime has initialized');
+      expect(runtime.providers.supports(Capability.PARSER).support).toBe(
+        CapabilitySupport.UNAVAILABLE,
+      );
+    });
   });
 });

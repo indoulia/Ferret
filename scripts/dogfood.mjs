@@ -34,6 +34,14 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CLI = fileURLToPath(new URL('../dist/cli/main.js', import.meta.url));
 const checkOnly = process.argv.includes('--check');
+/**
+ * Index with EPIC-108 content indexing on, and check what it added.
+ *
+ * Off by default here for the same reason it is off by default in the CLI: it
+ * reads and parses every file, which is a materially different cost from a tree
+ * listing. `npm run dogfood -- --content` is AC-14's run.
+ */
+const withContent = process.argv.includes('--content');
 
 /** Findings, so the run reports all of them rather than only the first. */
 const findings = [];
@@ -60,6 +68,31 @@ function git(...args) {
  * model them as files — a symlink's blob holds a target path, not content.
  * Excluding them here rather than tolerating a mismatch keeps the check strict.
  */
+/**
+ * The repository entity that is *this* checkout.
+ *
+ * Matched on the origin URL Ferret **recorded**, not on an identity key
+ * re-derived here. Ferret's identity rules are EPIC-022's, and a second
+ * implementation of them in the oracle would eventually disagree with the first
+ * — which is the class of defect this script exists to catch, not to contain.
+ * Falls back to the Git directory for a checkout with no remote, which is how
+ * Ferret identifies one too.
+ */
+function thisCheckout(entities) {
+  let origin = '';
+  try {
+    origin = git('config', '--get', 'remote.origin.url').trim();
+  } catch {
+    origin = '';
+  }
+  if (origin.length > 0) {
+    const byRemote = entities.find((entity) => entity.attributes?.remoteUrl === origin);
+    if (byRemote !== undefined) return byRemote;
+  }
+  const gitDir = git('rev-parse', '--absolute-git-dir').trim().split(String.fromCharCode(92)).join('/');
+  return entities.find((entity) => entity.source?.id === gitDir);
+}
+
 function trackedFiles() {
   const lines = git('ls-files', '-s', '-z').split('\0').filter((line) => line.length > 0);
   const files = new Set();
@@ -114,7 +147,11 @@ async function main() {
 
   if (!checkOnly) {
     process.stderr.write('Indexing this repository with the built CLI...\n');
-    execFileSync(process.execPath, [CLI, 'index', ROOT], { stdio: 'inherit', cwd: ROOT });
+    execFileSync(
+      process.execPath,
+      [CLI, 'index', ROOT, ...(withContent ? ['--content'] : [])],
+      { stdio: 'inherit', cwd: ROOT },
+    );
     process.stderr.write('\n');
   }
 
@@ -130,9 +167,23 @@ async function main() {
       pass('content notice');
     }
 
-    const repository = sample.entities?.[0];
+    // **This** repository, not whichever one came back first.
+    //
+    // A database that has indexed anything else — a fixture from an earlier
+    // run, a second checkout — holds more than one `repository` entity, and
+    // taking `entities[0]` scopes every check below to an arbitrary one while
+    // comparing it against *this* checkout's `git ls-files`. Every file of the
+    // other repository then reads as a phantom. Found by asking Ferret which
+    // repositories it held, which is the point of this script.
+    const all = await call(client, 'ferret_find', { kind: 'repository', limit: 50 });
+    const repository = thisCheckout(all.entities ?? []);
     if (repository === undefined) {
-      fail('repository indexed', 'Ferret holds no repository entity. Nothing else can be checked.');
+      fail(
+        'repository indexed',
+        `Ferret holds no entity for this checkout. It holds ${(all.entities ?? []).length}: ` +
+          `${(all.entities ?? []).map((e) => e.source?.id).slice(0, 3).join(', ')}. ` +
+          'Checking one of those would compare one repository against another.',
+      );
       return;
     }
     pass('repository indexed', repository.attributes?.name);
@@ -169,6 +220,68 @@ async function main() {
       );
     } else {
       pass('no phantom files', `${live.length} active`);
+    }
+
+    // -- What content indexing added, checked against the repository. ------
+    //
+    // EPIC-108 AC-14. Only when the run was asked for content; a metadata run
+    // must not be judged for lacking what it never read. The oracle is the same
+    // one the rest of this script uses: `git` can answer these independently,
+    // so a disagreement is a defect and not a matter of opinion.
+    if (withContent) {
+      // Structure is recorded on files, and on the right ones. Every TypeScript
+      // file Ferret holds must carry the media type EPIC-030 derives; a file
+      // without it was written from a tree listing and never opened.
+      const sources = live.filter((path) => path.endsWith('.ts') && !path.startsWith('spikes/'));
+      const undescribed = sources.filter(
+        (path) => indexed.get(path)?.attributes?.mediaType === undefined,
+      );
+      if (sources.length === 0) {
+        fail('structure recorded', 'no TypeScript files are indexed, so nothing was checked.');
+      } else if (undescribed.length > 0) {
+        fail(
+          'structure recorded',
+          `${undescribed.length} of ${sources.length} source files carry no EPIC-030 structure: ` +
+            `${undescribed.slice(0, 3).join(', ')}`,
+        );
+      } else {
+        pass('structure recorded', `${sources.length} source files`);
+      }
+
+      // Symbols exist, and they are Ferret's own. `RepositoryIndexer` is a
+      // class this repository declares exactly once, so a lookup that finds it
+      // proves the whole path — content read, parsed, symbols built, stored.
+      const symbols = await call(client, 'ferret_find', {
+        kind: 'code_symbol',
+        attributes: { name: 'RepositoryIndexer' },
+        limit: 10,
+      });
+      const declared = (symbols.entities ?? []).filter(
+        (row) => row.attributes?.name === 'RepositoryIndexer',
+      );
+      if (declared.length === 0) {
+        fail(
+          'symbols indexed',
+          'Ferret holds no `RepositoryIndexer` symbol, which its own source declares.',
+        );
+      } else {
+        pass('symbols indexed', `${declared.length} declaration(s) of RepositoryIndexer`);
+      }
+
+      // A symbol must point at the file that actually declares it.
+      const wrong = declared.filter(
+        (row) =>
+          typeof row.attributes?.path === 'string' &&
+          !existsSync(join(ROOT, row.attributes.path)),
+      );
+      if (wrong.length > 0) {
+        fail(
+          'symbols point at real files',
+          `${wrong.length} symbol(s) name a path the repository does not contain.`,
+        );
+      } else {
+        pass('symbols point at real files');
+      }
     }
 
     // ...and the other direction: a tracked file Ferret does not know about.

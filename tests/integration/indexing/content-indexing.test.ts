@@ -7,12 +7,16 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
 
 import {
+  ContentUnavailable,
+  ErrorCode,
   ParserFramework,
   ProviderRegistry,
   RepositoryIndexer,
   createNullLogger,
+  type ContentReader,
   type DiscoveredRepository,
   type IndexReport,
+  type IndexableSource,
   type IndexerDependencies,
   type ProviderOperationContext,
 } from '../../../src/index.js';
@@ -395,5 +399,138 @@ describeContent('with content indexing off — AC-1', () => {
     // The path and extension a tree listing gives, and nothing content-derived.
     expect(attributes['path']).toBe('src/box.ts');
     expect(attributes['mediaType']).toBeUndefined();
+  });
+});
+
+describeContent('failure, cancellation and the guarantees they must not break — AC-10', () => {
+  it('leaves the watermark where it was when the content stage was cancelled', async () => {
+    // EPIC-031 AC-6, unchanged and now covering one more stage. A run that
+    // failed halfway must be repeated, not resumed from a position it never
+    // reached: the watermark moves only after every stage succeeded.
+    const fixture = await repository('cancelled');
+    await commit(fixture, 'src/box.ts', SOURCE);
+
+    const before = await index(fixture, false);
+    expect(before.watermark).toBeDefined();
+
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      new RepositoryIndexer(dependencies()).index(
+        fixture.discovered,
+        { withContent: true },
+        { ...context, signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ code: ErrorCode.INTERRUPTED });
+
+    // Re-read through a successful metadata run: the recorded position is the
+    // one the earlier run left, not one the cancelled run claimed.
+    const after = await index(fixture, false);
+    expect(after.watermark).toBe(before.watermark);
+  });
+
+  it('retires nothing and reinstates nothing when a content run is cancelled', async () => {
+    const fixture = await repository('cancelled-lifecycle');
+    await commit(fixture, 'src/box.ts', SOURCE);
+    const seeded = await index(fixture);
+    const before = await contentRows(seeded.repositoryId);
+
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      new RepositoryIndexer(dependencies()).index(
+        fixture.discovered,
+        { withContent: true },
+        { ...context, signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ code: ErrorCode.INTERRUPTED });
+
+    expect(await contentRows(seeded.repositoryId)).toBe(before);
+  });
+
+  it('retires nothing when the tree listing was truncated, with content enabled', async () => {
+    // EPIC-032's rule, unchanged and now exercised with a content stage
+    // present. A partial view of a tree cannot be allowed to condemn the files
+    // it did not reach, and content is not evidence of presence or absence.
+    const fixture = await repository('truncated');
+    await commit(fixture, 'src/one.ts', 'export function one(): void {}\n');
+    await commit(fixture, 'src/two.ts', 'export function two(): void {}\n');
+    await index(fixture);
+
+    const truncating: IndexableSource = {
+      listWorktrees: (repo, ctx) => provider.listWorktrees(repo, ctx),
+      listBranches: (repo, request, ctx) => provider.listBranches(repo, request, ctx),
+      readHistory: (repo, request, ctx) => provider.readHistory(repo, request, ctx),
+      listFiles: async (repo, request, ctx) => {
+        const listing = await provider.listFiles(repo, { ...request, limit: 1 }, ctx);
+        return { entries: listing.entries, cursor: 'more' };
+      },
+      emit: (repo) => provider.emit(repo),
+      emitGraph: (repo, parts) => provider.emitGraph(repo, parts),
+      emitHistory: (repo, commits, options) => provider.emitHistory(repo, commits, options),
+      emitFiles: (repo, entries, options) => provider.emitFiles(repo, entries, options),
+    };
+
+    const report = await new RepositoryIndexer({ ...dependencies(), source: truncating }).index(
+      fixture.discovered,
+      { withContent: true },
+      context,
+    );
+
+    expect(report.lifecycle.retired).toBe(0);
+    expect(report.lifecycle.skippedReason).toContain('truncated');
+  });
+
+  it('leaves the other file\'s symbols untouched when only one is parsed', async () => {
+    // §8.9: symbol reconciliation is per file and only for files parsed on this
+    // run. A file the content stage did not reach has its symbols left exactly
+    // as they are.
+    const fixture = await repository('per-file-isolation');
+    await commit(fixture, 'src/one.ts', 'export function one(): void {}\n');
+    await commit(fixture, 'src/two.ts', 'export function two(): void {}\n');
+    const first = await index(fixture);
+
+    await commit(fixture, 'src/one.ts', 'export function oneChanged(): void {}\n');
+    const second = await index(fixture);
+
+    expect(second.content?.filesRead).toBe(1);
+    expect(await symbolsOf(first.repositoryId, 'src/two.ts')).toStrictEqual([
+      { name: 'two', lifecycle: 'active' },
+    ]);
+  });
+
+  it('completes the run when a file cannot be read, counting it on its own', async () => {
+    // One unreadable file costs exactly itself. The run is a success with a
+    // hole in it that the report names, rather than a failure.
+    const fixture = await repository('unreadable-file');
+    await commit(fixture, 'src/box.ts', SOURCE);
+
+    const failing: ContentReader = {
+      readFileContent: (repo, request, ctx) =>
+        request.path === 'src/box.ts'
+          ? Promise.resolve({
+              read: false,
+              reason: ContentUnavailable.UNREADABLE,
+              detail: 'forced failure',
+            })
+          : provider.readFileContent(repo, request, ctx),
+    };
+
+    const report = await new RepositoryIndexer({ ...dependencies(), content: failing }).index(
+      fixture.discovered,
+      { withContent: true },
+      context,
+    );
+
+    expect(report.content?.filesFailed).toBe(1);
+    // The invariant still holds around the hole: the file that could not be
+    // read is in neither `filesParsed` nor `filesUnparsed`, because Ferret
+    // never had its bytes.
+    expect(report.content?.filesRead).toBe(
+      (report.content?.filesParsed ?? 0) + (report.content?.filesUnparsed ?? 0),
+    );
+    expect(await symbolsOf(report.repositoryId, 'src/box.ts')).toStrictEqual([]);
+    // The run succeeded: the watermark moved and the report is a report.
+    expect(report.watermark).toBeDefined();
   });
 });

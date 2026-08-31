@@ -18,6 +18,7 @@ import {
   RepositoryOperation,
   assertSupported,
   discoverProviders,
+  type ProviderDiscoveryResult,
 } from '../../providers/index.js';
 import { createRuntime, type FerretRuntime } from '../../runtime/index.js';
 import {
@@ -91,6 +92,17 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
           ...(globals.logLevel === undefined ? {} : { logLevel: globals.logLevel }),
         });
 
+        // Discovery happens **before** the runtime starts, and the ordering is
+        // load-bearing rather than tidy: `ProviderRegistry` refuses to register
+        // anything once the runtime has initialized, so a parser composed inside
+        // `runtime.run` is a parser that never registers — and content indexing
+        // would then read nothing while reporting success. That is exactly the
+        // silent no-op EPIC-108 §8.5 requires a positive test to rule out, and it
+        // is what a dogfooding run caught.
+        const discovery = options.content
+          ? await discoverProviders(runtime.providers, [FERRET_PARSERS_MODULE], loadFerretParsers)
+          : undefined;
+
         const report = await runtime.run(async (context) => {
           // Asked for by capability, never by name. This command is the only
           // place that *constructs* a Git provider; everything after this line
@@ -111,12 +123,13 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
           // re-parse gate are both derived artefacts, which is exactly why
           // neither needed a table of its own.
           const compatibility = new CompatibilityService(storage.db, storage.pool);
-          const contentPorts = await composeContent(
+          const contentPorts = composeContent(
             options.content,
             runtime,
             source,
             storage,
             compatibility,
+            discovery,
             context.logger,
           );
 
@@ -170,20 +183,21 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
  * Returns the ports to hand the indexer, which is nothing at all when content
  * was not asked for or cannot be served.
  */
-async function composeContent(
+function composeContent(
   requested: boolean,
   runtime: FerretRuntime,
   source: GitSourceProvider,
   storage: { db: FerretDatabase },
   artifacts: ContentArtifactStore,
+  discovery: ProviderDiscoveryResult | undefined,
   logger: Logger,
-): Promise<{
+): {
   content?: ContentReader;
   symbols?: SymbolIndexPort;
   parser?: ParserFramework;
   artifacts?: ContentArtifactStore;
-}> {
-  if (!requested) return {};
+} {
+  if (!requested || discovery === undefined) return {};
 
   // Asked before it is called, never discovered by exception. A version-1
   // provider lands here too: the operation was introduced at version 2, and
@@ -206,14 +220,6 @@ async function composeContent(
     return {};
   }
 
-  // The parser is loaded here and nowhere else, on demand, for a run that asked
-  // for it. `ferret status` and `ferret config` never reach this line and never
-  // pay for the grammar runtime.
-  const discovery = await discoverProviders(
-    runtime.providers,
-    [FERRET_PARSERS_MODULE],
-    loadFerretParsers,
-  );
   for (const skip of discovery.skipped) {
     logger.warn(
       { operation: 'index.content.compose', module: skip.module, reason: skip.reason, detail: skip.detail },
@@ -284,6 +290,32 @@ function summarize(report: IndexReport): string {
       `skipped           ${[...reasons].map(([reason, count]) => `${String(count)} ${reason}`).join(', ')}`,
     );
   }
+  // Reported only when the stage ran. A run with content off says nothing here
+  // rather than printing zeroes, because "not asked for" and "found nothing"
+  // are different facts (§8.8, Governance §6).
+  const content = report.content;
+  if (content !== undefined) {
+    lines.push(
+      `content           ${String(content.filesRead)} read, ${String(content.filesSkippedUnchanged)} unchanged, ${String(content.filesFailed)} unreadable, of ${String(content.filesConsidered)} considered`,
+    );
+    lines.push(
+      `parsed            ${String(content.filesParsed)} parsed, ${String(content.filesUnparsed)} unparsed`,
+    );
+    // The breakdown, so "how much of this repository is unparsed, and why"
+    // stays a lookup rather than an investigation (§12). Only the reasons that
+    // actually occurred: a wall of zeroes hides the one number that is not.
+    const reasons = Object.entries(content.unparsedReasons).filter(([, count]) => count > 0);
+    if (reasons.length > 0) {
+      lines.push(
+        `unparsed by       ${reasons.map(([reason, count]) => `${String(count)} ${reason}`).join(', ')}`,
+      );
+    }
+    const { created, updated, unchanged, tombstoned, reinstated } = content.symbols;
+    lines.push(
+      `symbols           ${String(created)} new, ${String(updated)} changed, ${String(unchanged)} unchanged, ${String(tombstoned)} deleted, ${String(reinstated)} restored`,
+    );
+  }
+
   if (report.watermark !== undefined) lines.push(`watermark         ${report.watermark}`);
   lines.push(`took              ${String(Math.round(report.durationMs))}ms`);
   return lines.join('\n');
