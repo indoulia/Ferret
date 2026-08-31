@@ -195,6 +195,74 @@ export interface BranchPage extends Page<DiscoveredBranch> {
   readonly defaultRef: string | undefined;
 }
 
+/**
+ * Why a file's content could not be produced.
+ *
+ * A verdict, not an exception. "This blob is bigger than Ferret will hold" and
+ * "the tree named an object the store does not have" are *facts about the
+ * repository*, and a caller indexing ten thousand files needs to count them
+ * rather than catch them. What still throws is everything that means the run
+ * itself is in trouble: cancellation, a timeout, a provider that is not there.
+ */
+export const ContentUnavailable = {
+  /** Over the requested byte bound. The bytes were never fully materialised. */
+  TOO_LARGE: 'too-large',
+  /**
+   * The source has no content for that object.
+   *
+   * A pruned object, a listing that has gone stale, or an object that exists
+   * and is not a file's content. Providers are not required to tell those
+   * apart — Git cannot — so the detail carries whatever the source said.
+   */
+  NOT_FOUND: 'not-found',
+  /** The source failed for some other reason, which the detail names. */
+  UNREADABLE: 'unreadable',
+} as const;
+
+export type ContentUnavailable = (typeof ContentUnavailable)[keyof typeof ContentUnavailable];
+
+/**
+ * A request for one file's bytes, addressed the way `listFiles` answered.
+ *
+ * The **object id is the address**. A path is carried for diagnostics and for
+ * the parser's benefit, but it is not what is looked up: resolving a path again
+ * would re-ask a question `listFiles` already answered, and would answer it
+ * against whatever the source holds *now* rather than at the revision being
+ * indexed.
+ */
+export interface FileContentRequest {
+  /** Repository-relative path, as `listFiles` reported it. */
+  readonly path: string;
+  /** The content's object id, as `listFiles` reported it. */
+  readonly oid: string;
+  /** The revision the entry was listed at. Default `HEAD`. */
+  readonly revision?: string;
+  /**
+   * Bytes the caller will accept.
+   *
+   * A ceiling the caller may lower, never raise: a provider applies its own
+   * bound as well, and the smaller of the two wins. The bound is enforced
+   * *before the bytes are materialised* — a provider that returns 400 MB in
+   * order to let the caller reject it has already paid the cost the bound
+   * exists to avoid.
+   */
+  readonly maxBytes?: number;
+}
+
+export type FileContent =
+  | {
+      readonly read: true;
+      /** The source's bytes, unchanged. Never decoded and re-encoded. */
+      readonly bytes: Uint8Array;
+      readonly sizeBytes: number;
+    }
+  | {
+      readonly read: false;
+      readonly reason: ContentUnavailable;
+      /** The source's own words, for a log line an operator can act on. */
+      readonly detail: string;
+    };
+
 /** Operation names, for a provider declaring partial support (EPIC-011 AC-4). */
 export const RepositoryOperation = {
   DISCOVER: 'discoverRepositories',
@@ -203,6 +271,15 @@ export const RepositoryOperation = {
   LIST_BRANCHES: 'listBranches',
   READ_HISTORY: 'readHistory',
   LIST_FILES: 'listFiles',
+  /**
+   * Read one file's bytes at a revision — EPIC-108, introduced at capability
+   * version 2.
+   *
+   * A provider declaring version 1 never supports this, whatever its
+   * `operations` field says or omits. `CAPABILITY_OPERATION_VERSIONS` in
+   * `capabilities.ts` is what enforces it.
+   */
+  READ_CONTENT: 'readFileContent',
 } as const;
 
 export type RepositoryOperation =
@@ -211,10 +288,15 @@ export type RepositoryOperation =
 /**
  * What a `source.repository` provider implements.
  *
- * Two operations, separately declarable: a provider that can describe a
- * repository it is pointed at, but cannot search a filesystem for one — a hosted
- * provider, for instance — declares only `describeRepository`, and a caller
- * asks before calling rather than discovering by exception.
+ * Separately declarable operations: a provider that can describe a repository it
+ * is pointed at, but cannot search a filesystem for one — a hosted provider, for
+ * instance — declares only `describeRepository`, and a caller asks before
+ * calling rather than discovering by exception.
+ *
+ * The optional members are the ones a provider may genuinely not have. A
+ * required method cannot express "this source has no content to read"; an
+ * optional one paired with `supports()` can, and that is the difference between
+ * a metadata-only index and a missing-method crash.
  */
 export interface RepositorySource {
   discoverRepositories(
@@ -244,4 +326,37 @@ export interface RepositorySource {
     request: PageRequest,
     context: ProviderOperationContext,
   ): Promise<BranchPage>;
+
+  /**
+   * One file's bytes, at the revision it was listed at — EPIC-108 §8.3.
+   *
+   * **Optional, and it must stay optional.** The capability version went to 2
+   * when this was added and the minimum stayed at 1, so a provider built against
+   * version 1 remains valid; making this required would break that provider at
+   * compile time and make the version span a fiction. A caller asks
+   * `supports(capability, RepositoryOperation.READ_CONTENT)` and takes the
+   * metadata-only path when the answer is no, in the same shape as the indexer's
+   * optional lifecycle port — a source that cannot do something must not be made
+   * to pretend.
+   *
+   * Three obligations on an implementation:
+   *
+   * - **Read the revision, not the working tree.** Content is read for the
+   *   revision being indexed. Reading a working copy answers a different
+   *   question and is wrong on a bare repository, on `--revision`, and on any
+   *   checkout with uncommitted edits.
+   * - **Bound before materialising.** `maxBytes` is a ceiling on what is ever
+   *   held, not a length to check afterwards.
+   * - **Return bytes, never text.** A repository holds files that are not UTF-8.
+   *   Decoding and re-encoding hands a parser bytes the repository does not
+   *   contain and changes what a content hash covers.
+   *
+   * Cancellation propagates through `context.signal` and throws; the outcomes
+   * that are facts about the repository come back as {@link FileContent}.
+   */
+  readFileContent?(
+    repository: DiscoveredRepository,
+    request: FileContentRequest,
+    context: ProviderOperationContext,
+  ): Promise<FileContent>;
 }

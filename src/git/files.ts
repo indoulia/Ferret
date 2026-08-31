@@ -2,7 +2,7 @@ import { ErrorCode, FerretError } from '../errors/index.js';
 import { extensionOf } from '../files/index.js';
 
 import { assertSafeRevision } from './history.js';
-import { runGit, type GitRunOptions } from './runner.js';
+import { runGit, runGitBytes, type GitRunOptions } from './runner.js';
 
 /**
  * Listing the files a repository holds at a revision.
@@ -159,6 +159,116 @@ function kindOf(mode: string, type: string): TreeEntryKind {
 function boundedPath(value: string): string {
   // eslint-disable-next-line no-control-regex
   return value.replace(/[\u0000-\u001F\u007F]/g, '').slice(0, MAX_PATH).replace(/\\/g, '/');
+}
+
+/**
+ * Reading the bytes a revision holds at a path — EPIC-108 §8.3.
+ *
+ * Against the **object store**, never the working tree. The indexer indexes a
+ * *revision*; reading the working copy would answer a different question, and
+ * would be wrong on any run with `--revision`, on a bare repository, and on a
+ * checkout with uncommitted edits. `git cat-file blob <oid>` reads exactly the
+ * object `listFiles` reported, which is also why no path is passed to Git here:
+ * the object id is the address, and it cannot be made to name a different file.
+ */
+
+/**
+ * The largest blob Ferret will read in one call.
+ *
+ * 8 MiB, deliberately above EPIC-024's 4 MiB parse bound rather than equal to
+ * it. The two bounds answer different questions and the order matters: this one
+ * says "Ferret will not hold this much of a repository in memory", and
+ * EPIC-024's says "this is too big to extract from". Setting them equal would
+ * make the second unreachable, and `too-large` would stop appearing as an
+ * unparsed reason for the files it was written for.
+ */
+export const MAX_BLOB_BYTES = 8 * 1024 * 1024;
+
+/** Why a blob could not be produced. */
+export const BlobUnavailable = {
+  /** Over {@link MAX_BLOB_BYTES}. The bytes were never fully materialised. */
+  TOO_LARGE: 'too-large',
+  /**
+   * Git has no blob for this object id.
+   *
+   * Covers a pruned or absent object *and* an object that is not a blob, and
+   * the two are deliberately not separated: `git cat-file blob` answers both
+   * with the same `bad file`, and inventing a distinction its output does not
+   * support would be manufacturing certainty. The detail carries Git's own
+   * words.
+   */
+  NOT_FOUND: 'not-found',
+  /** Git failed for some other reason, which the detail names. */
+  UNREADABLE: 'unreadable',
+} as const;
+
+export type BlobUnavailable = (typeof BlobUnavailable)[keyof typeof BlobUnavailable];
+
+export type BlobContent =
+  | { readonly read: true; readonly bytes: Uint8Array; readonly sizeBytes: number }
+  | { readonly read: false; readonly reason: BlobUnavailable; readonly detail: string };
+
+export interface ReadBlobOptions extends Omit<GitRunOptions, 'maxBufferBytes' | 'allowFailure'> {
+  /** The object id `listFiles` returned for this entry. */
+  readonly oid: string;
+  /** Bytes accepted. Default {@link MAX_BLOB_BYTES}. */
+  readonly maxBytes?: number;
+}
+
+/** A Git object id, and nothing that could be read as an option or a revision. */
+const OID = /^[0-9a-f]{7,64}$/;
+
+/**
+ * Reads one blob's bytes.
+ *
+ * Returns a verdict rather than throwing for the two outcomes that are facts
+ * about the repository — the object is missing, or it is larger than Ferret
+ * will hold. Cancellation and a timeout still throw, because a run that was
+ * interrupted must fail rather than report a short read as success.
+ */
+export async function readBlob(options: ReadBlobOptions): Promise<BlobContent> {
+  const maxBytes = options.maxBytes ?? MAX_BLOB_BYTES;
+  if (!OID.test(options.oid)) {
+    // Never interpolated into a revision expression and never passed as a path.
+    // An id that is not an id is refused here rather than handed to Git, where
+    // `--upload-pack=...` would be an option rather than an object.
+    return {
+      read: false,
+      reason: BlobUnavailable.NOT_FOUND,
+      detail: 'The object id is not a Git object id',
+    };
+  }
+
+  const result = await runGitBytes(['cat-file', 'blob', options.oid], {
+    ...options,
+    maxOutputBytes: maxBytes,
+  });
+
+  if (result.truncated) {
+    return {
+      read: false,
+      reason: BlobUnavailable.TOO_LARGE,
+      detail: `The blob is larger than the ${String(maxBytes)}-byte read bound`,
+    };
+  }
+  if (result.exitCode !== 0) {
+    const detail = firstStderrLine(result.stderr);
+    // "No such object" and "that object is not a blob" are one message in
+    // Git — `fatal: git cat-file <oid>: bad file` for both — so they are one
+    // reason here. Anything else is a fault rather than a fact about the
+    // repository, and is reported as such.
+    if (/bad file|not a valid object|could not get object info|bad object/i.test(detail)) {
+      return { read: false, reason: BlobUnavailable.NOT_FOUND, detail };
+    }
+    return { read: false, reason: BlobUnavailable.UNREADABLE, detail };
+  }
+
+  return { read: true, bytes: result.stdout, sizeBytes: result.stdout.length };
+}
+
+function firstStderrLine(stderr: string): string {
+  const line = stderr.split('\n', 1)[0]?.trim() ?? '';
+  return line.length > 0 ? line.slice(0, 500) : 'git reported no detail';
 }
 
 /**

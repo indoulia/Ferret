@@ -17,14 +17,19 @@ export {
   type RepositoryIdentity,
 } from './identity.js';
 export {
+  BlobUnavailable,
+  MAX_BLOB_BYTES,
   MAX_FILES_PER_READ,
   TreeEntryKind,
   extensionOf,
   gitContentHash,
   listFiles,
   parseTree,
+  readBlob,
+  type BlobContent,
   type FileListing,
   type ListFilesOptions,
+  type ReadBlobOptions,
   type TreeEntry,
 } from './files.js';
 export {
@@ -53,7 +58,17 @@ export {
   createGitSourceProvider,
   type GitProviderOptions,
 } from './provider.js';
-export { GIT_SAFETY_CONFIG, GIT_STRIPPED_ENV, runGit, scrubEnvironment, type GitResult, type GitRunOptions } from './runner.js';
+export {
+  GIT_SAFETY_CONFIG,
+  GIT_STRIPPED_ENV,
+  runGit,
+  runGitBytes,
+  scrubEnvironment,
+  type GitBytesOptions,
+  type GitBytesResult,
+  type GitResult,
+  type GitRunOptions,
+} from './runner.js';
 
 export {
   MAX_SAMPLED_PATHS,

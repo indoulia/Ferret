@@ -1,0 +1,125 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  Capability,
+  CapabilitySupport,
+  ProviderRegistry,
+  isContentParser,
+  ParserFramework,
+  ParserSupport,
+  type Provider,
+} from '../../../src/index.js';
+// `discoverProviders` ships from `@indoulia/ferret/providers`, not the package
+// root, and is imported from where it is published rather than added to the
+// root barrel to suit a test.
+import { discoverProviders } from '../../../src/providers/index.js';
+import {
+  FERRET_PARSERS_MODULE,
+  loadFerretParsers,
+} from '../../../src/cli/commands/parser-composition.js';
+
+/**
+ * EPIC-108 AC-13 — the positive half of the boundary decision.
+ *
+ * `boundaries.test.ts` proves the CLI's static graph carries no parser and no
+ * grammar runtime. On its own that is satisfied just as well by a composition
+ * that silently does nothing, which is the failure mode this file exists to
+ * rule out: an assertion that passes by *invisibility* is weaker than one that
+ * passes by *absence*.
+ *
+ * So this proves the other direction. The parser really is loaded, through
+ * EPIC-013 discovery, from the package's own published subpath, and it is then
+ * reached **by capability** rather than by name — which is what makes it a
+ * composed provider rather than an import with extra steps.
+ */
+
+describe('composing the code parser through discovery', () => {
+  it('loads Ferret\'s parser subpath and registers a provider', async () => {
+    const registry = new ProviderRegistry();
+
+    const result = await discoverProviders(registry, [FERRET_PARSERS_MODULE], loadFerretParsers);
+
+    expect(result.skipped).toStrictEqual([]);
+    expect(result.modules).toStrictEqual([FERRET_PARSERS_MODULE]);
+    expect(result.providers).toHaveLength(1);
+    expect(registry.has(result.providers[0] ?? '')).toBe(true);
+  });
+
+  it('makes the parser capability selectable, by capability and not by name', async () => {
+    // The property that distinguishes composition from an import. Nothing after
+    // this line names the code parser; the registry is asked for `parser` and
+    // hands back whatever offers it.
+    const registry = new ProviderRegistry();
+    await discoverProviders(registry, [FERRET_PARSERS_MODULE], loadFerretParsers);
+
+    const verdict = registry.supports(Capability.PARSER);
+    expect(verdict.support).toBe(CapabilitySupport.SUPPORTED);
+    expect(verdict.declaredVersion).toBe(1);
+
+    const provider: Provider | undefined = registry.forCapability(Capability.PARSER);
+    expect(provider).toBeDefined();
+    expect(isContentParser(provider)).toBe(true);
+  });
+
+  it('produces a framework that actually claims a TypeScript file', async () => {
+    // Registration is not the same as usefulness. Without this, a provider that
+    // registered and claimed nothing would satisfy every assertion above and
+    // still leave content indexing doing no work at all.
+    const registry = new ProviderRegistry();
+    await discoverProviders(registry, [FERRET_PARSERS_MODULE], loadFerretParsers);
+
+    const framework = new ParserFramework({ registry });
+    const parser = framework.select({
+      path: 'src/app.ts',
+      mediaType: 'text/x-typescript',
+      binary: false,
+      sizeBytes: 42,
+    });
+
+    expect(parser).toBeDefined();
+    expect(parser?.supports({
+      path: 'src/app.ts',
+      mediaType: 'text/x-typescript',
+      binary: false,
+      sizeBytes: 42,
+    })).toBe(ParserSupport.NATIVE);
+  });
+
+  it('hands out a fresh provider each time, so two runtimes do not share one', async () => {
+    // `BaseProvider` refuses to initialize again once it has been shut down, so
+    // a module-level singleton would work for the first runtime in a process
+    // and fail for the second. Invisible in a CLI with one run; immediate in a
+    // suite with many.
+    const first = await loadFerretParsers(FERRET_PARSERS_MODULE);
+    const second = await loadFerretParsers(FERRET_PARSERS_MODULE);
+
+    expect(first.provider).toBeDefined();
+    expect(first.provider).not.toBe(second.provider);
+    expect(first.provider?.id).toBe(second.provider?.id);
+  });
+
+  it('refuses any specifier but its own, rather than importing it', async () => {
+    // EPIC-108 §11: the parser module specifier is fixed and internal. The
+    // refusal is what makes that a property rather than a convention — nothing
+    // derived from repository content can ever become a module specifier here.
+    for (const hostile of ['evil-package', './relative', '@indoulia/ferret/storage', '']) {
+      await expect(loadFerretParsers(hostile)).rejects.toMatchObject({
+        code: 'E_PROVIDER_INVALID',
+      });
+    }
+  });
+
+  it('leaves the registry usable when the module cannot be loaded', async () => {
+    // Discovery is additive and best-effort by design (EPIC-013): one bad
+    // optional provider must not make already-registered capabilities vanish.
+    // This is what lets `composeContent` fall back to a metadata-only run
+    // instead of failing the index.
+    const registry = new ProviderRegistry();
+    const result = await discoverProviders(registry, ['@indoulia/ferret/nonexistent'], loadFerretParsers);
+
+    expect(result.providers).toStrictEqual([]);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0]?.reason).toBe('unavailable');
+    expect(registry.supports(Capability.PARSER).support).toBe(CapabilitySupport.UNAVAILABLE);
+  });
+});

@@ -58,7 +58,11 @@ export function isCapability(value: unknown): value is Capability {
  */
 export const CAPABILITY_VERSIONS: Readonly<Record<Capability, number>> = Object.freeze({
   [Capability.STORAGE]: 1,
-  [Capability.SOURCE_REPOSITORY]: 1,
+  // EPIC-108 raised this to 2 when the content-read operation was added. The
+  // minimum stays 1 below, so nothing built against version 1 stops working;
+  // what a version-1 provider does *not* get is the new operation, which
+  // `operationIntroducedAt` enforces rather than trusting a declaration.
+  [Capability.SOURCE_REPOSITORY]: 2,
   [Capability.SOURCE_HISTORY]: 1,
   [Capability.SOURCE_FILE]: 1,
   [Capability.SOURCE_PROJECT]: 1,
@@ -85,6 +89,46 @@ export const MINIMUM_CAPABILITY_VERSIONS: Readonly<Record<Capability, number>> =
   [Capability.EMBEDDING]: 1,
   [Capability.MCP]: 1,
 });
+
+/**
+ * The capability version at which an operation became part of the contract.
+ *
+ * Only operations introduced *after* version 1 appear; everything else was
+ * there from the start and needs no entry.
+ *
+ * This exists because of one specific hole. {@link declares} returns `true` when
+ * a declaration omits `operations` — "omitting the field means all of them" —
+ * and that reading is correct only for the operations that existed when the
+ * declaration was written. Without this map, adding an operation makes every
+ * already-written declaration silently begin claiming it, and the failure
+ * surfaces as a missing method at the call site rather than as an honest
+ * unsupported verdict. EPIC-108 §8.4.
+ *
+ * The keys are string literals rather than the `RepositoryOperation` constants
+ * because `contracts/source-repository.ts` reaches a logger and therefore an
+ * external package, and the capability contract is asserted to reach neither.
+ * `tests/unit/capabilities.test.ts` asserts the literals and the constants
+ * agree, so the duplication cannot drift unnoticed.
+ */
+export const CAPABILITY_OPERATION_VERSIONS: Readonly<
+  Partial<Record<Capability, Readonly<Record<string, number>>>>
+> = Object.freeze({
+  [Capability.SOURCE_REPOSITORY]: Object.freeze({
+    // EPIC-108: reading a file's bytes at a revision.
+    readFileContent: 2,
+  }),
+});
+
+/**
+ * The capability version an operation was introduced at. 1 unless recorded.
+ *
+ * An unknown operation answers 1, deliberately: this function decides whether a
+ * declaration is too old to be claiming something, and an operation nobody has
+ * recorded is not one this runtime added.
+ */
+export function operationIntroducedAt(capability: Capability, operation: string): number {
+  return CAPABILITY_OPERATION_VERSIONS[capability]?.[operation] ?? 1;
+}
 
 /**
  * A provider's declared limits.
@@ -126,8 +170,10 @@ export interface CapabilityDeclaration {
   /**
    * Operations within the capability that this provider supports.
    *
-   * Omitted means "all of them". Naming a subset is how a provider is honest
-   * about a partial implementation rather than failing at the call.
+   * Omitted means "all of them" — all of them *at the version being declared*.
+   * It never reaches forward into an operation added later; see
+   * {@link CAPABILITY_OPERATION_VERSIONS}. Naming a subset is how a provider is
+   * honest about a partial implementation rather than failing at the call.
    */
   readonly operations?: readonly string[];
   readonly limits?: CapabilityLimits;
@@ -215,8 +261,24 @@ export function validateCapabilityDeclaration(providerId: string, declaration: C
   }
 }
 
-/** True when a declaration covers a named operation. */
+/**
+ * True when a declaration covers a named operation.
+ *
+ * Two questions, in this order, and the order is the point.
+ *
+ * **Is the declaration new enough to be talking about this operation at all?**
+ * A provider declaring version 1 is describing the operation set that existed at
+ * version 1, and that set is closed. It is never considered to support anything
+ * added later — not by omitting `operations`, and not by naming it either. A
+ * declaration written before an operation existed cannot have meant it, and a
+ * declaration that names an operation its version does not contain is claiming
+ * something it was not built against. EPIC-108 §8.4, parts 3 and 4.
+ *
+ * **Then: did it name the operation, or claim all of them?** The original rule,
+ * unchanged, and applied only within the version's own operation set.
+ */
 export function declares(declaration: CapabilityDeclaration, operation: string): boolean {
+  if (declaration.version < operationIntroducedAt(declaration.capability, operation)) return false;
   return declaration.operations === undefined || declaration.operations.includes(operation);
 }
 
@@ -257,13 +319,23 @@ export function describeSupport(
   }
 
   if (operation !== undefined && !declares(declared, operation)) {
+    // Two ways to not support an operation, and they send a reader to different
+    // places: a provider that could implement it and did not, and a provider
+    // declared against a contract version that did not contain it. Saying which
+    // is the difference between "use another provider" and "update this one".
+    const introduced = operationIntroducedAt(capability, operation);
+    const tooOld = declared.version < introduced;
     return {
       capability,
       support: CapabilitySupport.OPERATION_UNSUPPORTED,
       providerId,
       declaredVersion: declared.version,
-      detail: `Provider "${providerId}" implements ${capability} but not the "${operation}" operation`,
-      remediation: `Use a provider that implements ${operation}, or take the path that does not need it.`,
+      detail: tooOld
+        ? `Provider "${providerId}" declares ${capability} at version ${String(declared.version)}, and the "${operation}" operation was introduced at version ${String(introduced)}`
+        : `Provider "${providerId}" implements ${capability} but not the "${operation}" operation`,
+      remediation: tooOld
+        ? `Update the provider to declare ${capability} version ${String(introduced)} or later, and implement ${operation}.`
+        : `Use a provider that implements ${operation}, or take the path that does not need it.`,
     };
   }
 

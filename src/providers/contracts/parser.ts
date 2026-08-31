@@ -145,6 +145,28 @@ export interface ContentParser {
   readonly parserVersion: string;
   /** Must not read content: it is called for every candidate. */
   supports(target: ParseTarget): ParserSupport;
+  /**
+   * What *else* determines this parser's output, as an opaque identity string.
+   *
+   * For the code parser this is the grammar: its name, its ABI version and the
+   * hash of the `.wasm` actually loaded. TECHNOLOGY-DECISIONS §4 made grammar
+   * pinning mandatory because two ecosystems' grammars disagreed by 1.2% of
+   * named nodes over the same corpus, so a result is only attributable if the
+   * grammar that produced it is recorded.
+   *
+   * **Optional, read-only, and it must not parse.** EPIC-108's re-parse gate has
+   * to know this *before* deciding whether to read a file at all; an identity
+   * only learned from a parse result is learned too late to decide anything. A
+   * parser with nothing beyond its own version to declare omits this, and the
+   * gate keys on `parserId` and `parserVersion` alone.
+   *
+   * A string rather than a structured type because the contract cannot name a
+   * grammar: a future PDF or spreadsheet parser has no grammar and may have a
+   * model version or a library build instead. What every one of them can say is
+   * "this is what I am, beyond my version", which is all a gate needs to
+   * compare.
+   */
+  producerIdentity?(target: ParseTarget): Promise<string | undefined>;
   parse(
     request: ParseRequest,
     context: ProviderOperationContext,

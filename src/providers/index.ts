@@ -1,11 +1,13 @@
 export {
   CAPABILITIES,
+  CAPABILITY_OPERATION_VERSIONS,
   CAPABILITY_VERSIONS,
   Capability,
   CapabilitySupport,
   MINIMUM_CAPABILITY_VERSIONS,
   assertSupported,
   declares,
+  operationIntroducedAt,
   describeSupport,
   isCapability,
   isSupportedCapabilityVersion,
@@ -39,6 +41,7 @@ export {
   type ProviderHostContext,
 } from './contract.js';
 export {
+  ContentUnavailable,
   RepositoryIdentityKind,
   RepositoryOperation,
   SkipReason,
@@ -46,6 +49,8 @@ export {
   type DiscoveredBranch,
   type DiscoveredRepository,
   type DiscoveredWorktree,
+  type FileContent,
+  type FileContentRequest,
   type RepositoryDiscoveryRequest,
   type RepositoryDiscoveryResult,
   type RepositoryRemote,

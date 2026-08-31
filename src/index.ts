@@ -238,6 +238,7 @@ export {
 
 export {
   CAPABILITIES,
+  CAPABILITY_OPERATION_VERSIONS,
   CAPABILITY_VERSIONS,
   Capability,
   CapabilitySupport,
@@ -248,6 +249,7 @@ export {
   PROVIDER_ID_PATTERN,
   assertSupported,
   declares,
+  operationIntroducedAt,
   describeSupport,
   isCapability,
   isSupportedCapabilityVersion,
@@ -318,6 +320,7 @@ export {
   type RetryOptions,
   // EPIC-017 — the source.repository capability contract. The Git provider that
   // implements it ships separately, at `@indoulia/ferret/git`.
+  ContentUnavailable,
   RepositoryIdentityKind,
   RepositoryOperation,
   SkipReason,
@@ -325,6 +328,8 @@ export {
   type DiscoveredBranch,
   type DiscoveredRepository,
   type DiscoveredWorktree,
+  type FileContent,
+  type FileContentRequest,
   type RepositoryDiscoveryRequest,
   type RepositoryDiscoveryResult,
   type RepositoryRemote,
@@ -365,11 +370,20 @@ export {
 } from './retrieval/index.js';
 
 export {
+  CONTENT_ARTIFACT_KIND,
+  CONTENT_PRODUCER,
+  ContentStageSkip,
+  contentScopeId,
+  runContentStage,
   INDEXER_PRODUCER,
   INDEX_ARTIFACT_KIND,
   RepositoryIndexer,
   assertIndexed,
   watermarkScopeId,
+  type ContentArtifactStore,
+  type ContentCounts,
+  type ContentReader,
+  type DerivedArtifactRecord,
   type EntityWriter,
   type EvidenceWriter,
   type IndexOptions,

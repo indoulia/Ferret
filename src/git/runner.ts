@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { isAbsolute } from 'node:path';
 
 import { ErrorCode, FerretError } from '../errors/index.js';
@@ -141,6 +141,44 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_BUFFER = 16 * 1024 * 1024;
 
 /**
+ * The argument vector Git is actually given, with its safety overrides.
+ *
+ * Shared by every entry point in this module, so that adding one cannot lose
+ * them. Both `runGit` and `runGitBytes` build their vector here and nowhere
+ * else.
+ */
+function gitVector(args: readonly string[], cwd: string): readonly string[] {
+  if (!isAbsolute(cwd)) {
+    // A relative path would resolve against whatever the process happens to be
+    // in, which for a long-running server is not a knowable thing.
+    throw new FerretError(ErrorCode.USAGE, 'Git must be run in an absolute directory', {
+      details: { cwd },
+      remediation: 'Resolve the path before passing it.',
+    });
+  }
+  for (const argument of args) {
+    if (typeof argument !== 'string' || argument.includes('\0')) {
+      // A NUL truncates the argument at the OS boundary, so what Git receives
+      // is not what was inspected. Refusing is the only safe reading.
+      throw new FerretError(ErrorCode.USAGE, 'A Git argument contains a null byte', {
+        details: { argumentCount: args.length },
+        remediation: 'Reject the path before it reaches the Git runner.',
+      });
+    }
+  }
+
+  const vector = [...SAFETY_CONFIG.flatMap((entry) => ['-c', entry]), '-C', cwd, ...args];
+  if (vector.length > MAX_ARGUMENTS) {
+    throw new FerretError(ErrorCode.USAGE, 'Git argument vector is longer than Ferret will assemble', {
+      details: { length: vector.length, maximum: MAX_ARGUMENTS },
+      remediation: 'Split the operation into smaller invocations.',
+    });
+  }
+
+  return vector;
+}
+
+/**
  * Runs `git` with the given arguments.
  *
  * `args` is the subcommand and its arguments; the safety configuration and
@@ -156,33 +194,7 @@ export async function runGit(
   args: readonly string[],
   options: GitRunOptions,
 ): Promise<GitResult> {
-  if (!isAbsolute(options.cwd)) {
-    // A relative path would resolve against whatever the process happens to be
-    // in, which for a long-running server is not a knowable thing.
-    throw new FerretError(ErrorCode.USAGE, 'Git must be run in an absolute directory', {
-      details: { cwd: options.cwd },
-      remediation: 'Resolve the path before passing it.',
-    });
-  }
-  for (const argument of args) {
-    if (typeof argument !== 'string' || argument.includes('\0')) {
-      // A NUL truncates the argument at the OS boundary, so what Git receives
-      // is not what was inspected. Refusing is the only safe reading.
-      throw new FerretError(ErrorCode.USAGE, 'A Git argument contains a null byte', {
-        details: { argumentCount: args.length },
-        remediation: 'Reject the path before it reaches the Git runner.',
-      });
-    }
-  }
-
-  const vector = [...SAFETY_CONFIG.flatMap((entry) => ['-c', entry]), '-C', options.cwd, ...args];
-  if (vector.length > MAX_ARGUMENTS) {
-    throw new FerretError(ErrorCode.USAGE, 'Git argument vector is longer than Ferret will assemble', {
-      details: { length: vector.length, maximum: MAX_ARGUMENTS },
-      remediation: 'Split the operation into smaller invocations.',
-    });
-  }
-
+  const vector = gitVector(args, options.cwd);
   const started = performance.now();
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -223,6 +235,229 @@ export async function runGit(
       },
     );
   });
+}
+
+/** Bytes of stderr retained by {@link runGitBytes}. */
+const MAX_STDERR_BYTES = 64 * 1024;
+
+/**
+ * How a byte-bounded read ended.
+ *
+ * `truncated` is a discriminated *result* rather than an exception, because a
+ * blob over the bound is a fact about the repository and not a fault, and
+ * EPIC-108 §8.8 counts it separately from a read that failed. Everything that
+ * genuinely went wrong — Git missing, cancellation, a timeout — still throws.
+ */
+export interface GitBytesResult {
+  readonly stdout: Uint8Array;
+  readonly stderr: string;
+  readonly exitCode: number;
+  readonly durationMs: number;
+  /** Output passed `maxOutputBytes`; the child was killed and `stdout` is partial. */
+  readonly truncated: boolean;
+}
+
+export interface GitBytesOptions extends Omit<GitRunOptions, 'maxBufferBytes' | 'allowFailure'> {
+  /**
+   * Bytes of stdout retained before the child is killed.
+   *
+   * Applied to the accumulating chunks, so the process is stopped as soon as it
+   * is passed and nothing larger is ever held. EPIC-108 §8.3: a caller that
+   * receives 400 MB in order to reject it has already paid the cost the bound
+   * exists to avoid.
+   */
+  readonly maxOutputBytes: number;
+}
+
+/**
+ * Runs `git` and keeps its stdout as bytes, under a hard output bound.
+ *
+ * Separate from {@link runGit} because {@link runGit} decodes as UTF-8, and a
+ * repository holds files that are not UTF-8: a Latin-1 source file, a file with
+ * a lone surrogate, a file with a NUL in it. Decoding those and re-encoding them
+ * would hand a parser bytes the repository does not contain, and would change
+ * what a content hash is computed over. `git cat-file` output is content, so it
+ * is never decoded here.
+ *
+ * `spawn` rather than `execFile` for one reason: `execFile`'s `maxBuffer` kills
+ * the child with a generic error that cannot be told apart from a real failure,
+ * and this caller has to distinguish "too large" from "broken". Everything that
+ * makes {@link runGit} safe is applied identically — the same argument vector
+ * through `gitVector`, the same scrubbed environment, no shell — so this is a
+ * second *encoding*, not a second subprocess primitive.
+ *
+ * @throws {FerretError} `E_DEPENDENCY_UNAVAILABLE` when Git is not installed,
+ * `E_INTERRUPTED` on cancellation or timeout.
+ */
+export async function runGitBytes(
+  args: readonly string[],
+  options: GitBytesOptions,
+): Promise<GitBytesResult> {
+  if (!Number.isInteger(options.maxOutputBytes) || options.maxOutputBytes < 1) {
+    throw new FerretError(ErrorCode.USAGE, 'A byte-bounded Git read needs a positive bound', {
+      details: { maxOutputBytes: options.maxOutputBytes },
+      remediation: 'Pass a positive integer byte bound.',
+    });
+  }
+
+  const vector = gitVector(args, options.cwd);
+  const started = performance.now();
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  return new Promise<GitBytesResult>((resolve, reject) => {
+    const child = spawn('git', [...vector], {
+      shell: false,
+      windowsHide: true,
+      env: scrubEnvironment(process.env),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let truncated = false;
+    let stderr = '';
+    let stderrBytes = 0;
+    let settled = false;
+    let timedOut = false;
+
+    // `SIGKILL` is right even though it is blunt: the child is a `cat-file`
+    // read, it holds no lock (`GIT_OPTIONAL_LOCKS=0`), and by the time this is
+    // called it has either been cancelled or produced more than Ferret accepts.
+    const stop = (): void => {
+      child.kill('SIGKILL');
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      stop();
+    }, timeoutMs);
+
+    const onAbort = (): void => {
+      stop();
+    };
+    options.signal.addEventListener('abort', onAbort, { once: true });
+
+    const finish = (outcome: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      options.signal.removeEventListener('abort', onAbort);
+      outcome();
+    };
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (truncated) return;
+      const room = options.maxOutputBytes - size;
+      if (chunk.length > room) {
+        // Keep exactly the bound and not one byte more, then stop the child.
+        // The partial buffer is kept rather than discarded so a caller can say
+        // how far it got, and so the bound is provably never exceeded.
+        if (room > 0) {
+          chunks.push(chunk.subarray(0, room));
+          size += room;
+        }
+        truncated = true;
+        stop();
+        return;
+      }
+      chunks.push(chunk);
+      size += chunk.length;
+    });
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      // Bounded independently and small: stderr is a diagnostic, and a Git
+      // command that writes megabytes to it is itself the problem.
+      if (stderrBytes >= MAX_STDERR_BYTES) return;
+      stderrBytes += chunk.length;
+      stderr += chunk.toString('utf8');
+    });
+
+    child.on('error', (error: NodeJS.ErrnoException) => {
+      finish(() => {
+        if (error.code === 'ENOENT') {
+          reject(
+            new FerretError(ErrorCode.DEPENDENCY_UNAVAILABLE, 'The git executable was not found', {
+              details: { operation: args[0] ?? 'git' },
+              remediation: 'Install Git and ensure it is on PATH. Run `ferret doctor` to confirm.',
+            }),
+          );
+          return;
+        }
+        reject(
+          new FerretError(ErrorCode.PROVIDER_INVALID, `git ${args[0] ?? ''} could not be started`, {
+            details: { operation: args[0] ?? 'git' },
+            cause: error,
+          }),
+        );
+      });
+    });
+
+    child.on('close', (code: number | null) => {
+      const durationMs = performance.now() - started;
+      finish(() => {
+        options.logger?.trace(
+          {
+            operation: 'git.run',
+            args: redactVector(args),
+            cwd: options.cwd,
+            exitCode: code ?? -1,
+            bytes: size,
+            truncated,
+            durationMs,
+          },
+          'git invoked',
+        );
+
+        // Cancellation and the timeout are answered before the bound, because a
+        // child killed for either also looks truncated, and a cancelled run must
+        // fail rather than quietly report a short read.
+        if (options.signal.aborted) {
+          reject(
+            new FerretError(ErrorCode.INTERRUPTED, 'Git was cancelled', {
+              details: { operation: args[0] ?? 'git', durationMs: Math.round(durationMs) },
+              retryable: true,
+            }),
+          );
+          return;
+        }
+        if (timedOut) {
+          reject(
+            new FerretError(
+              ErrorCode.INTERRUPTED,
+              `Git did not finish within ${String(timeoutMs)}ms and was stopped`,
+              {
+                details: { operation: args[0] ?? 'git', durationMs: Math.round(durationMs) },
+                remediation: 'Raise the timeout, or narrow the operation.',
+                retryable: true,
+              },
+            ),
+          );
+          return;
+        }
+
+        resolve({
+          stdout: concat(chunks, size),
+          stderr,
+          // A child killed for passing the bound has no meaningful exit code;
+          // `truncated` is what a caller reads, and the code is reported as Git
+          // left it.
+          exitCode: code ?? (truncated ? 0 : 1),
+          durationMs,
+          truncated,
+        });
+      });
+    });
+  });
+}
+
+function concat(chunks: readonly Buffer[], size: number): Uint8Array {
+  const out = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
 }
 
 interface ExecFailure extends Error {

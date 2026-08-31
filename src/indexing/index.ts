@@ -21,7 +21,20 @@ export {
   type IndexerDependencies,
   type WriteCounts,
 } from './indexer.js';
+export {
+  CONTENT_ARTIFACT_KIND,
+  CONTENT_PRODUCER,
+  contentScopeId,
+  runContentStage,
+  type ContentCounts,
+  type ContentStageResult,
+  type UnparsedBreakdown,
+} from './content.js';
+export { ContentStageSkip } from './ports.js';
 export type {
+  ContentArtifactStore,
+  ContentReader,
+  DerivedArtifactRecord,
   EntityWriteResult,
   EntityWriter,
   EvidenceWriteResult,

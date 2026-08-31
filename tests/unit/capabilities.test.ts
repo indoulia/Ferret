@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   CAPABILITIES,
+  CAPABILITY_OPERATION_VERSIONS,
   CAPABILITY_VERSIONS,
   Capability,
   CapabilitySupport,
@@ -17,6 +18,8 @@ import {
   describeSupport,
   isCapability,
   isSupportedCapabilityVersion,
+  operationIntroducedAt,
+  RepositoryOperation,
   parseConfig,
   validateCapabilityDeclaration,
   type CapabilityDeclaration,
@@ -125,6 +128,139 @@ describe('declaring a capability', () => {
       thrown = error;
     }
     expect((thrown as { remediation: string }).remediation).toContain('Omit `operations`');
+  });
+});
+
+describe('an operation added after version 1 — EPIC-108 §8.4', () => {
+  const v1: CapabilityDeclaration = {
+    capability: Capability.SOURCE_REPOSITORY,
+    version: 1,
+  };
+  const v2: CapabilityDeclaration = {
+    capability: Capability.SOURCE_REPOSITORY,
+    version: 2,
+  };
+
+  it('raises the capability version but not the minimum', () => {
+    // The whole compatibility rule in two numbers: version 2 is what this
+    // runtime is built against, and version 1 is still accepted everywhere the
+    // existing contract requires it. Nothing built against 1 stops working.
+    expect(CAPABILITY_VERSIONS[Capability.SOURCE_REPOSITORY]).toBe(2);
+    expect(MINIMUM_CAPABILITY_VERSIONS[Capability.SOURCE_REPOSITORY]).toBe(1);
+    expect(isSupportedCapabilityVersion(Capability.SOURCE_REPOSITORY, 1)).toBe(true);
+    expect(isSupportedCapabilityVersion(Capability.SOURCE_REPOSITORY, 2)).toBe(true);
+  });
+
+  it('records the version each operation was introduced at, and agrees with the contract', () => {
+    // The map is keyed by string literal because `capabilities.ts` may not
+    // import the contract — it would reach a logger, and therefore an external
+    // package, which the boundary test forbids. This is what keeps the literal
+    // and the constant from drifting apart silently.
+    expect(operationIntroducedAt(Capability.SOURCE_REPOSITORY, RepositoryOperation.READ_CONTENT)).toBe(2);
+    expect(CAPABILITY_OPERATION_VERSIONS[Capability.SOURCE_REPOSITORY]).toStrictEqual({
+      [RepositoryOperation.READ_CONTENT]: 2,
+    });
+  });
+
+  it('leaves every operation that existed at version 1 introduced at 1', () => {
+    for (const operation of [
+      RepositoryOperation.DISCOVER,
+      RepositoryOperation.DESCRIBE,
+      RepositoryOperation.LIST_WORKTREES,
+      RepositoryOperation.LIST_BRANCHES,
+      RepositoryOperation.READ_HISTORY,
+      RepositoryOperation.LIST_FILES,
+    ]) {
+      expect(operationIntroducedAt(Capability.SOURCE_REPOSITORY, operation)).toBe(1);
+    }
+  });
+
+  it('never lets a version-1 declaration claim it by omitting operations', () => {
+    // The hole this closes. "Omitting the field means all of them" is correct
+    // only for the operations that existed when the declaration was written; a
+    // provider written before this operation existed cannot have meant it, and
+    // inferring support from silence is how a missing method becomes a runtime
+    // failure instead of an honest verdict.
+    expect(v1.operations).toBeUndefined();
+    expect(declares(v1, RepositoryOperation.READ_CONTENT)).toBe(false);
+  });
+
+  it('never lets a version-1 declaration claim it by naming it either', () => {
+    // Stricter than the omission rule, and deliberately so: version 1 covers
+    // the six operations that existed at version 1, and that set is closed.
+    const naming: CapabilityDeclaration = {
+      ...v1,
+      operations: [RepositoryOperation.LIST_FILES, RepositoryOperation.READ_CONTENT],
+    };
+    expect(declares(naming, RepositoryOperation.READ_CONTENT)).toBe(false);
+    expect(declares(naming, RepositoryOperation.LIST_FILES)).toBe(true);
+  });
+
+  it('lets a version-1 declaration keep every operation it did have', () => {
+    // The other half of the rule, and the one that would be easy to break: this
+    // must not become "version 1 supports nothing".
+    expect(declares(v1, RepositoryOperation.LIST_FILES)).toBe(true);
+    expect(declares(v1, RepositoryOperation.READ_HISTORY)).toBe(true);
+    expect(declares(v1, RepositoryOperation.DISCOVER)).toBe(true);
+  });
+
+  it('lets a version-2 declaration claim it, by omission or by name', () => {
+    expect(declares(v2, RepositoryOperation.READ_CONTENT)).toBe(true);
+    expect(
+      declares({ ...v2, operations: [RepositoryOperation.READ_CONTENT] }, RepositoryOperation.READ_CONTENT),
+    ).toBe(true);
+  });
+
+  it('lets a version-2 declaration still decline it', () => {
+    // Being new enough is necessary, not sufficient. A provider at version 2
+    // that does not implement the operation says so, and is believed.
+    const partial: CapabilityDeclaration = { ...v2, operations: [RepositoryOperation.LIST_FILES] };
+    expect(declares(partial, RepositoryOperation.READ_CONTENT)).toBe(false);
+  });
+
+  it('reports the version as the reason, not a bare unimplemented', () => {
+    // "Use a different provider" and "update this provider" are different
+    // instructions, and an operator who is told the wrong one goes looking in
+    // the wrong place. Governance §6.
+    const verdict = describeSupport(
+      Capability.SOURCE_REPOSITORY,
+      { providerId: 'old', declaration: v1 },
+      RepositoryOperation.READ_CONTENT,
+    );
+    expect(verdict.support).toBe(CapabilitySupport.OPERATION_UNSUPPORTED);
+    expect(verdict.detail).toContain('version 1');
+    expect(verdict.detail).toContain('introduced at version 2');
+    expect(verdict.remediation).toContain('version 2 or later');
+  });
+
+  it('reports a plain unimplemented when the version is not the problem', () => {
+    const verdict = describeSupport(
+      Capability.SOURCE_REPOSITORY,
+      { providerId: 'partial', declaration: { ...v2, operations: [RepositoryOperation.LIST_FILES] } },
+      RepositoryOperation.READ_CONTENT,
+    );
+    expect(verdict.support).toBe(CapabilitySupport.OPERATION_UNSUPPORTED);
+    expect(verdict.detail).toContain('but not the');
+    expect(verdict.detail).not.toContain('introduced at');
+  });
+
+  it('still accepts a version-1 provider for the capability itself', () => {
+    // AC-2's other half. A version-1 source is not rejected; it is simply not
+    // asked to read content.
+    const verdict = describeSupport(Capability.SOURCE_REPOSITORY, {
+      providerId: 'old',
+      declaration: v1,
+    });
+    expect(verdict.support).toBe(CapabilitySupport.SUPPORTED);
+  });
+
+  it('is asked and answered through the registry, which is where a caller asks', () => {
+    const registry = new ProviderRegistry();
+    registry.register(provider('old-source', [v1]));
+
+    const verdict = registry.supports(Capability.SOURCE_REPOSITORY, RepositoryOperation.READ_CONTENT);
+    expect(verdict.support).toBe(CapabilitySupport.OPERATION_UNSUPPORTED);
+    expect(registry.supports(Capability.SOURCE_REPOSITORY).support).toBe(CapabilitySupport.SUPPORTED);
   });
 });
 
