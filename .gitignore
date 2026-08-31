@@ -18,3 +18,6 @@ __pycache__/
 # Measured results under spikes/results/ ARE committed as evidence.
 spikes/corpus/
 spikes/.state/
+
+# Local scratch, never committed
+.local/

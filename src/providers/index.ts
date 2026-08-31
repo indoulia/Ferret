@@ -50,3 +50,11 @@ export {
 } from './discovery.js';
 export { ProviderRegistry } from './registry.js';
 export * from './sdk/index.js';
+
+export {
+  assertUsable,
+  type EmbeddingModel,
+  type EmbeddingRequest,
+  type EmbeddingResult,
+  type EmbeddingSource,
+} from './contracts/embedding.js';

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { CONTENT_NOTICE, ContextPackBuilder, MAX_BUDGET, renderPack } from '../context/index.js';
 import { serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
-import { MAX_LIMIT, type RetrievalPort } from '../retrieval/index.js';
+import { MAX_LIMIT, type QueryPlanner, type RetrievalPort, type SearchHit } from '../retrieval/index.js';
 import { VERSION } from '../version.js';
 
 /**
@@ -43,6 +43,14 @@ const TOOL_RESULT_LIMIT = 50;
 
 export interface McpServerDependencies {
   readonly retrieval: RetrievalPort;
+  /**
+   * EPIC-055's planner, when one is wired.
+   *
+   * Optional so that a caller with only a `RetrievalPort` still gets a working
+   * server — the planner is an improvement to how a question is routed, not a
+   * new requirement for answering one.
+   */
+  readonly planner?: QueryPlanner;
   readonly logger: Logger;
 }
 
@@ -53,7 +61,7 @@ export interface McpServerDependencies {
  * which is most of what is worth testing.
  */
 export function createMcpServer(dependencies: McpServerDependencies): McpServer {
-  const { retrieval, logger } = dependencies;
+  const { retrieval, planner, logger } = dependencies;
   const packs = new ContextPackBuilder(retrieval);
 
   const server = new McpServer(
@@ -89,11 +97,13 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
     {
       title: 'Search indexed knowledge',
       description:
-        'Full-text search across indexed repositories: commit messages, file ' +
-        'paths, branch names and recorded evidence. Returns ranked results. ' +
-        'Use this when you half-remember something and need to find it. ' +
+        'Search indexed repositories: commit messages, file paths, branch names ' +
+        'and recorded evidence. Understands an abbreviated commit id or a file ' +
+        'path as an exact lookup, and prose as a ranked search. Use this when ' +
+        'you half-remember something and need to find it. The response reports ' +
+        'which strategies ran and which could not, so a partial answer says so. ' +
         CONTENT_NOTICE,
-      inputSchema: {
+      inputSchema: z.strictObject({
         query: z.string().min(1).max(1024).describe('What to search for. Supports "quoted phrases" and -exclusion.'),
         kinds: z
           .array(z.string().min(1))
@@ -101,28 +111,54 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           .optional()
           .describe('Restrict to entity kinds such as commit, file, branch, developer.'),
         limit: z.number().int().min(1).max(TOOL_RESULT_LIMIT).optional(),
-      },
+      }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ query, kinds, limit }) =>
       guard('search', async () => {
-        const hits = await retrieval.search({
-          text: query,
+        const bounded = Math.min(limit ?? 20, TOOL_RESULT_LIMIT);
+
+        // Without a planner the behaviour is exactly what it was: one ranked
+        // full-text search. The planner is an improvement to routing, not a new
+        // requirement for answering, so its absence changes nothing a caller
+        // depends on.
+        if (planner === undefined) {
+          const hits = await retrieval.search({
+            text: query,
+            ...(kinds === undefined ? {} : { kinds }),
+            limit: bounded,
+          });
+          return {
+            notice: CONTENT_NOTICE,
+            count: hits.length,
+            results: hits.map(describeHit),
+          };
+        }
+
+        const { plan, hits } = await planner.search({
+          question: query,
           ...(kinds === undefined ? {} : { kinds }),
-          limit: Math.min(limit ?? 20, TOOL_RESULT_LIMIT),
+          limit: bounded,
         });
+
         return {
           notice: CONTENT_NOTICE,
           count: hits.length,
-          results: hits.map((hit) => ({
-            id: hit.entity.id,
-            kind: hit.entity.kind,
-            source: hit.entity.source,
-            attributes: hit.entity.attributes,
-            matchedIn: hit.source,
-            highlight: hit.highlight,
-            score: hit.score,
-          })),
+          // Reported, not hidden. A caller cannot tell a complete answer from a
+          // partial one unless the answer says which it is, and `partial` is the
+          // single field that says so.
+          plan: {
+            interpretedAs: plan.shape,
+            why: plan.reason,
+            partial: plan.partial,
+            strategies: plan.strategies.map((outcome) => ({
+              strategy: outcome.strategy,
+              ran: outcome.ran,
+              returned: outcome.returned,
+              ...(outcome.skipped === undefined ? {} : { skipped: outcome.skipped }),
+            })),
+          },
+          results: hits.map((hit) => ({ ...describeHit(hit), foundBy: hit.foundBy })),
         };
       }),
   );
@@ -134,7 +170,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       description:
         'Read a single indexed entity by its Ferret id, with its external ' +
         'identifiers. ' + CONTENT_NOTICE,
-      inputSchema: { id: z.string().uuid().describe('The Ferret entity id, as returned by ferret_search.') },
+      inputSchema: z.strictObject({
+        id: z.string().uuid().describe('The Ferret entity id, as returned by ferret_search.'),
+      }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ id }) =>
@@ -159,34 +197,45 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         'Pass `at` to ask what was true at a past instant rather than now — ' +
         'that is how to answer "what was I working on last Tuesday". ' +
         CONTENT_NOTICE,
-      inputSchema: {
+      inputSchema: z.strictObject({
         id: z.string().uuid(),
         types: z.array(z.string().min(1)).max(20).optional().describe('Relationship types to follow.'),
         direction: z.enum(['out', 'in', 'both']).optional(),
         at: z.string().datetime({ offset: true }).optional().describe('ISO 8601 instant to answer as of.'),
+        includeHistorical: z
+          .boolean()
+          .optional()
+          .describe('Include relationships that have ended, so a deletion is visible.'),
         limit: z.number().int().min(1).max(TOOL_RESULT_LIMIT).optional(),
-      },
+      }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ id, types, direction, at, limit }) =>
+    async ({ id, types, direction, at, includeHistorical, limit }) =>
       guard('neighbours', async () => {
         const neighbours = await retrieval.neighbours({
           from: id,
           ...(types === undefined ? {} : { types }),
           ...(direction === undefined ? {} : { direction }),
           ...(at === undefined ? {} : { at }),
+          ...(includeHistorical === undefined ? {} : { includeHistorical }),
           limit: Math.min(limit ?? 20, TOOL_RESULT_LIMIT),
         });
         return {
           notice: CONTENT_NOTICE,
-          asOf: at ?? 'now',
+          asOf: includeHistorical === true ? 'all time' : (at ?? 'now'),
           count: neighbours.length,
           neighbours: neighbours.map((neighbour) => ({
             id: neighbour.entity.id,
             kind: neighbour.entity.kind,
+            lifecycle: neighbour.entity.lifecycle,
             attributes: neighbour.entity.attributes,
             relationship: neighbour.relationshipType,
             direction: neighbour.direction,
+            // What the source said about the edge itself — including whether a
+            // commit added, modified or deleted the file it touched.
+            ...(Object.keys(neighbour.metadata).length === 0
+              ? {}
+              : { metadata: neighbour.metadata }),
             validFrom: neighbour.validFrom,
             validTo: neighbour.validTo,
           })),
@@ -202,13 +251,13 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         'Build a bounded pack of the most relevant indexed knowledge for a ' +
         'question, sized to a token budget. The pack states what it left out, ' +
         'so treat a partial pack as partial evidence. ' + CONTENT_NOTICE,
-      inputSchema: {
+      inputSchema: z.strictObject({
         question: z.string().min(1).max(1024),
         budget: z.number().int().min(100).max(MAX_BUDGET).optional().describe('Estimated tokens the pack may occupy.'),
         kinds: z.array(z.string().min(1)).max(20).optional(),
         withNeighbours: z.boolean().optional(),
         format: z.enum(['json', 'text']).optional(),
-      },
+      }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ question, budget, kinds, withNeighbours, format }) =>
@@ -231,23 +280,50 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         'Exact, unranked lookup by kind and attribute — "every file in this ' +
         'repository", "the branch named main". Use this when the question has ' +
         'a right answer; use ferret_search when it does not. ' + CONTENT_NOTICE,
-      inputSchema: {
+      inputSchema: z.strictObject({
         kind: z.string().min(1).optional(),
         attributes: z.record(z.string(), z.string()).optional(),
         scope: z.string().uuid().optional().describe('The entity these are identified within, e.g. a repository.'),
+        lifecycle: z
+          .enum(['active', 'deleted', 'superseded', 'unknown'])
+          .optional()
+          .describe('Restrict to a lifecycle state. Omitted returns every state, deleted included.'),
         limit: z.number().int().min(1).max(MAX_LIMIT).optional(),
-      },
+      }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ kind, attributes, scope, limit }) =>
+    async ({ kind, attributes, scope, lifecycle, limit }) =>
       guard('find', async () => {
+        // Bounded by `MAX_LIMIT`, which is what the schema advertises — not by
+        // the smaller cap the ranked tools use. Accepting a limit of 500 and
+        // then quietly returning 50 makes the declared schema a lie, and this is
+        // the tool whose stated purpose is "every file in this repository".
+        const requested = Math.min(limit ?? 20, MAX_LIMIT);
+        // One more than asked for, purely to learn whether there were more. An
+        // exact lookup that silently returns the first page of a larger answer
+        // is a wrong answer wearing a right one's clothes — the caller has no
+        // way to tell, and "every file in this repository" is precisely the
+        // question people ask this tool.
         const entities = await retrieval.findEntities({
           ...(kind === undefined ? {} : { kind }),
           ...(attributes === undefined ? {} : { attributes }),
           ...(scope === undefined ? {} : { scope }),
-          limit: Math.min(limit ?? 20, TOOL_RESULT_LIMIT),
+          ...(lifecycle === undefined ? {} : { lifecycle }),
+          limit: Math.min(requested + 1, MAX_LIMIT),
         });
-        return { notice: CONTENT_NOTICE, count: entities.length, entities };
+        const truncated = entities.length > requested;
+        const page = truncated ? entities.slice(0, requested) : entities;
+        return {
+          notice: CONTENT_NOTICE,
+          count: page.length,
+          ...(truncated
+            ? {
+                truncated: true,
+                more: `More than ${requested} entities match. This is a partial answer — raise \`limit\` (max ${MAX_LIMIT}) or narrow the query.`,
+              }
+            : { truncated: false }),
+          entities: page,
+        };
       }),
   );
 
@@ -270,4 +346,24 @@ export async function serveStdio(server: McpServer): Promise<StdioServerTranspor
   const transport = new StdioServerTransport();
   await server.connect(transport);
   return transport;
+}
+
+/**
+ * One search hit, as a client sees it.
+ *
+ * Shared by the planned and unplanned paths so the two cannot drift into
+ * describing the same thing differently — which is how a client ends up with a
+ * field that exists only sometimes.
+ */
+function describeHit(hit: SearchHit): Record<string, unknown> {
+  return {
+    id: hit.entity.id,
+    kind: hit.entity.kind,
+    lifecycle: hit.entity.lifecycle,
+    source: hit.entity.source,
+    attributes: hit.entity.attributes,
+    matchedIn: hit.source,
+    highlight: hit.highlight,
+    score: hit.score,
+  };
 }

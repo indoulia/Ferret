@@ -2,7 +2,7 @@
 
 **Status: APPROVED**  
 **Registry Version: 3.0**  
-**Effective: 2026-08-30**
+**Effective: 2026-08-31**
 
 ## Purpose
 
@@ -98,7 +98,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-029 — Text & Markdown Intelligence** — P1
 - **EPIC-030 — File Structure & Metadata** — P0
 - **EPIC-031 — Incremental Indexing** — P0 — VALIDATED ([spec](EPIC-031-Incremental-Indexing.md), [evidence](validation/EPIC-031-VALIDATION.md))
-- **EPIC-032 — Index Lifecycle & Tombstones** — P0
+- **EPIC-032 — Index Lifecycle & Tombstones** — P0 — VALIDATED ([spec](EPIC-032-Index-Lifecycle-And-Tombstones.md), [evidence](validation/EPIC-032-VALIDATION.md))
 
 ### Code Intelligence
 
@@ -114,11 +114,13 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Session & Agent Memory
 
-- **EPIC-039 — Session Model** — P0
-- **EPIC-040 — Session Capture** — P0
-- **EPIC-041 — Durable Checkpoints** — P0
-- **EPIC-042 — Decision & Engineering Memory** — P1
-- **EPIC-043 — Session Recovery** — P1
+**P0 focus:** persistent AI-session memory is now a release-critical capability. Ferret must preserve useful AI context across session boundaries, make session state and durable checkpoints first-class, extract decisions and engineering knowledge from captured context, and support recovery/continuation without forcing the AI to rediscover prior work or consume the original session's full token budget. The raw session remains evidence; derived memory remains traceable to that evidence. AI-client-specific capture remains provider/adapter based so Claude is first, not exclusive.
+
+- **EPIC-039 — Session Model** — P0 — VALIDATED ([evidence](validation/EPIC-039-VALIDATION.md))
+- **EPIC-040 — Session Capture** — P0 — VALIDATED ([evidence](validation/EPIC-040-VALIDATION.md))
+- **EPIC-041 — Durable Checkpoints** — P0 — VALIDATED ([evidence](validation/EPIC-041-VALIDATION.md))
+- **EPIC-042 — Decision & Engineering Memory** — P0
+- **EPIC-043 — Session Recovery** — P0
 
 ### Evidence & Provenance
 
@@ -138,8 +140,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 - **EPIC-052 — Exact Structured Retrieval** — P0 — VALIDATED ([spec](EPIC-052-053-Retrieval.md), [evidence](validation/EPIC-052-053-VALIDATION.md))
 - **EPIC-053 — Full-Text Retrieval** — P0 — VALIDATED ([spec](EPIC-052-053-Retrieval.md), [evidence](validation/EPIC-052-053-VALIDATION.md))
-- **EPIC-054 — Semantic Retrieval** — P1
-- **EPIC-055 — Hybrid Query Planner** — P0
+- **EPIC-054 — Semantic Retrieval** — P1 — VALIDATED ([spec](EPIC-054-055-Semantic-And-Planner.md), [evidence](validation/EPIC-054-055-VALIDATION.md))
+- **EPIC-055 — Hybrid Query Planner** — P0 — VALIDATED ([spec](EPIC-054-055-Semantic-And-Planner.md), [evidence](validation/EPIC-054-055-VALIDATION.md))
 - **EPIC-056 — Ranking & Reranking** — P1
 - **EPIC-057 — Freshness & Authority Ranking** — P1
 - **EPIC-058 — Permission-Aware Retrieval** — P0
@@ -181,7 +183,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 ### Security & Authorization
 
 - **EPIC-081 — Credential Isolation** — P0
-- **EPIC-082 — Secret Detection & Exclusion** — P0
+- **EPIC-082 — Secret Detection & Exclusion** — P0 — VALIDATED ([spec](EPIC-082-Secret-Detection.md), [evidence](validation/EPIC-082-VALIDATION.md))
 - **EPIC-083 — Authorization Enforcement** — P0
 - **EPIC-084 — Prompt-Injection Resistance** — P0
 - **EPIC-085 — Audit Events** — P1
@@ -241,6 +243,8 @@ satisfies them are authored together. Each validation document states it plainly
 Scope is drawn from the registry entry and the approved governance rules; a
 specification that would expand scope beyond what this registry approved is a
 governance change and must be raised rather than written.
+
+This registry update explicitly elevates Session & Agent Memory to release-critical P0 focus; no separate Claude-specific Epic is introduced because client-specific capture belongs behind the provider/adapter boundary.
 
 ## Epic Definition of Done
 

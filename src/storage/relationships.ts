@@ -186,11 +186,30 @@ export class RelationshipStore {
         if (canonical.validTo === null) {
           const stillOpen = await this.#findOpenEquivalent(tx, canonical);
           if (stillOpen !== undefined) {
-            await tx
-              .update(relationship)
-              .set({ lastIndexedAt: now })
-              .where(eq(relationship.id, stillOpen.id));
-            return { relationship: toCanonical(stillOpen), outcome: AssertOutcome.UNCHANGED, closed: [] };
+            // Learning that an open fact began *earlier* than recorded.
+            //
+            // Not the out-of-order case the rest of this class defends against:
+            // both intervals are open, so nothing newer is being overwritten and
+            // the correction only ever extends what Ferret claims backwards.
+            // Knowledge grows; it does not move.
+            //
+            // Found by asking Ferret what this repository contained at noon and
+            // getting back only files that had not been touched since. History
+            // arrives newest-first, so the first assertion won and every earlier
+            // one was absorbed here as "already open, nothing new".
+            //
+            // The row is replaced rather than edited because `validFrom` is part
+            // of relationship identity — editing in place would leave an id that
+            // no longer derives from the row it names.
+            if (new Date(canonical.validFrom) < stillOpen.validFrom) {
+              await tx.delete(relationship).where(eq(relationship.id, stillOpen.id));
+            } else {
+              await tx
+                .update(relationship)
+                .set({ lastIndexedAt: now })
+                .where(eq(relationship.id, stillOpen.id));
+              return { relationship: toCanonical(stillOpen), outcome: AssertOutcome.UNCHANGED, closed: [] };
+            }
           }
         }
 

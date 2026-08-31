@@ -676,7 +676,12 @@ withGit('performance', () => {
     // Two Git invocations per repository. Process creation dominates, and on
     // Windows it dominates heavily, so the ceiling is generous by design.
     expect(elapsed).toBeLessThan(60_000);
-  });
+    // The harness must outlast the budget the assertion states, and by enough
+    // to cover building twenty-five repositories first. At the default thirty
+    // seconds this test could never reach its own ceiling: it died of the
+    // timeout instead, intermittently, and read as a failure of what it
+    // measures rather than of how long it was given.
+  }, 180_000);
 });
 
 withGit('the fixtures themselves', () => {

@@ -161,3 +161,36 @@ export {
   type CompatibilityVerdict,
   type SurfacePolicy,
 } from './compatibility.js';
+
+export {
+  SessionStatus,
+  continueSession,
+  createSession,
+  endSession,
+  sessionInputSchema,
+  sessionKey,
+  touchSession,
+  type Session,
+  type SessionInput,
+} from './session.js';
+
+export {
+  SessionCaptureKind,
+  createSessionCapture,
+  sessionCaptureInputSchema,
+  sessionCaptureKey,
+  type SessionCapture,
+  type SessionCaptureInput,
+} from './session-capture.js';
+
+export {
+  advanceSessionCheckpoint,
+  createSessionCheckpoint,
+  serializeSessionCheckpoint,
+  sessionCheckpointKey,
+  sessionCheckpointInputSchema,
+  verifySessionCheckpointIntegrity,
+  type JsonValue,
+  type SessionCheckpoint,
+  type SessionCheckpointInput,
+} from './session-checkpoint.js';

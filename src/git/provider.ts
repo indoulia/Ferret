@@ -9,6 +9,7 @@ import {
 } from '../domain/index.js';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
+import { isSecretPath, redactSecrets } from '../security/index.js';
 import { VERSION } from '../version.js';
 import {
   RepositoryIdentityKind,
@@ -358,8 +359,9 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         // repositories' `main` branches are different objects.
         source: { id: branch.ref, scope: repositoryEntity.id },
         attributes: {
-          ref: branch.ref,
-          shortName: branch.shortName,
+          // A ref name can carry a token — `fix/ghp_...` is a legal branch name.
+          ref: redactSecrets(branch.ref).text,
+          shortName: redactSecrets(branch.shortName).text,
           headCommit: branch.headCommit,
           isDefault: branch.isDefault,
         },
@@ -571,6 +573,9 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         }),
       );
 
+    /** The earliest instant each file was observed to exist, across this page. */
+    const firstSeen = new Map<string, { at: Date; file: CanonicalEntity }>();
+
     for (const commit of commits) {
       const commitEntity = add(
         emitter.entity({
@@ -578,7 +583,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
           source: { id: commit.sha },
           attributes: {
             sha: commit.sha,
-            message: commit.body.length === 0 ? commit.subject : commit.subject + '\n\n' + commit.body,
+            message: redactSecrets(commit.body.length === 0 ? commit.subject : commit.subject + '\n\n' + commit.body).text,
             authoredAt: commit.authoredAt,
             committedAt: commit.committedAt,
             parents: [...commit.parents],
@@ -649,19 +654,37 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       }
 
       for (const change of commit.changes) {
+        // EPIC-082: history reaches files the tree listing never returns, so
+        // the gate has to be here too. Without it a commit that touched `.env`
+        // created the entity that `emitFiles` had just refused to.
+        if (isSecretPath(change.path)) {
+          continue;
+        }
+
         const file = fileFor(change.path);
-        link(
-          emitter.relationship(
-            {
-              fromId: repositoryEntity.id,
-              type: RelationshipType.REPOSITORY_CONTAINS_FILE,
-              toId: file.id,
-              fromKind: 'repository',
-              toKind: 'file',
-            },
-            commitTime,
-          ),
-        );
+
+        // Containment starts when the file first appeared, not at whichever
+        // commit happens to be processed first.
+        //
+        // `git log` returns newest-first, so emitting the edge here opened the
+        // interval at the *newest* commit that touched the file and every older
+        // assertion then found an open equivalent and did nothing. Measured on
+        // Ferret's own repository: it claimed to have started containing
+        // `README.md` at 14:28, the instant of its most recent edit, when the
+        // file had been there since 09:33. Asking what a repository contained at
+        // a past instant therefore returned nothing modified since — which is
+        // the one question the temporal model exists to answer.
+        //
+        // A deletion establishes nothing, so it is not a candidate: a file seen
+        // only as deleted opens no interval at all, and EPIC-032's tombstone
+        // carries that case.
+        if (change.kind !== ChangeKind.DELETED) {
+          const earliest = firstSeen.get(file.id);
+          if (earliest === undefined || commitTime < earliest.at) {
+            firstSeen.set(file.id, { at: commitTime, file });
+          }
+        }
+
         link(
           emitter.relationship(
             {
@@ -700,6 +723,23 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
           );
         }
       }
+    }
+
+    // Emitted after the whole page, so each interval opens at the earliest
+    // instant the page saw rather than the first one it happened to read.
+    for (const { at, file } of firstSeen.values()) {
+      link(
+        emitter.relationship(
+          {
+            fromId: repositoryEntity.id,
+            type: RelationshipType.REPOSITORY_CONTAINS_FILE,
+            toId: file.id,
+            fromKind: 'repository',
+            toKind: 'file',
+          },
+          at,
+        ),
+      );
     }
 
     return {
@@ -788,6 +828,13 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       }
       if (entry.kind === TreeEntryKind.UNKNOWN) {
         skipped.push({ path: entry.path, reason: 'unrecognised-mode' });
+        continue;
+      }
+
+      // EPIC-082: skipped on what the path is, not what it holds — content is
+      // never read, so the path is the only signal available.
+      if (isSecretPath(entry.path)) {
+        skipped.push({ path: entry.path, reason: 'secret-bearing path' });
         continue;
       }
 

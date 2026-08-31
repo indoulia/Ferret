@@ -267,12 +267,16 @@ export {
   INDEX_ARTIFACT_KIND,
   RepositoryIndexer,
   assertIndexed,
+  watermarkScopeId,
   type EntityWriter,
   type EvidenceWriter,
   type IndexOptions,
   type IndexReport,
   type IndexableSource,
   type IndexerDependencies,
+  type LifecycleCounts,
+  type LifecycleStore,
+  type PendingLifecycleChange,
   type RelationshipWriter,
   type WatermarkStore,
   type WriteCounts,
@@ -418,3 +422,29 @@ export {
   type CompatibilityVerdict,
   type SurfacePolicy,
 } from './domain/index.js';
+
+export {
+  assertUsable,
+  type EmbeddingModel,
+  type EmbeddingRequest,
+  type EmbeddingResult,
+  type EmbeddingSource,
+} from './providers/contracts/embedding.js';
+
+export {
+  QueryPlanner,
+  QueryShape,
+  RRF_K,
+  classify,
+  fuse,
+  type Classification,
+  type ExactStrategy,
+  type FusedHit,
+  type PlannedQuery,
+  type PlannedResults,
+  type QueryPlan,
+  type RankedList,
+  type SemanticStrategy,
+  type StrategyOutcome,
+  type TextStrategy,
+} from './retrieval/index.js';

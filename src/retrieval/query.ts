@@ -34,6 +34,15 @@ export interface EntityQuery {
   readonly attributes?: Readonly<Record<string, string>>;
   /** An identifier another system uses for the same thing. */
   readonly externalId?: { readonly system: string; readonly id: string };
+  /**
+   * Restrict to one lifecycle state.
+   *
+   * Omitted returns every state, tombstones included. That is the right default
+   * for a store whose purpose is remembering: a caller asking what a repository
+   * *currently* holds says `active` and means it, and one asking what it ever
+   * held would be badly served by a filter they never applied.
+   */
+  readonly lifecycle?: string;
   readonly limit?: number;
   readonly offset?: number;
 }
@@ -66,6 +75,16 @@ export interface TraversalQuery {
    * exists for.
    */
   readonly at?: string;
+  /**
+   * Include relationships that have ended.
+   *
+   * Without this a caller can only ever see what is true, never what stopped
+   * being true — and "this commit deleted this file" is a relationship that
+   * ended by definition. Asking *as of* a past instant answers a different
+   * question: it needs the instant, and a caller who wants the whole history of
+   * an edge does not have one to give.
+   */
+  readonly includeHistorical?: boolean;
   readonly limit?: number;
 }
 
@@ -75,6 +94,16 @@ export interface Neighbour {
   readonly direction: Exclude<Direction, 'both'>;
   readonly validFrom: string;
   readonly validTo: string | null;
+  /**
+   * What the source said about this edge.
+   *
+   * Carries the facts that live on the relationship rather than on either
+   * entity — most importantly whether a commit added, modified or deleted the
+   * file it touched. Ferret recorded that from the first day it read history
+   * and, until this was here, no client could see it: the evidence existed and
+   * was unreachable, which Governance §18 makes no better than not having it.
+   */
+  readonly metadata: Readonly<Record<string, unknown>>;
 }
 
 export interface SearchQuery {
@@ -84,6 +113,20 @@ export interface SearchQuery {
   readonly limit?: number;
   /** Search evidence statements as well as entity attributes. Default true. */
   readonly includeEvidence?: boolean;
+  /**
+   * Match documents containing *any* of the terms rather than all of them.
+   *
+   * `websearch_to_tsquery` joins terms with AND, so "how are deleted files
+   * tombstoned" requires every one of `deleted`, `files` and `tombstoned` in a
+   * single document. Measured on Ferret's own index: `tombstone` found a
+   * result, `deleted files` found a result, and the full question found
+   * nothing — the more context a person gave, the worse the answer got, in a
+   * search box whose own description invites a half-remembered question.
+   *
+   * Relaxing is a fallback rather than the default: when every term does match,
+   * that is a better answer, and starting loose would bury it.
+   */
+  readonly relax?: boolean;
 }
 
 /** Where a hit came from, so a caller can tell an observation from a name. */

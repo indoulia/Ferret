@@ -130,3 +130,11 @@ export {
 } from './schema/derived.js';
 
 export { RetrievalStore } from './retrieval.js';
+
+export { IndexLifecycleStore, type LifecycleChange } from './lifecycle.js';
+
+export {
+  EmbeddingStore,
+  SemanticRetrieval,
+  type StoredEmbedding,
+} from './embeddings.js';

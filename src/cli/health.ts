@@ -94,6 +94,7 @@ async function probeStorage(config: FerretConfig, logger: Logger): Promise<Healt
     return results.map((result) => {
       if (result.name.startsWith('postgres-extension')) return componentFrom(result, HealthArea.EXTENSIONS);
       if (result.name === 'postgres-schema') return componentFrom(result, HealthArea.SCHEMA);
+      if (result.name === 'index-integrity') return componentFrom(result, HealthArea.INDEX);
       return componentFrom(result, HealthArea.DATABASE);
     });
   } catch (error) {
@@ -133,6 +134,21 @@ export async function probeHealth(options: HealthProbeOptions = {}): Promise<Hea
     components.push(...(await probeStorage(core.config, logger)));
   }
   components.push(...plannedCapabilityComponents());
+
+  // `index-integrity` is answered by the database when there is one to ask.
+  // When there is not, the answer is unknown rather than absent: Governance §6
+  // requires an operator reading a report to see that a check did not run,
+  // rather than having to notice that a name is missing.
+  if (!components.some((component) => component.name === 'index-integrity')) {
+    components.push({
+      name: 'index-integrity',
+      area: HealthArea.INDEX,
+      status: DependencyStatus.UNKNOWN,
+      required: false,
+      detail: 'The index cannot be assessed without a database connection',
+      remediation: 'Configure a database with `ferret init --save`, then run `ferret status` again.',
+    });
+  }
 
   return buildReport({
     components,

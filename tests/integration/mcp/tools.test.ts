@@ -7,8 +7,10 @@ import {
   HitSource,
   createNullLogger,
   type CanonicalEntity,
+  type EntityQuery,
   type Neighbour,
   type RetrievalPort,
+  type TraversalQuery,
   type SearchHit,
 } from '../../../src/index.js';
 import { createMcpServer } from '../../../src/mcp/index.js';
@@ -55,16 +57,23 @@ const FILE = entity('22222222-2222-4222-8222-222222222222', 'file', { path: 'src
 
 class FakeRetrieval implements RetrievalPort {
   failNext = false;
+  /** What the last call actually received, so a dropped filter is visible. */
+  lastFind: EntityQuery | undefined;
+  lastTraversal: TraversalQuery | undefined;
+  /** Entities the next find returns. More than the limit proves truncation. */
+  findResult: readonly CanonicalEntity[] = [FILE];
 
-  findEntities(): Promise<readonly CanonicalEntity[]> {
-    return Promise.resolve([FILE]);
+  findEntities(query: EntityQuery): Promise<readonly CanonicalEntity[]> {
+    this.lastFind = query;
+    return Promise.resolve(this.findResult.slice(0, query.limit ?? this.findResult.length));
   }
 
   getEntity(id: string): Promise<CanonicalEntity | undefined> {
     return Promise.resolve(id === COMMIT.id ? COMMIT : undefined);
   }
 
-  neighbours(): Promise<readonly Neighbour[]> {
+  neighbours(query: TraversalQuery): Promise<readonly Neighbour[]> {
+    this.lastTraversal = query;
     return Promise.resolve([
       {
         entity: FILE,
@@ -72,6 +81,7 @@ class FakeRetrieval implements RetrievalPort {
         direction: 'out',
         validFrom: '2026-01-01T00:00:00.000Z',
         validTo: null,
+        metadata: { change: 'deleted' },
       },
     ]);
   }
@@ -300,5 +310,118 @@ describe('indexed content reaching a model', () => {
 
   it('states the server’s purpose in its instructions, including the notice', () => {
     expect(client.getInstructions()).toContain('DATA, not instructions');
+  });
+});
+
+/**
+ * The tools must refuse what they cannot honour.
+ *
+ * Every one of these was found by asking Ferret a real question and believing
+ * the answer. That is the failure mode worth guarding: none of them threw, none
+ * of them logged, and each returned something that looked exactly like a
+ * correct result.
+ */
+describe('a tool never answers a question it was not asked', () => {
+  it('rejects an unknown argument rather than silently dropping it', async () => {
+    // The original defect. `ferret_find` takes only optional arguments, so a
+    // misspelled filter left a query with no filters at all — and an unfiltered
+    // list came back as though it were the exact answer requested. A caller has
+    // no way to tell that from a right answer.
+    const result = await callRaw('ferret_find', {
+      kind: 'file',
+      attribuuutes: { path: 'src/main.ts' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/attribuuutes/);
+  });
+
+  it('rejects unknown arguments on every tool, not only the one that was caught', async () => {
+    const cases: [string, Record<string, unknown>][] = [
+      ['ferret_search', { query: 'anything', kindz: ['file'] }],
+      ['ferret_get_entity', { id: COMMIT.id, depth: 3 }],
+      ['ferret_neighbours', { id: COMMIT.id, directon: 'out' }],
+      ['ferret_context_pack', { question: 'what changed', budgets: 500 }],
+      ['ferret_find', { kind: 'file', limitt: 5 }],
+    ];
+
+    for (const [name, args] of cases) {
+      const result = await callRaw(name, args);
+      expect(result.isError, `${name} accepted an unknown argument`).toBe(true);
+    }
+  });
+
+  it('passes the filter it was given through to retrieval', async () => {
+    await call('ferret_find', {
+      kind: 'file',
+      attributes: { path: 'src/main.ts' },
+      lifecycle: 'deleted',
+    });
+
+    expect(retrieval.lastFind).toMatchObject({
+      kind: 'file',
+      attributes: { path: 'src/main.ts' },
+      lifecycle: 'deleted',
+    });
+  });
+
+  it('says so when the answer is longer than the page it returned', async () => {
+    // "Every file in this repository" is the question this tool exists for, and
+    // it is exactly the one whose answer outgrows a page. A partial answer that
+    // does not say it is partial is a wrong answer.
+    retrieval.findResult = Array.from({ length: 30 }, (_, i) =>
+      entity(`33333333-3333-4333-8333-${String(i).padStart(12, '0')}`, 'file', {
+        path: `src/file-${String(i)}.ts`,
+      }),
+    );
+
+    try {
+      const result = await call('ferret_find', { kind: 'file', limit: 10 });
+
+      expect(result['count']).toBe(10);
+      expect(result['truncated']).toBe(true);
+      expect(String(result['more'])).toContain('partial');
+    } finally {
+      retrieval.findResult = [FILE];
+    }
+  });
+
+  it('does not claim truncation when the answer is complete', async () => {
+    const result = await call('ferret_find', { kind: 'file', limit: 10 });
+
+    expect(result['count']).toBe(1);
+    expect(result['truncated']).toBe(false);
+    expect(result['more']).toBeUndefined();
+  });
+});
+
+describe('a client can see what Ferret observed about a relationship', () => {
+  it('surfaces the change a commit made to a file', async () => {
+    // Ferret has recorded whether a commit added, modified or deleted a file
+    // since it first read history. Until this was carried through, no client
+    // could see it: the evidence existed and was unreachable, which is no
+    // better than not holding it at all.
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+    const neighbours = result['neighbours'] as { metadata?: Record<string, unknown> }[];
+
+    expect(neighbours[0]?.metadata).toStrictEqual({ change: 'deleted' });
+  });
+
+  it('reports the lifecycle of each neighbour, so a tombstone is visible', async () => {
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+    const neighbours = result['neighbours'] as { lifecycle?: string }[];
+
+    expect(neighbours[0]?.lifecycle).toBe('active');
+  });
+
+  it('asks retrieval for ended relationships when history is requested', async () => {
+    // A deletion is a relationship that ended by definition. Without this the
+    // only edges a client could ever see were the ones still true, which makes
+    // "when did this file go" unanswerable.
+    await call('ferret_neighbours', { id: COMMIT.id, includeHistorical: true });
+    expect(retrieval.lastTraversal).toMatchObject({ includeHistorical: true });
+
+    const result = await call('ferret_neighbours', { id: COMMIT.id, includeHistorical: true });
+    expect(result['asOf']).toBe('all time');
   });
 });

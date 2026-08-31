@@ -10,6 +10,7 @@ import { createRuntime } from '../../runtime/index.js';
 import {
   CompatibilityService,
   EntityStore,
+  IndexLifecycleStore,
   EvidenceStore,
   MigrationPolicy,
   RelationshipStore,
@@ -89,6 +90,7 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
             relationships: new RelationshipStore(storage.db),
             evidence: new EvidenceStore(storage.db),
             watermarks: new CompatibilityService(storage.db, storage.pool),
+            lifecycle: new IndexLifecycleStore(storage.db),
             logger: context.logger,
           });
 
@@ -125,6 +127,18 @@ function summarize(report: IndexReport): string {
     counts('relationships', report.relationships),
     `evidence          ${String(report.evidence.recorded)} recorded, ${String(report.evidence.deduplicated)} already known`,
   ];
+
+  // Reported even when zero, and reported when it did not run. A run that
+  // quietly tombstoned four per cent of a repository should not look like one
+  // that did nothing, and neither should a run that skipped the check.
+  const { retired, reinstated, skippedReason } = report.lifecycle;
+  if (skippedReason !== undefined) {
+    lines.push(`lifecycle         not reconciled — ${skippedReason}`);
+  } else {
+    lines.push(
+      `lifecycle         ${String(retired)} deleted, ${String(reinstated)} restored`,
+    );
+  }
   if (report.skipped.length > 0) {
     const reasons = new Map<string, number>();
     for (const skip of report.skipped) reasons.set(skip.reason, (reasons.get(skip.reason) ?? 0) + 1);
