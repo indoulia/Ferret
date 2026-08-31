@@ -43,6 +43,18 @@ function invalid(message: string, details: Record<string, unknown>, remediation:
   return new FerretError(ErrorCode.IDENTITY_INVALID, message, { details, remediation });
 }
 
+function payloadOf(checkpoint: SessionCheckpoint): Record<string, unknown> {
+  return {
+    sessionId: checkpoint.sessionId,
+    provider: checkpoint.provider,
+    checkpointSequence: checkpoint.checkpointSequence,
+    capturedThroughSequence: checkpoint.capturedThroughSequence,
+    checkpointedAt: checkpoint.checkpointedAt,
+    summary: checkpoint.summary,
+    continuationState: checkpoint.continuationState,
+  };
+}
+
 function buildCheckpoint(value: SessionCheckpointInput): SessionCheckpoint {
   const payload = {
     sessionId: value.sessionId,
@@ -100,4 +112,12 @@ export function advanceSessionCheckpoint(
     );
   }
   return createSessionCheckpoint({ ...input, sessionId: previous.sessionId, provider: previous.provider });
+}
+
+export function serializeSessionCheckpoint(checkpoint: SessionCheckpoint): string {
+  return stableStringify(payloadOf(checkpoint));
+}
+
+export function verifySessionCheckpointIntegrity(checkpoint: SessionCheckpoint): boolean {
+  return contentHash(serializeSessionCheckpoint(checkpoint)) === checkpoint.contentHash;
 }
