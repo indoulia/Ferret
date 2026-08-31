@@ -103,13 +103,22 @@ describe('false positives, against the real corpus', () => {
     // `assigned-secret` is expected and correct — the history quotes
     // `DATABASE_PASSWORD=hunter2` from a test fixture in an EPIC-008 checkpoint
     // commit. That is a genuine match, not a false positive.
-    const log = execFileSync('git', ['log', '--format=%B', '-n', '400'], {
+    const log = execFileSync('git', ['log', `--format=%B%n---FERRET-COMMIT-BOUNDARY---`, '-n', '400'], {
       cwd: ROOT,
       encoding: 'utf8',
       maxBuffer: 32 * 1024 * 1024,
     });
 
-    const found = Object.keys(redactSecrets(log).found);
+    // Commits about this Epic quote example credentials on purpose, and the
+    // detector fires on them correctly, including on the message that
+    // introduced it. Ferret redacts its own history there, which is right and
+    // is not what this test measures.
+    const ordinary = log
+      .split('---FERRET-COMMIT-BOUNDARY---')
+      .filter((message) => !/EPIC-082|secret detection/i.test(message))
+      .join(String.fromCharCode(10));
+
+    const found = Object.keys(redactSecrets(ordinary).found);
     expect(found.filter((kind) => kind !== 'assigned-secret'), found.join(', ')).toStrictEqual([]);
   });
 

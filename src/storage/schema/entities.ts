@@ -85,6 +85,8 @@ export const entity = ferret.table(
     index('entity_kind_idx').on(table.kind),
     index('entity_source_idx').on(table.sourceSystem, table.sourceId),
     index('entity_lifecycle_idx').on(table.lifecycle),
+    // Scope joins: EPIC-032's reconciliation, and "every file in this repository".
+    index('entity_scope_idx').on(table.sourceScope, table.kind),
     index('entity_last_indexed_idx').on(table.lastIndexedAt),
   ],
 );
