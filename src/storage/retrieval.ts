@@ -120,6 +120,7 @@ export class RetrievalStore implements RetrievalPort {
     }
     if (query.sourceSystem !== undefined) conditions.push(sql`e.source_system = ${query.sourceSystem}`);
     if (query.scope !== undefined) conditions.push(sql`e.source_scope = ${query.scope}`);
+    if (query.lifecycle !== undefined) conditions.push(sql`e.lifecycle = ${query.lifecycle}`);
 
     for (const [key, value] of Object.entries(query.attributes ?? {})) {
       // The key is a bind parameter too. An attribute name reaching a query as
@@ -196,16 +197,22 @@ export class RetrievalStore implements RetrievalPort {
         ? sql`true`
         : sql`r.type = ANY(${sql.raw('ARRAY[')}${sql.join(query.types.map((t) => sql`${t}`), sql`, `)}${sql.raw(']::text[]')})`;
 
-    const temporal = sql`r.valid_from <= ${at}::timestamptz AND (r.valid_to IS NULL OR r.valid_to > ${at}::timestamptz)`;
+    // Half-open, so an edge that ended at T was not true *at* T. Asking for
+    // history drops the bound entirely rather than widening it: a caller who
+    // wants every assertion ever made has no instant to reason about.
+    const temporal =
+      query.includeHistorical === true
+        ? sql`true`
+        : sql`r.valid_from <= ${at}::timestamptz AND (r.valid_to IS NULL OR r.valid_to > ${at}::timestamptz)`;
 
     const outward = sql`
-      SELECT ${ENTITY_COLUMNS}, r.type AS rel_type, 'out' AS rel_direction, r.valid_from, r.valid_to
+      SELECT ${ENTITY_COLUMNS}, r.type AS rel_type, 'out' AS rel_direction, r.valid_from, r.valid_to, r.metadata AS rel_metadata
         FROM ferret.relationship r
         JOIN ferret.entity e ON e.id = r.to_id
        WHERE r.from_id = ${query.from} AND ${typeFilter} AND ${temporal}`;
 
     const inward = sql`
-      SELECT ${ENTITY_COLUMNS}, r.type AS rel_type, 'in' AS rel_direction, r.valid_from, r.valid_to
+      SELECT ${ENTITY_COLUMNS}, r.type AS rel_type, 'in' AS rel_direction, r.valid_from, r.valid_to, r.metadata AS rel_metadata
         FROM ferret.relationship r
         JOIN ferret.entity e ON e.id = r.from_id
        WHERE r.to_id = ${query.from} AND ${typeFilter} AND ${temporal}`;
@@ -224,8 +231,11 @@ export class RetrievalStore implements RetrievalPort {
           rel_direction: 'in' | 'out';
           valid_from: Date | string;
           valid_to: Date | string | null;
+          rel_metadata: Record<string, unknown> | null;
         }
-      >(sql`SELECT * FROM (${body}) neighbours ORDER BY rel_type, source_id LIMIT ${limit}`);
+      >(
+        sql`SELECT * FROM (${body}) neighbours ORDER BY rel_type, valid_from DESC, source_id LIMIT ${limit}`,
+      );
 
       return rows.rows.map((row) => ({
         entity: toEntity(row),
@@ -233,6 +243,7 @@ export class RetrievalStore implements RetrievalPort {
         direction: row.rel_direction,
         validFrom: instant(row.valid_from) ?? new Date(0).toISOString(),
         validTo: instant(row.valid_to) ?? null,
+        metadata: row.rel_metadata ?? {},
       }));
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.neighbours');
@@ -304,13 +315,54 @@ export class RetrievalStore implements RetrievalPort {
         JOIN ferret.entity e ON e.id = ev.subject_id, websearch_to_tsquery('english', ${text}) AS q(query)
        WHERE ev.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}`;
 
-    const body =
+    // An abbreviated object id — how every person and every tool refers to a
+    // commit.
+    //
+    // Full-text search matches whole lexemes, so `b9559ab` never matches the
+    // token `b9559ab55755eee...`: the commit is indexed, findable by its full
+    // forty characters, and unreachable by the seven anyone actually has. Found
+    // by asking Ferret for the commit at the top of its own history.
+    //
+    // Seven is Git's own abbreviation floor. The pattern is safe because the
+    // test admits only hexadecimal — `%` and `_` are LIKE wildcards, and a
+    // pattern built from caller text would otherwise be caller-controlled
+    // matching. The value is still a bind parameter; the regex is what makes
+    // the *pattern* trustworthy, not the binding.
+    const abbreviated = /^[0-9a-f]{7,40}$/i.test(text) ? text.toLowerCase() : undefined;
+    const objectIdMatches =
+      abbreviated === undefined
+        ? undefined
+        : sql`
+      SELECT ${ENTITY_COLUMNS},
+             'entity'::text AS hit_source,
+             NULL::uuid AS evidence_id,
+             -- Ranked above every ranked hit: an exact identifier prefix is not
+             -- a guess about relevance, it is the thing that was asked for.
+             1.0::real AS score,
+             e.source_id AS highlight
+        FROM ferret.entity e
+       WHERE (e.source_id LIKE ${`${abbreviated}%`} ESCAPE '\\'
+              OR e.attributes->>'sha' LIKE ${`${abbreviated}%`} ESCAPE '\\')
+         AND ${kindFilter} AND ${systemFilter}`;
+
+    const textual =
       query.includeEvidence === false ? entityMatches : sql`${entityMatches} UNION ALL ${evidenceMatches}`;
+    const body = objectIdMatches === undefined ? textual : sql`${objectIdMatches} UNION ALL ${textual}`;
 
     try {
       const rows = await this.#db.execute<
         EntityRowShape & { hit_source: string; evidence_id: string | null; score: number; highlight: string | null }
-      >(sql`SELECT * FROM (${body}) hits ORDER BY score DESC, kind, source_id LIMIT ${limit}`);
+      >(sql`
+        SELECT * FROM (
+          -- One row per entity per evidence record. A commit found both by its
+          -- object id and by its message is one hit with the better score, not
+          -- the same commit listed twice.
+          SELECT DISTINCT ON (id, evidence_id) *
+            FROM (${body}) hits
+           ORDER BY id, evidence_id, score DESC
+        ) deduped
+         ORDER BY score DESC, kind, source_id
+         LIMIT ${limit}`);
 
       const hits: SearchHit[] = [];
       for (const row of rows.rows) {

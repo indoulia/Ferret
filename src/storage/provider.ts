@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
+import { VERSION } from '../version.js';
 import {
   BaseProvider,
   Capability,
@@ -267,7 +268,85 @@ export class PostgresStorageProvider extends BaseProvider {
 
     results.push(await this.#checkSchema(pool));
     results.push(...(await this.#checkExtensions(pool)));
+    results.push(await this.#checkIndex(pool));
     return results;
+  }
+
+  /**
+   * What Ferret has indexed, and whether the build that indexed it is this one.
+   *
+   * This replaced a hard-coded component that told every operator "no index
+   * exists yet, so its integrity cannot be assessed" — including operators
+   * whose database held three hundred indexed files. A health check that
+   * reports a constant is worse than no health check, because it is believed.
+   *
+   * A watermark written by a different build is reported as degraded rather
+   * than as a failure: nothing is broken, the next run simply re-reads that
+   * scope in full, and an operator watching a long re-read deserves to find the
+   * reason here rather than infer it.
+   */
+  async #checkIndex(pool: Pool): Promise<DependencyCheckResult> {
+    try {
+      const { rows } = await pool.query<{
+        total: string;
+        current: string;
+        newest: Date | null;
+        versions: string[] | null;
+      }>(
+        `SELECT count(*)::text AS total,
+                count(*) FILTER (WHERE producer_version = $1)::text AS current,
+                max(built_at) AS newest,
+                array_agg(DISTINCT producer_version) FILTER (WHERE producer_version <> $1) AS versions
+           FROM ferret.derived_artifact
+          WHERE kind = 'index'`,
+        [VERSION],
+      );
+
+      const row = rows[0];
+      const total = Number(row?.total ?? '0');
+      const current = Number(row?.current ?? '0');
+
+      if (total === 0) {
+        return {
+          name: 'index-integrity',
+          status: DependencyStatus.UNKNOWN,
+          required: false,
+          detail: 'Nothing has been indexed yet, so index integrity cannot be assessed',
+          remediation: 'Run `ferret index <path>` to index a repository.',
+        };
+      }
+
+      const newest = row?.newest ?? undefined;
+      const when = newest === undefined ? 'an unrecorded time' : newest.toISOString();
+
+      if (current < total) {
+        const stale = (row?.versions ?? []).filter((v) => v !== null).join(', ');
+        return {
+          name: 'index-integrity',
+          status: DependencyStatus.DEGRADED,
+          required: false,
+          detail: `${String(total - current)} of ${String(total)} indexed scope(s) were built by a different Ferret (${stale || 'unknown version'}); last indexed ${when}`,
+          remediation:
+            'Nothing is lost. The next `ferret index` re-reads those scopes in full, which is slower once and then correct.',
+        };
+      }
+
+      return {
+        name: 'index-integrity',
+        status: DependencyStatus.OK,
+        required: false,
+        detail: `${String(total)} indexed scope(s), all built by this version; last indexed ${when}`,
+      };
+    } catch (error) {
+      // An integrity check that cannot run reports unknown. It never reports ok,
+      // and it never takes the whole report down with it.
+      return {
+        name: 'index-integrity',
+        status: DependencyStatus.UNKNOWN,
+        required: false,
+        detail: `Index integrity could not be determined: ${classifyDatabaseError(error, 'storage.check.index').message}`,
+      };
+    }
   }
 
   async #checkSchema(pool: Pool): Promise<DependencyCheckResult> {

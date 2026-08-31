@@ -225,17 +225,25 @@ describe('capabilities that do not exist yet', () => {
     // than infer it from an absence.
     const data = payload<StatusPayload>((await runCli(['status', '--json'], { env, cwd })).stdout);
 
+    // No database is configured here, so the index genuinely cannot be
+    // assessed. It must say that, and say what to do about it — this component
+    // used to be a hard-coded stub that told every operator "no index exists
+    // yet" including those whose database held three hundred indexed files.
     const index = find(data.components, 'index-integrity');
     expect(index?.status).toBe('unknown');
     expect(index?.required).toBe(false);
-    expect(index?.remediation).toContain('EPIC-031');
+    expect(index?.remediation).toContain('ferret init');
+    expect(index?.detail).not.toContain('No index exists yet');
 
     expect(find(data.components, 'synchronization')?.status).toBe('unknown');
   });
 
   it('never lets an unimplemented capability read as healthy', async () => {
     const data = payload<StatusPayload>((await runCli(['status', '--json'], { env, cwd })).stdout);
-    for (const name of ['index-integrity', 'synchronization']) {
+    // `index-integrity` is no longer in this list: it is implemented, and with a
+    // database holding a current index it reports `ok` — which is the whole
+    // point of having replaced the stub.
+    for (const name of ['synchronization']) {
       expect(find(data.components, name)?.status).not.toBe('ok');
     }
   });

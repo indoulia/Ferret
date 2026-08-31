@@ -70,6 +70,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "baseline": "node scripts/baseline.mjs",
+    "dogfood": "node scripts/dogfood.mjs",
     "verify": "npm run lint && npm run typecheck && npm run build && npm run test"
   },
   "dependencies": {

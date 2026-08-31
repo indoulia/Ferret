@@ -224,14 +224,6 @@ export async function probeCore(options: ProbeOptions = {}): Promise<CoreProbe> 
 export function plannedCapabilityComponents(): readonly HealthComponent[] {
   return [
     {
-      name: 'index-integrity',
-      area: HealthArea.INDEX,
-      status: DependencyStatus.UNKNOWN,
-      required: false,
-      detail: 'No index exists yet, so its integrity cannot be assessed',
-      remediation: 'Indexing arrives with EPIC-031; integrity checking and recovery with EPIC-094.',
-    },
-    {
       name: 'synchronization',
       area: HealthArea.SOURCES,
       status: DependencyStatus.UNKNOWN,

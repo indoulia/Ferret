@@ -571,6 +571,9 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         }),
       );
 
+    /** The earliest instant each file was observed to exist, across this page. */
+    const firstSeen = new Map<string, { at: Date; file: CanonicalEntity }>();
+
     for (const commit of commits) {
       const commitEntity = add(
         emitter.entity({
@@ -650,18 +653,29 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
 
       for (const change of commit.changes) {
         const file = fileFor(change.path);
-        link(
-          emitter.relationship(
-            {
-              fromId: repositoryEntity.id,
-              type: RelationshipType.REPOSITORY_CONTAINS_FILE,
-              toId: file.id,
-              fromKind: 'repository',
-              toKind: 'file',
-            },
-            commitTime,
-          ),
-        );
+
+        // Containment starts when the file first appeared, not at whichever
+        // commit happens to be processed first.
+        //
+        // `git log` returns newest-first, so emitting the edge here opened the
+        // interval at the *newest* commit that touched the file and every older
+        // assertion then found an open equivalent and did nothing. Measured on
+        // Ferret's own repository: it claimed to have started containing
+        // `README.md` at 14:28, the instant of its most recent edit, when the
+        // file had been there since 09:33. Asking what a repository contained at
+        // a past instant therefore returned nothing modified since — which is
+        // the one question the temporal model exists to answer.
+        //
+        // A deletion establishes nothing, so it is not a candidate: a file seen
+        // only as deleted opens no interval at all, and EPIC-032's tombstone
+        // carries that case.
+        if (change.kind !== ChangeKind.DELETED) {
+          const earliest = firstSeen.get(file.id);
+          if (earliest === undefined || commitTime < earliest.at) {
+            firstSeen.set(file.id, { at: commitTime, file });
+          }
+        }
+
         link(
           emitter.relationship(
             {
@@ -700,6 +714,23 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
           );
         }
       }
+    }
+
+    // Emitted after the whole page, so each interval opens at the earliest
+    // instant the page saw rather than the first one it happened to read.
+    for (const { at, file } of firstSeen.values()) {
+      link(
+        emitter.relationship(
+          {
+            fromId: repositoryEntity.id,
+            type: RelationshipType.REPOSITORY_CONTAINS_FILE,
+            toId: file.id,
+            fromKind: 'repository',
+            toKind: 'file',
+          },
+          at,
+        ),
+      );
     }
 
     return {
