@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { createNullLogger, parseConfig } from '../../../src/index.js';
+import { DEFAULT_PROVIDER_SETTINGS, createNullLogger, parseConfig } from '../../../src/index.js';
 import {
   ADVISORY_LOCK_CLASS,
   ADVISORY_LOCK_MIGRATIONS,
@@ -213,6 +213,7 @@ describeDb(`storage reliability (${databaseAvailable() ? 'real PostgreSQL' : SKI
         }),
         environment: {} as never,
         signal: new AbortController().signal,
+        settings: DEFAULT_PROVIDER_SETTINGS,
       });
       try {
         const checks = await provider.checkDependencies();
@@ -302,6 +303,7 @@ describeDb(`storage reliability (${databaseAvailable() ? 'real PostgreSQL' : SKI
           }),
           environment: {} as never,
           signal: new AbortController().signal,
+          settings: DEFAULT_PROVIDER_SETTINGS,
         })
         .catch((error: unknown) => error);
 
@@ -325,6 +327,7 @@ describeDb(`storage reliability (${databaseAvailable() ? 'real PostgreSQL' : SKI
           }),
           environment: {} as never,
           signal: new AbortController().signal,
+          settings: DEFAULT_PROVIDER_SETTINGS,
         })
         .catch((error: unknown) => error);
 
@@ -363,6 +366,7 @@ describeDb(`storage reliability (${databaseAvailable() ? 'real PostgreSQL' : SKI
           }),
           environment: {} as never,
           signal: new AbortController().signal,
+          settings: DEFAULT_PROVIDER_SETTINGS,
         })
         .catch((error: unknown) => error);
 
@@ -398,6 +402,7 @@ describeDb(`storage reliability (${databaseAvailable() ? 'real PostgreSQL' : SKI
         }),
         environment: {} as never,
         signal: new AbortController().signal,
+        settings: DEFAULT_PROVIDER_SETTINGS,
       });
       await provider.checkDependencies();
       await provider.shutdown();

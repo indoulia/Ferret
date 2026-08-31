@@ -15,7 +15,12 @@ import {
 import { ErrorCode, FerretError, toFerretError } from '../errors/index.js';
 import { createLogger, createNullLogger, type LogLevel, type Logger } from '../logging/index.js';
 import { detectEnvironment, type EnvironmentReport } from '../environment/index.js';
-import { ProviderRegistry, type Provider, type ProviderContext } from '../providers/index.js';
+import {
+  ProviderRegistry,
+  providerConfigurationWarnings,
+  type Provider,
+  type ProviderHostContext,
+} from '../providers/index.js';
 import { RUNTIME_CONTRACT_VERSION, VERSION, versionInfo, type VersionInfo } from '../version.js';
 
 import { DisposableStack, type Disposable } from './disposables.js';
@@ -193,7 +198,7 @@ export class FerretRuntime {
         );
       }
 
-      const providerContext: ProviderContext = {
+      const providerContext: ProviderHostContext = {
         logger: this.#logger.child({ component: 'provider' }),
         config,
         environment,
@@ -201,6 +206,18 @@ export class FerretRuntime {
       };
       await this.#providers.initializeAll(providerContext);
       const providerDependencies = await this.#providers.checkAll(providerContext);
+      // Reported rather than fatal: a configuration file shared across machines
+      // may name a provider only some of them install (EPIC-015 AC-9).
+      const configWarnings = providerConfigurationWarnings(
+        config,
+        this.#providers.describe().map((entry) => entry.id),
+      );
+      for (const warning of configWarnings) {
+        this.#logger.warn(
+          { operation: 'runtime.initialize', providerId: warning.providerId, reason: warning.reason },
+          `Configuration names provider "${warning.providerId}", which is not registered`,
+        );
+      }
 
       this.#context = {
         config,
@@ -218,7 +235,7 @@ export class FerretRuntime {
           operation: 'runtime.initialize',
           durationMs: Date.now() - startedAt,
           configSources: sources,
-          config: describeConfig(config),
+          config: describeConfig(config, { secret: this.#providers.isSecretConfigPath }),
           providers: this.#providers.describe(),
         },
         'Ferret runtime ready',

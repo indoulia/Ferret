@@ -4,6 +4,7 @@ import type { EnvironmentReport } from '../environment/index.js';
 import type { Logger } from '../logging/index.js';
 
 import type { Capability, CapabilityDeclaration } from './capabilities.js';
+import type { ProviderOptionsSchema, ProviderSettings } from './configuration.js';
 
 /**
  * Version of the provider contract itself.
@@ -88,7 +89,24 @@ export interface ProviderContext {
   readonly environment: EnvironmentReport;
   /** Aborted when the runtime begins shutting down. */
   readonly signal: AbortSignal;
+  /**
+   * This provider's own configuration, validated against whatever it declared.
+   *
+   * Derived per provider by the registry (EPIC-015), so it never contains
+   * another provider's options. `config` remains the whole configuration —
+   * narrowing that is credential isolation, EPIC-081.
+   */
+  readonly settings: ProviderSettings;
 }
+
+/**
+ * What the runtime supplies once, for every provider.
+ *
+ * The registry derives a {@link ProviderContext} from this per provider by
+ * adding that provider's settings; the host cannot build one itself because it
+ * would have to pick a provider to build it for.
+ */
+export type ProviderHostContext = Omit<ProviderContext, 'settings'>;
 
 /**
  * The stable contract every external system and replaceable implementation
@@ -117,6 +135,22 @@ export interface Provider {
    * for a capability, which is the honest outcome rather than a silent one.
    */
   readonly capabilities?: readonly CapabilityDeclaration[];
+  /**
+   * The shape of this provider's `options`, validated before `initialize`.
+   *
+   * Optional: a provider that declares nothing receives its options unchanged.
+   * Governance §4 keeps provider-specific validation with the provider — the
+   * core knows only that a schema exists and where its failures point.
+   */
+  readonly configSchema?: ProviderOptionsSchema;
+  /**
+   * Dotted paths into `options` whose values are credentials.
+   *
+   * Redaction by key name cannot know that `pat` is a token. Declaring the path
+   * is how a provider makes its secrets redactable; a declared path covers
+   * everything beneath it.
+   */
+  readonly secretOptions?: readonly string[];
   /** Prepare the provider. Throwing here fails runtime initialization. */
   initialize?(context: ProviderContext): Promise<void> | void;
   /** Report on external systems this provider depends on. Must not mutate. */
@@ -134,23 +168,36 @@ export interface ProviderDescriptor {
   readonly contractVersion: number;
   readonly description?: string;
   readonly initialized: boolean;
+  /**
+   * Whether configuration leaves this provider switched on.
+   *
+   * A disabled provider is still described: "installed and off" is a different
+   * answer from "not installed", and only one of them is a missing dependency.
+   */
+  readonly enabled: boolean;
   /** Capabilities declared, so diagnostics can report what a provider offers. */
   readonly capabilities: readonly Capability[];
 }
 
-export function describeProvider(provider: Provider, initialized: boolean): ProviderDescriptor {
+export function describeProvider(
+  provider: Provider,
+  initialized: boolean,
+  enabled = true,
+): ProviderDescriptor {
   const descriptor: {
     id: string;
     kind: ProviderKind;
     contractVersion: number;
     description?: string;
     initialized: boolean;
+    enabled: boolean;
     capabilities: readonly Capability[];
   } = {
     id: provider.id,
     kind: provider.kind,
     contractVersion: provider.contractVersion,
     initialized,
+    enabled,
     capabilities: (provider.capabilities ?? []).map((declaration) => declaration.capability),
   };
   if (provider.description !== undefined) descriptor.description = provider.description;

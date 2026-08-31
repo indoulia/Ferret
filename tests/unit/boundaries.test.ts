@@ -174,10 +174,15 @@ describe('core public entry point', () => {
     // below. `discovery.ts` joined it with EPIC-013 on the same ground as
     // `sdk/`: it is machinery over the contract and the registry, it imports no
     // concrete provider, and the Epic requires the package to export it.
+    // `configuration.ts` joined it with EPIC-015 on that same ground: it is how
+    // the core resolves a provider's own settings, and it knows nothing about
+    // what any provider's options mean.
     //
     // What the core still may not reach is an implementation.
     const concreteProviders = [...graph.files].filter((file) =>
-      /^providers\/(?!contract\.ts|contracts\/|registry|capabilities|index|sdk\/|discovery\.ts)/.test(file),
+      /^providers\/(?!contract\.ts|contracts\/|configuration\.ts|registry|capabilities|index|sdk\/|discovery\.ts)/.test(
+        file,
+      ),
     );
     expect(concreteProviders).toStrictEqual([]);
   });

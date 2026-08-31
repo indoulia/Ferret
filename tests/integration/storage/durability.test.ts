@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createNullLogger, parseConfig } from '../../../src/index.js';
+import { DEFAULT_PROVIDER_SETTINGS, createNullLogger, parseConfig } from '../../../src/index.js';
 import {
   ADVISORY_LOCK_CLASS,
   ADVISORY_LOCK_MIGRATIONS,
@@ -159,6 +159,7 @@ describeDb(`storage durability (${databaseAvailable() ? 'real PostgreSQL' : SKIP
           config: configFor(db),
           environment: {} as never,
           signal: new AbortController().signal,
+          settings: DEFAULT_PROVIDER_SETTINGS,
         });
         const rows = await provider.pool.query<{ applied_at: Date }>(
           'SELECT applied_at FROM ferret.schema_migrations ORDER BY version LIMIT 1',
@@ -212,6 +213,7 @@ describeDb(`storage durability (${databaseAvailable() ? 'real PostgreSQL' : SKIP
         config: configFor(db),
         environment: {} as never,
         signal: new AbortController().signal,
+        settings: DEFAULT_PROVIDER_SETTINGS,
       });
       const during = provider.report.schema.instanceId;
       await provider.shutdown();
@@ -222,6 +224,7 @@ describeDb(`storage durability (${databaseAvailable() ? 'real PostgreSQL' : SKIP
         config: configFor(db),
         environment: {} as never,
         signal: new AbortController().signal,
+        settings: DEFAULT_PROVIDER_SETTINGS,
       });
       try {
         expect(second.report.schema.instanceId).toBe(during);
@@ -250,6 +253,7 @@ describeDb(`storage durability (${databaseAvailable() ? 'real PostgreSQL' : SKIP
         config: configFor(db),
         environment: {} as never,
         signal: new AbortController().signal,
+        settings: DEFAULT_PROVIDER_SETTINGS,
       });
       await provider.shutdown();
       // Idempotent: shutting down twice must not throw.

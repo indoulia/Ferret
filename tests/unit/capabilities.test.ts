@@ -5,6 +5,7 @@ import {
   CAPABILITY_VERSIONS,
   Capability,
   CapabilitySupport,
+  DEFAULT_PROVIDER_SETTINGS,
   DependencyStatus,
   MINIMUM_CAPABILITY_VERSIONS,
   PROVIDER_CONTRACT_VERSION,
@@ -29,6 +30,7 @@ function context(): ProviderContext {
     config: parseConfig({}),
     environment: {} as never,
     signal: new AbortController().signal,
+    settings: DEFAULT_PROVIDER_SETTINGS,
   };
 }
 

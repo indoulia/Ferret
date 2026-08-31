@@ -2,6 +2,7 @@ import { parseConfig, type FerretConfig } from '../../config/index.js';
 import type { LogFields, LogLevel, Logger } from '../../logging/index.js';
 import type { CapabilityDeclaration } from '../capabilities.js';
 import { Capability } from '../capabilities.js';
+import { DEFAULT_PROVIDER_SETTINGS, type ProviderSettings } from '../configuration.js';
 import type { Provider, ProviderContext } from '../contract.js';
 import { PROVIDER_CONTRACT_VERSION, ProviderKind } from '../contract.js';
 
@@ -101,6 +102,7 @@ export function createTestProviderContext(
     readonly signal?: AbortSignal;
     readonly cwd?: string;
     readonly gitAvailable?: boolean;
+    readonly settings?: ProviderSettings;
   } = {},
 ): TestProviderContext {
   const controller = new AbortController();
@@ -118,6 +120,7 @@ export function createTestProviderContext(
       git: overrides.gitAvailable === false ? { available: false } : { available: true, version: '2.55.0' },
     },
     signal: overrides.signal ?? controller.signal,
+    settings: overrides.settings ?? DEFAULT_PROVIDER_SETTINGS,
     abort: (reason?: unknown): void => {
       controller.abort(reason);
     },

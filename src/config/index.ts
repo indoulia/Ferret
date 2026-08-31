@@ -23,6 +23,7 @@ export {
   parseConfig,
   resolveConfig,
   type ConfigSource,
+  type DescribeConfigOptions,
   type ResolveOptions,
   type ResolvedConfig,
 } from './resolve.js';
