@@ -1,4 +1,5 @@
 import { ErrorCode, FerretError } from '../errors/index.js';
+import { extensionOf } from '../files/index.js';
 
 import { assertSafeRevision } from './history.js';
 import { runGit, type GitRunOptions } from './runner.js';
@@ -173,10 +174,12 @@ export function gitContentHash(oid: string): string {
   return `git-blob:${oid}`;
 }
 
-/** Lowercase extension without the dot, when the path has one. */
-export function extensionOf(path: string): string | undefined {
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  const dot = name.lastIndexOf('.');
-  if (dot <= 0 || dot === name.length - 1) return undefined;
-  return name.slice(dot + 1).toLowerCase();
-}
+/**
+ * Lowercase extension without the dot, when the path has one.
+ *
+ * Re-exported rather than reimplemented: EPIC-030 needs the same answer from
+ * the same paths, and a second copy would eventually disagree about a dotfile
+ * or a trailing dot. The definition lives in the core, which providers may
+ * depend on.
+ */
+export { extensionOf };

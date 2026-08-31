@@ -1,9 +1,14 @@
-import { chmod, mkdir, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { RelationshipType, type DiscoveredRepository, type ProviderOperationContext } from '../../../src/index.js';
+import {
+  RelationshipType,
+  describeFileStructure,
+  type DiscoveredRepository,
+  type ProviderOperationContext,
+} from '../../../src/index.js';
 import { GitSourceProvider, TreeEntryKind, extensionOf, gitContentHash, parseTree } from '../../../src/git/index.js';
 import { createTestOperationContext, createTestProviderContext } from '../../../src/providers/sdk/testing.js';
 import { createRepository, createWorkspace, git, gitVersion } from '../../support/git-fixtures.js';
@@ -277,6 +282,55 @@ withGit('emitting files and their versions', () => {
     const types = new Set(graph.relationships.map((r) => r.type));
     expect(types).toContain(RelationshipType.REPOSITORY_CONTAINS_FILE);
     expect(types).toContain(RelationshipType.FILE_HAS_VERSION);
+  });
+
+  it('records EPIC-030 structure when the caller supplies it — AC-10', async () => {
+    const fixture = await repository('emit-structure');
+    await mkdir(join(fixture.path, 'dist'), { recursive: true });
+    await writeFile(join(fixture.path, 'dist', 'bundle.min.js'), 'var a=1;\r\nvar b=2;\r\n');
+    await git(fixture.path, ['add', '-A']);
+    await git(fixture.path, ['commit', '-m', 'add bundle']);
+
+    const { entries } = await provider.listFiles(fixture.discovered, {}, context);
+    // Nothing in `emitFiles` opens a file, so the caller reads the bytes and
+    // hands the structure in. That is the whole integration point: EPIC-030
+    // derives, EPIC-022 emits, and neither gains a filesystem dependency.
+    const path = 'dist/bundle.min.js';
+    const structure = describeFileStructure(path, await readFile(join(fixture.path, 'dist', 'bundle.min.js')));
+
+    const graph = provider.emitFiles(fixture.discovered, entries, {
+      structure: new Map([[path, structure]]),
+    });
+
+    const file = graph.entities.find(
+      (entity) => entity.kind === 'file' && entity.attributes['path'] === path,
+    );
+    expect(file?.attributes).toMatchObject({
+      classification: 'generated',
+      isGenerated: true,
+      isVendored: false,
+      isBinary: false,
+    });
+
+    const version = graph.entities.find(
+      (entity) => entity.kind === 'file_version' && entity.attributes['path'] === path,
+    );
+    expect(version?.attributes).toMatchObject({ lineCount: 2, lineEnding: 'crlf', endsWithNewline: true });
+  });
+
+  it('emits exactly as before when no structure is supplied — AC-10', async () => {
+    const fixture = await repository('emit-no-structure');
+    await writeFile(join(fixture.path, 'plain.ts'), 'const a = 1;\n');
+    await git(fixture.path, ['add', '-A']);
+    await git(fixture.path, ['commit', '-m', 'add plain']);
+
+    const { entries } = await provider.listFiles(fixture.discovered, {}, context);
+    const graph = provider.emitFiles(fixture.discovered, entries);
+    const file = graph.entities.find(
+      (entity) => entity.kind === 'file' && entity.attributes['path'] === 'plain.ts',
+    );
+
+    expect(file?.attributes).toStrictEqual({ path: 'plain.ts', extension: 'ts' });
   });
 
   it('gives a file the same identity whether it was listed or seen in a commit', async () => {
