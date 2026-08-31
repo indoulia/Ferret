@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { CONTENT_CLOSE, CONTENT_OPEN } from '../../src/security/index.js';
 import {
   CONTENT_NOTICE,
   ContextPackBuilder,
@@ -178,8 +179,14 @@ describe('building a context pack', () => {
     const pack = await builder.build({ question: 'anything', budget: 1200 });
 
     expect(pack.omitted.length).toBeGreaterThan(0);
-    expect(pack.omitted[0]?.reason).toBe(TruncationReason.BUDGET);
-    expect(pack.omitted[0]?.detail).toContain('1200');
+    // By reason rather than by position. EPIC-084's containment adds a delimiter
+    // to every contained value, so an item that used to be dropped whole is now
+    // trimmed first and both omissions are reported — which is more informative
+    // and reorders the list. What the pack must always say is *that* something
+    // did not fit and against which budget.
+    const budgeted = pack.omitted.find((omission) => omission.reason === TruncationReason.BUDGET);
+    expect(budgeted).toBeDefined();
+    expect(budgeted?.detail).toContain('1200');
   });
 
   it('trims an oversized result rather than returning an empty pack', async () => {
@@ -311,7 +318,14 @@ describe('indexed content is data, not instructions', () => {
     const builder = new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: HOSTILE })]));
     const pack = await builder.build({ question: 'anything' });
 
-    expect(pack.items[0]?.entity.attributes['message']).toBe(HOSTILE);
+    // Delivered whole, and since EPIC-084 inside a boundary the message cannot
+    // forge — so the frame is a property of the value rather than of the reader's
+    // goodwill. The pack reports it too, so a client can weight the answer.
+    const message = String(pack.items[0]?.entity.attributes['message']);
+    expect(message).toContain(HOSTILE);
+    expect(message).toBe(`${CONTENT_OPEN}${HOSTILE}${CONTENT_CLOSE}`);
+    expect(pack.contentSafety.marked).toBeGreaterThan(0);
+
     // Nothing Ferret wrote incorporates it.
     expect(pack.items[0]?.reason).not.toContain('Ignore all previous');
     expect(pack.question).not.toContain('Ignore all previous');

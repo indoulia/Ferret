@@ -3,6 +3,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 
 import { CONTENT_NOTICE, ContextPackBuilder, MAX_BUDGET, renderPack } from '../context/index.js';
+import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
+import type { CanonicalEntity } from '../domain/index.js';
 import { serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 import { MAX_LIMIT, type QueryPlanner, type RetrievalPort, type SearchHit } from '../retrieval/index.js';
@@ -128,10 +130,13 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             ...(kinds === undefined ? {} : { kinds }),
             limit: bounded,
           });
+          const safety = new ContentSafety();
+          const results = hits.map((hit) => describeHit(hit, safety));
           return {
             notice: CONTENT_NOTICE,
             count: hits.length,
-            results: hits.map(describeHit),
+            results,
+            contentSafety: safety.report,
           };
         }
 
@@ -141,9 +146,12 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           limit: bounded,
         });
 
+        const safety = new ContentSafety();
+        const plannedResults = hits.map((hit) => ({ ...describeHit(hit, safety), foundBy: hit.foundBy }));
         return {
           notice: CONTENT_NOTICE,
           count: hits.length,
+          contentSafety: safety.report,
           // Reported, not hidden. A caller cannot tell a complete answer from a
           // partial one unless the answer says which it is, and `partial` is the
           // single field that says so.
@@ -158,7 +166,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
               ...(outcome.skipped === undefined ? {} : { skipped: outcome.skipped }),
             })),
           },
-          results: hits.map((hit) => ({ ...describeHit(hit), foundBy: hit.foundBy })),
+          results: plannedResults,
         };
       }),
   );
@@ -181,9 +189,12 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         // Absence is an answer, not an error. A client asking about something
         // Ferret has not indexed should be told that, not handed a failure it
         // has to interpret.
-        return entity === undefined
-          ? { notice: CONTENT_NOTICE, found: false, id }
-          : { notice: CONTENT_NOTICE, found: true, entity };
+        if (entity === undefined) {
+          return { notice: CONTENT_NOTICE, found: false, id, contentSafety: NO_CONTENT_SAFETY };
+        }
+        const safety = new ContentSafety();
+        const described = describeEntity(entity, safety);
+        return { notice: CONTENT_NOTICE, found: true, entity: described, contentSafety: safety.report };
       }),
   );
 
@@ -220,6 +231,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           ...(includeHistorical === undefined ? {} : { includeHistorical }),
           limit: Math.min(limit ?? 20, TOOL_RESULT_LIMIT),
         });
+        const safety = new ContentSafety();
         return {
           notice: CONTENT_NOTICE,
           asOf: includeHistorical === true ? 'all time' : (at ?? 'now'),
@@ -228,7 +240,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             id: neighbour.entity.id,
             kind: neighbour.entity.kind,
             lifecycle: neighbour.entity.lifecycle,
-            attributes: neighbour.entity.attributes,
+            attributes: containAttributes(neighbour.entity.attributes, safety),
             relationship: neighbour.relationshipType,
             direction: neighbour.direction,
             // What the source said about the edge itself — including whether a
@@ -239,6 +251,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             validFrom: neighbour.validFrom,
             validTo: neighbour.validTo,
           })),
+          contentSafety: safety.report,
         };
       }),
   );
@@ -313,16 +326,19 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         });
         const truncated = entities.length > requested;
         const page = truncated ? entities.slice(0, requested) : entities;
+        const safety = new ContentSafety();
+        const described = page.map((entity) => describeEntity(entity, safety));
         return {
           notice: CONTENT_NOTICE,
           count: page.length,
+          contentSafety: safety.report,
           ...(truncated
             ? {
                 truncated: true,
                 more: `More than ${requested} entities match. This is a partial answer — raise \`limit\` (max ${MAX_LIMIT}) or narrow the query.`,
               }
             : { truncated: false }),
-          entities: page,
+          entities: described,
         };
       }),
   );
@@ -355,15 +371,34 @@ export async function serveStdio(server: McpServer): Promise<StdioServerTranspor
  * describing the same thing differently — which is how a client ends up with a
  * field that exists only sometimes.
  */
-function describeHit(hit: SearchHit): Record<string, unknown> {
+/**
+ * One search hit, with its repository-authored text contained — EPIC-084.
+ *
+ * `highlight` is an extract of indexed content and is contained unconditionally;
+ * the attributes go through the policy in `containAttributes`, which wraps prose
+ * and leaves tokens like `path` matchable. Ferret's own fields — the id, the
+ * kind, the score — are structural and are emitted as they are.
+ */
+function describeHit(hit: SearchHit, safety: ContentSafety): Record<string, unknown> {
   return {
     id: hit.entity.id,
     kind: hit.entity.kind,
     lifecycle: hit.entity.lifecycle,
     source: hit.entity.source,
-    attributes: hit.entity.attributes,
+    attributes: containAttributes(hit.entity.attributes, safety),
     matchedIn: hit.source,
-    highlight: hit.highlight,
+    highlight: hit.highlight === undefined ? undefined : safety.contain(hit.highlight),
     score: hit.score,
   };
+}
+
+/**
+ * One entity, contained the same way a hit is.
+ *
+ * The same policy on the same fields, so a client cannot be handed a contained
+ * value by one tool and a raw one by another. Two surfaces disagreeing about
+ * where content starts is the same defect as having no boundary at all.
+ */
+function describeEntity(entity: CanonicalEntity, safety: ContentSafety): Record<string, unknown> {
+  return { ...entity, attributes: containAttributes(entity.attributes, safety) };
 }
