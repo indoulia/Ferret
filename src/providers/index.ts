@@ -40,5 +40,13 @@ export {
   type RepositorySource,
   type SkippedPath,
 } from './contracts/source-repository.js';
+export {
+  discoverProviders,
+  providerDiscoveryError,
+  type ProviderDiscoveryResult,
+  type ProviderDiscoverySkip,
+  type ProviderModuleExports,
+  type ProviderModuleLoader,
+} from './discovery.js';
 export { ProviderRegistry } from './registry.js';
 export * from './sdk/index.js';
