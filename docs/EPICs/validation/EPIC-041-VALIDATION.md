@@ -59,10 +59,10 @@ evidence; the checkpoint is the part a later session reads first.
   identity does not involve the timestamp.
 - **No decision extraction** (EPIC-042) and **no recovery orchestration**
   (EPIC-043), so a later session must read the summary itself.
-- **EPIC-039 compares timestamps as text too** — `touchSession` and `endSession`
-  measure a normalized `Date` against a possibly-offset stored `startedAt`.
-  Same class of defect, outside this Epic's files; recorded here so it is not
-  lost.
+- ~~**EPIC-039 compares timestamps as text too**~~ — `touchSession` and
+  `endSession` measured a normalized `Date` against a possibly-offset stored
+  `startedAt`. Found here, fixed in EPIC-039's validation pass; see
+  [its evidence](EPIC-039-VALIDATION.md).
 
 ## Suite
 
