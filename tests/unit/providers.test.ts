@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  DEFAULT_PROVIDER_SETTINGS,
   DependencyStatus,
   ErrorCode,
   FerretError,
@@ -28,6 +29,7 @@ function context(): ProviderContext {
       git: { available: true, version: '2.55.0' },
     },
     signal: new AbortController().signal,
+    settings: DEFAULT_PROVIDER_SETTINGS,
   };
 }
 
@@ -122,6 +124,8 @@ describe('provider lookup', () => {
         contractVersion: PROVIDER_CONTRACT_VERSION,
         description: 'test provider',
         initialized: false,
+        // EPIC-015: configuration says nothing about this provider, so it is on.
+        enabled: true,
         // EPIC-011 added capability declaration. This provider declares none,
         // so it is registered and lifecycle-managed but never selected for a
         // capability — the honest outcome rather than a silent one.

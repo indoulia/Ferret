@@ -1,6 +1,7 @@
 import { ErrorCode, FerretError, toFerretError } from '../../errors/index.js';
 import type { Logger } from '../../logging/index.js';
 import type { CapabilityDeclaration } from '../capabilities.js';
+import type { ProviderSettings } from '../configuration.js';
 import type { Provider, ProviderContext, ProviderKind } from '../contract.js';
 import { PROVIDER_CONTRACT_VERSION } from '../contract.js';
 
@@ -93,6 +94,24 @@ export abstract class BaseProvider implements Provider {
   /** Aborted when the runtime begins shutting down. */
   protected get signal(): AbortSignal {
     return this.context.signal;
+  }
+
+  /** This provider's own configuration, validated against what it declared. */
+  protected get settings(): ProviderSettings {
+    return this.context.settings;
+  }
+
+  /**
+   * This provider's validated options.
+   *
+   * Typed by the subclass, which is the only code that knows its own schema:
+   * `protected override get options(): GitOptions` is the intended shape. The
+   * cast is the one place the untyped configuration record meets the type the
+   * provider declared, and it is sound exactly when `configSchema` matches that
+   * type — which is the provider's own contract with itself.
+   */
+  protected get options(): Readonly<Record<string, unknown>> {
+    return this.context.settings.options;
   }
 
   async initialize(context: ProviderContext): Promise<void> {

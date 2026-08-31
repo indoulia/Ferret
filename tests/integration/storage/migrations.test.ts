@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createNullLogger, parseConfig } from '../../../src/index.js';
+import { DEFAULT_PROVIDER_SETTINGS, createNullLogger, parseConfig } from '../../../src/index.js';
 import {
   MigrationPolicy,
   PostgresStorageProvider,
@@ -241,6 +241,7 @@ describeDb(`schema migration against real PostgreSQL (${databaseAvailable() ? 'a
         config: configFor(db),
         environment: {} as never,
         signal: new AbortController().signal,
+        settings: DEFAULT_PROVIDER_SETTINGS,
       });
 
       try {
@@ -275,6 +276,7 @@ describeDb(`schema migration against real PostgreSQL (${databaseAvailable() ? 'a
         config: configFor(db, { migrate: 'off' }),
         environment: {} as never,
         signal: new AbortController().signal,
+        settings: DEFAULT_PROVIDER_SETTINGS,
       });
       try {
         const checks = await provider.checkDependencies();
@@ -294,6 +296,7 @@ describeDb(`schema migration against real PostgreSQL (${databaseAvailable() ? 'a
           config: parseConfig({}),
           environment: {} as never,
           signal: new AbortController().signal,
+          settings: DEFAULT_PROVIDER_SETTINGS,
         }),
       ).rejects.toMatchObject({ code: 'E_CONFIG_MISSING' });
     });

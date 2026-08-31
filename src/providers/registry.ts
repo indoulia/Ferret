@@ -9,6 +9,11 @@ import {
   type CapabilityVerdict,
 } from './capabilities.js';
 import {
+  providerSettings,
+  secretOptionPredicate,
+  type ProviderSettings,
+} from './configuration.js';
+import {
   MINIMUM_PROVIDER_CONTRACT_VERSION,
   PROVIDER_CONTRACT_VERSION,
   PROVIDER_ID_PATTERN,
@@ -18,6 +23,7 @@ import {
   type Provider,
   type ProviderContext,
   type ProviderDescriptor,
+  type ProviderHostContext,
   type ProviderKind,
 } from './contract.js';
 
@@ -44,6 +50,15 @@ export class ProviderRegistry {
    * offers this" a lookup rather than a search through declarations.
    */
   readonly #byCapability = new Map<Capability, Array<{ providerId: string; declaration: CapabilityDeclaration }>>();
+  /**
+   * Providers configuration switched off, learned at {@link initializeAll}.
+   *
+   * Empty before then, which is honest rather than convenient: the registry has
+   * no configuration until the runtime hands it one, and nothing selects a
+   * provider before initialization because registration seals at that point.
+   */
+  readonly #disabled = new Set<string>();
+  #secretPredicate: ((path: readonly string[]) => boolean) | undefined;
   #sealed = false;
 
   /**
@@ -84,6 +99,7 @@ export class ProviderRegistry {
 
     this.#providers.set(provider.id, provider);
     this.#order.push(provider.id);
+    this.#secretPredicate = undefined;
 
     for (const declaration of provider.capabilities ?? []) {
       const offered = this.#byCapability.get(declaration.capability) ?? [];
@@ -159,21 +175,37 @@ export class ProviderRegistry {
    * the resulting order equally explicit.
    */
   forCapability(capability: Capability): Provider | undefined {
-    const offered = this.#byCapability.get(capability);
-    const first = offered?.[0];
+    const first = this.#offered(capability)[0];
     return first === undefined ? undefined : this.#providers.get(first.providerId);
   }
 
   /** Every provider offering a capability, in registration order. */
   allForCapability(capability: Capability): readonly Provider[] {
-    return (this.#byCapability.get(capability) ?? [])
+    return this.#offered(capability)
       .map((entry) => this.#providers.get(entry.providerId))
       .filter((provider): provider is Provider => provider !== undefined);
   }
 
   /** What a provider declared about a capability it offers. */
   declarationFor(capability: Capability): CapabilityDeclaration | undefined {
-    return this.#byCapability.get(capability)?.[0]?.declaration;
+    return this.#offered(capability)[0]?.declaration;
+  }
+
+  /**
+   * Capability offers from providers configuration has not switched off.
+   *
+   * A disabled provider stays in the index — `describe()` still reports it, and
+   * re-enabling it is a configuration change rather than a re-registration —
+   * but it must not be *selected*, or turning a provider off would leave it
+   * quietly serving every request (EPIC-015 AC-5).
+   */
+  #offered(
+    capability: Capability,
+  ): ReadonlyArray<{ providerId: string; declaration: CapabilityDeclaration }> {
+    const offered = this.#byCapability.get(capability) ?? [];
+    return this.#disabled.size === 0
+      ? offered
+      : offered.filter((entry) => !this.#disabled.has(entry.providerId));
   }
 
   /**
@@ -184,20 +216,42 @@ export class ProviderRegistry {
    * rather than failing when someone happens to search (Governance §13).
    */
   supports(capability: Capability, operation?: string): CapabilityVerdict {
-    return describeSupport(capability, this.#byCapability.get(capability)?.[0], operation);
+    return describeSupport(capability, this.#offered(capability)[0], operation);
   }
 
-  /** Capabilities at least one registered provider offers. */
+  /** Capabilities at least one enabled provider offers. */
   capabilities(): readonly Capability[] {
-    return [...this.#byCapability.keys()];
+    return [...this.#byCapability.keys()].filter((capability) => this.#offered(capability).length > 0);
   }
 
   describe(): readonly ProviderDescriptor[] {
-    return this.list().map((provider) => describeProvider(provider, this.#initialized.has(provider.id)));
+    return this.list().map((provider) =>
+      describeProvider(provider, this.#initialized.has(provider.id), !this.#disabled.has(provider.id)),
+    );
   }
+
+  /**
+   * Whether a configuration path holds a secret a registered provider declared.
+   *
+   * A bound field rather than a method so it can be handed to `describeConfig`
+   * on its own — the caller that renders configuration should not have to keep
+   * the registry alongside it just to call back into it.
+   */
+  readonly isSecretConfigPath = (path: readonly string[]): boolean => {
+    // Built once and cached: `describeConfig` calls this for every leaf, and
+    // rebuilding the index per leaf would make rendering quadratic in the
+    // number of providers.
+    this.#secretPredicate ??= secretOptionPredicate(this.list());
+    return this.#secretPredicate(path);
+  };
 
   get size(): number {
     return this.#providers.size;
+  }
+
+  /** The host context plus one provider's own settings, and nothing else's. */
+  #contextFor(host: ProviderHostContext, settings: ProviderSettings): ProviderContext {
+    return { ...host, settings };
   }
 
   /**
@@ -206,11 +260,21 @@ export class ProviderRegistry {
    * On the first failure, providers already initialized are shut down before
    * the error propagates, so a failed start leaves nothing open.
    */
-  async initializeAll(context: ProviderContext): Promise<void> {
+  async initializeAll(host: ProviderHostContext): Promise<void> {
     this.#sealed = true;
     for (const provider of this.list()) {
       try {
-        await provider.initialize?.(context);
+        // Settings are resolved *inside* the try so a rejected schema is
+        // handled the same way a failed initialize is: providers already
+        // initialized are shut down, and the diagnosis the provider's own
+        // schema produced survives into the error the caller sees.
+        const settings = providerSettings(provider, host.config);
+        if (!settings.enabled) {
+          this.#disabled.add(provider.id);
+          continue;
+        }
+        this.#disabled.delete(provider.id);
+        await provider.initialize?.(this.#contextFor(host, settings));
         this.#initialized.add(provider.id);
       } catch (error) {
         // A provider that already classified its own failure keeps that
@@ -237,12 +301,16 @@ export class ProviderRegistry {
   }
 
   /** Runs every provider's dependency checks. A throwing check yields `unknown`. */
-  async checkAll(context: ProviderContext): Promise<readonly DependencyCheckResult[]> {
+  async checkAll(host: ProviderHostContext): Promise<readonly DependencyCheckResult[]> {
     const results: DependencyCheckResult[] = [];
     for (const provider of this.list()) {
       if (provider.checkDependencies === undefined) continue;
+      // A provider that is switched off has no dependencies worth reporting:
+      // its external system being down is not a Ferret problem.
+      if (this.#disabled.has(provider.id)) continue;
       try {
-        results.push(...(await provider.checkDependencies(context)));
+        const settings = providerSettings(provider, host.config);
+        results.push(...(await provider.checkDependencies(this.#contextFor(host, settings))));
       } catch (error) {
         results.push({
           name: `${provider.id}:dependencies`,

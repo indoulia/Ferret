@@ -218,22 +218,42 @@ export function parseConfig(input: unknown): FerretConfig {
   return result.data;
 }
 
+export interface DescribeConfigOptions {
+  /**
+   * Additional paths to redact, decided by the caller.
+   *
+   * Redaction by key name cannot know that a provider stores its token under
+   * `pat`. EPIC-015 lets a provider declare which of its option paths are
+   * secrets and passes the resulting predicate here, so the core still enforces
+   * redaction and still does not need to know what any provider's options mean.
+   *
+   * The path arrives as segments rather than a dotted string because a provider
+   * id contains dots, and a joined path could not be split back apart.
+   */
+  readonly secret?: (path: readonly string[]) => boolean;
+}
+
 /**
  * Renders configuration for display, replacing every secret-bearing field.
  *
  * This is the only supported way to show configuration to a human, a log or an
  * AI client.
  */
-export function describeConfig(config: FerretConfig): Record<string, unknown> {
-  const describe = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(describe);
+export function describeConfig(
+  config: FerretConfig,
+  options: DescribeConfigOptions = {},
+): Record<string, unknown> {
+  const isSecretPath = options.secret;
+  const describe = (value: unknown, path: readonly string[]): unknown => {
+    if (Array.isArray(value)) return value.map((entry, index) => describe(entry, [...path, String(index)]));
     if (typeof value !== 'object' || value === null) return value;
     const output: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
       if (entry === undefined) continue;
-      output[key] = isSecretKey(key) ? REDACTED : describe(entry);
+      const child = [...path, key];
+      output[key] = isSecretKey(key) || isSecretPath?.(child) === true ? REDACTED : describe(entry, child);
     }
     return output;
   };
-  return describe(config) as Record<string, unknown>;
+  return describe(config, []) as Record<string, unknown>;
 }

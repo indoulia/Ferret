@@ -6,6 +6,7 @@ import {
   isDatabaseConfigured,
   plannedCapabilityComponents,
   probeCore,
+  providerSettings,
   serializeError,
   toFerretError,
   VERSION,
@@ -67,6 +68,7 @@ async function probeStorage(config: FerretConfig, logger: Logger): Promise<Healt
       config,
       environment: {} as never,
       signal: new AbortController().signal,
+      settings: providerSettings(provider, config),
     });
   } catch (error) {
     const failure = toFerretError(error);

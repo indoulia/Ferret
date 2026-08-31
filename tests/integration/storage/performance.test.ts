@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createNullLogger, parseConfig } from '../../../src/index.js';
+import { DEFAULT_PROVIDER_SETTINGS, createNullLogger, parseConfig } from '../../../src/index.js';
 import {
   PostgresStorageProvider,
   migrate,
@@ -188,6 +188,7 @@ describeDb(`storage performance (${databaseAvailable() ? 'real PostgreSQL' : SKI
         config,
         environment: {} as never,
         signal: new AbortController().signal,
+        settings: DEFAULT_PROVIDER_SETTINGS,
       });
       await provider.shutdown();
     });

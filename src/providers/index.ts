@@ -15,6 +15,17 @@ export {
   type CapabilityVerdict,
 } from './capabilities.js';
 export {
+  DEFAULT_PROVIDER_SETTINGS,
+  providerConfigurationWarnings,
+  providerSettings,
+  secretOptionPredicate,
+  type OptionsSchemaIssue,
+  type OptionsSchemaResult,
+  type ProviderConfigurationWarning,
+  type ProviderOptionsSchema,
+  type ProviderSettings,
+} from './configuration.js';
+export {
   MINIMUM_PROVIDER_CONTRACT_VERSION,
   PROVIDER_CONTRACT_VERSION,
   PROVIDER_ID_PATTERN,
@@ -25,6 +36,7 @@ export {
   type Provider,
   type ProviderContext,
   type ProviderDescriptor,
+  type ProviderHostContext,
 } from './contract.js';
 export {
   RepositoryIdentityKind,
