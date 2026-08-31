@@ -182,3 +182,15 @@ export {
   type SessionCapture,
   type SessionCaptureInput,
 } from './session-capture.js';
+
+export {
+  advanceSessionCheckpoint,
+  createSessionCheckpoint,
+  serializeSessionCheckpoint,
+  sessionCheckpointKey,
+  sessionCheckpointInputSchema,
+  verifySessionCheckpointIntegrity,
+  type JsonValue,
+  type SessionCheckpoint,
+  type SessionCheckpointInput,
+} from './session-checkpoint.js';

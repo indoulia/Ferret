@@ -117,8 +117,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 **P0 focus:** persistent AI-session memory is now a release-critical capability. Ferret must preserve useful AI context across session boundaries, make session state and durable checkpoints first-class, extract decisions and engineering knowledge from captured context, and support recovery/continuation without forcing the AI to rediscover prior work or consume the original session's full token budget. The raw session remains evidence; derived memory remains traceable to that evidence. AI-client-specific capture remains provider/adapter based so Claude is first, not exclusive.
 
 - **EPIC-039 — Session Model** — P0 — MERGED (PR #29; CI passed; validation evidence still required before DONE)
-- **EPIC-040 — Session Capture** — P0 — IN_PROGRESS (PR #30)
-- **EPIC-041 — Durable Checkpoints** — P0
+- **EPIC-040 — Session Capture** — P0 — MERGED (PR #30; CI passed; validation evidence still required before DONE)
+- **EPIC-041 — Durable Checkpoints** — P0 — VALIDATED ([evidence](validation/EPIC-041-VALIDATION.md))
 - **EPIC-042 — Decision & Engineering Memory** — P0
 - **EPIC-043 — Session Recovery** — P0
 
@@ -243,6 +243,8 @@ satisfies them are authored together. Each validation document states it plainly
 Scope is drawn from the registry entry and the approved governance rules; a
 specification that would expand scope beyond what this registry approved is a
 governance change and must be raised rather than written.
+
+This registry update explicitly elevates Session & Agent Memory to release-critical P0 focus; no separate Claude-specific Epic is introduced because client-specific capture belongs behind the provider/adapter boundary.
 
 ## Epic Definition of Done
 
