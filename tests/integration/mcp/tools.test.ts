@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { CONTENT_CLOSE, CONTENT_OPEN } from '../../../src/security/index.js';
 import {
   CONTENT_NOTICE,
   HitSource,
@@ -284,7 +285,15 @@ describe('indexed content reaching a model', () => {
 
     // The message is delivered intact — hiding it would be its own failure —
     // but only ever as a named field of a named object.
-    expect(results[0]?.attributes['message']).toBe(HOSTILE);
+    const message = String(results[0]?.attributes['message']);
+    expect(message).toContain(HOSTILE);
+    // Since EPIC-084, inside a boundary the message cannot forge.
+    expect(message).toBe(`${CONTENT_OPEN}${HOSTILE}${CONTENT_CLOSE}`);
+
+    // And reported, so a client can weight the answer rather than read it first.
+    const safety = result['contentSafety'] as { marked: number; contained: number };
+    expect(safety.marked).toBeGreaterThan(0);
+    expect(safety.contained).toBeGreaterThan(0);
 
     const raw = JSON.stringify(result);
     // The notice precedes the content in the serialized response, because a

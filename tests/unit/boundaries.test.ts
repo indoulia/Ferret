@@ -698,3 +698,84 @@ describe('mcp boundary', () => {
     expect([...mcp.packages].some((name) => name.includes('modelcontextprotocol'))).toBe(true);
   });
 });
+
+describe('content never reaches a control path — EPIC-084 AC-6', () => {
+  /**
+   * Modules that read repository content and could, in principle, act on it.
+   *
+   * EPIC-108 §11 asserts that "content never selects code": a media type chooses
+   * among registered parsers, a grammar is loaded by language name, and nothing
+   * derived from repository content becomes a module specifier or a path. That
+   * was a claim in a document. This makes it a test.
+   */
+  const CONTENT_HANDLING = [
+    'indexing/content.ts',
+    'parsing/framework.ts',
+    'parsing/detect.ts',
+    'files/structure.ts',
+    'code/symbols.ts',
+    'context/pack.ts',
+    'security/containment.ts',
+  ];
+
+  /** Modules that can reach outside the process. */
+  const CONTROL_MODULES = [
+    'node:fs',
+    'node:fs/promises',
+    'node:path',
+    'node:child_process',
+    'node:net',
+    'node:http',
+    'node:https',
+    'node:worker_threads',
+  ];
+
+  it.each(CONTENT_HANDLING)('%s imports nothing that reaches outside the process', (file) => {
+    // The module's **own** import list, not its transitive graph. A direct
+    // import is what this file could actually call; anything further away is
+    // reachable only through code that is not this file's to run.
+    const source = stripComments(readFileSync(resolve(SRC, file), 'utf8'));
+    const specifiers = [...source.matchAll(SPECIFIER)]
+      .map((match) => match[1])
+      .filter((specifier): specifier is string => specifier !== undefined);
+
+    expect(specifiers.filter((specifier) => CONTROL_MODULES.includes(specifier))).toStrictEqual([]);
+  });
+
+  it.each(CONTENT_HANDLING)('%s loads no module chosen at runtime', (file) => {
+    // EPIC-108 §11: nothing derived from repository content becomes a module
+    // specifier. A dynamic import in a module that handles content is the one
+    // construct that could make that false, so its absence is asserted rather
+    // than argued. `import(` with a literal is caught here too — the point is
+    // that content-handling code loads nothing at all.
+    const source = stripComments(readFileSync(resolve(SRC, file), 'utf8'));
+    expect(source).not.toMatch(/\bimport\s*\(/);
+  });
+
+  /**
+   * Deliberately *not* asserted: that these modules cannot transitively reach
+   * `node:fs` or `node:child_process`.
+   *
+   * They can, and the reachability is meaningless. `indexing/content.ts` imports
+   * the providers barrel for four types; the barrel reaches `providers/contract.ts`,
+   * which reaches `environment/detect.ts`, which runs a subprocess to describe
+   * the machine. Nothing about that lets repository content reach a subprocess —
+   * the chain is type-level and composition-level, and the scanner cannot see
+   * that `import type` is erased.
+   *
+   * An assertion that fails for a reason unrelated to the property it names
+   * teaches people to widen it. So the property is asserted where it is real:
+   * above, on what these modules actually *call*, and below, on the layers they
+   * may not reach at all.
+   */
+  it('keeps the content-handling graph free of raw SQL', () => {
+    // Symbol names, signatures and documentation are untrusted text. EPIC-034
+    // binds every value as a parameter and escapes LIKE metacharacters; nothing
+    // that handles content may assemble a query at all.
+    for (const file of CONTENT_HANDLING) {
+      const graph = importGraph(file);
+      expect([...graph.files].filter((f) => f.startsWith('storage/'))).toStrictEqual([]);
+      expect([...graph.packages].filter((name) => name.startsWith('drizzle'))).toStrictEqual([]);
+    }
+  });
+});
