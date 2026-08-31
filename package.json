@@ -48,6 +48,10 @@
       "types": "./dist/providers/index.d.ts",
       "default": "./dist/providers/index.js"
     },
+    "./parsers": {
+      "types": "./dist/parsers/index.d.ts",
+      "default": "./dist/parsers/index.js"
+    },
     "./testing": {
       "types": "./dist/providers/sdk/testing.d.ts",
       "default": "./dist/providers/sdk/testing.js"
@@ -64,7 +68,7 @@
     "tag": "next"
   },
   "scripts": {
-    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs && node scripts/copy-grammars.mjs",
     "prepack": "npm run build",
     "clean": "node scripts/clean.mjs",
     "migration:generate": "node scripts/generate-migration.mjs",
@@ -84,6 +88,7 @@
     "pg": "^8.23.0",
     "picomatch": "^4.0.7",
     "pino": "^10.3.1",
+    "web-tree-sitter": "0.25.10",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -95,6 +100,7 @@
     "eslint": "^10.9.1",
     "globals": "^16.5.0",
     "testcontainers": "^12.1.0",
+    "tree-sitter-wasms": "^0.1.12",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11"
