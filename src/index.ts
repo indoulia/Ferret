@@ -118,6 +118,24 @@ export {
 } from './config/index.js';
 
 export {
+  CODE_MODIFIERS,
+  CODE_SYMBOL_KIND,
+  CODE_SYMBOL_KINDS,
+  CodeSymbolKind,
+  MAX_SIGNATURE_LENGTH,
+  buildCodeSymbols,
+  codeSymbolAttributes,
+  codeSymbolAttributesFrom,
+  codeSymbolId,
+  codeSymbolKindOf,
+  codeSymbolTree,
+  registerCodeSymbolKind,
+  type CodeSymbol,
+  type CodeSymbolContext,
+  type CodeSymbolNode,
+} from './code/index.js';
+
+export {
   FILE_CLASSIFICATIONS,
   FileClassification,
   LineEnding,
