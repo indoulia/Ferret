@@ -49,10 +49,22 @@ function fixtureEnv(): NodeJS.ProcessEnv {
   };
 }
 
-export async function git(cwd: string, args: readonly string[]): Promise<string> {
+/**
+ * Runs `git` in a fixture repository.
+ *
+ * `env` exists for the tests that must pin a commit's instant. Git timestamps
+ * have one-second resolution, so whether two commits share an instant otherwise
+ * depends on how fast the machine is — which is not a property a test should be
+ * measuring.
+ */
+export async function git(
+  cwd: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv = {},
+): Promise<string> {
   const { stdout } = await run('git', [...args], {
     cwd,
-    env: fixtureEnv(),
+    env: { ...fixtureEnv(), ...env },
     windowsHide: true,
     shell: false,
     encoding: 'utf8',

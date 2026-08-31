@@ -239,6 +239,45 @@ describeLifecycle('a file that stops existing', () => {
     expect(revived.intervals.length).toBeGreaterThan(1);
   }, 120_000);
 
+  it('comes back when the delete and the re-add share an instant', async () => {
+    // Git timestamps have one-second resolution. On a fast enough machine a
+    // delete and a re-add land in the same second, no ordering of the history
+    // can separate them, and which one won was decided by whichever row the
+    // database happened to return first.
+    //
+    // It passed on Windows and failed on Linux CI, which is the only reason it
+    // was found — and it revealed that the tree-listing override this Epic
+    // specified had never been implemented. The earlier test passed on the luck
+    // of two commits falling in different seconds.
+    //
+    // The instant is pinned here rather than left to the clock, so the case is
+    // reproduced on every machine instead of on whichever one is quick.
+    const fixture = await repository('same-second');
+    const at = '2026-03-01T12:00:00+00:00';
+    const pinned = { GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at };
+
+    await writeFile(join(fixture.path, 'flicker.txt'), 'one\n');
+    await git(fixture.path, ['add', '-A']);
+    await git(fixture.path, ['commit', '-m', 'add flicker'], pinned);
+
+    await rm(join(fixture.path, 'flicker.txt'));
+    await git(fixture.path, ['add', '-A']);
+    await git(fixture.path, ['commit', '-m', 'remove flicker'], pinned);
+
+    await writeFile(join(fixture.path, 'flicker.txt'), 'two\n');
+    await git(fixture.path, ['add', '-A']);
+    await git(fixture.path, ['commit', '-m', 'restore flicker'], pinned);
+
+    const report = await indexer().index(fixture.discovered, {}, context);
+
+    // The file is in the tree at the indexed revision. That is a direct
+    // observation of the revision being indexed, and it outranks any statement
+    // about a commit in its past.
+    const revived = await believed(report.repositoryId, 'flicker.txt');
+    expect(revived.lifecycle).toBe('active');
+    expect(revived.open).toBe(1);
+  }, 120_000);
+
   it('changes nothing on the runs after the first', async () => {
     // AC-9. A reconciliation that is not idempotent is a reconciliation that
     // rewrites history every hour.

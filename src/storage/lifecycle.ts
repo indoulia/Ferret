@@ -86,7 +86,23 @@ export class IndexLifecycleStore {
            -- Newest statement wins. A file deleted and later re-added is alive,
            -- and the ordering is what makes that fall out rather than needing a
            -- rule of its own.
-           ORDER BY r.to_id, r.valid_from DESC
+           --
+           -- Git commit timestamps have one-second resolution, so a delete and
+           -- a re-add can share an instant — routinely, on a machine fast
+           -- enough, which is how Linux CI failed this while Windows passed.
+           -- Without a tiebreak the winner is whichever row PostgreSQL happened
+           -- to return first, so the same repository gave different answers on
+           -- different machines.
+           --
+           -- The tie is broken toward deletion, which is the direction that can
+           -- be corrected: the caller holds the file tree at the indexed
+           -- revision, and a file it can see there is reinstated. Breaking it
+           -- toward presence instead would need absence from the tree to
+           -- *condemn* a file in order to be corrected, and inferring deletion
+           -- from absence is the one thing this design refuses to do.
+           ORDER BY r.to_id,
+                    r.valid_from DESC,
+                    (r.metadata->>'change' = 'deleted') DESC
         )
         SELECT n.entity_id, n.change, n.valid_from, e.lifecycle, e.attributes->>'path' AS path
           FROM newest n

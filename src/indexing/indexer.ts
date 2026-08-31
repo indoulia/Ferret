@@ -318,6 +318,14 @@ export class RepositoryIndexer {
     // Stage 3 — the file tree at the revision.
     let filesRead = 0;
     let treeComplete = false;
+    /**
+     * Files observed to exist at the indexed revision.
+     *
+     * Direct evidence of presence, and stronger than any older statement that
+     * the file was deleted — a re-add on this branch, or a branch that still
+     * has what another removed.
+     */
+    const present = new Set<string>();
     if (options.withFiles !== false) {
       throwIfAborted(context.signal, 'index.files');
       const listing = await this.#source.listFiles(
@@ -332,11 +340,20 @@ export class RepositoryIndexer {
         observedAt,
       });
       skipped.push(...graph.skipped);
+      for (const entity of graph.entities) {
+        if (entity.kind === 'file') present.add(entity.id);
+      }
       await write(graph);
     }
 
     // Stage 4 — reconcile what Ferret believes exists with what it observed.
-    const lifecycle = await this.#reconcile(repositoryEntity.id, treeComplete, options, observedAt, context);
+    const lifecycle = await this.#reconcile(
+      repositoryEntity.id,
+      { complete: treeComplete, present },
+      options,
+      observedAt,
+      context,
+    );
 
     // The watermark moves only after everything above succeeded. A run that
     // failed halfway must be repeated, not resumed from a position it never
@@ -393,7 +410,7 @@ export class RepositoryIndexer {
    */
   async #reconcile(
     repositoryId: string,
-    treeComplete: boolean,
+    tree: { complete: boolean; present: ReadonlySet<string> },
     options: IndexOptions,
     now: Date,
     context: ProviderOperationContext,
@@ -411,7 +428,7 @@ export class RepositoryIndexer {
     if (options.withFiles === false) {
       return none('the file tree was not read, so presence could not be corroborated');
     }
-    if (!treeComplete) {
+    if (!tree.complete) {
       return none('the file tree listing was truncated, so absence proves nothing');
     }
     if (context.signal?.aborted === true) return none('the run was cancelled');
@@ -424,6 +441,20 @@ export class RepositoryIndexer {
       // Checked per entity rather than per batch: a cancelled run must stop
       // where it is, and every write so far is independently correct.
       throwIfAborted(context.signal, 'index.lifecycle');
+
+      // Seeing the file in the tree outranks any statement that it was
+      // deleted. Both are positive observations, and this one is of the
+      // revision being indexed rather than of some commit in its past.
+      //
+      // Git timestamps have one-second resolution, so a delete and a re-add
+      // can share an instant and no ordering of the history can separate them.
+      // The tree is what settles it, and this is why: without it the outcome
+      // depended on which row the database happened to return first, which
+      // passed on one platform and failed on another.
+      if (change.action === 'retire' && tree.present.has(change.entityId)) {
+        if (await store.reinstate(change.entityId, now)) reinstated += 1;
+        continue;
+      }
 
       if (change.action === 'retire') {
         if (await store.retire(change.entityId, repositoryId, change.at, now)) retired += 1;

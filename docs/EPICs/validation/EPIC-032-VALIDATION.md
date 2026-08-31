@@ -40,7 +40,7 @@ open interval backwards when it learns the fact began earlier.
 | AC-1 file with a newest deletion is `deleted` | PASS | `is tombstoned, and its containment closed at the deleting commit` |
 | AC-2 containment closed at the deleting commit's instant | PASS | same test, compared against `git log -1 --format=%cI` |
 | AC-3 re-added file is active again | PASS | `comes back when it is added again` |
-| AC-4 presence in a complete tree keeps a file active | PASS | same test; the gap between intervals is asserted, not collapsed |
+| AC-4 presence in a complete tree keeps a file active | PASS | `comes back when the delete and the re-add share an instant` — see §2.1 |
 | AC-5 a truncated tree listing retires nothing | PASS | `does nothing when the file tree came back truncated` |
 | AC-6 `--no-files` and a missing store retire nothing | PASS | two tests in `a partial observation retires nothing` |
 | AC-7 reference lifecycle | **NOT APPLICABLE** | see §5 |
@@ -49,6 +49,30 @@ open interval backwards when it learns the fact began earlier.
 | AC-10 `index-integrity` reports real state | PASS | §4 |
 | AC-11 report states what changed | PASS | `lifecycle  13 deleted, 0 restored` in `ferret index` |
 | AC-12 a client can see a change was a deletion | PASS | `surfaces the change a commit made to a file` |
+
+### 2.1 AC-4 passed for the wrong reason first
+
+Worth recording, because it is the failure mode this project keeps guarding
+against and it still happened.
+
+`comes back when it is added again` passed on Windows and **failed on Linux CI**.
+Git commit timestamps have one-second resolution, so on a fast enough machine a
+delete and a re-add land in the same second. No ordering of history can separate
+them, and the winner was whichever row PostgreSQL happened to return first.
+
+The failure exposed something larger: **the tree-listing override AC-4 specifies
+had never been implemented.** The Windows run passed on the luck of two commits
+falling in different seconds, and the acceptance criterion would have been marked
+PASS on that evidence had CI not run on a second platform.
+
+Both halves are fixed. The tie is now broken deterministically *toward deletion*
+— the direction that can be corrected — and the file tree at the indexed
+revision reinstates anything it can actually see. Breaking the tie toward
+presence instead would require absence from the tree to condemn a file, and
+inferring deletion from absence is the one thing this design refuses to do.
+
+The regression test pins the commit instant rather than relying on the clock, so
+the case is reproduced on every machine instead of on whichever one is quick.
 
 ## 3. Safety: a partial observation retires nothing
 
@@ -149,7 +173,7 @@ Findings 1, 4 and 7 were each caught by a check in this script failing.
 
 ```
 Test Files  51 passed (51)
-     Tests  1263 passed | 3 skipped (1266)
+     Tests  1264 passed | 3 skipped (1267)
 ```
 
 `npm audit`: 0 vulnerabilities.
