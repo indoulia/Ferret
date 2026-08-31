@@ -104,11 +104,14 @@ describe('the package a consumer installs', () => {
   it('publishes the subpaths the architecture depends on', () => {
     // Each subpath exists because the core must *not* carry what it holds:
     // `pg` and Drizzle, the Git executable path, the MCP SDK, the test doubles.
+    // `./providers` is EPIC-013's: a host composing Ferret needs the registry
+    // and discovery without importing anything that loads a provider for it.
     expect(Object.keys(pkg.exports).sort()).toStrictEqual([
       '.',
       './git',
       './mcp',
       './package.json',
+      './providers',
       './storage',
       './testing',
     ]);

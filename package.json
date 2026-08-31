@@ -44,6 +44,10 @@
       "types": "./dist/mcp/index.d.ts",
       "default": "./dist/mcp/index.js"
     },
+    "./providers": {
+      "types": "./dist/providers/index.d.ts",
+      "default": "./dist/providers/index.js"
+    },
     "./testing": {
       "types": "./dist/providers/sdk/testing.d.ts",
       "default": "./dist/providers/sdk/testing.js"
