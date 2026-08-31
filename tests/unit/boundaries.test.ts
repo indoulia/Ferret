@@ -354,6 +354,38 @@ describe('code parser boundary', () => {
   });
 });
 
+describe('code intelligence boundary', () => {
+  const code = importGraph('code/index.ts');
+
+  it('speaks the parser contract, never a parser', () => {
+    // EPIC-033 exists so a grammar upgrade cannot change what a consumer
+    // switches on. An import of a parser here would defeat that entirely.
+    expect([...code.files].filter((file) => file.startsWith('parsers/'))).toStrictEqual([]);
+    expect(code.packages.has('web-tree-sitter')).toBe(false);
+  });
+
+  it('derives identity the way the canonical model does', () => {
+    // A second identity scheme is how two halves of one graph stop agreeing
+    // about what a thing is.
+    expect(code.files).toContain('domain/identity.ts');
+  });
+
+  it('does not reach storage, the CLI or a provider implementation', () => {
+    const forbidden = [...code.files].filter(
+      (file) => file.startsWith('storage/') || file.startsWith('cli/') || file.startsWith('git/'),
+    );
+    expect(forbidden).toStrictEqual([]);
+  });
+
+  it('adds no runtime dependency beyond the core set', () => {
+    // A subset rather than an exact match: this graph reaches less of the core
+    // than the entry point does, and asserting the full set would make the test
+    // fail when the module got *smaller*.
+    const external = [...code.packages].filter((name) => !name.startsWith('node:'));
+    expect(external.filter((name) => !ALLOWED_CORE_PACKAGES.has(name))).toStrictEqual([]);
+  });
+});
+
 describe('file intelligence boundary', () => {
   const files = importGraph('files/index.ts');
 
