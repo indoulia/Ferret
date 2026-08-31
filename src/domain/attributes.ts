@@ -3,6 +3,27 @@ import { z } from 'zod';
 import { EntityKind } from './kinds.js';
 
 /**
+ * EPIC-030's vocabularies, spelled out here rather than imported.
+ *
+ * `src/files/` derives these from content and depends on the parsing module;
+ * the canonical model depends on nothing but zod, and importing upwards to
+ * reach two string unions would trade that for no benefit. `files.test.ts`
+ * asserts the two lists stay identical.
+ */
+const FILE_CLASSIFICATIONS = [
+  'source',
+  'test',
+  'documentation',
+  'configuration',
+  'data',
+  'generated',
+  'vendored',
+  'binary',
+] as const;
+
+const LINE_ENDINGS = ['lf', 'crlf', 'cr', 'mixed', 'none'] as const;
+
+/**
  * Canonical attributes per entity kind.
  *
  * These are the fields Ferret understands *provider-neutrally*. They are
@@ -124,6 +145,18 @@ export const fileAttributes = z
     /** Detected language, when a parser established one. */
     language: z.string().min(1).optional(),
     isBinary: z.boolean().optional(),
+    /**
+     * What the file is for, in one word — EPIC-030.
+     *
+     * Single-valued, because a consumer needs one answer. The two flags below
+     * are separate because a minified bundle inside `node_modules` is both, and
+     * "is this generated" must not answer `false` because `vendored` won.
+     */
+    classification: z.enum(FILE_CLASSIFICATIONS).optional(),
+    /** What decided the classification. A derived judgement must be explicable. */
+    classificationReason: z.string().min(1).optional(),
+    isGenerated: z.boolean().optional(),
+    isVendored: z.boolean().optional(),
   })
   .strict();
 
@@ -139,6 +172,12 @@ export const fileVersionAttributes = z
     /** Path at this version, which a rename makes differ from the file's. */
     path: z.string().min(1).optional(),
     encoding: z.string().min(1).optional(),
+    /** Lines of text — EPIC-030. Absent for binary: the question does not apply. */
+    lineCount: z.number().int().nonnegative().optional(),
+    lineEnding: z.enum(LINE_ENDINGS).optional(),
+    endsWithNewline: z.boolean().optional(),
+    /** Longest line in characters. A minified bundle is one very long line. */
+    maxLineLength: z.number().int().nonnegative().optional(),
   })
   .strict();
 

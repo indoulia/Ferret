@@ -118,6 +118,20 @@ export {
 } from './config/index.js';
 
 export {
+  FILE_CLASSIFICATIONS,
+  FileClassification,
+  LineEnding,
+  MARKER_WINDOW_BYTES,
+  baseNameOf,
+  describeFileStructure,
+  extensionOf,
+  fileAttributesFrom,
+  fileVersionAttributesFrom,
+  normalizeForMatch,
+  type FileStructure,
+} from './files/index.js';
+
+export {
   DEFAULT_MAX_PARSE_BYTES,
   DETECTION_WINDOW_BYTES,
   MEDIA_TYPES,
@@ -359,6 +373,8 @@ export {
   entityKindDefinition,
   entityKindSchema,
   entitySourceSchema,
+  fileAttributes,
+  fileVersionAttributes,
   externalIdSchema,
   identify,
   isCanonicalId,

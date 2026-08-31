@@ -9,6 +9,7 @@ import {
 } from '../domain/index.js';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
+import { fileAttributesFrom, fileVersionAttributesFrom, type FileStructure } from '../files/index.js';
 import { isSecretPath, redactSecrets } from '../security/index.js';
 import { VERSION } from '../version.js';
 import {
@@ -801,7 +802,18 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
   emitFiles(
     repository: DiscoveredRepository,
     entries: readonly TreeEntry[],
-    options: { revision?: string; observedAt?: Date } = {},
+    options: {
+      revision?: string;
+      observedAt?: Date;
+      /**
+       * EPIC-030 structure, by path, for callers that have read the content.
+       *
+       * Optional because nothing here opens a file: `listFiles` answers from the
+       * tree, and reading content is a decision the caller makes. A path absent
+       * from the map is emitted exactly as it was before EPIC-030.
+       */
+      structure?: ReadonlyMap<string, FileStructure>;
+    } = {},
   ): {
     entities: readonly CanonicalEntity[];
     relationships: readonly CanonicalRelationship[];
@@ -839,12 +851,14 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       }
 
       const extension = extensionOf(entry.path);
+      const structure = options.structure?.get(entry.path);
       const file = emitter.entity({
         kind: 'file',
         source: { id: entry.path, scope: repositoryEntity.id },
         attributes: {
           path: entry.path,
           ...(extension === undefined ? {} : { extension }),
+          ...(structure === undefined ? {} : fileAttributesFrom(structure)),
         },
       });
       entities.push(file);
@@ -859,6 +873,9 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
           contentHash: gitContentHash(entry.oid),
           path: entry.path,
           ...(entry.sizeBytes === undefined ? {} : { sizeBytes: entry.sizeBytes }),
+          ...(structure === undefined
+            ? {}
+            : fileVersionAttributesFrom(structure, gitContentHash(entry.oid))),
         },
       });
       entities.push(version);

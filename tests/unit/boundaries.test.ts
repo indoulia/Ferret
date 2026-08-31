@@ -354,6 +354,30 @@ describe('code parser boundary', () => {
   });
 });
 
+describe('file intelligence boundary', () => {
+  const files = importGraph('files/index.ts');
+
+  it('derives from bytes it is given, and opens nothing', () => {
+    // EPIC-030 describes a file; it never reads one. A filesystem import here
+    // would make classification depend on a checkout existing, which is exactly
+    // what EPIC-022 avoided by reading trees rather than walking directories.
+    expect([...files.packages].filter((name) => name.startsWith('node:'))).toStrictEqual([]);
+  });
+
+  it('reuses EPIC-024 detection rather than repeating it', () => {
+    // A file that is text to one module and binary to the other is the bug this
+    // import prevents.
+    expect(files.files).toContain('parsing/detect.ts');
+  });
+
+  it('does not reach a provider, storage or the CLI', () => {
+    const forbidden = [...files.files].filter(
+      (file) => file.startsWith('git/') || file.startsWith('storage/') || file.startsWith('cli/'),
+    );
+    expect(forbidden).toStrictEqual([]);
+  });
+});
+
 describe('parser framework boundary', () => {
   const parsing = importGraph('parsing/index.ts');
 
