@@ -370,16 +370,20 @@ describeEndToEnd('indexing a repository', () => {
     // commit, which is far worse than re-reading one.
     //
     // What the watermark actually promises is that the second run *writes*
-    // nothing and *finishes sooner*, and both of those are checked.
+    // nothing, which is what is checked.
     expect(second.incremental).toBe(true);
     expect(second.entities.created).toBe(0);
     expect(second.relationships.created).toBe(0);
     expect(second.evidence.recorded).toBe(0);
-    // The second run must be cheaper than the first, or the watermark is
-    // decorative. Not a tight ratio — the file tree is still read in full —
-    // but a second run that were *slower* would mean the incremental path had
-    // been lost.
-    expect(secondRun).toBeLessThan(firstRun);
+    // `expect(secondRun).toBeLessThan(firstRun)` used to stand here and was
+    // flaky: it failed on a shared runner at 1685ms against 1618ms, a 4%
+    // spread, having passed on the two runs before it. It cannot detect what
+    // it claims to either — the file tree is still read in full on the second
+    // run, so losing the incremental path would land near 1.0x, inside the
+    // same noise band it was tripping on. What actually proves the watermark
+    // is the four assertions above: the run reports itself incremental and
+    // writes nothing. Wall clock keeps only its absolute ceiling.
     expect(firstRun).toBeLessThan(60_000);
+    expect(secondRun).toBeLessThan(60_000);
   }, 180_000);
 });
