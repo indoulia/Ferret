@@ -1,6 +1,7 @@
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 
+import type { FerretConfig } from '../config/index.js';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
@@ -80,6 +81,16 @@ export interface StorageReport {
 export class PostgresStorageProvider extends BaseProvider {
   readonly id = STORAGE_PROVIDER_ID;
   readonly kind = ProviderKind.STORAGE;
+  /**
+   * The one credential Ferret holds, declared by the one thing that opens the
+   * connection it exists for — EPIC-081 §8.1.
+   *
+   * Every other provider's `context.config` has no password field at all, and
+   * reaching for one does not compile. This declaration is what makes the
+   * exception visible: it is a line in the provider that needs it, not a
+   * property of being loaded at all.
+   */
+  readonly credentials: readonly string[] = ['database.password'];
   readonly description =
     'PostgreSQL persistence, schema migration and schema version tracking';
 
@@ -160,17 +171,27 @@ export class PostgresStorageProvider extends BaseProvider {
     const logger = context.logger.child({ component: 'storage' });
     this.#logger = logger;
 
-    const connection = describeConnection(context.config);
+    // Reassembled here and nowhere else — EPIC-081 AC-2. `context.config` no
+    // longer carries a password, so the one component allowed to hold one puts
+    // it back for the one call that needs it. Deliberately a local: it is not
+    // stored on the provider, and nothing else in this file can reach it.
+    const password = context.credentials?.['database.password'];
+    const config: FerretConfig = {
+      ...context.config,
+      database: { ...context.config.database, ...(password === undefined ? {} : { password }) },
+    };
+
+    const connection = describeConnection(config);
     // Logged before connecting so a hang is attributable to a host and port.
     // `describeConnection` cannot return the password.
     logger.debug({ operation: 'storage.connect', connection }, 'Connecting to PostgreSQL');
 
-    const pool = createPool(context.config, logger);
+    const pool = createPool(config, logger);
     this.#pool = pool;
 
     try {
       const server = await this.#verifyServer(pool);
-      const policy = this.#options.policy ?? context.config.database.migrate;
+      const policy = this.#options.policy ?? config.database.migrate;
       const migration = await migrate(pool, {
         logger,
         policy,

@@ -14,6 +14,14 @@ export {
   type ProviderConfig,
 } from './schema.js';
 
+export { describeConfigProtection, type ConfigProtection } from './at-rest.js';
+export {
+  CREDENTIAL_CONFIG_PATHS,
+  credentialsFor,
+  withoutCredentialFields,
+  type ProviderVisibleConfig,
+} from './credentials.js';
+
 export {
   ConfigPrecedence,
   ENV_BINDINGS,
@@ -45,11 +53,16 @@ export {
   SECRET_REF_KEY,
   describeSecretRef,
   isSecretRef,
+  registerSecretResolver,
   resolveSecretRef,
   resolveSecrets,
+  secretResolverFor,
+  secretResolverSources,
   type ResolveSecretsOptions,
   type SecretRef,
   type SecretRefBody,
+  type SecretResolver,
+  type SecretResolverContext,
 } from './secret-ref.js';
 
 export {

@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import { withoutCredentials } from '../security/credentials.js';
 import { SUPPORTED_NODE_RANGE, VERSION } from '../version.js';
 
 const execFileAsync = promisify(execFile);
@@ -44,6 +45,13 @@ function nodeMajor(version: string): number {
  * directly to the OS: there is no shell, and therefore no shell metacharacter
  * interpretation. Governance §12 — Ferret must not establish unsafe subprocess
  * primitives that later Epics inherit.
+ *
+ * The environment is scrubbed of credentials — EPIC-081 AC-9. This call passed
+ * no `env` at all, so its child inherited the parent's whole environment,
+ * including `FERRET_DATABASE_PASSWORD`, without even the Git-redirect scrub the
+ * runner applies. It is `git --version` and reads nothing, which is exactly why
+ * it was missed: the least consequential subprocess in the codebase was the one
+ * handing on the most.
  */
 export async function detectGit(timeoutMs = 5_000): Promise<GitInfo> {
   try {
@@ -52,6 +60,7 @@ export async function detectGit(timeoutMs = 5_000): Promise<GitInfo> {
       windowsHide: true,
       shell: false,
       encoding: 'utf8',
+      env: withoutCredentials(process.env),
     });
     const version = /(\d+\.\d+\.\d+)/.exec(stdout)?.[1];
     return version === undefined ? { available: true } : { available: true, version };

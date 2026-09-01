@@ -3,7 +3,9 @@ import {
   HealthArea,
   buildReport,
   componentFrom,
+  credentialsFor,
   isDatabaseConfigured,
+  withoutCredentialFields,
   plannedCapabilityComponents,
   probeCore,
   providerSettings,
@@ -65,7 +67,12 @@ async function probeStorage(config: FerretConfig, logger: Logger): Promise<Healt
   try {
     await provider.initialize({
       logger,
-      config,
+      // Projected and granted exactly as the registry does — EPIC-081 §8.1.
+      // This is the one place outside the registry that builds a provider
+      // context in production, and passing the whole configuration here would
+      // have made the narrowing true by type and false at runtime.
+      config: withoutCredentialFields(config),
+      credentials: credentialsFor(config, provider.credentials ?? []),
       environment: {} as never,
       signal: new AbortController().signal,
       settings: providerSettings(provider, config),

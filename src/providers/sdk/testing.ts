@@ -1,4 +1,4 @@
-import { parseConfig, type FerretConfig } from '../../config/index.js';
+import { parseConfig, withoutCredentialFields, type FerretConfig } from '../../config/index.js';
 import type { LogFields, LogLevel, Logger } from '../../logging/index.js';
 import type { CapabilityDeclaration } from '../capabilities.js';
 import { Capability } from '../capabilities.js';
@@ -103,13 +103,23 @@ export function createTestProviderContext(
     readonly cwd?: string;
     readonly gitAvailable?: boolean;
     readonly settings?: ProviderSettings;
+    /**
+     * Credentials to grant, as the registry would for a provider that declared
+     * them — EPIC-081. Absent grants none, which is what a provider that
+     * declared none receives in production.
+     */
+    readonly credentials?: Readonly<Record<string, string>>;
   } = {},
 ): TestProviderContext {
   const controller = new AbortController();
   const logger = overrides.logger ?? new CapturingLogger();
   return {
     logger,
-    config: overrides.config ?? parseConfig({}),
+    // Projected, exactly as the registry projects it — EPIC-081 §8.1. A test
+    // harness that handed over the password would let a provider pass here and
+    // fail to compile in production, which is the wrong way round.
+    config: withoutCredentialFields(overrides.config ?? parseConfig({})),
+    credentials: overrides.credentials ?? {},
     environment: {
       ferretVersion: '0.0.0-test',
       node: { version: process.versions.node, major: 22, supportedRange: '>=22.0.0', supported: true },

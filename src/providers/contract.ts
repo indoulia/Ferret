@@ -1,4 +1,4 @@
-import type { FerretConfig } from '../config/index.js';
+import type { FerretConfig, ProviderVisibleConfig } from '../config/index.js';
 import type { DependencyCheckResult } from '../diagnostics/index.js';
 import type { EnvironmentReport } from '../environment/index.js';
 import type { Logger } from '../logging/index.js';
@@ -85,7 +85,24 @@ export const PROVIDER_ID_PATTERN = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
  */
 export interface ProviderContext {
   readonly logger: Logger;
-  readonly config: FerretConfig;
+  /**
+   * Everything Ferret is configured with, minus every credential — EPIC-081.
+   *
+   * `database.password` is absent from the type, so reaching for it does not
+   * compile. A provider that legitimately needs a credential declares it (see
+   * {@link ProviderDescriptor.credentials}) and reads it from
+   * {@link ProviderContext.credentials}.
+   */
+  readonly config: ProviderVisibleConfig;
+  /**
+   * The credentials this provider declared, keyed by the path it declared.
+   *
+   * Optional, and absent means *none granted* — the safe direction. A context
+   * assembled by hand (a test, a conformance harness) therefore grants nothing
+   * unless it says so, which is the behaviour a forgotten field should have.
+   * Empty for every provider that declared none, which is all of them but one.
+   */
+  readonly credentials?: Readonly<Record<string, string>>;
   readonly environment: EnvironmentReport;
   /** Aborted when the runtime begins shutting down. */
   readonly signal: AbortSignal;
@@ -93,8 +110,7 @@ export interface ProviderContext {
    * This provider's own configuration, validated against whatever it declared.
    *
    * Derived per provider by the registry (EPIC-015), so it never contains
-   * another provider's options. `config` remains the whole configuration —
-   * narrowing that is credential isolation, EPIC-081.
+   * another provider's options.
    */
   readonly settings: ProviderSettings;
 }
@@ -106,7 +122,16 @@ export interface ProviderContext {
  * adding that provider's settings; the host cannot build one itself because it
  * would have to pick a provider to build it for.
  */
-export type ProviderHostContext = Omit<ProviderContext, 'settings'>;
+export type ProviderHostContext = Omit<ProviderContext, 'settings' | 'config' | 'credentials'> & {
+  /**
+   * The whole configuration, credentials included.
+   *
+   * The host holds it because the host resolved it. What crosses into a
+   * provider is the registry's projection of it — EPIC-081 §8.1 — which is why
+   * this type and {@link ProviderContext} no longer agree about `config`.
+   */
+  readonly config: FerretConfig;
+};
 
 /**
  * The stable contract every external system and replaceable implementation
@@ -151,6 +176,18 @@ export interface Provider {
    * everything beneath it.
    */
   readonly secretOptions?: readonly string[];
+  /**
+   * Credential configuration paths this provider needs — EPIC-081 §8.1.
+   *
+   * Declared, so that receiving a credential is a visible property of a
+   * provider rather than a consequence of being loaded. Today exactly one
+   * provider declares anything: the storage provider, which opens the
+   * connection the credential exists for.
+   *
+   * A path not in `CREDENTIAL_CONFIG_PATHS` is ignored rather than honoured —
+   * this grants access to known credentials, it does not define new ones.
+   */
+  readonly credentials?: readonly string[];
   /** Prepare the provider. Throwing here fails runtime initialization. */
   initialize?(context: ProviderContext): Promise<void> | void;
   /** Report on external systems this provider depends on. Must not mutate. */
