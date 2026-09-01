@@ -13,7 +13,7 @@ import {
 // `discoverProviders` ships from `@indoulia/ferret/providers`, not the package
 // root, and is imported from where it is published rather than added to the
 // root barrel to suit a test.
-import { discoverProviders } from '../../../src/providers/index.js';
+import { discoverProviders, type ProviderDiscoverySkip } from '../../../src/providers/index.js';
 import {
   FERRET_PARSERS_MODULE,
   loadFerretParsers,
@@ -155,9 +155,48 @@ describe('composing through a real runtime lifecycle', () => {
       );
       expect(late.providers).toStrictEqual([]);
       expect(late.skipped[0]?.detail).toContain('after the runtime has initialized');
+      // Beside the prose assertion above, not instead of it. The prose is what a
+      // person reads; the reason is what a caller branches on, and EPIC-013
+      // AC-10 requires the second to exist so nobody has to do the first.
+      expect(late.skipped[0]?.reason).toBe('lifecycle');
       expect(runtime.providers.supports(Capability.PARSER).support).toBe(
         CapabilitySupport.UNAVAILABLE,
       );
     });
+  });
+
+  it('reports a caller lifecycle error and a broken module as different reasons', async () => {
+    // EPIC-013 AC-10, asserted as a *discrimination* rather than as a constant.
+    // Both of these were `reason: 'invalid'` before this test existed, so the
+    // only thing separating "you composed this at the wrong time" from "this
+    // module is broken" was English text in `detail` — which is precisely what
+    // AC-10 says a caller must never have to parse.
+    //
+    // It has to run through a real runtime, because a bare `ProviderRegistry`
+    // cannot be sealed: `initializeAll` is the only thing that seals it. Every
+    // fresh-registry test in this file passed throughout the defect's life.
+    const runtime = createRuntime({ providers: [] });
+    let lifecycle: ProviderDiscoverySkip | undefined;
+
+    await runtime.run(async () => {
+      const late = await discoverProviders(
+        runtime.providers,
+        [FERRET_PARSERS_MODULE],
+        loadFerretParsers,
+      );
+      lifecycle = late.skipped[0];
+    });
+
+    // A well-formed module that exports something which is not a Provider. The
+    // registry rejects it on its own merits, with a fresh registry, so nothing
+    // about the lifecycle is involved.
+    const broken = await discoverProviders(new ProviderRegistry(), ['broken-module'], () =>
+      Promise.resolve({ provider: { id: 'broken.provider' } as unknown as Provider }),
+    );
+    const malformed = broken.skipped[0];
+
+    expect(lifecycle?.reason).toBe('lifecycle');
+    expect(malformed?.reason).toBe('invalid');
+    expect(lifecycle?.reason).not.toBe(malformed?.reason);
   });
 });
