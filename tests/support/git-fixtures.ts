@@ -1,10 +1,47 @@
-import { execFile } from 'node:child_process';
+import { execFile, type ExecFileOptions } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-const run = promisify(execFile);
+const execFileAsync = promisify(execFile);
+
+/**
+ * `execFile`, keeping the reason a command failed.
+ *
+ * `promisify(execFile)` rejects with `Command failed: <argv>` and carries the
+ * child's stderr and exit code as *properties nobody reads*, so an intermittent
+ * fixture failure reported only that it failed. Issue #61 went four full-suite
+ * runs — twenty-six occurrences — without ever naming a cause, because the one
+ * place the cause was known threw it away.
+ *
+ * This is the same lesson as issue #21, where `Promise.all` discarded the
+ * rejection reason and three occurrences said nothing useful before the test was
+ * changed to assert on reasons.
+ */
+async function run(
+  file: string,
+  args: readonly string[],
+  options: ExecFileOptions & { encoding?: BufferEncoding },
+): Promise<{ stdout: string; stderr: string }> {
+  try {
+    const result = await execFileAsync(file, [...args], options);
+    return { stdout: String(result.stdout), stderr: String(result.stderr) };
+  } catch (error) {
+    // Narrowed rather than cast to `unknown` and stringified: `code` is a number
+    // for an exit status and a string for a spawn error (`ENOENT`), and both are
+    // worth reporting, but neither is worth risking `[object Object]` over.
+    const failure = error as { stderr?: string | Buffer; code?: number | string };
+    const stderr = (typeof failure.stderr === 'string' ? failure.stderr : (failure.stderr?.toString('utf8') ?? '')).trim();
+    const code =
+      typeof failure.code === 'number' || typeof failure.code === 'string' ? String(failure.code) : 'unknown';
+    throw new Error(
+      `${file} ${args.join(' ')} failed (exit ${code})` +
+        `${stderr.length === 0 ? ' with no stderr' : `: ${stderr}`}`,
+      { cause: error },
+    );
+  }
+}
 
 /**
  * Real repositories, created by real `git`.
