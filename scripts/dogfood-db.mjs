@@ -39,10 +39,12 @@ const DATABASE = 'ferret';
 /**
  * Local-only, and not a secret worth protecting — but still not committed.
  *
- * The container publishes on loopback and holds one thing: an index of a public
- * repository. What makes this safe is the binding, not the password. It stays out
- * of `.mcp.json` regardless, because a committed credential teaches the wrong
- * habit far more reliably than it protects anything.
+ * The container is published on **127.0.0.1** and holds one thing: an index of a
+ * public repository. What makes this safe is the binding, not the password — and
+ * the binding is explicit for that reason, because `-p 55432:5432` would bind
+ * `0.0.0.0` and quietly invalidate the whole argument. It stays out of
+ * `.mcp.json` regardless, because a committed credential teaches the wrong habit
+ * far more reliably than it protects anything.
  */
 const PASSWORD = process.env['FERRET_DATABASE_PASSWORD'] ?? 'ferret_dogfood';
 
@@ -92,7 +94,13 @@ function start() {
         '-e', `POSTGRES_USER=${USER}`,
         '-e', `POSTGRES_PASSWORD=${PASSWORD}`,
         '-e', `POSTGRES_DB=${DATABASE}`,
-        '-p', `${PORT}:5432`,
+        // Explicitly loopback. `-p 55432:5432` binds **0.0.0.0** — the container
+        // was reachable from the network, while this file and PR #76 both claimed
+        // "the container publishes on loopback" and rested the security argument
+        // on that binding. The claim was wrong; the binding is now what the claim
+        // said. Caught by reading `docker ps` output while answering a question
+        // about where the database runs.
+        '-p', `127.0.0.1:${PORT}:5432`,
         IMAGE,
       ]);
     } catch (error) {
