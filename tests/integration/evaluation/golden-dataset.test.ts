@@ -6,6 +6,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  ParserFramework,
   RepositoryIndexer,
   createNullLogger,
   loadGoldenDataset,
@@ -19,14 +20,18 @@ import { GitSourceProvider } from '../../../src/git/index.js';
 import { createTestOperationContext, createTestProviderContext } from '../../../src/providers/sdk/testing.js';
 import {
   CompatibilityService,
+  ContentStore,
   EntityStore,
   EvidenceStore,
   MigrationPolicy,
   RelationshipStore,
   RetrievalStore,
+  SymbolStore,
   migrate,
   type FerretDatabase,
 } from '../../../src/storage/index.js';
+import { ProviderRegistry, discoverProviders } from '../../../src/providers/index.js';
+import { FERRET_PARSERS_MODULE, loadFerretParsers } from '../../../src/cli/commands/parser-composition.js';
 import { createRepository, createWorkspace, git, gitVersion } from '../../support/git-fixtures.js';
 import {
   SKIP_REASON,
@@ -126,14 +131,31 @@ beforeAll(async () => {
   const path = await buildCorpusRepository(workspace.path);
   const discovered = await provider.describeRepository(path, context);
 
+  // Content indexing is on — EPIC-087 AC-11.
+  //
+  // Before EPIC-087 the harness measured an index that had never opened a file,
+  // and `text-authentication` scored 0.00 because `authenticate` appears in
+  // `login.ts`'s body and in no path. Measuring the same corpus without content
+  // now would measure a capability the product no longer lacks.
+  //
+  // Composed through discovery, exactly as `ferret index --content` does.
+  const registry = new ProviderRegistry();
+  await discoverProviders(registry, [FERRET_PARSERS_MODULE], loadFerretParsers);
+  const compatibility = new CompatibilityService(handle, database.pool);
+
   const indexer = new RepositoryIndexer({
     source: provider,
     entities: new EntityStore(handle),
     relationships: new RelationshipStore(handle),
     evidence: new EvidenceStore(handle),
-    watermarks: new CompatibilityService(handle, database.pool),
+    watermarks: compatibility,
+    content: provider,
+    symbols: new SymbolStore(handle),
+    parser: new ParserFramework({ registry }),
+    artifacts: compatibility,
+    blobs: new ContentStore(handle),
   });
-  await indexer.index(discovered, { withHistory: true, withFiles: true }, context);
+  await indexer.index(discovered, { withHistory: true, withFiles: true, withContent: true }, context);
 
   const found = await database.pool.query(
     `SELECT id FROM ferret.entity WHERE kind = 'repository' LIMIT 1`,

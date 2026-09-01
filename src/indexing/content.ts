@@ -12,7 +12,7 @@ import {
 import type { DiscoveredRepository, ParseTarget, ProviderOperationContext } from '../providers/index.js';
 import { throwIfAborted } from '../providers/index.js';
 
-import type { ContentArtifactStore, ContentReader } from './ports.js';
+import type { ContentArtifactStore, ContentBlobWriter, ContentReader } from './ports.js';
 
 /**
  * The per-file content flow — EPIC-108 §3.5 and §8.7.
@@ -76,6 +76,25 @@ export interface ContentCounts {
    * inside a parser statistic.
    */
   readonly filesFailed: number;
+  /**
+   * What the content stage persisted — EPIC-087 §12.
+   *
+   * All zero when no blob writer was composed, which is indistinguishable from
+   * a run that stored nothing. That is acceptable and the alternative was not:
+   * the stage-level skip reasons already say *why* content did not run, and a
+   * fifth `undefined` here would make every consumer handle a case the skip
+   * reason already covers.
+   */
+  readonly blobs: {
+    /** Content written for the first time. */
+    readonly stored: number;
+    /** Already on record under this hash. Nothing was written. */
+    readonly deduplicated: number;
+    /** Stored without a body, by reason — EPIC-087 §8.6. */
+    readonly textOmitted: Readonly<Record<string, number>>;
+    /** The store rejected it. The file is still parsed and indexed (AC-13). */
+    readonly failed: number;
+  };
   /** Summed from the `SymbolIndexReport`s EPIC-034 returned, with its meanings. */
   readonly symbols: {
     readonly created: number;
@@ -127,6 +146,8 @@ export interface ContentStageDependencies {
   readonly symbols: SymbolIndexPort;
   readonly parser: ParserFramework;
   readonly artifacts: ContentArtifactStore;
+  /** Optional — EPIC-087. Absent means content is read and derived from, not kept. */
+  readonly blobs?: ContentBlobWriter;
   readonly logger?: Logger;
 }
 
@@ -168,7 +189,7 @@ export async function runContentStage(
   request: ContentStageRequest,
   context: ProviderOperationContext,
 ): Promise<ContentStageResult> {
-  const { content, symbols, parser, artifacts, logger } = dependencies;
+  const { content, symbols, parser, artifacts, blobs, logger } = dependencies;
   const facts = fileVersionFacts(request.emitted.entities);
   const structure = new Map<string, FileStructure>();
 
@@ -180,6 +201,8 @@ export async function runContentStage(
   let filesFailed = 0;
   const unparsedReasons = emptyBreakdown();
   const symbolCounts = { created: 0, updated: 0, unchanged: 0, tombstoned: 0, reinstated: 0 };
+  const blobCounts = { stored: 0, deduplicated: 0, failed: 0 };
+  const textOmitted: Record<string, number> = {};
 
   for (const raw of request.entries) {
     // Between files rather than between stages. A repository with forty
@@ -252,6 +275,44 @@ export async function runContentStage(
     const described = describeFileStructure(entry.path, fetched.bytes);
     structure.set(entry.path, described);
 
+    // EPIC-087 — the point at which EPIC-108 §4 discarded the bytes.
+    //
+    // After `describeFileStructure` because the store needs its verdict on
+    // binary, media type and encoding, and before the parse because a store
+    // failure must not cost the parse. Isolated for that reason: content
+    // retrieval is an additional answer, and losing it is not a reason to lose
+    // the symbols this run already read the file for (AC-13).
+    if (blobs !== undefined) {
+      try {
+        const written = await blobs.store({
+          contentHash: known.contentHash,
+          bytes: fetched.bytes,
+          mediaType: described.mediaType,
+          encoding: described.encoding,
+          binary: described.binary,
+        });
+        if (written.deduplicated) blobCounts.deduplicated += 1;
+        else blobCounts.stored += 1;
+        if (written.omittedReason !== undefined) {
+          textOmitted[written.omittedReason] = (textOmitted[written.omittedReason] ?? 0) + 1;
+        }
+        for (const [kind, count] of Object.entries(written.redacted)) {
+          // Kind and count. Never the value — that is the whole point of
+          // redacting before the insert (EPIC-087 §8.2).
+          logger?.warn(
+            { operation: 'index.content.redacted', path: entry.path, kind, count },
+            `Redacted ${String(count)} ${kind} from ${entry.path} before storing it`,
+          );
+        }
+      } catch (error) {
+        blobCounts.failed += 1;
+        logger?.warn(
+          { operation: 'index.content.blob-failed', path: entry.path, error: String(error) },
+          `Could not store content for ${entry.path}; it is indexed but not searchable by body`,
+        );
+      }
+    }
+
     const outcome = await parser.parse(
       { path: entry.path, bytes: fetched.bytes, contentHash: known.contentHash },
       context,
@@ -293,6 +354,7 @@ export async function runContentStage(
       filesUnparsed,
       unparsedReasons,
       filesFailed,
+      blobs: { ...blobCounts, textOmitted: { ...textOmitted } },
       symbols: { ...symbolCounts },
     },
     structure,

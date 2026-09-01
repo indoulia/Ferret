@@ -201,6 +201,33 @@ export interface ContentArtifactStore {
 }
 
 /**
+ * Where the content stage persists the bytes it read — EPIC-087 §8.1.
+ *
+ * A port for the reason every other one here is: EPIC-031 §11 keeps the indexer
+ * free of storage, and EPIC-108 §8.3 keeps content something it is *handed*.
+ * `ContentStore` satisfies it structurally and knows nothing about this file.
+ *
+ * Optional on the stage. A run composed without it indexes exactly as it did
+ * before EPIC-087 — which is what makes the blob write additive to a VALIDATED
+ * Epic rather than a change to it.
+ */
+export interface ContentBlobWriter {
+  store(input: {
+    contentHash: string;
+    bytes: Uint8Array;
+    mediaType?: string | undefined;
+    encoding?: string | undefined;
+    binary?: boolean | undefined;
+  }): Promise<{
+    readonly deduplicated: boolean;
+    /** Absent when the body was stored. One of EPIC-087's four reasons. */
+    readonly omittedReason: string | undefined;
+    /** Redaction kinds and counts. Never the values. */
+    readonly redacted: Readonly<Record<string, number>>;
+  }>;
+}
+
+/**
  * Why the content stage did not run, when it did not.
  *
  * Never silence, and never a block of zeroes: EPIC-108 §8.8 and Governance §6

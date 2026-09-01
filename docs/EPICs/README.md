@@ -192,7 +192,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 ### Storage & Data Lifecycle
 
 - **EPIC-086 — PostgreSQL Storage Layer** — P0
-- **EPIC-087 — Deduplicated Content Storage** — P0
+- **EPIC-087 — Deduplicated Content Storage** — P0 — IMPLEMENTED ([spec](EPIC-087-Deduplicated-Content-Storage.md), [evidence](validation/EPIC-087-VALIDATION.md))
 - **EPIC-088 — Retention & Exclusion Policies** — P1
 - **EPIC-089 — Backup & Export** — P1
 - **EPIC-090 — Data Import & Recovery** — P1

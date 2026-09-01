@@ -419,6 +419,7 @@ export {
   assertIndexed,
   watermarkScopeId,
   type ContentArtifactStore,
+  type ContentBlobWriter,
   type ContentCounts,
   type ContentReader,
   type DerivedArtifactRecord,

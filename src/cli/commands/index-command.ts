@@ -8,6 +8,7 @@ import { createGitSourceProvider, type GitSourceProvider } from '../../git/index
 import {
   RepositoryIndexer,
   type ContentArtifactStore,
+  type ContentBlobWriter,
   type ContentReader,
   type IndexReport,
 } from '../../indexing/index.js';
@@ -29,6 +30,7 @@ import {
   EvidenceStore,
   MigrationPolicy,
   RelationshipStore,
+  ContentStore,
   SymbolStore,
   createStorageProvider,
   type FerretDatabase,
@@ -215,6 +217,7 @@ function composeContent(
   symbols?: SymbolIndexPort;
   parser?: ParserFramework;
   artifacts?: ContentArtifactStore;
+  blobs?: ContentBlobWriter;
 } {
   if (!requested || discovery === undefined) return {};
 
@@ -271,6 +274,9 @@ function composeContent(
   return {
     content: source,
     symbols: new SymbolStore(storage.db),
+    // EPIC-087. Composed alongside the symbol store because it answers the same
+    // run's read: what the parse derived, and what the file actually said.
+    blobs: new ContentStore(storage.db),
     // Built from the registry, so it holds whatever the discovery above
     // composed and this file never names a parser.
     parser: new ParserFramework({ registry: runtime.providers }),
@@ -319,6 +325,14 @@ function summarize(report: IndexReport): string {
     );
     lines.push(
       `parsed            ${String(content.filesParsed)} parsed, ${String(content.filesUnparsed)} unparsed`,
+    );
+    const omitted = Object.entries(content.blobs.textOmitted)
+      .map(([reason, n]) => `${String(n)} ${reason}`)
+      .join(', ');
+    lines.push(
+      `stored            ${String(content.blobs.stored)} new, ${String(content.blobs.deduplicated)} already held` +
+        (omitted === '' ? '' : `, ${omitted}`) +
+        (content.blobs.failed === 0 ? '' : `, ${String(content.blobs.failed)} failed`),
     );
     // The breakdown, so "how much of this repository is unparsed, and why"
     // stays a lookup rather than an investigation (§12). Only the reasons that

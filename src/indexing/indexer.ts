@@ -22,6 +22,7 @@ import { runContentStage, type ContentCounts } from './content.js';
 import { ContentStageSkip } from './ports.js';
 import type {
   ContentArtifactStore,
+  ContentBlobWriter,
   ContentReader,
   EntityWriter,
   EvidenceWriter,
@@ -277,6 +278,15 @@ export interface IndexerDependencies {
    * that fits, exactly as `watermarks` is. The same service satisfies both.
    */
   readonly artifacts?: ContentArtifactStore;
+  /**
+   * Where content is kept once it has been read — EPIC-087.
+   *
+   * Optional, and its absence is not a skip reason: a run without it derives
+   * everything it derived before and keeps no bodies, which is exactly the
+   * behaviour EPIC-108 shipped. Making it required would turn a VALIDATED Epic's
+   * composition into a broken one.
+   */
+  readonly blobs?: ContentBlobWriter;
   readonly logger?: Logger;
 }
 
@@ -291,6 +301,7 @@ export class RepositoryIndexer {
   readonly #symbols: SymbolIndexPort | undefined;
   readonly #parser: ParserFramework | undefined;
   readonly #artifacts: ContentArtifactStore | undefined;
+  readonly #blobs: ContentBlobWriter | undefined;
   readonly #logger: Logger | undefined;
 
   constructor(dependencies: IndexerDependencies) {
@@ -304,6 +315,7 @@ export class RepositoryIndexer {
     this.#symbols = dependencies.symbols;
     this.#parser = dependencies.parser;
     this.#artifacts = dependencies.artifacts;
+    this.#blobs = dependencies.blobs;
     this.#logger = dependencies.logger;
   }
 
@@ -462,6 +474,7 @@ export class RepositoryIndexer {
             symbols: this.#symbols,
             parser: this.#parser,
             artifacts: this.#artifacts,
+            ...(this.#blobs === undefined ? {} : { blobs: this.#blobs }),
             ...(this.#logger === undefined ? {} : { logger: this.#logger }),
           },
           {

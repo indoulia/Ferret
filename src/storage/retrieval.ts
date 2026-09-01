@@ -166,6 +166,24 @@ function scopePredicate(access: AccessContext): SQL {
   )}${sql.raw(']::text[]')}))`;
 }
 
+/**
+ * The `hit_source` literal a union branch selected, as the enum.
+ *
+ * Total over the literals rather than a ternary. The ternary it replaces read
+ * `=== 'evidence' ? EVIDENCE : ENTITY`, which silently labelled EPIC-087's
+ * content branch an entity hit — and would have done the same to the next one.
+ */
+function hitSourceOf(literal: string): HitSource {
+  switch (literal) {
+    case 'evidence':
+      return HitSource.EVIDENCE;
+    case 'content':
+      return HitSource.CONTENT;
+    default:
+      return HitSource.ENTITY;
+  }
+}
+
 function abbreviatedObjectId(text: string): string | undefined {
   return /^[0-9a-f]{7,40}$/i.test(text) ? text.toLowerCase() : undefined;
 }
@@ -497,6 +515,50 @@ export class RetrievalStore implements RetrievalPort {
     // pattern built from caller text would otherwise be caller-controlled
     // matching. The value is still a bind parameter; the regex is what makes
     // the *pattern* trustworthy, not the binding.
+    // EPIC-087 — the branch that reaches a term appearing only inside a file.
+    //
+    // **Two joins, and the second one is not decoration.** A blob is addressed
+    // by hash, so the first join reaches the `file_version` that carries it —
+    // but a `file_version` is a blob at a path, and it is not what anyone
+    // searching for `authenticate` is looking for. The hit is the `file`, which
+    // is the entity a developer names by hand and the one EPIC-096's labels are
+    // written against. Measured: resolving to the version instead left
+    // `text-authentication` at recall 0.00 with content indexed and searchable,
+    // because the label expects a file and retrieval offered a version of one.
+    //
+    // The second join is also what makes the permission filter correct. A
+    // `file_version`'s `source_scope` is its *file*; a `file`'s is its
+    // repository, which is what `includedRepositories` compares against. So
+    // filtering the version would have compared a file id to a repository id and
+    // excluded everything — a leak's mirror image, and just as wrong.
+    //
+    // The direction matters for the same reason #87 did. A blob is shared by
+    // definition: the same bytes at two paths are one row, and if those paths
+    // are in two repositories, ranking on `content_blob` alone would answer a
+    // query with source the caller cannot list. The blob supplies rank and
+    // highlight only; the row that comes back is an entity that passed
+    // `scopePredicate`, exactly as in every other branch.
+    //
+    // The `file_version` kind predicate is spelled out rather than left to
+    // `kindFilter` — the latter is the caller's filter, may be absent, and
+    // applies to the *file* — and migration 0011's partial index is on it.
+    const contentMatches = sql`
+      SELECT ${ENTITY_COLUMNS},
+             'content'::text AS hit_source,
+             NULL::uuid AS evidence_id,
+             ts_rank(cb.search_vector, q.query) AS score,
+             ts_headline('english', coalesce(cb.text_content, ''), q.query,
+                         'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
+        FROM ferret.content_blob cb
+        JOIN ferret.entity fv
+          ON fv.kind = 'file_version'
+         AND fv.attributes->>'contentHash' = cb.content_hash
+        JOIN ferret.entity e
+          ON e.id::text = fv.source_scope
+         AND e.kind = 'file', ${tsquery}
+       WHERE cb.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}
+         AND ${scopePredicate(access)}`;
+
     const abbreviated = abbreviatedObjectId(text);
     const objectIdMatches =
       abbreviated === undefined
@@ -516,7 +578,12 @@ export class RetrievalStore implements RetrievalPort {
 
     const textual =
       query.includeEvidence === false ? entityMatches : sql`${entityMatches} UNION ALL ${evidenceMatches}`;
-    const body = objectIdMatches === undefined ? textual : sql`${objectIdMatches} UNION ALL ${textual}`;
+    // Content joins the union unconditionally. There is no `includeContent`
+    // flag: `includeEvidence` exists because an evidence hit returns a second
+    // object the caller may not want to pay for, and a content hit returns the
+    // same `file_version` entity every other branch does.
+    const withContent = sql`${textual} UNION ALL ${contentMatches}`;
+    const body = objectIdMatches === undefined ? withContent : sql`${objectIdMatches} UNION ALL ${withContent}`;
 
     try {
       const rows = await this.#db.execute<
@@ -539,7 +606,7 @@ export class RetrievalStore implements RetrievalPort {
         const evidence =
           row.evidence_id === null ? undefined : await this.#readEvidence(row.evidence_id);
         hits.push({
-          source: row.hit_source === 'evidence' ? HitSource.EVIDENCE : HitSource.ENTITY,
+          source: hitSourceOf(row.hit_source),
           entity: toEntity(row),
           evidence,
           score: Number(row.score),

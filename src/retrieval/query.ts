@@ -135,6 +135,15 @@ export interface SearchQuery {
 export const HitSource = {
   ENTITY: 'entity',
   EVIDENCE: 'evidence',
+  /**
+   * The match was in the file's body — EPIC-087.
+   *
+   * Distinct from `ENTITY` because it answers a different question. An entity
+   * hit means the thing is *called* that; a content hit means the thing
+   * *contains* that, and a caller deciding whether to show a path or a snippet
+   * needs to know which.
+   */
+  CONTENT: 'content',
 } as const;
 
 export type HitSource = (typeof HitSource)[keyof typeof HitSource];
