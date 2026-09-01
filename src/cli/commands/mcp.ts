@@ -5,7 +5,7 @@ import { createMcpServer, serveStdio } from '../../mcp/index.js';
 import { Capability, assertSupported } from '../../providers/index.js';
 import { QueryPlanner } from '../../retrieval/index.js';
 import { createRuntime } from '../../runtime/index.js';
-import { MigrationPolicy, RetrievalStore, createStorageProvider } from '../../storage/index.js';
+import { EvidenceStore, MigrationPolicy, RetrievalStore, createStorageProvider } from '../../storage/index.js';
 
 /**
  * `ferret mcp` — serve the AI control plane over stdio.
@@ -47,6 +47,10 @@ export function mcpCommand(): Command {
         // here and nothing else changes.
         const server = createMcpServer({
           retrieval,
+          // EPIC-048. Without this the traceability tool is not registered at
+          // all, and the 556 evidence rows a single index run records stay
+          // unreachable from the only surface an AI client has.
+          evidence: new EvidenceStore(storage.db),
           planner: new QueryPlanner({
             exact: retrieval,
             text: { search: (query) => retrieval.search(query) },

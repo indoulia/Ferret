@@ -17,6 +17,7 @@ import {
 import { VERSION } from '../version.js';
 
 import { TokenBudget, estimateJsonTokens } from './budget.js';
+import { MAX_EVIDENCE_PER_ITEM, type EvidenceReader } from './evidence-port.js';
 
 /**
  * Assembling what Ferret knows into something that fits a context window.
@@ -65,6 +66,15 @@ export interface PackItem {
   /** Relevance, when the item came from a ranked source. */
   readonly score: number | undefined;
   readonly evidence: readonly CanonicalEvidence[];
+  /**
+   * Observations this entity has that the item does not carry — EPIC-048 AC-7.
+   *
+   * Bounded because a pack is bounded: an entity with two hundred observations
+   * must not spend the whole budget proving one item. Reported rather than
+   * dropped silently, which is the rule the pack already applies to everything
+   * else it leaves out.
+   */
+  readonly evidenceOmitted: number;
   readonly estimatedTokens: number;
   /**
    * True when the item's longest values were shortened to fit.
@@ -151,9 +161,18 @@ export const MAX_BUDGET = 100_000;
 
 export class ContextPackBuilder {
   readonly #retrieval: RetrievalPort;
+  readonly #evidence: EvidenceReader | undefined;
 
-  constructor(retrieval: RetrievalPort) {
+  /**
+   * `evidence` is EPIC-048's addition and is optional, so every existing caller
+   * keeps working unchanged. When it is supplied, an item carries what its
+   * entity actually rests on rather than only the record that matched the query
+   * — and that evidence comes from the store, so its lineage is real rather than
+   * the empty array a search hit carries.
+   */
+  constructor(retrieval: RetrievalPort, evidence?: EvidenceReader) {
     this.#retrieval = retrieval;
+    this.#evidence = evidence;
   }
 
   /**
@@ -222,6 +241,18 @@ export class ContextPackBuilder {
     }
 
     const omitted: PackOmission[] = [];
+    // EPIC-048 AC-7. Evidence is bounded per item, and a bound that is not
+    // reported is indistinguishable from an entity that simply had no more.
+    const evidenceOmitted = items.reduce((total, item) => total + item.evidenceOmitted, 0);
+    if (evidenceOmitted > 0) {
+      omitted.push({
+        reason: TruncationReason.LIMIT,
+        count: evidenceOmitted,
+        detail:
+          `${String(evidenceOmitted)} observation(s) supporting these results were not included; ` +
+          `each item carries at most ${String(MAX_EVIDENCE_PER_ITEM)}`,
+      });
+    }
     if (trimmedCount > 0) {
       omitted.push({
         reason: TruncationReason.CONTENT,
@@ -260,7 +291,7 @@ export class ContextPackBuilder {
   }
 
   async #toItem(hit: SearchHit, withNeighbours: boolean, safety: ContentSafety): Promise<PackItem> {
-    const evidence = hit.evidence === undefined ? [] : [hit.evidence];
+    const { evidence, omitted: evidenceOmitted } = await this.#evidenceFor(hit);
     const neighbours = withNeighbours
       ? await this.#retrieval.neighbours({
           from: hit.entity.id,
@@ -287,6 +318,7 @@ export class ContextPackBuilder {
       reason: neighbours.length === 0 ? reason : `${reason}; ${String(neighbours.length)} connected`,
       score: hit.score,
       evidence,
+      evidenceOmitted,
       estimatedTokens: estimateJsonTokens({
         entity,
         evidence,
@@ -294,6 +326,46 @@ export class ContextPackBuilder {
       }),
       trimmed: false,
     };
+  }
+
+  /**
+   * What this item rests on — EPIC-048 AC-6.
+   *
+   * Before this, an item carried `hit.evidence` and nothing else: the single
+   * record that matched the query, or — for a hit that matched the entity's own
+   * attributes, which is the common case — nothing at all. An item with no
+   * evidence looks exactly like an item nothing supports, so an answer built
+   * from it could not be traced anywhere.
+   *
+   * Read from the store rather than from the hit, which also settles AC-8: a
+   * search hit's `derivedFrom` is always empty because fetching it per hit would
+   * turn a page of fifty into a hundred round trips, and an empty array is
+   * indistinguishable from "no antecedents". The store returns the real chain.
+   */
+  async #evidenceFor(hit: SearchHit): Promise<{
+    readonly evidence: readonly CanonicalEvidence[];
+    readonly omitted: number;
+  }> {
+    if (this.#evidence === undefined) {
+      return { evidence: hit.evidence === undefined ? [] : [hit.evidence], omitted: 0 };
+    }
+
+    // One more than the bound, so "exactly the bound" and "more than the bound"
+    // are distinguishable. Asking for the bound alone makes a truncated answer
+    // indistinguishable from a complete one, which is the defect this Epic
+    // exists to stop shipping.
+    const held = await this.#evidence.forSubject(hit.entity.id, { limit: MAX_EVIDENCE_PER_ITEM + 1 });
+    if (held.length > 0) {
+      return {
+        evidence: held.slice(0, MAX_EVIDENCE_PER_ITEM),
+        omitted: Math.max(0, held.length - MAX_EVIDENCE_PER_ITEM),
+      };
+    }
+
+    // The matching record still counts when the store holds nothing under this
+    // entity's id — evidence about a subject Ferret models differently should
+    // not vanish from the answer just because the lookup missed.
+    return { evidence: hit.evidence === undefined ? [] : [hit.evidence], omitted: 0 };
   }
 }
 
@@ -363,6 +435,10 @@ function trimItem(item: PackItem, room: number): PackItem | undefined {
         entity,
         reason: `${item.reason} (trimmed to fit)`,
         evidence: [],
+        // Every observation this item had is now absent, so the count of what
+        // is missing has to grow by them. A trimmed item that reported zero
+        // omitted evidence would be claiming completeness it does not have.
+        evidenceOmitted: item.evidenceOmitted + item.evidence.length,
         estimatedTokens,
         trimmed: true,
       };

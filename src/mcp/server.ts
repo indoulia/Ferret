@@ -2,9 +2,21 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-import { CONTENT_NOTICE, ContextPackBuilder, MAX_BUDGET, renderPack } from '../context/index.js';
+import {
+  CONTENT_NOTICE,
+  ContextPackBuilder,
+  MAX_BUDGET,
+  MAX_LINEAGE_DEPTH,
+  renderPack,
+  type EvidenceReader,
+} from '../context/index.js';
 import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
-import type { CanonicalEntity } from '../domain/index.js';
+import {
+  EvidenceState,
+  integrityHashOf,
+  type CanonicalEntity,
+  type CanonicalEvidence,
+} from '../domain/index.js';
 import { serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 import { MAX_LIMIT, type QueryPlanner, type RetrievalPort, type SearchHit } from '../retrieval/index.js';
@@ -53,6 +65,16 @@ export interface McpServerDependencies {
    * new requirement for answering one.
    */
   readonly planner?: QueryPlanner;
+  /**
+   * EPIC-048's evidence reader, when one is wired.
+   *
+   * Optional for the same reason `planner` is: a caller with only a
+   * `RetrievalPort` still gets a working server. When it is absent
+   * `ferret_why` is not registered at all, rather than registered and answering
+   * "nothing" — a tool that always reports no evidence is worse than a tool that
+   * is honestly not there, because a client cannot tell the two apart.
+   */
+  readonly evidence?: EvidenceReader;
   readonly logger: Logger;
 }
 
@@ -63,8 +85,8 @@ export interface McpServerDependencies {
  * which is most of what is worth testing.
  */
 export function createMcpServer(dependencies: McpServerDependencies): McpServer {
-  const { retrieval, planner, logger } = dependencies;
-  const packs = new ContextPackBuilder(retrieval);
+  const { retrieval, planner, evidence, logger } = dependencies;
+  const packs = new ContextPackBuilder(retrieval, evidence);
 
   const server = new McpServer(
     { name: MCP_SERVER_NAME, version: VERSION },
@@ -349,6 +371,96 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       }),
   );
 
+  // EPIC-048. Registered only when an evidence reader is wired: a tool that is
+  // present and always answers "nothing held" is indistinguishable, to a client,
+  // from a subject that genuinely has no evidence.
+  if (evidence !== undefined) {
+    server.registerTool(
+      'ferret_why',
+      {
+        title: 'Why does Ferret believe this',
+        description:
+          'Show the observations behind what Ferret holds about one entity: how ' +
+          'each fact was obtained, by which producer and version, where in the ' +
+          'source it came from, how authoritative that source is, and what each ' +
+          'observation was derived from. Use this to check an answer rather than ' +
+          'trust it. Reports honestly when Ferret holds no evidence for the ' +
+          'entity. ' + CONTENT_NOTICE,
+        inputSchema: z.strictObject({
+          id: z.string().uuid().describe('The Ferret entity id, as returned by ferret_search.'),
+          field: z.string().min(1).max(256).optional().describe('Restrict to observations about one field.'),
+          depth: z
+            .number()
+            .int()
+            .min(1)
+            .max(MAX_LINEAGE_DEPTH)
+            .optional()
+            .describe(`How far back to walk each derivation chain. Default and maximum ${String(MAX_LINEAGE_DEPTH)}.`),
+        }),
+        annotations: { readOnlyHint: true, openWorldHint: false },
+      },
+      async ({ id, field, depth }) =>
+        guard('why', async () => {
+          const maxDepth = depth ?? MAX_LINEAGE_DEPTH;
+          // `current` explicitly, never the default. Unfiltered, `forSubject`
+          // returns superseded and stale records too, and citing an observation
+          // a newer one replaced — without saying so — would make this tool a
+          // source of confidently wrong answers rather than a check on them.
+          // Nothing is deleted; EPIC-044 AC-6 keeps the history, and reading it
+          // back is a separate question from "what does Ferret believe now".
+          const held = await evidence.forSubject(id, {
+            state: EvidenceState.CURRENT,
+            ...(field === undefined ? {} : { field }),
+            limit: TOOL_RESULT_LIMIT,
+          });
+
+          // Absence is an answer, not an error — EPIC-065 AC-20. Said in words
+          // as well as in an empty array, because a client that treats `[]` as a
+          // failure and a client that treats it as "nothing known" both exist.
+          if (held.length === 0) {
+            return {
+              notice: CONTENT_NOTICE,
+              id,
+              held: false,
+              detail:
+                'Ferret holds no current evidence for this entity. That is what is recorded, ' +
+                'not a failure to look — an answer about it cannot be traced to a source.',
+              evidence: [],
+              conflicts: [],
+              contentSafety: NO_CONTENT_SAFETY,
+            };
+          }
+
+          const safety = new ContentSafety();
+          const described = await Promise.all(
+            held.map(async (record) => {
+              const lineage = await evidence.provenanceOf(record.id, maxDepth);
+              return describeEvidence(record, lineage, maxDepth, safety);
+            }),
+          );
+
+          // Reported, never resolved. EPIC-045 owns which source wins and
+          // EPIC-047 acts on it; hiding a disagreement inside a citation would
+          // be the one thing Governance §15 forbids.
+          const conflicts = await evidence.conflictsFor(id);
+
+          return {
+            notice: CONTENT_NOTICE,
+            id,
+            held: true,
+            count: described.length,
+            evidence: described,
+            conflicts: conflicts.map((group) => ({
+              field: group.field,
+              records: group.evidence.map((record) => record.id),
+              detail: 'Ferret holds observations that disagree about this field. Neither is discarded.',
+            })),
+            contentSafety: safety.report,
+          };
+        }),
+    );
+  }
+
   return server;
 }
 
@@ -407,4 +519,53 @@ function describeHit(hit: SearchHit, safety: ContentSafety): Record<string, unkn
  */
 function describeEntity(entity: CanonicalEntity, safety: ContentSafety): Record<string, unknown> {
   return { ...entity, attributes: containAttributes(entity.attributes, safety) };
+}
+
+/**
+ * One observation, as a citation a person or a model can check — EPIC-048.
+ *
+ * `statement` is source content and is contained like every other value that
+ * came out of a repository; the rest is Ferret's own record of how it looked and
+ * is not.
+ *
+ * Two fields exist purely so the answer cannot overstate itself. `truncated`
+ * marks a chain cut short by the depth bound, because a chain that stops
+ * silently reads as a chain that ended. `derivedFrom` is reported from the
+ * *store*, never from a search hit — a hit always carries an empty array for
+ * performance reasons, and empty is indistinguishable from "nothing derived
+ * this".
+ */
+function describeEvidence(
+  record: CanonicalEvidence,
+  lineage: readonly CanonicalEvidence[],
+  maxDepth: number,
+  safety: ContentSafety,
+): Record<string, unknown> {
+  return {
+    id: record.id,
+    field: record.field,
+    statement: safety.contain(JSON.stringify(record.statement)),
+    // How Ferret came to believe it, and how much that is worth.
+    method: record.method,
+    producer: `${record.producer}@${record.producerVersion}`,
+    sourceSystem: record.sourceSystem,
+    sourceUrl: record.sourceUrl,
+    locator: record.locator,
+    authority: record.authority,
+    confidence: record.confidence,
+    completeness: record.completeness,
+    observedAt: record.observedAt,
+    redacted: record.redacted,
+    // AC-4. Recomputed here rather than fetched: `integrityHashOf` is pure, so
+    // a citation can be shown untampered without a round trip per record. A
+    // tool whose job is checking answers should not itself be taken on trust.
+    integrity: integrityHashOf(record) === record.integrityHash ? 'verified' : 'tampered',
+    derivedFrom: lineage.map((ancestor) => ({
+      id: ancestor.id,
+      method: ancestor.method,
+      producer: `${ancestor.producer}@${ancestor.producerVersion}`,
+      locator: ancestor.locator,
+    })),
+    truncated: lineage.length >= maxDepth,
+  };
 }
