@@ -1,4 +1,4 @@
-import type { CanonicalEvidence, ConflictGroup } from '../domain/index.js';
+import type { CanonicalEvidence, ConflictGroup, StatedEvidence } from '../domain/index.js';
 
 /**
  * What answer traceability needs from the evidence store — EPIC-048 §8.
@@ -36,6 +36,29 @@ export interface EvidenceReader {
     },
   ): Promise<readonly CanonicalEvidence[]>;
 
+  /**
+   * The same query, with Ferret's interpretation of each record — EPIC-062.
+   *
+   * `CanonicalEvidence` carries no `state`: the observation is append-only and
+   * immutable, while state is Ferret's revisable reading of it. That separation
+   * is right, and it left a citation surface unable to tell a superseded record
+   * from a current one — so evidence selection could only order by recency,
+   * which is how a model's own claim from today outranked a system-of-record
+   * observation from last week.
+   *
+   * A projection rather than a second query: the store's `select()` already
+   * fetches `state` and `superseded_by` and discards them.
+   */
+  forSubjectWithState(
+    subjectId: string,
+    query?: {
+      readonly field?: string;
+      readonly state?: string;
+      readonly permittedScopes?: readonly string[];
+      readonly limit?: number;
+    },
+  ): Promise<readonly StatedEvidence[]>;
+
   /** "Why does Ferret believe this" — EPIC-008 D-006, walked backwards, bounded. */
   provenanceOf(id: string, maxDepth?: number): Promise<readonly CanonicalEvidence[]>;
 
@@ -58,3 +81,14 @@ export const MAX_EVIDENCE_PER_ITEM = 5;
 
 /** Lineage depth a traceability answer will walk before saying it stopped. */
 export const MAX_LINEAGE_DEPTH = 10;
+
+/**
+ * How many records evidence selection considers per item — EPIC-062 §13.
+ *
+ * Wider than {@link MAX_EVIDENCE_PER_ITEM} because a choice needs alternatives:
+ * asking for five and citing five is not a selection, and the exclusion account
+ * a pack now carries would have nothing to account for. Bounded by a constant
+ * so an entity with two thousand observations costs what one with thirty costs —
+ * the fetch stays one query either way.
+ */
+export const EVIDENCE_CANDIDATE_WINDOW = 25;

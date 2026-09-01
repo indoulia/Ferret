@@ -17,7 +17,18 @@ import {
 import { VERSION } from '../version.js';
 
 import { TokenBudget, estimateJsonTokens } from './budget.js';
-import { MAX_EVIDENCE_PER_ITEM, type EvidenceReader } from './evidence-port.js';
+import {
+  EVIDENCE_CANDIDATE_WINDOW,
+  MAX_EVIDENCE_PER_ITEM,
+  type EvidenceReader,
+} from './evidence-port.js';
+import {
+  EvidenceExclusion,
+  MAX_EVIDENCE_PER_FIELD,
+  selectEvidence,
+  type EvidenceSelection,
+  type ExcludedEvidence,
+} from './evidence-selection.js';
 
 /**
  * Assembling what Ferret knows into something that fits a context window.
@@ -55,6 +66,15 @@ export const TruncationReason = {
   LIMIT: 'result-limit',
   /** Included, with its longest values shortened to fit. */
   CONTENT: 'content-trimmed',
+  /**
+   * Held, and deliberately not cited — EPIC-062.
+   *
+   * Distinct from `result-limit`, which says a bound was reached. This says
+   * Ferret made a *judgement*: a record it no longer believes, or one whose fact
+   * is already cited. Governance §18 asks Ferret to explain why evidence was
+   * excluded, and "a limit was hit" is not that explanation.
+   */
+  SELECTION: 'evidence-selection',
 } as const;
 
 export type TruncationReason = (typeof TruncationReason)[keyof typeof TruncationReason];
@@ -75,6 +95,16 @@ export interface PackItem {
    * else it leaves out.
    */
   readonly evidenceOmitted: number;
+  /**
+   * Why this item cites what it cites — EPIC-062.
+   *
+   * Governance §18 asks Ferret to explain "why evidence was included, excluded,
+   * considered authoritative, considered stale, or considered conflicting".
+   * `evidence` is the answer to *what*; this is the answer to *why*, and to why
+   * not the rest. It also carries the one thing `evidence` cannot: whether a
+   * cited record is one Ferret still believes.
+   */
+  readonly evidenceSelection: EvidenceSelection;
   readonly estimatedTokens: number;
   /**
    * True when the item's longest values were shortened to fit.
@@ -240,19 +270,11 @@ export class ContextPackBuilder {
       droppedForBudget += 1;
     }
 
-    const omitted: PackOmission[] = [];
-    // EPIC-048 AC-7. Evidence is bounded per item, and a bound that is not
-    // reported is indistinguishable from an entity that simply had no more.
-    const evidenceOmitted = items.reduce((total, item) => total + item.evidenceOmitted, 0);
-    if (evidenceOmitted > 0) {
-      omitted.push({
-        reason: TruncationReason.LIMIT,
-        count: evidenceOmitted,
-        detail:
-          `${String(evidenceOmitted)} observation(s) supporting these results were not included; ` +
-          `each item carries at most ${String(MAX_EVIDENCE_PER_ITEM)}`,
-      });
-    }
+    // EPIC-048 AC-7 and EPIC-062 AC-10. Evidence is bounded per item, and a bound
+    // that is not reported is indistinguishable from an entity that simply had no
+    // more. The breakdown by cause is the §18 part: an integer says how much was
+    // left out, and only a cause says why.
+    const omitted: PackOmission[] = evidenceOmissions(items);
     if (trimmedCount > 0) {
       omitted.push({
         reason: TruncationReason.CONTENT,
@@ -291,7 +313,8 @@ export class ContextPackBuilder {
   }
 
   async #toItem(hit: SearchHit, withNeighbours: boolean, safety: ContentSafety): Promise<PackItem> {
-    const { evidence, omitted: evidenceOmitted } = await this.#evidenceFor(hit);
+    const selection = await this.#evidenceFor(hit);
+    const evidence = selection.selected.map((entry) => entry.evidence);
     const neighbours = withNeighbours
       ? await this.#retrieval.neighbours({
           from: hit.entity.id,
@@ -300,10 +323,17 @@ export class ContextPackBuilder {
         })
       : [];
 
-    const reason =
+    let reason =
       hit.source === HitSource.EVIDENCE
         ? `matched evidence recorded by ${hit.evidence?.producer ?? 'a provider'}`
         : `matched ${hit.entity.kind} attributes`;
+    // EPIC-062 AC-9. A disputed fact is named on the item rather than only in the
+    // selection, because `reason` is the sentence a client is most likely to
+    // read, and an answer built on a contested fact should say so where it will
+    // be seen. Field names are Ferret's own canonical keys, not repository text.
+    if (selection.disputedFields.length > 0) {
+      reason += `; disputed: ${selection.disputedFields.map((field) => (field === '' ? 'the subject itself' : field)).join(', ')}`;
+    }
 
     // Contained here rather than at the response boundary, so a pack handed
     // straight to a model — which is what a pack is for — carries the boundary
@@ -318,7 +348,8 @@ export class ContextPackBuilder {
       reason: neighbours.length === 0 ? reason : `${reason}; ${String(neighbours.length)} connected`,
       score: hit.score,
       evidence,
-      evidenceOmitted,
+      evidenceOmitted: selection.excluded.length,
+      evidenceSelection: selection,
       estimatedTokens: estimateJsonTokens({
         entity,
         evidence,
@@ -329,45 +360,110 @@ export class ContextPackBuilder {
   }
 
   /**
-   * What this item rests on — EPIC-048 AC-6.
+   * What this item rests on, and why these records rather than the others.
    *
-   * Before this, an item carried `hit.evidence` and nothing else: the single
-   * record that matched the query, or — for a hit that matched the entity's own
-   * attributes, which is the common case — nothing at all. An item with no
-   * evidence looks exactly like an item nothing supports, so an answer built
-   * from it could not be traced anywhere.
+   * **EPIC-048 AC-6/AC-8.** Before that Epic, an item carried `hit.evidence` and
+   * nothing else: the single record that matched the query, or — for a hit that
+   * matched the entity's own attributes, which is the common case — nothing at
+   * all. An item with no evidence looks exactly like an item nothing supports.
+   * Reading from the store also settles AC-8: a search hit's `derivedFrom` is
+   * always empty because fetching it per hit would turn a page of fifty into a
+   * hundred round trips, and an empty array is indistinguishable from "no
+   * antecedents". The store returns the real chain.
    *
-   * Read from the store rather than from the hit, which also settles AC-8: a
-   * search hit's `derivedFrom` is always empty because fetching it per hit would
-   * turn a page of fifty into a hundred round trips, and an empty array is
-   * indistinguishable from "no antecedents". The store returns the real chain.
+   * **EPIC-062.** *Which* records was the part left undecided. The store returns
+   * newest-first, so taking the first five made recency the entire policy, and
+   * the query passed no `state` filter, so a superseded observation was cited
+   * exactly as a current one. Now a candidate window is fetched with each
+   * record's state, and {@link selectEvidence} decides — state before authority,
+   * authority before recency — and accounts for every record it did not choose.
+   *
+   * The window is fetched with one more than the bound so a complete window and a
+   * truncated one are distinguishable. A pack that cannot tell "the best five of
+   * nine" from "the best five of who knows how many" makes the stronger claim by
+   * accident.
    */
-  async #evidenceFor(hit: SearchHit): Promise<{
-    readonly evidence: readonly CanonicalEvidence[];
-    readonly omitted: number;
-  }> {
+  async #evidenceFor(hit: SearchHit): Promise<EvidenceSelection> {
     if (this.#evidence === undefined) {
-      return { evidence: hit.evidence === undefined ? [] : [hit.evidence], omitted: 0 };
+      // No reader wired. The matching record is all there is, and its state was
+      // never read — so it is offered as unassessed rather than as current,
+      // which is what it is.
+      return selectEvidence(hit.evidence === undefined ? [] : [{ evidence: hit.evidence }], {
+        limit: MAX_EVIDENCE_PER_ITEM,
+      });
     }
 
-    // One more than the bound, so "exactly the bound" and "more than the bound"
-    // are distinguishable. Asking for the bound alone makes a truncated answer
-    // indistinguishable from a complete one, which is the defect this Epic
-    // exists to stop shipping.
-    const held = await this.#evidence.forSubject(hit.entity.id, { limit: MAX_EVIDENCE_PER_ITEM + 1 });
+    const held = await this.#evidence.forSubjectWithState(hit.entity.id, {
+      limit: EVIDENCE_CANDIDATE_WINDOW + 1,
+    });
     if (held.length > 0) {
-      return {
-        evidence: held.slice(0, MAX_EVIDENCE_PER_ITEM),
-        omitted: Math.max(0, held.length - MAX_EVIDENCE_PER_ITEM),
-      };
+      return selectEvidence(held.slice(0, EVIDENCE_CANDIDATE_WINDOW), {
+        limit: MAX_EVIDENCE_PER_ITEM,
+        windowTruncated: held.length > EVIDENCE_CANDIDATE_WINDOW,
+      });
     }
 
     // The matching record still counts when the store holds nothing under this
     // entity's id — evidence about a subject Ferret models differently should
     // not vanish from the answer just because the lookup missed.
-    return { evidence: hit.evidence === undefined ? [] : [hit.evidence], omitted: 0 };
+    return selectEvidence(hit.evidence === undefined ? [] : [{ evidence: hit.evidence }], {
+      limit: MAX_EVIDENCE_PER_ITEM,
+    });
   }
 }
+
+/**
+ * The pack-level account of evidence Ferret held and did not cite — EPIC-062 AC-10.
+ *
+ * One entry per cause rather than one integer for all of them. Governance §18
+ * asks Ferret to explain why evidence was excluded; a count answers "how much",
+ * and the three causes answer three genuinely different questions — *we do not
+ * believe it*, *this fact is already cited*, and *there was no room*. A client
+ * weighting an answer treats them differently, and before this it could not tell
+ * them apart.
+ *
+ * Aggregated here so a caller reads the pack rather than summing across items;
+ * the per-item detail stays on `PackItem.evidenceSelection`.
+ */
+function evidenceOmissions(items: readonly PackItem[]): PackOmission[] {
+  const counts = new Map<EvidenceExclusion, number>();
+  for (const item of items) {
+    for (const excluded of item.evidenceSelection.excluded) {
+      counts.set(excluded.cause, (counts.get(excluded.cause) ?? 0) + 1);
+    }
+  }
+
+  const omissions: PackOmission[] = [];
+  for (const [cause, count] of [...counts.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    omissions.push({
+      reason: cause === EvidenceExclusion.TOKEN_BUDGET ? TruncationReason.BUDGET : TruncationReason.SELECTION,
+      count,
+      detail: `${String(count)} observation(s) not cited — ${EXCLUSION_DETAIL[cause]}`,
+    });
+  }
+
+  const truncated = items.filter((item) => item.evidenceSelection.windowTruncated).length;
+  if (truncated > 0) {
+    omissions.push({
+      reason: TruncationReason.LIMIT,
+      count: truncated,
+      detail:
+        `${String(truncated)} result(s) hold more than the ${String(EVIDENCE_CANDIDATE_WINDOW)} observations ` +
+        'Ferret considered, so the records cited are the best of a sample rather than of everything held',
+    });
+  }
+
+  return omissions;
+}
+
+/** One sentence per cause, so the pack explains itself without a lookup table. */
+const EXCLUSION_DETAIL: Readonly<Record<EvidenceExclusion, string>> = Object.freeze({
+  [EvidenceExclusion.NOT_CURRENT]:
+    'Ferret no longer believes them and a current record covers the same fact',
+  [EvidenceExclusion.FIELD_COVERED]: `at most ${String(MAX_EVIDENCE_PER_FIELD)} record(s) are cited per fact`,
+  [EvidenceExclusion.BOUND]: `each result cites at most ${String(MAX_EVIDENCE_PER_ITEM)} record(s)`,
+  [EvidenceExclusion.TOKEN_BUDGET]: 'the result carrying them was shortened to fit the token budget',
+});
 
 /**
  * Tokens below which a trimmed item is not worth including.
@@ -430,15 +526,32 @@ function trimItem(item: PackItem, room: number): PackItem | undefined {
     // misquotation, and the entity's own attributes carry the same content.
     const estimatedTokens = estimateJsonTokens({ entity, evidence: [] });
     if (estimatedTokens <= room) {
+      // Every observation this item had is now absent, so the account of what is
+      // missing has to grow by them — and by the *right* cause. A trimmed item
+      // that reported them as ranked-out would be describing a decision the
+      // selection never made; the budget took them, after the selection chose
+      // them. A trimmed item reporting zero omissions would be claiming
+      // completeness it does not have.
+      const dropped: ExcludedEvidence[] = item.evidenceSelection.selected.map((entry) =>
+        Object.freeze({
+          id: entry.evidence.id,
+          field: entry.evidence.field,
+          cause: EvidenceExclusion.TOKEN_BUDGET,
+          reason: 'cited by the selection, then dropped when this result was shortened to fit',
+        }),
+      );
+
       return {
         ...item,
         entity,
         reason: `${item.reason} (trimmed to fit)`,
         evidence: [],
-        // Every observation this item had is now absent, so the count of what
-        // is missing has to grow by them. A trimmed item that reported zero
-        // omitted evidence would be claiming completeness it does not have.
         evidenceOmitted: item.evidenceOmitted + item.evidence.length,
+        evidenceSelection: Object.freeze({
+          ...item.evidenceSelection,
+          selected: Object.freeze([]),
+          excluded: Object.freeze([...item.evidenceSelection.excluded, ...dropped]),
+        }),
         estimatedTokens,
         trimmed: true,
       };
@@ -479,9 +592,25 @@ export function renderPack(pack: ContextPack): string {
     lines.push(`why: ${item.reason}`);
     lines.push(`source: ${item.entity.source.system}:${JSON.stringify(item.entity.source.id)}`);
     lines.push(`attributes: ${JSON.stringify(item.entity.attributes)}`);
-    for (const record of item.evidence) {
+    // EPIC-062 AC-14. Each cited record is printed with the reason it was cited,
+    // and the exclusions are summarised after them — an answer written from this
+    // text can say which observation it rests on and how far Ferret believes it.
+    // The reason is Ferret's own sentence; only `statement` is repository content,
+    // and it stays quoted by `JSON.stringify` as it already was.
+    for (const entry of item.evidenceSelection.selected) {
+      const record = entry.evidence;
       lines.push(
-        `evidence: ${record.method} by ${record.producer}@${record.producerVersion} — ${JSON.stringify(record.statement)}`,
+        `evidence: ${record.method} by ${record.producer}@${record.producerVersion} — ` +
+          `${JSON.stringify(record.statement)} [${entry.reason}]`,
+      );
+    }
+    for (const line of describeExclusions(item.evidenceSelection.excluded)) {
+      lines.push(`not cited: ${line}`);
+    }
+    if (item.evidenceSelection.windowTruncated) {
+      lines.push(
+        `not cited: more than ${String(EVIDENCE_CANDIDATE_WINDOW)} observations are held; ` +
+          'these are the best of a sample',
       );
     }
     lines.push('');
@@ -498,4 +627,19 @@ export function renderPack(pack: ContextPack): string {
       `${pack.omitted.length === 0 ? 'complete' : 'PARTIAL — see omitted'}`,
   );
   return lines.join('\n');
+}
+
+/**
+ * Groups exclusions by cause for a reader.
+ *
+ * Per cause rather than per record: a client that wants every id has
+ * `evidenceSelection.excluded`, and a person reading the text needs to know
+ * *what kind* of thing was left out, not fifteen uuids.
+ */
+function describeExclusions(excluded: readonly ExcludedEvidence[]): string[] {
+  const counts = new Map<EvidenceExclusion, number>();
+  for (const entry of excluded) counts.set(entry.cause, (counts.get(entry.cause) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([cause, count]) => `${String(count)} observation(s) — ${EXCLUSION_DETAIL[cause]}`);
 }

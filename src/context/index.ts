@@ -30,7 +30,20 @@ export {
 // bounds. Exported from the context barrel rather than from `storage/` so a
 // caller can name what it needs without importing a database.
 export {
+  EVIDENCE_CANDIDATE_WINDOW,
   MAX_EVIDENCE_PER_ITEM,
   MAX_LINEAGE_DEPTH,
   type EvidenceReader,
 } from './evidence-port.js';
+
+// EPIC-062. Which evidence an item cites, and why — pure, so it is testable
+// without a store and reproducible from its inputs alone.
+export {
+  EvidenceExclusion,
+  MAX_EVIDENCE_PER_FIELD,
+  selectEvidence,
+  type EvidenceSelection,
+  type ExcludedEvidence,
+  type SelectedEvidence,
+  type SelectionOptions,
+} from './evidence-selection.js';

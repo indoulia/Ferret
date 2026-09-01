@@ -11,7 +11,9 @@ import {
   type EntityQuery,
   type CanonicalEvidence,
   type ConflictGroup,
+  type EvidenceState,
   type Neighbour,
+  type StatedEvidence,
   type RetrievalPort,
   type TraversalQuery,
   type SearchHit,
@@ -141,6 +143,8 @@ class FakeRetrieval implements RetrievalPort {
 class FakeEvidence {
   /** Records returned for any subject except `EMPTY_SUBJECT`. */
   held: CanonicalEvidence[] = [EVIDENCE];
+  /** Ferret's interpretation of every held record, for the EPIC-062 pack path. */
+  state: EvidenceState = 'current';
   /** Ancestors returned for any record. Longer than the bound proves truncation. */
   lineage: CanonicalEvidence[] = [];
   conflicts: ConflictGroup[] = [];
@@ -152,6 +156,17 @@ class FakeEvidence {
   ): Promise<readonly CanonicalEvidence[]> {
     this.lastQuery = query;
     return Promise.resolve(subjectId === EMPTY_SUBJECT ? [] : this.held);
+  }
+
+  /** EPIC-062's projection, with the state the pack path now selects on. */
+  forSubjectWithState(
+    subjectId: string,
+    query: { state?: string; field?: string; limit?: number } = {},
+  ): Promise<readonly StatedEvidence[]> {
+    this.lastQuery = query;
+    return Promise.resolve(
+      subjectId === EMPTY_SUBJECT ? [] : this.held.map((record) => ({ evidence: record, state: this.state })),
+    );
   }
 
   provenanceOf(_id: string, maxDepth = 10): Promise<readonly CanonicalEvidence[]> {

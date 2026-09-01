@@ -12,6 +12,7 @@ import {
   type EvidenceInput,
   type EvidenceLocator,
   type EvidenceMethod,
+  type StatedEvidence,
 } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 
@@ -212,6 +213,35 @@ export class EvidenceStore {
 
   /** Every record about a subject, newest observation first. */
   async forSubject(subjectId: string, query: EvidenceQuery = {}): Promise<CanonicalEvidence[]> {
+    return await this.#hydrate(await this.#rowsForSubject(subjectId, query));
+  }
+
+  /**
+   * The same query, each record paired with Ferret's interpretation of it.
+   *
+   * EPIC-062 needs both halves. `toCanonical` drops `state` — correctly, because
+   * the integrity hash must exclude Ferret's revisable reading of an immutable
+   * observation — and that left a citation surface unable to tell a superseded
+   * record from a current one, so it could only order by recency.
+   *
+   * A projection rather than a second query: the `select()` below already fetches
+   * `state` and `superseded_by`, and threw them away.
+   */
+  async forSubjectWithState(subjectId: string, query: EvidenceQuery = {}): Promise<StatedEvidence[]> {
+    const rows = await this.#rowsForSubject(subjectId, query);
+    const records = await this.#hydrate(rows);
+    // `#hydrate` preserves row order, so index pairing is exact.
+    return records.map((record, index) => {
+      const row = rows[index];
+      return Object.freeze({
+        evidence: record,
+        state: row === undefined ? undefined : (row.state as EvidenceState),
+        supersededBy: row?.supersededBy ?? undefined,
+      });
+    });
+  }
+
+  async #rowsForSubject(subjectId: string, query: EvidenceQuery): Promise<EvidenceRow[]> {
     const filters = [eq(evidence.subjectId, subjectId)];
     if (query.field !== undefined) filters.push(eq(evidence.field, query.field));
     if (query.state !== undefined) filters.push(eq(evidence.state, query.state));
@@ -228,14 +258,12 @@ export class EvidenceStore {
     }
 
     try {
-      const rows = await this.#db
+      return await this.#db
         .select()
         .from(evidence)
         .where(and(...filters))
         .orderBy(sql`COALESCE(${evidence.observedAt}, ${evidence.recordedAt}) DESC`)
         .limit(query.limit ?? 200);
-
-      return await this.#hydrate(rows);
     } catch (error) {
       throw classifyDatabaseError(error, 'storage.evidence.forSubject');
     }

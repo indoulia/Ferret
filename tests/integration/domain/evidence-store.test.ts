@@ -6,9 +6,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   Completeness,
   EntityKind,
+  EvidenceExclusion,
   EvidenceMethod,
   EvidenceState,
+  SourceAuthority,
   createNullLogger,
+  selectEvidence,
 } from '../../../src/index.js';
 import {
   EntityStore,
@@ -452,6 +455,144 @@ describeDb(`evidence and provenance (${databaseAvailable() ? 'real PostgreSQL' :
 
       expect((await store.stateOf(recorded.evidence.id))?.state).toBe(EvidenceState.STALE);
       await expect(store.verify(recorded.evidence.id)).resolves.toBeDefined();
+    });
+  });
+
+  /**
+   * EPIC-062. Selection against evidence a real store actually returned.
+   *
+   * The unit tests construct candidates directly, which is right for the
+   * ordering rules. What only a real store can demonstrate is the half that was
+   * missing: `toCanonical` drops `state`, so before `forSubjectWithState` a
+   * caller physically could not tell a superseded observation from a current one
+   * — and the pack path selected without it.
+   */
+  describe('evidence selection', () => {
+    it("returns Ferret's interpretation alongside each record", async () => {
+      const subject = (
+        await entities.upsert({
+          kind: EntityKind.ISSUE,
+          source: { system: 'jira', id: 'FER-62' },
+          attributes: { key: 'FER-62', title: 'Evidence selection' },
+        })
+      ).entity.id;
+
+      const first = await store.record({
+        subjectId: subject,
+        field: 'status',
+        statement: 'open',
+        method: EvidenceMethod.OBSERVED,
+        producer: 'ferret.provider.jira',
+        producerVersion: '1.0.0',
+        sourceSystem: 'jira',
+        authority: SourceAuthority.SYSTEM_OF_RECORD,
+      });
+      const second = await store.record({
+        subjectId: subject,
+        field: 'status',
+        statement: 'closed',
+        method: EvidenceMethod.OBSERVED,
+        producer: 'ferret.provider.jira',
+        producerVersion: '1.0.0',
+        sourceSystem: 'jira',
+        authority: SourceAuthority.SYSTEM_OF_RECORD,
+      });
+      await store.supersede(first.evidence.id, second.evidence.id);
+
+      const stated = await store.forSubjectWithState(subject);
+      const states = new Map(stated.map((entry) => [entry.evidence.id, entry.state]));
+
+      expect(states.get(first.evidence.id)).toBe(EvidenceState.SUPERSEDED);
+      expect([...states.values()].filter((state) => state === EvidenceState.CURRENT)).toHaveLength(1);
+      // `forSubject` returns the same records and cannot answer the question.
+      expect((await store.forSubject(subject)).map((record) => record.id).sort()).toStrictEqual(
+        stated.map((entry) => entry.evidence.id).sort(),
+      );
+    });
+
+    it('cites the current record and accounts for the replaced one — AC-2, AC-4', async () => {
+      const subject = (
+        await entities.upsert({
+          kind: EntityKind.ISSUE,
+          source: { system: 'jira', id: 'FER-63' },
+          attributes: { key: 'FER-63', title: 'Selection over a real store' },
+        })
+      ).entity.id;
+
+      // The exact shape the recency-only ordering got wrong: the record Ferret no
+      // longer believes is the authoritative one, and the newer record is a
+      // model's unverified claim.
+      const replaced = await store.record({
+        subjectId: subject,
+        field: 'summary',
+        statement: 'the parser fails on nested generics',
+        method: EvidenceMethod.OBSERVED,
+        producer: 'ferret.provider.jira',
+        producerVersion: '1.0.0',
+        sourceSystem: 'jira',
+        authority: SourceAuthority.SYSTEM_OF_RECORD,
+        observedAt: '2026-01-01T00:00:00.000Z',
+      });
+      const believed = await store.record({
+        subjectId: subject,
+        field: 'summary',
+        statement: 'the parser fails on nested generics and on decorators',
+        // `asserted` rather than `generated`: EPIC-008 requires generated
+        // evidence to name what it was derived from, and the point here is the
+        // authority rank, not the provenance chain.
+        method: EvidenceMethod.ASSERTED,
+        producer: 'ferret.model',
+        producerVersion: '1.0.0',
+        sourceSystem: 'ferret',
+        authority: SourceAuthority.ASSERTED,
+        observedAt: '2026-08-01T00:00:00.000Z',
+      });
+      await store.supersede(replaced.evidence.id, believed.evidence.id);
+
+      const selection = selectEvidence(await store.forSubjectWithState(subject), { limit: 5 });
+
+      expect(selection.selected.map((entry) => entry.evidence.id)).toStrictEqual([believed.evidence.id]);
+      expect(selection.excluded).toHaveLength(1);
+      expect(selection.excluded[0]?.id).toBe(replaced.evidence.id);
+      expect(selection.excluded[0]?.cause).toBe(EvidenceExclusion.NOT_CURRENT);
+      expect(selection.excluded[0]?.reason).toContain('state superseded');
+    });
+
+    it('reports a fact the store marked conflicting — AC-9', async () => {
+      const subject = (
+        await entities.upsert({
+          kind: EntityKind.ISSUE,
+          source: { system: 'jira', id: 'FER-64' },
+          attributes: { key: 'FER-64', title: 'Disagreement' },
+        })
+      ).entity.id;
+
+      await store.record({
+        subjectId: subject,
+        field: 'owner',
+        statement: 'alice',
+        method: EvidenceMethod.OBSERVED,
+        producer: 'ferret.provider.jira',
+        producerVersion: '1.0.0',
+        sourceSystem: 'jira',
+      });
+      await store.record({
+        subjectId: subject,
+        field: 'owner',
+        statement: 'bob',
+        method: EvidenceMethod.PARSED,
+        producer: 'ferret.parser.code',
+        producerVersion: '1.0.0',
+        sourceSystem: 'git',
+      });
+
+      const selection = selectEvidence(await store.forSubjectWithState(subject), { limit: 5 });
+
+      // Both sides cited: Governance §15 forbids discarding a conflicting record,
+      // and EPIC-047 rather than this Epic decides which wins.
+      expect(selection.disputedFields).toStrictEqual(['owner']);
+      expect(selection.selected).toHaveLength(2);
+      expect(selection.excluded).toStrictEqual([]);
     });
   });
 

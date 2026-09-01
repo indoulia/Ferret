@@ -4,6 +4,7 @@ import { CONTENT_CLOSE, CONTENT_OPEN } from '../../src/security/index.js';
 import {
   CONTENT_NOTICE,
   ContextPackBuilder,
+  EVIDENCE_CANDIDATE_WINDOW,
   ErrorCode,
   HitSource,
   MAX_BUDGET,
@@ -17,6 +18,7 @@ import {
   type Neighbour,
   type RetrievalPort,
   type SearchHit,
+  type StatedEvidence,
 } from '../../src/index.js';
 
 /**
@@ -428,6 +430,20 @@ describe('evidence on a pack item', () => {
       return Promise.resolve(this.records.filter((record) => record.subjectId === subjectId));
     }
 
+    /**
+     * EPIC-062's projection. `state` is deliberately unset here: these records
+     * were written before the store returned one, and the selection must treat an
+     * unread state as *unassessed* rather than assume it is current.
+     */
+    forSubjectWithState(subjectId: string): Promise<readonly StatedEvidence[]> {
+      this.calls.push(subjectId);
+      return Promise.resolve(
+        this.records
+          .filter((record) => record.subjectId === subjectId)
+          .map((record) => ({ evidence: record })),
+      );
+    }
+
     provenanceOf(): Promise<readonly CanonicalEvidence[]> {
       return Promise.resolve([]);
     }
@@ -508,5 +524,153 @@ describe('evidence on a pack item', () => {
     const pack = await builder.build({ question: 'why' });
 
     expect(pack.items[0]?.evidence).toStrictEqual([]);
+  });
+});
+
+/**
+ * Which evidence an item cites, and why — EPIC-062 on the pack path.
+ *
+ * The selection rules are proved in `evidence-selection.test.ts`, without a
+ * pack, because they are pure. What is left to prove here is the composition: a
+ * pack asks for a *window* rather than exactly the bound, carries the account
+ * with each item, aggregates the causes, and keeps all of that true when an item
+ * is trimmed to fit.
+ */
+describe('evidence selection on a pack item', () => {
+  function evidenceRecord(id: string, field: string, authority: number, observedAt: string): CanonicalEvidence {
+    return Object.freeze({
+      id,
+      subjectId: 'c1',
+      field,
+      statement: `observed ${field}`,
+      method: 'observed',
+      producer: 'ferret.source.git',
+      producerVersion: '0.1.0',
+      sourceSystem: 'git',
+      sourceId: undefined,
+      sourceUrl: undefined,
+      locator: undefined,
+      sourceContentHash: undefined,
+      confidence: undefined,
+      completeness: 'complete',
+      authority,
+      observedAt,
+      derivedFrom: Object.freeze([]),
+      permissionScope: undefined,
+      integrityHash: `hash-${id}`,
+      redacted: false,
+    });
+  }
+
+  /** A reader that answers the EPIC-062 projection with states the test chooses. */
+  class StatedEvidenceStore {
+    lastLimit: number | undefined;
+    constructor(private readonly records: readonly StatedEvidence[]) {}
+
+    forSubject(): Promise<readonly CanonicalEvidence[]> {
+      return Promise.resolve(this.records.map((entry) => entry.evidence));
+    }
+
+    forSubjectWithState(_subjectId: string, query: { limit?: number } = {}): Promise<readonly StatedEvidence[]> {
+      this.lastLimit = query.limit;
+      return Promise.resolve(this.records);
+    }
+
+    provenanceOf(): Promise<readonly CanonicalEvidence[]> {
+      return Promise.resolve([]);
+    }
+
+    verify(): Promise<CanonicalEvidence> {
+      return Promise.resolve(this.records[0]?.evidence as CanonicalEvidence);
+    }
+
+    conflictsFor(): Promise<readonly never[]> {
+      return Promise.resolve([]);
+    }
+  }
+
+  it('asks for more candidates than it will cite, so there is a choice to make', async () => {
+    // Asking for five and citing five is not a selection, and the exclusion
+    // account would have nothing to account for. One more than the window so a
+    // complete window and a truncated one stay distinguishable.
+    const store = new StatedEvidenceStore([
+      { evidence: evidenceRecord('e1', 'message', 80, '2026-01-01T00:00:00.000Z'), state: 'current' },
+    ]);
+    await new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]), store).build({
+      question: 'why',
+    });
+
+    expect(store.lastLimit).toBe(EVIDENCE_CANDIDATE_WINDOW + 1);
+  });
+
+  it('cites the authoritative current record rather than the newest one', async () => {
+    // The whole defect, seen through the pack: before this, `e-recent` was cited
+    // first because the store returns newest-first and the builder took the top
+    // of the list.
+    const store = new StatedEvidenceStore([
+      { evidence: evidenceRecord('e-recent', 'message', 20, '2026-09-01T00:00:00.000Z'), state: 'current' },
+      { evidence: evidenceRecord('e-authoritative', 'author', 100, '2026-01-01T00:00:00.000Z'), state: 'current' },
+      { evidence: evidenceRecord('e-replaced', 'message', 100, '2026-08-01T00:00:00.000Z'), state: 'superseded' },
+    ]);
+
+    const pack = await new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]), store).build({
+      question: 'why',
+    });
+
+    expect(pack.items[0]?.evidence.map((record) => record.id)).toStrictEqual(['e-authoritative', 'e-recent']);
+    expect(pack.items[0]?.evidenceSelection.excluded[0]?.id).toBe('e-replaced');
+  });
+
+  it('names the cause of every omission at pack level — AC-10', async () => {
+    // Governance §18: a count says how much was left out; only a cause says why.
+    const store = new StatedEvidenceStore([
+      { evidence: evidenceRecord('e1', 'message', 80, '2026-01-01T00:00:00.000Z'), state: 'current' },
+      { evidence: evidenceRecord('e2', 'message', 80, '2026-01-02T00:00:00.000Z'), state: 'current' },
+      { evidence: evidenceRecord('e3', 'message', 80, '2026-01-03T00:00:00.000Z'), state: 'superseded' },
+    ]);
+
+    const pack = await new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]), store).build({
+      question: 'why',
+    });
+
+    const selection = pack.omitted.find((entry) => entry.reason === TruncationReason.SELECTION);
+    expect(selection?.count).toBe(1);
+    expect(selection?.detail).toContain('no longer believes them');
+  });
+
+  it('states per item what it rests on and what it left out — AC-14', async () => {
+    const store = new StatedEvidenceStore([
+      { evidence: evidenceRecord('e1', 'message', 100, '2026-01-01T00:00:00.000Z'), state: 'current' },
+      { evidence: evidenceRecord('e2', 'message', 60, '2026-01-02T00:00:00.000Z'), state: 'stale' },
+    ]);
+
+    const pack = await new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]), store).build({
+      question: 'why',
+    });
+    const rendered = renderPack(pack);
+
+    expect(rendered).toContain('system-of-record authority');
+    expect(rendered).toContain('state current');
+    expect(rendered).toContain('not cited:');
+    expect(rendered).toContain('no longer believes them');
+  });
+
+  it('blames the budget, not the ranking, for evidence a trimmed item lost', async () => {
+    // The selection chose these records and the budget took them away
+    // afterwards. Reporting them as ranked-out would describe a decision Ferret
+    // never made.
+    const store = new StatedEvidenceStore([
+      { evidence: evidenceRecord('e1', 'message', 100, '2026-01-01T00:00:00.000Z'), state: 'current' },
+    ]);
+    const builder = new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x'.repeat(6000) })]), store);
+
+    const pack = await builder.build({ question: 'why', budget: 900 });
+
+    expect(pack.items[0]?.trimmed).toBe(true);
+    expect(pack.items[0]?.evidence).toStrictEqual([]);
+    expect(pack.items[0]?.evidenceSelection.excluded.map((entry) => entry.cause)).toStrictEqual([
+      'token-budget',
+    ]);
+    expect(pack.omitted.some((entry) => entry.detail.includes('shortened to fit the token budget'))).toBe(true);
   });
 });
