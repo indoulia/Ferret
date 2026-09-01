@@ -275,6 +275,28 @@ describe('indexed content reaching a model', () => {
     }
   });
 
+  it('keys every row-bearing response under the same name', async () => {
+    // Issue #51. `ferret_find` returned `entities` and `ferret_search` returned
+    // `results`, and nothing said so. A client reading `.results` from
+    // `ferret_find` got `undefined`, which flows into `(x ?? []).find(...)` and
+    // reads as a confident "not found" rather than as an error — a silent wrong
+    // answer, which is the one failure mode this whole surface is built to
+    // prevent. Ferret's own dogfood script reported an empty index that was in
+    // fact correct.
+    //
+    // Asserted across both tools together rather than one at a time: the defect
+    // was the *disagreement*, so a test that pins each tool separately would
+    // have passed throughout. Nothing here asserted the shape at all before.
+    for (const [name, args] of [
+      ['ferret_search', { query: 'anything' }],
+      ['ferret_find', { kind: 'file' }],
+    ] as const) {
+      const result = await call(name, args);
+      expect(Array.isArray(result['results'])).toBe(true);
+      expect(result['entities']).toBeUndefined();
+    }
+  });
+
   it('returns a hostile commit message as an attributed value, not as prose', async () => {
     // The brief's hardest constraint: indexed content must never override
     // Ferret's or the client's instructions. No filter can achieve that — a
