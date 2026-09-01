@@ -188,7 +188,61 @@ export function validateCandidate(candidate: Record<string, unknown>, env: NodeJ
   );
 }
 
-/** Splits a dotted path, rejecting shapes that cannot address a value. */
+/**
+ * Keys that address JavaScript's object machinery rather than a value.
+ *
+ * The same three, for the same reason, as `FORBIDDEN_KEYS` in
+ * `providers/sdk/operation.ts` — EPIC-011 needed them for a decoded cursor.
+ * Duplicated rather than imported because configuration must not depend on the
+ * provider SDK; three language constants and a shared comment is the cheaper
+ * price than that dependency.
+ */
+const FORBIDDEN_SEGMENTS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Refuses segments that address object internals.
+ *
+ * `setAt(document, ['__proto__', 'polluted'], v)` walks into `Object.prototype`
+ * — `isRecord` says yes, because it is one — and assigns to it, polluting every
+ * object in the process. It then leaves no trace: `JSON.stringify` serializes own
+ * enumerable properties only, so the document written to disk is clean and
+ * `validateCandidate` never sees anything to reject.
+ *
+ * A local operator could only ever have done this to their own process. EPIC-066
+ * puts configuration writes on the MCP surface, where the path is a string a
+ * model chooses and EPIC-084's threat model says indexed content can influence
+ * what a model asks for. Same defect, materially different blast radius.
+ *
+ * Called from `parsePath`, which every surface inside Ferret goes through, **and**
+ * from `setAt` and `unsetAt`, which are exported: the guarantee should belong to
+ * the function that does the dangerous thing rather than to the discipline of
+ * whoever calls it.
+ *
+ * `USAGE` rather than `CONFIG_INVALID`: the stored configuration is fine, and what
+ * arrived was a malformed request.
+ *
+ * @throws {FerretError} `E_USAGE`
+ */
+function assertAddressable(segments: readonly string[]): void {
+  const forbidden = segments.filter((segment) => FORBIDDEN_SEGMENTS.has(segment));
+  if (forbidden.length === 0) return;
+  throw new FerretError(
+    ErrorCode.USAGE,
+    `Configuration path addresses JavaScript object internals: ${forbidden.join(', ')}`,
+    {
+      details: { path: segments.join('.'), forbidden },
+      remediation: `A configuration path may not contain: ${[...FORBIDDEN_SEGMENTS].join(', ')}.`,
+    },
+  );
+}
+
+/**
+ * Splits a dotted path, rejecting shapes that cannot address a value.
+ *
+ * Segments addressing object internals are refused here, at the one place every
+ * surface inside Ferret turns a caller's string into a path — see
+ * {@link assertAddressable}.
+ */
 export function parsePath(path: string): string[] {
   const segments = path.split('.').filter((segment) => segment !== '');
   if (segments.length === 0 || segments.length !== path.split('.').length) {
@@ -197,12 +251,15 @@ export function parsePath(path: string): string[] {
       remediation: 'Use a dotted path such as `database.host` or `logLevel`.',
     });
   }
+
+  assertAddressable(segments);
   return segments;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
+
 
 /** Reads a dotted path out of a document. */
 export function getAt(document: Record<string, unknown>, segments: readonly string[]): unknown {
@@ -220,6 +277,7 @@ export function setAt(
   segments: readonly string[],
   value: unknown,
 ): Record<string, unknown> {
+  assertAddressable(segments);
   const clone = structuredClone(document);
   let cursor = clone;
   for (const segment of segments.slice(0, -1)) {
@@ -237,6 +295,7 @@ export function unsetAt(
   document: Record<string, unknown>,
   segments: readonly string[],
 ): Record<string, unknown> {
+  assertAddressable(segments);
   const clone = structuredClone(document);
   let cursor: Record<string, unknown> = clone;
   for (const segment of segments.slice(0, -1)) {

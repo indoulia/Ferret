@@ -154,3 +154,75 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | No `ferret config edit`, and no schema export for AI clients. | An agent must use `get`/`set` rather than discovering the schema. | **EPIC-066** — MCP Configuration Tools |
 | Exclusions are enforced only where they are consulted. | EPIC-003 delivers the model and the evaluator; applying them at discovery and retrieval time is later work. | **EPIC-022**, **EPIC-058** |
 | macOS unvalidated. | Inherited from EPIC-001/EPIC-005; no macOS host available. | **EPIC-105** |
+
+## 8. Defects found after validation, and fixed
+
+Appended rather than folded into §1 or §4. Nothing above is rewritten: those
+sections record what was true when this Epic was validated, and a validation
+document that edited itself whenever a later defect appeared would stop being
+evidence of anything. This section is how a post-validation finding is recorded.
+
+### 8.1 A configuration path could address `Object.prototype`
+
+**Found:** 2026-09-01, while assessing EPIC-066 readiness.
+**Issue:** [#81](https://github.com/indoulia/Ferret/issues/81).
+**Severity:** low as shipped; the fix is what keeps it low.
+
+`parsePath` accepted `__proto__`, `constructor` and `prototype` as segments, and
+`setAt` then descended into `Object.prototype` and assigned to it — polluting
+every object in the process:
+
+```
+parsePath accepted: ["__proto__","polluted"]
+Object.prototype.polluted after setAt: "OWNED"
+a fresh unrelated object sees it: "OWNED"
+serialized document: {"logLevel":"warn"}
+```
+
+Every control in this Epic missed it, and each for a defensible reason.
+`isRecord(Object.prototype)` is `true` — it *is* an object — so `setAt`'s loop
+descended rather than replacing. `JSON.stringify` serializes own enumerable
+properties only, so the document written to disk was clean. `validateCandidate`
+therefore had nothing to reject. And §2's tests covered the CLI and the
+read-modify-write cycle but never `parsePath`, `setAt` or `unsetAt` directly,
+which is the gap that let it live.
+
+**Why it was invisible.** This Epic reasoned carefully about hostile input and got
+that right: §6 and the repository trust boundary exist because a cloned
+repository's `.ferret/config.json` is untrusted, and `filterRepositoryFragment`'s
+allowlist refuses `__proto__` correctly today. The hole was in the input nobody
+modelled as hostile — an operator's own dotted path string, trusted because only
+an operator could supply one. That was true when this Epic shipped. **EPIC-066 is
+what makes it false**, by putting the path string in a model's hands, and
+EPIC-084's threat model states that indexed content can influence what a model
+asks for.
+
+Worth stating because it is easy to assume otherwise: **EPIC-069's confirmation
+gate would not have contained this.** The assignment happens inside `setAt`, after
+`consume` succeeds, so a confirmation reduces the attack to two calls. A
+confirmation is not a substitute for input validation.
+
+**Fix.** `assertAddressable(segments)` in `src/config/store.ts`, called from
+`parsePath` — the one place every surface inside Ferret turns a caller's string
+into a path — and also from `setAt` and `unsetAt`, which are exported: the
+guarantee belongs to the function that does the dangerous thing rather than to the
+discipline of whoever calls it. Reuses the three keys and the reasoning from
+`FORBIDDEN_KEYS` in `src/providers/sdk/operation.ts`, where EPIC-011 needed them
+for a decoded cursor; duplicated rather than imported, because configuration must
+not depend on the provider SDK. `E_USAGE`, not `E_CONFIG_INVALID` — the stored
+configuration is fine and what arrived was a malformed request.
+
+**Coverage.** `tests/unit/config-path.test.ts`, 13 tests — the first direct
+coverage these three helpers have had. Verified by reverting the guard: **7 of 13
+fail**, including the `Object.prototype` regression. The converse is asserted too:
+`providers.constructorName` and `myPrototype` still parse, so the guard matches
+whole segments rather than substrings.
+
+**Siblings checked.** `resolve.ts`'s `assign` has the same shape and is
+unreachable — its paths come only from the hardcoded `ENV_BINDINGS` table.
+`repository-source.ts` is fed genuinely hostile keys and is safe by allowlist,
+confirmed rather than assumed, since `JSON.parse` creates `__proto__` as a real
+own property that `Object.entries` does see.
+
+**No acceptance criterion of this Epic changes.** AC-4's claim — invalid values
+produce actionable errors — is now true of a case it did not previously cover.
