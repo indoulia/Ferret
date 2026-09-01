@@ -158,12 +158,39 @@ const SQLSTATE = {
    */
   SERIALIZATION_FAILURE: '40001',
   DEADLOCK_DETECTED: '40P01',
+  /**
+   * A unique index the statement's arbiter did not cover — issue #55.
+   *
+   * `ON CONFLICT (id) DO UPDATE` guarantees insert-or-update for the **arbiter
+   * index only**. `ferret.entity` also carries a unique index on
+   * `canonical_key`, and because the id is derived from the canonical key both
+   * collide at once — so which index the executor detects first is a race.
+   * Detect `id` and the upsert works; detect `canonical_key` and PostgreSQL
+   * raises this instead of taking the update path.
+   *
+   * Intermittent by construction, and it was reasoned away as impossible before
+   * CI produced it on a documentation-only pull request.
+   */
+  UNIQUE_VIOLATION: '23505',
 } as const;
 
-/** SQLSTATEs that mean "try the whole transaction again". */
+/**
+ * SQLSTATEs that mean "try the whole transaction again".
+ *
+ * `23505` is here on narrower grounds than the other two. PostgreSQL documents
+ * those as errors an application is expected to retry; a unique violation is
+ * *usually* a genuine constraint failure and retrying it would simply repeat it.
+ * It earns its place because a second attempt is exactly what resolves the race
+ * above — by then the competing row is committed and the arbiter path works.
+ *
+ * The cost of being wrong is bounded and paid only on a real duplicate: a few
+ * retries, then the same error. That is a trade rather than a free win, and
+ * `withConflictRetry` capping the attempts is what makes it acceptable.
+ */
 const TRANSIENT_CONFLICTS: ReadonlySet<string> = new Set([
   SQLSTATE.SERIALIZATION_FAILURE,
   SQLSTATE.DEADLOCK_DETECTED,
+  SQLSTATE.UNIQUE_VIOLATION,
 ]);
 
 /**

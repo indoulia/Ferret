@@ -60,17 +60,50 @@ describe('classifying a transaction conflict — AC-1', () => {
   it('recognises a conflict from the raw driver error too', () => {
     expect(isTransientConflict(pgError('40001'))).toBe(true);
     expect(isTransientConflict(pgError('40P01'))).toBe(true);
-    expect(isTransientConflict(pgError('23505'))).toBe(false);
+    expect(isTransientConflict(pgError('23505'))).toBe(true);
     expect(isTransientConflict(pgError('42501'))).toBe(false);
     expect(isTransientConflict(new Error('no code'))).toBe(false);
   });
 
-  it('leaves 23505 alone, deliberately', () => {
-    // Under `ON CONFLICT` it is a concurrent insert and retryable; outside it,
-    // the caller wrote something that violates a constraint and retrying is a
-    // loop. Ferret cannot tell which from the SQLSTATE, and guessing in the
-    // retryable direction turns a bug into a hang.
-    expect(classifyDatabaseError(pgError('23505'), 'op').retryable).toBe(false);
+  it('treats 23505 as retryable — corrected by evidence', () => {
+    // This assertion previously read `toBe(false)`, with the reasoning that a
+    // unique violation cannot arise under `ON CONFLICT` and outside it is a
+    // genuine constraint failure a retry would only repeat.
+    //
+    // The first half was wrong. CI produced 23505 from
+    // `insert ... on conflict ("id") do update` on a documentation-only pull
+    // request (#65): `ferret.entity` has a second unique index on
+    // `canonical_key`, and `ON CONFLICT` arbitrates the named index only. Both
+    // collide at once because the id is derived from the canonical key, so
+    // which one the executor detects first is a race — and detecting the
+    // non-arbiter one raises this instead of updating.
+    //
+    // The second half still holds, and is why the next test exists: retrying a
+    // real duplicate repeats it. `withConflictRetry` bounds the attempts, so the
+    // cost of being wrong is a few wasted tries and then the same error.
+    // Changed because measurement disproved the reasoning, not to make anything
+    // pass. Issue #55.
+    expect(classifyDatabaseError(pgError('23505'), 'op').retryable).toBe(true);
+  });
+
+  it('still gives up on a duplicate that is genuinely a duplicate', async () => {
+    // The bound that makes the trade above acceptable. A 23505 that is not a
+    // race is retried a few times and then surfaces unchanged, rather than
+    // looping — which is the failure mode the original reasoning was guarding
+    // against and which still must not happen.
+    let attempts = 0;
+    await expect(
+      withConflictRetry(
+        () => {
+          attempts += 1;
+          return Promise.reject(classifyDatabaseError(pgError('23505'), 'test.op'));
+        },
+        { label: 'test.op', random: (): number => 0 },
+      ),
+    ).rejects.toMatchObject({ details: { sqlstate: '23505' } });
+
+    expect(attempts).toBeGreaterThan(1);
+    expect(attempts).toBeLessThanOrEqual(5);
   });
 });
 
