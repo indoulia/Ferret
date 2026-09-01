@@ -11,7 +11,12 @@ import {
   type EvidenceReader,
 } from '../context/index.js';
 import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
-import { EvidenceState, type CanonicalEntity, type CanonicalEvidence } from '../domain/index.js';
+import {
+  EvidenceState,
+  integrityHashOf,
+  type CanonicalEntity,
+  type CanonicalEvidence,
+} from '../domain/index.js';
 import { serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 import { MAX_LIMIT, type QueryPlanner, type RetrievalPort, type SearchHit } from '../retrieval/index.js';
@@ -551,6 +556,10 @@ function describeEvidence(
     completeness: record.completeness,
     observedAt: record.observedAt,
     redacted: record.redacted,
+    // AC-4. Recomputed here rather than fetched: `integrityHashOf` is pure, so
+    // a citation can be shown untampered without a round trip per record. A
+    // tool whose job is checking answers should not itself be taken on trust.
+    integrity: integrityHashOf(record) === record.integrityHash ? 'verified' : 'tampered',
     derivedFrom: lineage.map((ancestor) => ({
       id: ancestor.id,
       method: ancestor.method,

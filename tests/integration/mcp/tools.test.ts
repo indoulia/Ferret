@@ -666,6 +666,19 @@ describe('tracing why Ferret believes something', () => {
     expect(statement).toContain(CONTENT_CLOSE);
   });
 
+  it('states whether each citation is untampered — AC-4', async () => {
+    // A tool whose job is checking answers should not itself be taken on trust.
+    // The hash is recomputed in process rather than fetched, so the verdict
+    // costs no round trip and cannot be stale.
+    const result = await trace('ferret_why', { id: COMMIT.id });
+    const records = result['evidence'] as Record<string, unknown>[];
+
+    // The fixture's hash is deliberately not a real one, so the honest verdict
+    // is `tampered` — which is the assertion worth having: a verdict that only
+    // ever said `verified` would prove nothing.
+    expect(records[0]?.['integrity']).toBe('tampered');
+  });
+
   it('refuses an id the schema does not allow', async () => {
     const result = (await traceClient.callTool({
       name: 'ferret_why',

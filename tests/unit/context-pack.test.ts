@@ -473,6 +473,36 @@ describe('evidence on a pack item', () => {
     expect(pack.items[0]?.evidence[0]?.derivedFrom).toStrictEqual(['ancestor-1', 'ancestor-2']);
   });
 
+  it('reports observations left out by the per-item bound — AC-7', async () => {
+    // A bound that is not reported is indistinguishable from an entity that
+    // simply had no more evidence, which is the class of quiet incompleteness
+    // the pack's omission contract exists to prevent.
+    const many = Array.from({ length: 9 }, (_, index) =>
+      evidenceRecord(`e${String(index)}`, 'c1', []),
+    );
+    const builder = new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]), new FakeEvidence(many));
+
+    const pack = await builder.build({ question: 'why' });
+
+    expect(pack.items[0]?.evidence).toHaveLength(5);
+    expect(pack.items[0]?.evidenceOmitted).toBe(4);
+
+    const omission = pack.omitted.find((entry) => entry.detail.includes('observation'));
+    expect(omission).toBeDefined();
+    expect(omission?.count).toBe(4);
+  });
+
+  it('reports nothing omitted when the entity has fewer than the bound', async () => {
+    const builder = new ContextPackBuilder(
+      new FakeRetrieval([hit('c1', { message: 'x' })]),
+      new FakeEvidence([evidenceRecord('e1', 'c1', [])]),
+    );
+    const pack = await builder.build({ question: 'why' });
+
+    expect(pack.items[0]?.evidenceOmitted).toBe(0);
+    expect(pack.omitted.some((entry) => entry.detail.includes('observation'))).toBe(false);
+  });
+
   it('reports an empty list for a subject the store holds nothing for — AC-3', async () => {
     const builder = new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]), new FakeEvidence([]));
     const pack = await builder.build({ question: 'why' });

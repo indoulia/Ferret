@@ -66,6 +66,15 @@ export interface PackItem {
   /** Relevance, when the item came from a ranked source. */
   readonly score: number | undefined;
   readonly evidence: readonly CanonicalEvidence[];
+  /**
+   * Observations this entity has that the item does not carry — EPIC-048 AC-7.
+   *
+   * Bounded because a pack is bounded: an entity with two hundred observations
+   * must not spend the whole budget proving one item. Reported rather than
+   * dropped silently, which is the rule the pack already applies to everything
+   * else it leaves out.
+   */
+  readonly evidenceOmitted: number;
   readonly estimatedTokens: number;
   /**
    * True when the item's longest values were shortened to fit.
@@ -232,6 +241,18 @@ export class ContextPackBuilder {
     }
 
     const omitted: PackOmission[] = [];
+    // EPIC-048 AC-7. Evidence is bounded per item, and a bound that is not
+    // reported is indistinguishable from an entity that simply had no more.
+    const evidenceOmitted = items.reduce((total, item) => total + item.evidenceOmitted, 0);
+    if (evidenceOmitted > 0) {
+      omitted.push({
+        reason: TruncationReason.LIMIT,
+        count: evidenceOmitted,
+        detail:
+          `${String(evidenceOmitted)} observation(s) supporting these results were not included; ` +
+          `each item carries at most ${String(MAX_EVIDENCE_PER_ITEM)}`,
+      });
+    }
     if (trimmedCount > 0) {
       omitted.push({
         reason: TruncationReason.CONTENT,
@@ -270,7 +291,7 @@ export class ContextPackBuilder {
   }
 
   async #toItem(hit: SearchHit, withNeighbours: boolean, safety: ContentSafety): Promise<PackItem> {
-    const evidence = await this.#evidenceFor(hit);
+    const { evidence, omitted: evidenceOmitted } = await this.#evidenceFor(hit);
     const neighbours = withNeighbours
       ? await this.#retrieval.neighbours({
           from: hit.entity.id,
@@ -297,6 +318,7 @@ export class ContextPackBuilder {
       reason: neighbours.length === 0 ? reason : `${reason}; ${String(neighbours.length)} connected`,
       score: hit.score,
       evidence,
+      evidenceOmitted,
       estimatedTokens: estimateJsonTokens({
         entity,
         evidence,
@@ -320,21 +342,30 @@ export class ContextPackBuilder {
    * turn a page of fifty into a hundred round trips, and an empty array is
    * indistinguishable from "no antecedents". The store returns the real chain.
    */
-  async #evidenceFor(hit: SearchHit): Promise<readonly CanonicalEvidence[]> {
+  async #evidenceFor(hit: SearchHit): Promise<{
+    readonly evidence: readonly CanonicalEvidence[];
+    readonly omitted: number;
+  }> {
     if (this.#evidence === undefined) {
-      return hit.evidence === undefined ? [] : [hit.evidence];
+      return { evidence: hit.evidence === undefined ? [] : [hit.evidence], omitted: 0 };
     }
 
-    // Absence is an answer. A subject with nothing recorded returns an empty
-    // list, and the caller can tell that apart from "not looked up" because this
-    // builder always looks when it has a reader.
-    const held = await this.#evidence.forSubject(hit.entity.id, { limit: MAX_EVIDENCE_PER_ITEM });
-    if (held.length > 0) return held;
+    // One more than the bound, so "exactly the bound" and "more than the bound"
+    // are distinguishable. Asking for the bound alone makes a truncated answer
+    // indistinguishable from a complete one, which is the defect this Epic
+    // exists to stop shipping.
+    const held = await this.#evidence.forSubject(hit.entity.id, { limit: MAX_EVIDENCE_PER_ITEM + 1 });
+    if (held.length > 0) {
+      return {
+        evidence: held.slice(0, MAX_EVIDENCE_PER_ITEM),
+        omitted: Math.max(0, held.length - MAX_EVIDENCE_PER_ITEM),
+      };
+    }
 
     // The matching record still counts when the store holds nothing under this
     // entity's id — evidence about a subject Ferret models differently should
     // not vanish from the answer just because the lookup missed.
-    return hit.evidence === undefined ? [] : [hit.evidence];
+    return { evidence: hit.evidence === undefined ? [] : [hit.evidence], omitted: 0 };
   }
 }
 
@@ -404,6 +435,10 @@ function trimItem(item: PackItem, room: number): PackItem | undefined {
         entity,
         reason: `${item.reason} (trimmed to fit)`,
         evidence: [],
+        // Every observation this item had is now absent, so the count of what
+        // is missing has to grow by them. A trimmed item that reported zero
+        // omitted evidence would be claiming completeness it does not have.
+        evidenceOmitted: item.evidenceOmitted + item.evidence.length,
         estimatedTokens,
         trimmed: true,
       };

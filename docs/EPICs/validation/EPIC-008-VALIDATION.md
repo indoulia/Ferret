@@ -129,6 +129,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | Limitation | Impact | Owner |
 | --- | --- | --- |
 | No retrieval layer consumes evidence yet. The contracts are exercised directly. | The Definition of Done's last item is demonstrated against the interface, not against a consumer. Recorded as PARTIAL rather than claimed. | **EPIC-048**, **EPIC-052**–**EPIC-058** |
+
 | Authority is stored as an integer with no policy behind it. | Two sources both claiming authority 0 are indistinguishable, so `preferredEvidence` correctly reports it cannot choose. | **EPIC-045** — Source Authority |
 | Confidence is stored but never computed. | A provider must supply it, and most will not, so most evidence has unknown confidence — reported honestly rather than defaulted. | **EPIC-046** — Confidence & Completeness |
 | Conflicts are detected, never resolved, and no state transition marks a record `conflicting`. | `conflictsFor` reports disagreement on demand; nothing writes the `conflicting` state yet. | **EPIC-047** — Conflict Detection |
@@ -137,3 +138,16 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | Secret detection is shape-based, not entropy-based. | A high-entropy credential in an unrecognised format would be stored. | **EPIC-082** — Secret Detection & Exclusion |
 | Evidence rows are never pruned. | An append-only store grows without bound. | **EPIC-088** — Retention & Exclusion Policies |
 | macOS unvalidated. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
+
+### Addendum — 2026-09-01
+
+**The first limitation above now has a consumer.** EPIC-048 (Answer
+Traceability) composes `EvidenceStore` into the MCP server and exposes
+`ferret_why`; provenance traversal, authority and integrity are demonstrated
+against a real index over real stdio rather than against the interface. See
+[`EPIC-048-VALIDATION.md`](EPIC-048-VALIDATION.md) §3.
+
+The row itself is **left exactly as written**. It was true when recorded, and
+editing an assessment to match a later state would destroy the evidence that the
+gap existed and was closed deliberately. Nothing else in this document is
+changed by that Epic.
