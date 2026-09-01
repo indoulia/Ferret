@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, isNull, like, or, sql, type SQL } from 'drizzle-orm';
 
 import {
   EvidenceState,
@@ -15,6 +15,7 @@ import {
   type StatedEvidence,
 } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
+import { scopeDescendantPattern, scopeGrants } from '../retrieval/access.js';
 
 import { classifyDatabaseError } from './connection.js';
 import type { FerretDatabase } from './entities.js';
@@ -47,13 +48,32 @@ export interface RecordedEvidence {
  * Optional here rather than required, and the distinction is the one
  * `Checkpoints/EPIC-008.md:112` draws: "an internal caller omitting it is
  * correct, a retrieval caller omitting it is a leak." The indexer and the
- * reconciler read this store directly and must see everything they wrote. The
- * *retrieval path* reaches evidence through `EvidenceReader`, where EPIC-058
- * makes the context mandatory, so a caller on a user's behalf cannot omit it.
+ * reconciler read this store directly and must see everything they wrote.
+ *
+ * The *retrieval path* reaches evidence through `EvidenceReader`, where the
+ * context is a required parameter — EPIC-083 AC-1, after EPIC-058 required it in
+ * prose and #85 and #87 both omitted it anyway. An internal caller that means
+ * unrestricted says {@link UNRESTRICTED_READ} rather than passing nothing.
  */
 export interface ScopedRead {
   readonly permittedScopes?: readonly string[];
 }
+
+/**
+ * The one legitimate unrestricted read, said out loud — EPIC-083 AC-2.
+ *
+ * The indexer, the reconciler and an integrity sweep read back what Ferret itself
+ * wrote, and must see all of it. That is a real requirement and this Epic does not
+ * remove it; what it removes is the ability to *arrive* at it by omission.
+ *
+ * EPIC-058 refused an `UNRESTRICTED_ACCESS` on the retrieval side and was right —
+ * there, unrestricted is the opt-out the Epic exists to close. Here it is the
+ * correct answer for a caller that is not acting for anyone, so it gets a name a
+ * reviewer can grep for rather than an empty options object that looks like
+ * someone forgot. The difference between an audited decision and a forgotten one
+ * is whether it is written down.
+ */
+export const UNRESTRICTED_READ: ScopedRead = Object.freeze({ permittedScopes: undefined });
 
 export interface EvidenceQuery {
   readonly field?: string;
@@ -83,9 +103,18 @@ export interface EvidenceQuery {
  */
 function permissionFilter(permittedScopes: readonly string[] | undefined): SQL | undefined {
   if (permittedScopes === undefined) return undefined;
-  return permittedScopes.length === 0
-    ? isNull(evidence.permissionScope)
-    : sql`(${evidence.permissionScope} IS NULL OR ${inArray(evidence.permissionScope, [...permittedScopes])})`;
+  // Empty grants dropped for the same reason `scopeGrants` denies them: a blank
+  // entry would become `LIKE ':%'` and match every scoped row.
+  const grants = permittedScopes.filter((scope) => scope.length > 0);
+  if (grants.length === 0) return isNull(evidence.permissionScope);
+  return or(
+    isNull(evidence.permissionScope),
+    inArray(evidence.permissionScope, [...grants]),
+    // A grant covers its descendants — EPIC-083. Segment-wise, never a
+    // substring: the pattern carries the separator, so `jira:proj-a` matches
+    // `jira:proj-a:issue-1` and not `jira:proj-ab`.
+    ...grants.map((scope) => like(evidence.permissionScope, scopeDescendantPattern(scope))),
+  );
 }
 
 function toCanonical(row: EvidenceRow, derivedFrom: readonly string[]): CanonicalEvidence {
@@ -433,7 +462,11 @@ export class EvidenceStore {
       // caller holding nothing, which sees unscoped records only.
       (options.permittedScopes === undefined ||
         record.permissionScope === undefined ||
-        options.permittedScopes.includes(record.permissionScope));
+        // The same membership rule the SQL filter applies — EPIC-083. Two
+        // spellings of one decision is two decisions.
+        options.permittedScopes.some((grant) =>
+          scopeGrants(grant, record.permissionScope ?? ''),
+        ));
     if (record === undefined || !visible) {
       throw new FerretError(ErrorCode.ENTITY_NOT_FOUND, `No evidence with id ${id}`, {
         details: { evidenceId: id },
@@ -462,7 +495,7 @@ export class EvidenceStore {
    * would hide how much is affected.
    */
   async verifyAll(subjectId: string): Promise<{ checked: number; tampered: string[] }> {
-    const records = await this.forSubject(subjectId, { limit: 1_000 });
+    const records = await this.forSubject(subjectId, { ...UNRESTRICTED_READ, limit: 1_000 });
     const tampered = records
       .filter((record) => integrityHashOf(record) !== record.integrityHash)
       .map((record) => record.id);

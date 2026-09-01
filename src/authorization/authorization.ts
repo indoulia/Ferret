@@ -139,6 +139,51 @@ export const ANONYMOUS_PRINCIPAL: Principal = Object.freeze({
 });
 
 /**
+ * The principal a locally invoked command runs under when nothing is configured
+ * — EPIC-083 AC-3.
+ *
+ * {@link ANONYMOUS_PRINCIPAL} is the right default for a client that arrived over
+ * a transport, and the wrong one for the CLI: it grants `READ` only, so enforcing
+ * `INDEX` on `ferret index` against it would stop Ferret indexing anything out of
+ * the box. Refusing the operator at their own machine protects nobody — they can
+ * already read the repository with `cat` and write the database with `psql`, which
+ * is the same argument EPIC-068 §8 used to grant the anonymous principal `READ`.
+ *
+ * So the CLI's default is a *different* default, not a different rule. This is
+ * not a second grant surface: the moment configuration declares an
+ * `authorization` block, {@link principalFrom} reads it and this constant is not
+ * consulted — which is what makes locking the CLI down possible for the first
+ * time. `PrincipalClass.OPERATOR` has existed since EPIC-068 with the doc "a
+ * person operating Ferret directly, through the CLI" and nothing has used it
+ * until now.
+ *
+ * `MUTATE`, `CONFIG_WRITE` and `PROVIDER_ADMIN` are **not** here. Indexing a
+ * repository the operator owns is not a privileged act; changing what Ferret
+ * believes is, and EPIC-069's confirmation is a separate control besides.
+ *
+ * This default is the one decision in EPIC-083 that no record dictated, and §16
+ * of that specification says so rather than burying it.
+ */
+export const LOCAL_OPERATOR_PRINCIPAL: Principal = Object.freeze({
+  id: 'ferret.local-operator',
+  class: PrincipalClass.OPERATOR,
+  permissions: Object.freeze([Permission.INDEX, Permission.READ]),
+  permittedScopes: Object.freeze([]),
+  scope: Object.freeze({ include: [], exclude: [] }),
+});
+
+/**
+ * The grant a locally invoked command runs under — EPIC-083 AC-4.
+ *
+ * Configuration wins wherever it speaks, so a CLI grant and an MCP grant are read
+ * from the same place by the same function and cannot disagree. Only the fallback
+ * differs, and only because the two surfaces have different callers behind them.
+ */
+export function localOperatorFrom(config: FerretConfig): Principal {
+  return config.authorization === undefined ? LOCAL_OPERATOR_PRINCIPAL : principalFrom(config);
+}
+
+/**
  * Whether this principal may do this.
  *
  * Pure: same principal and permission in, same decision out. An authorization

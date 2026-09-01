@@ -10,6 +10,7 @@ import {
   WithholdReason,
   boundedLimit,
   includedRepositories,
+  scopeDescendantPattern,
   visibleEntities,
   withholds,
   type AccessContext,
@@ -125,11 +126,21 @@ const ENTITY_COLUMNS = sql`e.id, e.kind, e.canonical_key, e.schema_version, e.so
  * protected from the moment it does.
  */
 function permissionPredicate(column: SQL, access: AccessContext): SQL {
-  if (access.permittedScopes.length === 0) return sql`${column} IS NULL`;
+  // Empty grants dropped here for the same reason `scopeGrants` denies them: a
+  // blank entry would become `LIKE ':%'` and grant every scoped row.
+  const grants = access.permittedScopes.filter((scope) => scope.length > 0);
+  if (grants.length === 0) return sql`${column} IS NULL`;
+  // Exact match or a descendant — EPIC-083. The same rule `scopeGrants`
+  // implements, and `permission-scope-parity.test.ts` drives both from one table
+  // of cases so the SQL and the checker cannot disagree.
+  const descendants = sql.join(
+    grants.map((scope) => sql`${column} LIKE ${scopeDescendantPattern(scope)}`),
+    sql` OR `,
+  );
   return sql`(${column} IS NULL OR ${column} = ANY(${sql.raw('ARRAY[')}${sql.join(
-    access.permittedScopes.map((scope) => sql`${scope}`),
+    grants.map((scope) => sql`${scope}`),
     sql`, `,
-  )}${sql.raw(']::text[]')}))`;
+  )}${sql.raw(']::text[]')}) OR ${descendants})`;
 }
 
 /**

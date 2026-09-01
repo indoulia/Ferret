@@ -1,4 +1,34 @@
-import type { CanonicalEvidence, ConflictGroup, StatedEvidence } from '../domain/index.js';
+import type {
+  CanonicalEvidence,
+  ConflictGroup,
+  EvidenceState,
+  StatedEvidence,
+} from '../domain/index.js';
+
+/**
+ * What every read through this port must state — EPIC-083 AC-1.
+ *
+ * Required, and required *everywhere*, which is the whole of the change. EPIC-058
+ * already made it mandatory in prose — "supplying it is mandatory on the retrieval
+ * path" — and prose was enforced by whoever reviewed the call site. It was missed
+ * twice: `ferret_why`'s subject read (#85) and, ten lines below it, the conflict
+ * report (#87). Both were one line, both were on the path nobody tested, and both
+ * were possible only because the parameter defaulted to *unrestricted*.
+ *
+ * There is deliberately no way to say "everything" here. A caller-facing read has
+ * no legitimate use for one, and the store — which does, for the indexer reading
+ * back what it wrote — names that decision with `UNRESTRICTED_READ` instead.
+ */
+export interface ScopedQuery {
+  /**
+   * Permission scopes the caller holds, taken from the `AccessContext`.
+   *
+   * An empty array is the caller who holds nothing and is a complete answer:
+   * unscoped records only. It is not the same as forgetting to pass one, and
+   * after this Epic there is no way to spell the second.
+   */
+  readonly permittedScopes: readonly string[];
+}
 
 /**
  * What answer traceability needs from the evidence store — EPIC-048 §8.
@@ -16,22 +46,17 @@ import type { CanonicalEvidence, ConflictGroup, StatedEvidence } from '../domain
 export interface EvidenceReader {
   /**
    * Evidence held about one subject.
-   *
-   * `permittedScopes` is threaded from the first version rather than added later
-   * — EPIC-058 makes supplying it mandatory on the retrieval path, and the query
-   * already filters on it. One parameter now; a rewrite afterwards.
    */
   forSubject(
     subjectId: string,
-    query?: {
+    query: ScopedQuery & {
       readonly field?: string;
       /**
        * Which observations to return. Unfiltered means every state, including
        * ones a newer observation has replaced — so a citation surface must ask
        * for what it means rather than take the default.
        */
-      readonly state?: string;
-      readonly permittedScopes?: readonly string[];
+      readonly state?: EvidenceState;
       readonly limit?: number;
     },
   ): Promise<readonly CanonicalEvidence[]>;
@@ -51,10 +76,9 @@ export interface EvidenceReader {
    */
   forSubjectWithState(
     subjectId: string,
-    query?: {
+    query: ScopedQuery & {
       readonly field?: string;
-      readonly state?: string;
-      readonly permittedScopes?: readonly string[];
+      readonly state?: EvidenceState;
       readonly limit?: number;
     },
   ): Promise<readonly StatedEvidence[]>;
@@ -62,27 +86,25 @@ export interface EvidenceReader {
   /**
    * "Why does Ferret believe this" — EPIC-008 D-006, walked backwards, bounded.
    *
-   * `permittedScopes` is not optional decoration here — EPIC-058 AC-12. A lineage
-   * is the most revealing answer Ferret gives: the chain is walked *because* the
-   * caller asked why, so an unfiltered walk is where a protected observation
-   * surfaces after every other path has been closed.
+   * A lineage is the most revealing answer Ferret gives: the chain is walked
+   * *because* the caller asked why, so an unfiltered walk is where a protected
+   * observation surfaces after every other path has been closed.
    */
   provenanceOf(
     id: string,
-    options?: { readonly maxDepth?: number; readonly permittedScopes?: readonly string[] },
+    options: ScopedQuery & { readonly maxDepth?: number },
   ): Promise<readonly CanonicalEvidence[]>;
 
   /** Recomputes the integrity hash, so a citation can be shown to be untampered. */
-  verify(
-    id: string,
-    options?: { readonly permittedScopes?: readonly string[] },
-  ): Promise<CanonicalEvidence>;
+  verify(id: string, options: ScopedQuery): Promise<CanonicalEvidence>;
 
-  /** Disagreement about a subject, reported and never resolved here. */
-  conflictsFor(
-    subjectId: string,
-    options?: { readonly permittedScopes?: readonly string[] },
-  ): Promise<readonly ConflictGroup[]>;
+  /**
+   * Disagreement about a subject, reported and never resolved here.
+   *
+   * Scoped like every other read: a group carries no statement, but it names the
+   * field and the record ids, which was #87.
+   */
+  conflictsFor(subjectId: string, options: ScopedQuery): Promise<readonly ConflictGroup[]>;
 }
 
 /**

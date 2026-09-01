@@ -99,8 +99,10 @@ export {
 
 export {
   EvidenceStore,
+  UNRESTRICTED_READ,
   type EvidenceQuery,
   type RecordedEvidence,
+  type ScopedRead,
 } from './evidence.js';
 
 export {

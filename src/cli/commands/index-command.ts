@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 
 import { Command, Option } from 'commander';
 
+import { Permission, assertPermitted, localOperatorFrom } from '../../authorization/index.js';
 import type { SymbolIndexPort } from '../../code/index.js';
 import { createGitSourceProvider, type GitSourceProvider } from '../../git/index.js';
 import {
@@ -104,6 +105,24 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
           : undefined;
 
         const report = await runtime.run(async (context) => {
+          // EPIC-083 AC-3/AC-4. The MCP surface has been authorized since
+          // EPIC-068 and this one has not, though Governance §3 makes the CLI
+          // the bootstrap and recovery interface — a real entry point rather
+          // than a lesser one. `Permission.INDEX` existed from the day EPIC-068
+          // shipped and nothing consulted it.
+          //
+          // The same grant surface as `ferret mcp`: configuration and nothing
+          // else, read by the same `principalFrom`, so a CLI grant and an MCP
+          // grant cannot disagree. Only the fallback differs — an unconfigured
+          // CLI is the local operator rather than an anonymous client, because
+          // refusing a person at their own machine protects nobody. Configure an
+          // `authorization` block and this command becomes deniable, which it
+          // has never been.
+          //
+          // First statement in the run, so the refusal happens before the
+          // repository is read or a row is written.
+          assertPermitted(localOperatorFrom(context.config), Permission.INDEX, 'index');
+
           // Asked for by capability, never by name. This command is the only
           // place that *constructs* a Git provider; everything after this line
           // works through the capability, so replacing the source provider

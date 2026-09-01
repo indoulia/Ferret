@@ -185,7 +185,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 - **EPIC-081 — Credential Isolation** — P0
 - **EPIC-082 — Secret Detection & Exclusion** — P0 — VALIDATED ([spec](EPIC-082-Secret-Detection.md), [evidence](validation/EPIC-082-VALIDATION.md))
-- **EPIC-083 — Authorization Enforcement** — P0
+- **EPIC-083 — Authorization Enforcement** — P0 — IMPLEMENTED ([spec](EPIC-083-Authorization-Enforcement.md), [evidence](validation/EPIC-083-VALIDATION.md))
 - **EPIC-084 — Prompt-Injection Resistance** — P0 — VALIDATED ([spec](EPIC-084-Prompt-Injection-Resistance.md), [evidence](validation/EPIC-084-VALIDATION.md))
 - **EPIC-085 — Audit Events** — P1
 

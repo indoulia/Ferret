@@ -67,6 +67,12 @@ const SCOPE = 'jira:restricted-team';
  */
 const CONFLICT_FIELD = 'incident-owner';
 
+/** A scope beneath {@link SCOPE}, and a sibling that merely starts the same way. */
+const DESCENDANT_SCOPE = `${SCOPE}:alpha`;
+const SIBLING_SCOPE = 'jira:restricted-teamwork';
+const DESCENDANT_PHRASE = 'quadrant alpha descendant';
+const SIBLING_PHRASE = 'quadrant beta sibling';
+
 let db: TestDatabase;
 let handle: FerretDatabase;
 let entities: EntityStore;
@@ -75,6 +81,7 @@ let retrieval: RetrievalStore;
 let subject: string;
 let openSubject: string;
 let mixedSubject: string;
+let hierarchySubject: string;
 let repositoryA: string;
 let repositoryB: string;
 let fileInB: string;
@@ -134,6 +141,15 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
       })
     ).entity.id;
 
+    // Two scopes that a substring test would confuse — EPIC-083 AC-5.
+    hierarchySubject = (
+      await entities.upsert({
+        kind: EntityKind.ISSUE,
+        source: { system: 'jira', id: 'FER-83-H' },
+        attributes: { key: 'FER-83-H', title: 'A hierarchically scoped issue' },
+      })
+    ).entity.id;
+
     fileInB = (
       await entities.upsert({
         kind: EntityKind.FILE,
@@ -167,6 +183,27 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
       producer: 'ferret.provider.jira',
       producerVersion: '1.0.0',
       sourceSystem: 'jira',
+    });
+
+    await evidence.record({
+      subjectId: hierarchySubject,
+      field: 'summary',
+      statement: `${DESCENDANT_PHRASE} — beneath the granted scope`,
+      method: EvidenceMethod.OBSERVED,
+      producer: 'ferret.provider.jira',
+      producerVersion: '1.0.0',
+      sourceSystem: 'jira',
+      permissionScope: DESCENDANT_SCOPE,
+    });
+    await evidence.record({
+      subjectId: hierarchySubject,
+      field: 'notes',
+      statement: `${SIBLING_PHRASE} — a different team entirely`,
+      method: EvidenceMethod.OBSERVED,
+      producer: 'ferret.provider.jira',
+      producerVersion: '1.0.0',
+      sourceSystem: 'jira',
+      permissionScope: SIBLING_SCOPE,
     });
 
     await evidence.record({
@@ -382,6 +419,71 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
       } finally {
         await client.close();
       }
+    });
+  });
+
+  describe('what a permission scope means, in SQL — EPIC-083 AC-5, AC-6', () => {
+    /**
+     * The rule is pure and is proved without a database in
+     * `tests/unit/permission-scope.test.ts`. What only PostgreSQL can show is
+     * that the *filter* implements the same rule as the checker — the predicate
+     * is a `WHERE` clause built from `LIKE` patterns, and a membership decision
+     * that differs between the filter and the checker is two decisions.
+     */
+    it('shows a descendant scope to a caller holding the parent, through search', async () => {
+      const result = await retrieval.search({ text: DESCENDANT_PHRASE }, holding(SCOPE));
+      expect(result.hits).toHaveLength(1);
+      expect(result.hits[0]?.entity.id).toBe(hierarchySubject);
+    });
+
+    it('shows it through the evidence read as well', async () => {
+      const held = await evidence.forSubject(hierarchySubject, {
+        field: 'summary',
+        permittedScopes: [SCOPE],
+      });
+      expect(held).toHaveLength(1);
+      expect(String(held[0]?.statement)).toContain(DESCENDANT_PHRASE);
+    });
+
+    it('withholds a sibling whose name merely starts the same way', async () => {
+      // `jira:restricted-teamwork` is a different team. A bare prefix match in
+      // SQL would hand it over, which is the failure this rule exists to avoid.
+      const searched = await retrieval.search({ text: SIBLING_PHRASE }, holding(SCOPE));
+      expect(searched.hits).toStrictEqual([]);
+      expect(JSON.stringify(searched)).not.toContain('sibling');
+
+      const held = await evidence.forSubject(hierarchySubject, {
+        field: 'notes',
+        permittedScopes: [SCOPE],
+      });
+      expect(held).toStrictEqual([]);
+    });
+
+    it('shows the sibling to a caller who actually holds it', async () => {
+      // The control: a filter that hides everything proves nothing.
+      const result = await retrieval.search({ text: SIBLING_PHRASE }, holding(SIBLING_SCOPE));
+      expect(result.hits).toHaveLength(1);
+    });
+
+    it('does not let a grant containing a LIKE wildcard match beyond what it names', async () => {
+      // `%` is a wildcard in `LIKE`, so an unescaped pattern would turn a grant
+      // into caller-controlled matching. Escaped, this grant names a scope that
+      // does not exist and therefore matches nothing.
+      const wildcard = await retrieval.search({ text: DESCENDANT_PHRASE }, holding('jira:restricted-tea%'));
+      expect(wildcard.hits).toStrictEqual([]);
+
+      const underscore = await evidence.forSubject(hierarchySubject, {
+        field: 'summary',
+        permittedScopes: ['jira:restricted-tea_'],
+      });
+      expect(underscore).toStrictEqual([]);
+    });
+
+    it('withholds everything scoped from a caller holding an empty string', async () => {
+      // A blank line in a configuration file must not become root access: `''`
+      // plus the separator is a prefix of every scoped token.
+      const result = await retrieval.search({ text: DESCENDANT_PHRASE }, holding(''));
+      expect(result.hits).toStrictEqual([]);
     });
   });
 

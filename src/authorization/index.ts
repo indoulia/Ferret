@@ -15,6 +15,7 @@
 
 export {
   ANONYMOUS_PRINCIPAL,
+  LOCAL_OPERATOR_PRINCIPAL,
   PERMISSIONS,
   Permission,
   PrincipalClass,
@@ -22,6 +23,7 @@ export {
   assertPermitted,
   authorize,
   isPermission,
+  localOperatorFrom,
   principalFrom,
   type AuthorizationDecision,
   type Principal,
