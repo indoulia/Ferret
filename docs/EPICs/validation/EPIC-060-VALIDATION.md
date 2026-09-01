@@ -114,6 +114,20 @@ explain why; `derived_artifact` gains no row of kind `answer-pack` in this Epic.
 
 Three findings, all from running the thing rather than reading it.
 
+**A claim statement was wrapped when it should not have been.** The fix below
+over-corrected. Wrapping every string statement reintroduced the exact cost
+EPIC-084 had reasoned its way out of — "a client that compares `attributes.path`
+to a file it knows about would find every comparison fail" — and a claim whose
+field is `attributes.path` and whose statement is `src/context/pack.ts` is
+precisely such a value. Found in the dogfood output of the fix for issue #71,
+where a file's own path came back wrapped. The line is now EPIC-084's own, drawn
+by **shape** rather than by key name, because shape is the property a `statement`
+actually has: prose is wrapped, a bare token is left matchable. An injection needs
+sentences, and a token has no whitespace to put them in. Two tests assert the
+boundary from both sides, and one records honestly that a single-token statement
+is neither wrapped nor marked — the same exposure EPIC-084 already accepts for a
+path and a symbol name.
+
 **A claim statement was marked and not wrapped.** The integration test
 *"contains the hostile statement it cites"* failed on first run: a 110-character
 injection attempt reached the claim unwrapped. The cause was reusing
