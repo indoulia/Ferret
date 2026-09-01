@@ -1,3 +1,9 @@
+<div align="center">
+
+<img src="docs/assets/ferret-banner.svg" alt="Ferret — Persistent Engineering Context" width="100%">
+
+</div>
+
 # Ferret
 
 Persistent engineering context and knowledge layer for AI-assisted development.
