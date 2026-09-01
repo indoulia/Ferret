@@ -154,3 +154,105 @@ describe('installed CLI — secret safety', () => {
     expect(result.stderr).not.toContain('wJalrXUtnFEMI0000EXAMPLEKEY');
   });
 });
+
+/**
+ * EPIC-091 — the two commands Governance §20 names by name.
+ *
+ * Both emitted nothing at any level. `probeHealth` accepted a logger and
+ * threaded it only into storage probing; no probe, verdict, component or
+ * duration was ever logged, so a `status` that answered `unknown` left nothing
+ * behind to diagnose. And both built a logger only when `--log-level` was
+ * present, so a configured level reached `ferret env` and not these two.
+ *
+ * Asserted against a real process rather than by calling `probeHealth`
+ * directly: the gap was in how the commands *composed* the logger, and a unit
+ * test of the function they call would have passed throughout.
+ */
+describe('installed CLI — health-path logging (EPIC-091)', () => {
+  it('logs one record per probed component, with its verdict — AC-5', async () => {
+    const result = await runCli(['status', '--log-level', 'debug']);
+
+    const probes = parseLogRecords(result.stderr).filter((r) => r['operation'] === 'health.probe');
+    expect(probes.length).toBeGreaterThan(0);
+    for (const probe of probes) {
+      expect(probe['component']).toBeTypeOf('string');
+      expect(probe['status']).toBeTypeOf('string');
+    }
+  });
+
+  it('logs a summary carrying the verdict and the duration — AC-5', async () => {
+    const result = await runCli(['doctor', '--log-level', 'debug']);
+
+    const summary = parseLogRecords(result.stderr).find((r) => r['operation'] === 'health.report');
+    expect(summary).toBeDefined();
+    expect(summary?.['status']).toBeTypeOf('string');
+    expect(summary?.['durationMs']).toBeTypeOf('number');
+  });
+
+  it('still produces a report when a subsystem is unavailable — AC-6', async () => {
+    // No database configured, which is the state §20 means by "dependable even
+    // when other subsystems are unhealthy": the report and the records are both
+    // required, and the one most likely to regress is the records.
+    const result = await runCli(['status', '--json', '--log-level', 'debug']);
+
+    expect(result.code).toBe(ExitCode.CONFIG);
+    const payload = JSON.parse(result.stdout) as { ok: boolean };
+    expect(payload.ok).toBeTypeOf('boolean');
+    expect(parseLogRecords(result.stderr).some((r) => r['operation'] === 'health.probe')).toBe(true);
+  });
+
+  it('honours a configured level with no flag — AC-7', async () => {
+    // The direct regression for §2.3: `FERRET_LOG_LEVEL=trace ferret status`
+    // produced zero lines while `ferret env` produced two.
+    const result = await runCli(['status'], { env: { FERRET_LOG_LEVEL: 'trace' } });
+
+    expect(parseLogRecords(result.stderr).length).toBeGreaterThan(0);
+  });
+
+  it('lets the flag override the configured level — AC-8', async () => {
+    const result = await runCli(['status', '--log-level', 'silent'], {
+      env: { FERRET_LOG_LEVEL: 'trace' },
+    });
+
+    expect(parseLogRecords(result.stderr)).toStrictEqual([]);
+  });
+
+  it('stays silent with neither a flag nor a configured level — AC-17', async () => {
+    const result = await runCli(['status'], { env: { FERRET_LOG_LEVEL: '' } });
+
+    expect(parseLogRecords(result.stderr)).toStrictEqual([]);
+  });
+
+  it('keeps stdout to exactly one document under --json at trace — AC-16', async () => {
+    const result = await runCli(['status', '--json'], { env: { FERRET_LOG_LEVEL: 'trace' } });
+
+    expect(() => JSON.parse(result.stdout) as unknown).not.toThrow();
+  });
+
+  it('stamps every record with the build, the process and one invocation id — AC-2, AC-3', async () => {
+    const result = await runCli(['status', '--log-level', 'debug']);
+    const records = parseLogRecords(result.stderr);
+
+    expect(records.length).toBeGreaterThan(0);
+    const invocations = new Set(records.map((r) => r['invocation']));
+    expect(invocations.size).toBe(1);
+    for (const record of records) {
+      expect(record['ferret']).toBe(VERSION);
+      expect(record['pid']).toBeTypeOf('number');
+    }
+  });
+
+  it('gives two concurrent invocations different ids — AC-3', async () => {
+    const [first, second] = await Promise.all([
+      runCli(['status', '--log-level', 'debug']),
+      runCli(['status', '--log-level', 'debug']),
+    ]);
+
+    const idOf = (stderr: string): string => {
+      const value = parseLogRecords(stderr)[0]?.['invocation'];
+      return typeof value === 'string' ? value : '';
+    };
+    expect(idOf(first?.stderr ?? '')).not.toBe('');
+    expect(idOf(first?.stderr ?? '')).not.toBe(idOf(second?.stderr ?? ''));
+  });
+});

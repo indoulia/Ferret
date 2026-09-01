@@ -159,13 +159,47 @@ export async function probeHealth(options: HealthProbeOptions = {}): Promise<Hea
     });
   }
 
-  return buildReport({
+  const report = buildReport({
     components,
     durationMs: Date.now() - startedAt,
     version: VERSION,
     node: core.environment.node.version,
     platform: `${core.environment.platform}/${core.environment.arch}`,
   });
+
+  // EPIC-091 AC-5. Governance §20 names `ferret status` and `ferret doctor` and
+  // asks for them to be dependable; before this they emitted nothing at any
+  // level, so a `status` that answered `unknown` left nothing behind to
+  // diagnose. One record per component with its verdict, and one summary.
+  //
+  // After the report is built rather than beside each probe: a record written
+  // mid-probe would be lost if a later probe threw, and the report is the thing
+  // that says a probe ran at all. Emission is best-effort — §8, logging never
+  // fails an operation — which is why the report is returned either way.
+  for (const component of report.components) {
+    logger.debug(
+      {
+        operation: 'health.probe',
+        component: component.name,
+        area: component.area,
+        status: component.status,
+        required: component.required,
+        detail: component.detail,
+      },
+      `${component.name}: ${component.status}`,
+    );
+  }
+  logger.debug(
+    {
+      operation: 'health.report',
+      status: report.status,
+      checked: report.components.length,
+      durationMs: report.durationMs,
+    },
+    `Health probe finished: ${report.status}`,
+  );
+
+  return report;
 }
 
 /**

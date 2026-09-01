@@ -34,7 +34,7 @@ class GoodProvider implements Provider {
 
   initialize(context: ProviderContext): Promise<void> | void {
     // Logs the option that is not a secret, which is the honest thing to do.
-    context.logger.info({ endpoint: context.settings.options['endpoint'] }, 'ready');
+    context.logger.info({ operation: 'test.ready', endpoint: context.settings.options['endpoint'] }, 'ready');
   }
 
   checkDependencies(): readonly { name: string; status: DependencyStatus; required: boolean }[] {
@@ -232,7 +232,7 @@ describe('secret handling', () => {
   it('fails a provider that logs a declared secret — AC-6', async () => {
     class Leaky extends GoodProvider {
       override initialize(context: ProviderContext): void {
-        context.logger.info({ options: context.settings.options }, 'ready with options');
+        context.logger.info({ operation: 'test.ready', options: context.settings.options }, 'ready with options');
       }
     }
 
@@ -264,7 +264,7 @@ describe('secret handling', () => {
     class Nosy extends GoodProvider {
       readonly credentials = ['database.password'];
       override initialize(context: ProviderContext): void {
-        context.logger.debug({ dsn: context.credentials?.['database.password'] }, 'connecting');
+        context.logger.debug({ operation: 'test.connect', dsn: context.credentials?.['database.password'] }, 'connecting');
       }
     }
 

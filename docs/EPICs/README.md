@@ -199,7 +199,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Reliability & Operations
 
-- **EPIC-091 — Structured Logging** — P0 — APPROVED ([spec](EPIC-091-Structured-Logging.md))
+- **EPIC-091 — Structured Logging** — P0 — IMPLEMENTED ([spec](EPIC-091-Structured-Logging.md), [evidence](validation/EPIC-091-VALIDATION.md))
 - **EPIC-092 — Metrics & Tracing** — P1
 - **EPIC-093 — Provider Failure Isolation** — P0
 - **EPIC-094 — Index Integrity & Recovery** — P0 — APPROVED ([spec](EPIC-094-Index-Integrity-And-Recovery.md))

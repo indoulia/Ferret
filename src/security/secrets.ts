@@ -23,7 +23,7 @@ export interface SecretKind {
  * secret". Ordering matters only for overlapping formats: the private key block
  * runs first so its body is not re-matched piecewise.
  */
-const PATTERNS: readonly SecretKind[] = Object.freeze([
+export const SECRET_KINDS: readonly SecretKind[] = Object.freeze([
   { kind: 'private-key', pattern: /-----BEGIN[ A-Z]{0,20}PRIVATE KEY-----[\s\S]{0,4096}?-----END[ A-Z]{0,20}PRIVATE KEY-----/g },
   { kind: 'aws-access-key-id', pattern: /\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b/g },
   { kind: 'github-token', pattern: /\bgh[pousr]_[A-Za-z0-9]{36,255}\b/g },
@@ -73,7 +73,7 @@ export function redactSecrets(text: string): RedactionResult {
   const found: Record<string, number> = {};
   let result = text;
 
-  for (const { kind, pattern } of PATTERNS) {
+  for (const { kind, pattern } of SECRET_KINDS) {
     // `lastIndex` is shared state on a `g` regex; reset so one call cannot
     // affect the next.
     pattern.lastIndex = 0;

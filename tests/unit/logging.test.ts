@@ -85,16 +85,16 @@ describe('createLogger', () => {
 
   it('is quiet by default: warn suppresses info and below', () => {
     const { logger, capture } = captureTo('warn');
-    logger.info({}, 'not emitted');
-    logger.debug({}, 'not emitted');
-    logger.warn({}, 'emitted');
+    logger.info({ operation: 'test.emit' }, 'not emitted');
+    logger.debug({ operation: 'test.emit' }, 'not emitted');
+    logger.warn({ operation: 'test.emit' }, 'emitted');
 
     expect(capture.records().map((r) => r.msg)).toStrictEqual(['emitted']);
   });
 
   it('redacts secret-named fields before they reach the stream', () => {
     const { logger, capture } = captureTo('info');
-    logger.info({ database: { host: 'db', password: 'hunter2' } }, 'connecting');
+    logger.info({ operation: 'test.connect', database: { host: 'db', password: 'hunter2' } }, 'connecting');
 
     const raw = JSON.stringify(capture.records());
     expect(raw).not.toContain('hunter2');
@@ -104,13 +104,13 @@ describe('createLogger', () => {
 
   it('redacts credentials embedded in a message field value', () => {
     const { logger, capture } = captureTo('info');
-    logger.error({ target: 'postgres://ferret:hunter2@db:5432/x' }, 'connection failed');
+    logger.error({ operation: 'test.connect', target: 'postgres://ferret:hunter2@db:5432/x' }, 'connection failed');
     expect(JSON.stringify(capture.records())).not.toContain('hunter2');
   });
 
   it('serializes an error under `err` without leaking its embedded credentials', () => {
     const { logger, capture } = captureTo('info');
-    logger.error({ err: new Error('failed for postgres://u:hunter2@h/db') }, 'boom');
+    logger.error({ operation: 'test.fail', err: new Error('failed for postgres://u:hunter2@h/db') }, 'boom');
 
     const [record] = capture.records();
     const err = record?.err as { code: string; message: string };
@@ -120,7 +120,7 @@ describe('createLogger', () => {
 
   it('inherits and redacts child bindings', () => {
     const { logger, capture } = captureTo('info');
-    logger.child({ requestId: 'abc-123', token: 'sensitive' }).info({}, 'child record');
+    logger.child({ requestId: 'abc-123', token: 'sensitive' }).info({ operation: 'test.child' }, 'child record');
 
     const [record] = capture.records();
     expect(record?.requestId).toBe('abc-123');
@@ -135,12 +135,12 @@ describe('createNullLogger', () => {
     expect(logger.level).toBe('silent');
     expect(logger.child({ a: 1 })).toBe(logger);
     expect(() => {
-      logger.trace({}, 'x');
-      logger.debug({}, 'x');
-      logger.info({}, 'x');
-      logger.warn({}, 'x');
-      logger.error({}, 'x');
-      logger.fatal({}, 'x');
+      logger.trace({ operation: 'test.x' }, 'x');
+      logger.debug({ operation: 'test.x' }, 'x');
+      logger.info({ operation: 'test.x' }, 'x');
+      logger.warn({ operation: 'test.x' }, 'x');
+      logger.error({ operation: 'test.x' }, 'x');
+      logger.fatal({ operation: 'test.x' }, 'x');
     }).not.toThrow();
   });
 });

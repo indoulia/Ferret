@@ -14,7 +14,7 @@ import {
   type Principal,
 } from '../../../src/authorization/index.js';
 import { ConfigStore, defaultConfigSources, resolveConfig } from '../../../src/config/index.js';
-import { createNullLogger } from '../../../src/index.js';
+import { RecordingLogger } from '../../support/recording-logger.js';
 import { registerConfigTools } from '../../../src/mcp/index.js';
 
 /**
@@ -45,6 +45,7 @@ interface Harness {
   readonly client: Client;
   readonly store: ConfigStore;
   readonly directory: string;
+  readonly logger: RecordingLogger;
   close: () => Promise<void>;
 }
 
@@ -57,6 +58,8 @@ async function harness(principal: Principal = GRANTED): Promise<Harness> {
   const env = { FERRET_DATABASE_PASSWORD: 'from-the-environment' };
   const store = new ConfigStore({ path: configPath, auditPath: join(directory, 'audit.jsonl'), env });
 
+  // Recording rather than null — EPIC-091 AC-12 asserts what a write logs.
+  const logger = new RecordingLogger();
   const server = new McpServer({ name: 'ferret-config-test', version: '0.0.0' });
   registerConfigTools(server, {
     principal,
@@ -68,7 +71,7 @@ async function harness(principal: Principal = GRANTED): Promise<Harness> {
       resolve: () => resolveConfig(defaultConfigSources({ configPath, env: {}, repository: false }).sources),
       store,
     },
-    logger: createNullLogger(),
+    logger,
   });
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -79,6 +82,7 @@ async function harness(principal: Principal = GRANTED): Promise<Harness> {
     client,
     store,
     directory,
+    logger,
     close: async () => {
       await client.close();
       rmSync(directory, { recursive: true, force: true });
@@ -303,6 +307,37 @@ describe('changing configuration over MCP', () => {
     // AI client sees its own change.
     const read = await call(live.client, 'ferret_config_describe', { path: 'database.host' });
     expect(read.body.value).toBe('db.internal');
+  });
+
+  it('logs the path and the principal of a write — EPIC-091 AC-12', async () => {
+    // EPIC-066 §262 wrote this line as "loggable" and never wrote it. A
+    // configuration write is the one MCP operation that changes what Ferret is,
+    // and an operator asking "who changed this" had nothing to read.
+    await confirmAndCall(live.client, 'ferret_config_set', { path: 'database.host', value: 'db.internal' });
+
+    const written = live.logger.records.find((r) => r.fields['operation'] === 'mcp.config.stored');
+    expect(written).toBeDefined();
+    expect(written?.fields['path']).toBe('database.host');
+    expect(written?.fields['principal']).toBe(GRANTED.id);
+    expect(written?.fields['redacted']).toBe(false);
+  });
+
+  it('logs a credential write without the reference it stored — EPIC-091 AC-12', async () => {
+    // The path that actually holds a secret. EPIC-066 refuses a literal here, so
+    // what is written is a reference — and the log line records that the path
+    // was written and that its value is one Ferret would mask, never the value.
+    await confirmAndCall(live.client, 'ferret_config_set', {
+      path: 'database.password',
+      // The one variable the store's environment actually has, because the
+      // write validates by resolving: a reference to an unset variable is
+      // correctly refused, and that is a different test.
+      value: { $secret: { env: 'FERRET_DATABASE_PASSWORD' } },
+    });
+
+    const written = live.logger.records.find((r) => r.fields['operation'] === 'mcp.config.stored');
+    expect(written?.fields['path']).toBe('database.password');
+    expect(written?.fields['redacted']).toBe(true);
+    expect(JSON.stringify(live.logger.records)).not.toContain('from-the-environment');
   });
 
   it('reports OVERWRITE and the previous value when replacing — AC-7', async () => {

@@ -9,6 +9,7 @@ import {
   type Diagnosis,
 } from '../../index.js';
 import { createLogger, type LogLevel } from '../../logging/index.js';
+import { effectiveLogLevel } from '../log-level.js';
 import { exitCodeForHealth, probeHealth } from '../health.js';
 import { emitResult, type OutputOptions } from '../output.js';
 
@@ -54,10 +55,13 @@ export function doctorCommand(
     .action(async (options: { strict: boolean; showConfig: boolean }, command: Command) => {
       const globals = command.optsWithGlobals<{ json?: boolean; logLevel?: LogLevel }>();
       const json = globals.json === true;
+      // EPIC-091 AC-7 — see the note in `status.ts`; both commands were mute
+      // at every level unless the flag was present.
+      const level = effectiveLogLevel(globals.logLevel);
       const logger =
-        globals.logLevel === undefined
+        level === undefined || level === 'silent'
           ? undefined
-          : createLogger({ level: globals.logLevel, base: { component: 'doctor' } });
+          : createLogger({ level, base: { component: 'doctor' } });
 
       const health = await probeHealth(logger === undefined ? {} : { logger });
       const report = buildDoctorReport(health);
