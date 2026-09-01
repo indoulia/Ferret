@@ -35,6 +35,16 @@ export const ExitCode = {
    * broken" when the configuration is fine and the grant is narrow.
    */
   NOT_PERMITTED: 7,
+  /**
+   * A destructive operation was requested without a usable confirmation —
+   * EPIC-069.
+   *
+   * Distinct from `NOT_PERMITTED` because the two are resolved by different
+   * people: a narrow grant is an operator's to widen, while an unconfirmed
+   * operation is the caller's to confirm. Collapsing them would tell a script to
+   * go and edit configuration when all it needed to do was ask again.
+   */
+  NOT_CONFIRMED: 8,
   /** Interrupted (SIGINT). */
   INTERRUPTED: 130,
   /** Terminated (SIGTERM). */
@@ -88,6 +98,11 @@ const BY_ERROR_CODE: Readonly<Record<ErrorCode, ExitCode>> = {
   [ErrorCode.IDENTITY_INVALID]: ExitCode.ERROR,
   [ErrorCode.IDENTITY_COLLISION]: ExitCode.ERROR,
   [ErrorCode.NOT_PERMITTED]: ExitCode.NOT_PERMITTED,
+  // Both, and the same code: from a process's point of view the operation did
+  // not happen because it was not confirmed, and whether the token was absent or
+  // unusable is in the error the caller already has.
+  [ErrorCode.CONFIRMATION_REQUIRED]: ExitCode.NOT_CONFIRMED,
+  [ErrorCode.CONFIRMATION_INVALID]: ExitCode.NOT_CONFIRMED,
   [ErrorCode.NOT_IMPLEMENTED]: ExitCode.NOT_IMPLEMENTED,
   [ErrorCode.INTERRUPTED]: ExitCode.INTERRUPTED,
 };

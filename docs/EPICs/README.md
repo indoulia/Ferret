@@ -162,7 +162,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-066 — MCP Configuration Tools** — P0
 - **EPIC-067 — MCP Provider Administration** — P1
 - **EPIC-068 — AI Authorization Model** — P0 — IMPLEMENTED ([spec](EPIC-068-AI-Authorization-Model.md), [evidence](validation/EPIC-068-VALIDATION.md))
-- **EPIC-069 — Destructive Operation Confirmation** — P0
+- **EPIC-069 — Destructive Operation Confirmation** — P0 — IMPLEMENTED ([spec](EPIC-069-Destructive-Operation-Confirmation.md), [evidence](validation/EPIC-069-VALIDATION.md))
 - **EPIC-070 — AI Client Capability Discovery** — P1
 
 ### External Project Knowledge
