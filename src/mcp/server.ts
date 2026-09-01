@@ -13,6 +13,12 @@ import {
   renderPack,
   type EvidenceReader,
 } from '../context/index.js';
+import {
+  ANONYMOUS_PRINCIPAL,
+  Permission,
+  assertPermitted,
+  type Principal,
+} from '../authorization/index.js';
 import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
 import {
   EvidenceState,
@@ -98,6 +104,20 @@ export interface McpServerDependencies {
    * view rather than everything.
    */
   readonly access?: AccessContext;
+  /**
+   * Who this server answers for — EPIC-068.
+   *
+   * Defaults to {@link ANONYMOUS_PRINCIPAL}: read-only, no scopes. So a caller
+   * that composes a server without thinking about authorization gets the
+   * restricted principal rather than an unrestricted one, and no mutating tool
+   * can ever be reached by accident.
+   *
+   * Beside `access` rather than replacing it, because they answer different
+   * questions — *may you do this at all* and *what of it may you see* — and
+   * EPIC-069 will add a third. `accessContextFor` is how a caller derives the
+   * second from the first without letting them drift.
+   */
+  readonly principal?: Principal;
   readonly logger: Logger;
 }
 
@@ -110,6 +130,7 @@ export interface McpServerDependencies {
 export function createMcpServer(dependencies: McpServerDependencies): McpServer {
   const { retrieval, planner, evidence, logger } = dependencies;
   const access = dependencies.access ?? PUBLIC_ACCESS;
+  const principal = dependencies.principal ?? ANONYMOUS_PRINCIPAL;
   const packs = new ContextPackBuilder(retrieval, access, evidence);
 
   const server = new McpServer(
@@ -122,12 +143,23 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
     },
   );
 
-  /** Wraps a handler so a failure becomes a redacted tool error, never a crash. */
+  /**
+   * Wraps a handler so a failure becomes a redacted tool error, never a crash —
+   * and so no handler runs for a caller that was not granted its permission.
+   *
+   * The permission is checked **here**, before `run`, rather than inside each
+   * handler. EPIC-068 AC-9: a check a handler performs is a check a handler can
+   * forget, and this is the one place every tool already passes through. Every
+   * tool names its permission at its call site, so a new tool cannot be added
+   * without naming one.
+   */
   const guard = async (
     operation: string,
+    permission: Permission,
     run: () => Promise<unknown>,
   ): Promise<{ content: { type: 'text'; text: string }[]; isError?: boolean }> => {
     try {
+      assertPermitted(principal, permission, `mcp.${operation}`);
       const result = await run();
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
@@ -163,7 +195,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ query, kinds, limit }) =>
-      guard('search', async () => {
+      guard('search', Permission.READ, async () => {
         const bounded = Math.min(limit ?? 20, TOOL_RESULT_LIMIT);
 
         // Without a planner the behaviour is exactly what it was: one ranked
@@ -243,7 +275,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ id }) =>
-      guard('getEntity', async () => {
+      guard('getEntity', Permission.READ, async () => {
         const entity = await retrieval.getEntity(id, access);
         // Absence is an answer, not an error. A client asking about something
         // Ferret has not indexed should be told that, not handed a failure it
@@ -281,7 +313,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ id, types, direction, at, includeHistorical, limit }) =>
-      guard('neighbours', async () => {
+      guard('neighbours', Permission.READ, async () => {
         const neighbours = await retrieval.neighbours({
           from: id,
           ...(types === undefined ? {} : { types }),
@@ -333,7 +365,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ question, budget, kinds, withNeighbours, format }) =>
-      guard('contextPack', async () => {
+      guard('contextPack', Permission.READ, async () => {
         const pack = await packs.build({
           question,
           ...(budget === undefined ? {} : { budget }),
@@ -365,7 +397,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ kind, attributes, scope, lifecycle, limit }) =>
-      guard('find', async () => {
+      guard('find', Permission.READ, async () => {
         // Bounded by `MAX_LIMIT`, which is what the schema advertises — not by
         // the smaller cap the ranked tools use. Accepting a limit of 500 and
         // then quietly returning 50 makes the declared schema a lie, and this is
@@ -447,7 +479,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         annotations: { readOnlyHint: true, openWorldHint: false },
       },
       async ({ question, budget, format }) =>
-        guard('answer', async () => {
+        guard('answer', Permission.READ, async () => {
           const pack = await answers.answer({
             question,
             ...(budget === undefined ? {} : { budget }),
@@ -486,7 +518,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         annotations: { readOnlyHint: true, openWorldHint: false },
       },
       async ({ id, field, depth }) =>
-        guard('why', async () => {
+        guard('why', Permission.READ, async () => {
           const maxDepth = depth ?? MAX_LINEAGE_DEPTH;
           // `current` explicitly, never the default. Unfiltered, `forSubject`
           // returns superseded and stale records too, and citing an observation

@@ -1,15 +1,10 @@
 import { Command } from 'commander';
 
-import { effectiveExclusions } from '../../config/index.js';
+import { accessContextFor, principalFrom } from '../../authorization/index.js';
 import type { LogLevel } from '../../logging/index.js';
 import { createMcpServer, serveStdio } from '../../mcp/index.js';
 import { Capability, assertSupported } from '../../providers/index.js';
-import {
-  PUBLIC_ACCESS,
-  QueryPlanner,
-  assertUsableAccess,
-  type AccessContext,
-} from '../../retrieval/index.js';
+import { QueryPlanner, assertUsableAccess, type AccessContext } from '../../retrieval/index.js';
 import { createRuntime } from '../../runtime/index.js';
 import { EvidenceStore, MigrationPolicy, RetrievalStore, createStorageProvider } from '../../storage/index.js';
 
@@ -46,22 +41,22 @@ export function mcpCommand(): Command {
 
         const retrieval = new RetrievalStore(storage.db);
 
-        // EPIC-058. Authorization comes from **configuration**, not from tool
-        // input: no tool this server registers accepts a scope, a selector or an
-        // exclusion, so nothing an AI client sends can widen what it sees
-        // (Governance §12).
+        // EPIC-068, and what it closes. Authorization comes from
+        // **configuration**, not from tool input: no tool this server registers
+        // accepts a scope, a selector, an exclusion or a permission, so nothing
+        // an AI client sends can widen what it may do or see (Governance §12).
         //
-        // The permitted set is empty — unscoped content only. Ferret has no
-        // authentication yet, so there is no principal whose scopes could be
-        // looked up; asserting one from configuration would be inventing a
-        // caller. EPIC-068 is where a principal comes from, and until then the
-        // honest position is that this server holds no permission scope, which is
-        // also the safe one. Exclusions and the scope selector *are* real
-        // configuration and are applied.
-        const access: AccessContext = {
-          ...PUBLIC_ACCESS,
-          exclusions: effectiveExclusions(context.config),
-        };
+        // EPIC-058 shipped with the permitted set always empty, because "there
+        // is no principal whose scopes could be looked up". There is one now.
+        // `principalFrom` reads the grant — read-only with no scopes when
+        // nothing is configured — and `accessContextFor` is the single
+        // conversion into the retrieval context, so a scope granted for reading
+        // and a scope enforced on reading cannot drift apart.
+        //
+        // A malformed grant throws here rather than at the first tool call:
+        // an operator whose permission is misspelled hears about it at startup.
+        const principal = principalFrom(context.config);
+        const access: AccessContext = accessContextFor(principal, context.config);
         // Loud here, conservative per row. A policy Ferret cannot evaluate
         // withholds everything at query time, which is safe and invisible — so
         // the operator hears about it at startup, where they can fix it, rather
@@ -89,6 +84,7 @@ export function mcpCommand(): Command {
             logger: context.logger,
           }),
           access,
+          principal,
           logger: context.logger,
         });
 

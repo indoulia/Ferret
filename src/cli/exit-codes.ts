@@ -25,6 +25,16 @@ export const ExitCode = {
    * a newer Ferret, or was edited after being applied.
    */
   STORAGE: 6,
+  /**
+   * The caller was not granted the permission the operation requires — EPIC-068.
+   *
+   * Its own code for the reason `STORAGE` has one: a well-formed request from a
+   * principal that simply was not granted something is a distinct condition an
+   * operator resolves differently from a missing or invalid configuration value.
+   * Collapsing it into `CONFIG` would tell a script "your configuration is
+   * broken" when the configuration is fine and the grant is narrow.
+   */
+  NOT_PERMITTED: 7,
   /** Interrupted (SIGINT). */
   INTERRUPTED: 130,
   /** Terminated (SIGTERM). */
@@ -77,6 +87,7 @@ const BY_ERROR_CODE: Readonly<Record<ErrorCode, ExitCode>> = {
   [ErrorCode.EVIDENCE_TAMPERED]: ExitCode.STORAGE,
   [ErrorCode.IDENTITY_INVALID]: ExitCode.ERROR,
   [ErrorCode.IDENTITY_COLLISION]: ExitCode.ERROR,
+  [ErrorCode.NOT_PERMITTED]: ExitCode.NOT_PERMITTED,
   [ErrorCode.NOT_IMPLEMENTED]: ExitCode.NOT_IMPLEMENTED,
   [ErrorCode.INTERRUPTED]: ExitCode.INTERRUPTED,
 };

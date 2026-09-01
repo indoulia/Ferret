@@ -63,6 +63,14 @@ export const ErrorCode = {
   IDENTITY_INVALID: 'E_IDENTITY_INVALID',
   /** Two actors claim the same external identity. Never merged silently. */
   IDENTITY_COLLISION: 'E_IDENTITY_COLLISION',
+  /**
+   * The caller was not granted the permission this operation requires — EPIC-068.
+   *
+   * Deliberately distinct from `ENTITY_NOT_FOUND` *and* returned identically
+   * whether or not the target exists: a refusal that varied would let a caller
+   * probe for the existence of something it may not see.
+   */
+  NOT_PERMITTED: 'E_NOT_PERMITTED',
   /** The capability exists in the roadmap but is not implemented in this release. */
   NOT_IMPLEMENTED: 'E_NOT_IMPLEMENTED',
   /** The operation was interrupted by a signal. */

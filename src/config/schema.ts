@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { scopeSelectorSchema } from '../domain/scope.js';
 import { LOG_LEVELS } from '../logging/index.js';
 
 import {
@@ -78,6 +79,33 @@ export const CONFIG_FILE_VERSION = 1;
  * Nothing here may become mandatory for starting Ferret: `parseConfig({})` must
  * always succeed, or Governance §2 is broken.
  */
+/**
+ * The grant a principal is given — EPIC-068.
+ *
+ * Optional, and its absence means `ANONYMOUS_PRINCIPAL`: read-only, no scopes.
+ * A Ferret nobody configured should be the restricted one, and everything it
+ * indexes by default is unscoped local source the caller could read with `cat`.
+ *
+ * Deliberately **one** principal. There is no authentication over stdio — the
+ * client is the process's parent — so a role system with several principals would
+ * be a configuration file with extra steps (EPIC-068 §4). The permission strings
+ * are validated by `principalFrom` rather than by an enum here, so a misspelling
+ * produces a message naming the known permissions instead of a schema dump.
+ */
+const authorizationConfigSchema = z
+  .object({
+    /** Stable identifier for a log line and a denial. Never a credential. */
+    principalId: z.string().min(1).default('ferret.configured'),
+    principalClass: z.enum(['operator', 'agent', 'automation']).default('agent'),
+    /** Anything absent is denied. Validated against the known vocabulary. */
+    permissions: z.array(z.string().min(1)).default([]),
+    /** EPIC-058 permission scopes this principal holds. Opaque tokens. */
+    permittedScopes: z.array(z.string().min(1)).default([]),
+    /** Which repositories, worktrees and sessions it may see — EPIC-009. */
+    scope: scopeSelectorSchema.optional(),
+  })
+  .strict();
+
 export const ferretConfigSchema = z.object({
   logLevel: z.enum(LOG_LEVELS).default('warn'),
   database: databaseConfigSchema.default({ port: DEFAULT_DATABASE_PORT, migrate: 'auto' }),
@@ -90,6 +118,13 @@ export const ferretConfigSchema = z.object({
    * what Ferret does by default.
    */
   exclude: z.array(exclusionInputSchema).default([]),
+  /**
+   * Who this Ferret answers for, and what they may do — EPIC-068.
+   *
+   * Absent means read-only with no scopes. Never widened by anything a client
+   * sends or anything Ferret indexed (Governance §12).
+   */
+  authorization: authorizationConfigSchema.optional(),
   providers: providersConfigSchema,
 });
 

@@ -1,6 +1,12 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { ferretConfigSchema } from '../../../src/config/index.js';
+import {
+  ANONYMOUS_PRINCIPAL,
+  accessContextFor,
+  principalFrom,
+} from '../../../src/authorization/index.js';
 import {
   EntityKind,
   EvidenceMethod,
@@ -301,6 +307,66 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
     it('leaves an unexcluded path alone', async () => {
       const found = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, excluded);
       expect(found.map((entity) => entity.attributes['path'])).toContain('src/open.ts');
+    });
+  });
+
+  /**
+   * A configured grant reaching scoped evidence — EPIC-068 AC-12.
+   *
+   * EPIC-058 shipped enforcing `permittedScopes` correctly against a set that
+   * was **always empty**, because "there is no principal whose scopes could be
+   * looked up". This is the first test in which that set is non-empty and came
+   * from configuration rather than from a literal in a test.
+   */
+  describe('a grant from configuration — EPIC-068 AC-12', () => {
+    it('reaches scoped evidence the anonymous principal cannot', async () => {
+      const configured = ferretConfigSchema.parse({
+        authorization: { principalId: 'granted', permissions: ['read'], permittedScopes: [SCOPE] },
+      });
+      const principal = principalFrom(configured);
+
+      const granted = await retrieval.search({ text: SECRET_PHRASE }, accessContextFor(principal));
+      const anonymous = await retrieval.search(
+        { text: SECRET_PHRASE },
+        accessContextFor(ANONYMOUS_PRINCIPAL),
+      );
+
+      expect(granted.hits).toHaveLength(1);
+      expect(String(granted.hits[0]?.evidence?.statement)).toContain(SECRET_PHRASE);
+
+      // The same query, the same database, a different grant.
+      expect(anonymous.hits).toStrictEqual([]);
+      expect(anonymous.withheld.total).toBe(1);
+    });
+
+    it('does not reach it on a grant that names a different scope', async () => {
+      const other = principalFrom(
+        ferretConfigSchema.parse({
+          authorization: { permissions: ['read'], permittedScopes: ['jira:some-other-team'] },
+        }),
+      );
+
+      const result = await retrieval.search({ text: SECRET_PHRASE }, accessContextFor(other));
+
+      expect(result.hits).toStrictEqual([]);
+      expect(JSON.stringify(result)).not.toContain('zarquon');
+    });
+
+    it('applies configured exclusions through the same conversion', async () => {
+      // `accessContextFor` is the only conversion, so an exclusion configured for
+      // the installation and a scope granted to the principal arrive together.
+      const configured = ferretConfigSchema.parse({
+        exclude: ['secrets/**'],
+        authorization: { permissions: ['read'], permittedScopes: [SCOPE] },
+      });
+      const principal = principalFrom(configured);
+
+      const hits = await retrieval.byIdentifier(
+        'secrets/keys.txt',
+        accessContextFor(principal, configured),
+      );
+
+      expect(hits).toStrictEqual([]);
     });
   });
 });
