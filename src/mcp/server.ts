@@ -596,7 +596,13 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           // Reported, never resolved. EPIC-045 owns which source wins and
           // EPIC-047 acts on it; hiding a disagreement inside a citation would
           // be the one thing Governance §15 forbids.
-          const conflicts = await evidence.conflictsFor(id);
+          // Scoped for the same reason the reads above are, and missed for the
+          // same reason #85 was: `ScopedRead` defaults to `undefined`, which the
+          // store reads as unrestricted. A group carries no statement, but it
+          // names the field and both record ids — EPIC-058 AC-12.
+          const conflicts = await evidence.conflictsFor(id, {
+            permittedScopes: access.permittedScopes,
+          });
 
           return {
             notice: CONTENT_NOTICE,

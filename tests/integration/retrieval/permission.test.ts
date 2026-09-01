@@ -58,6 +58,15 @@ const SECRET_PHRASE = 'zarquon embargo disclosure';
 const OPEN_PHRASE = 'ordinary public observation';
 const SCOPE = 'jira:restricted-team';
 
+/**
+ * The field two protected records disagree about.
+ *
+ * A conflict group carries no statement, so what leaks is the field name and the
+ * ids of the records — which is the disclosure `conflictsFor`'s own test names:
+ * "the fields in a conflict group name the fact".
+ */
+const CONFLICT_FIELD = 'incident-owner';
+
 let db: TestDatabase;
 let handle: FerretDatabase;
 let entities: EntityStore;
@@ -65,6 +74,7 @@ let evidence: EvidenceStore;
 let retrieval: RetrievalStore;
 let subject: string;
 let openSubject: string;
+let mixedSubject: string;
 let repositoryA: string;
 let repositoryB: string;
 let fileInB: string;
@@ -113,6 +123,17 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
       })
     ).entity.id;
 
+    // A subject a caller holding nothing may partly see: one unscoped record, so
+    // `ferret_why` gets past its "nothing held" early return, and two protected
+    // records that disagree, so there is a conflict group to leak.
+    mixedSubject = (
+      await entities.upsert({
+        kind: EntityKind.ISSUE,
+        source: { system: 'jira', id: 'FER-83' },
+        attributes: { key: 'FER-83', title: 'A partly visible issue' },
+      })
+    ).entity.id;
+
     fileInB = (
       await entities.upsert({
         kind: EntityKind.FILE,
@@ -147,6 +168,28 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
       producerVersion: '1.0.0',
       sourceSystem: 'jira',
     });
+
+    await evidence.record({
+      subjectId: mixedSubject,
+      field: 'status',
+      statement: 'open',
+      method: EvidenceMethod.OBSERVED,
+      producer: 'ferret.provider.jira',
+      producerVersion: '1.0.0',
+      sourceSystem: 'jira',
+    });
+    for (const owner of ['first responder', 'second responder']) {
+      await evidence.record({
+        subjectId: mixedSubject,
+        field: CONFLICT_FIELD,
+        statement: owner,
+        method: EvidenceMethod.OBSERVED,
+        producer: 'ferret.provider.jira',
+        producerVersion: '1.0.0',
+        sourceSystem: 'jira',
+        permissionScope: SCOPE,
+      });
+    }
   });
 
   afterAll(async () => {
@@ -284,6 +327,58 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
           arguments: { id: subject },
         })) as { content: { text: string }[] };
         expect(traced.content[0]?.text ?? '').not.toContain(SECRET_PHRASE);
+      } finally {
+        await client.close();
+      }
+    });
+
+    /**
+     * #85 again, ten lines below where it was fixed.
+     *
+     * `ferret_why` supplies the access context to `forSubject` and to the lineage
+     * walk, and then calls `conflictsFor(id)` with no options at all. `ScopedRead`
+     * defaults `permittedScopes` to `undefined`, which `permissionFilter` reads as
+     * unrestricted — so a disagreement between two records the caller may not see
+     * is reported to them, naming the field and both record ids.
+     *
+     * Narrower than #85: a conflict group carries no statement. It is the same
+     * defect nonetheless, and the second instance is the argument that the fix is
+     * structural rather than another call site — EPIC-083 AC-1.
+     */
+    it('does not report through ferret_why a conflict between records it may not see', async () => {
+      const server = createMcpServer({ retrieval, evidence, access: holding(), logger });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'conflict-leak-probe', version: '0.0.0' });
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+      try {
+        const traced = (await client.callTool({
+          name: 'ferret_why',
+          arguments: { id: mixedSubject },
+        })) as { content: { text: string }[] };
+        const text = traced.content[0]?.text ?? '';
+
+        // The control: the caller does see this subject, so an empty answer is
+        // not what makes the assertion below pass.
+        expect(text).toContain('"held": true');
+        expect(text).not.toContain(CONFLICT_FIELD);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('still reports a conflict to a caller holding the scope', async () => {
+      const server = createMcpServer({ retrieval, evidence, access: holding(SCOPE), logger });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'conflict-visible-probe', version: '0.0.0' });
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+      try {
+        const traced = (await client.callTool({
+          name: 'ferret_why',
+          arguments: { id: mixedSubject },
+        })) as { content: { text: string }[] };
+        expect(traced.content[0]?.text ?? '').toContain(CONFLICT_FIELD);
       } finally {
         await client.close();
       }
