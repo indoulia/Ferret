@@ -183,7 +183,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Security & Authorization
 
-- **EPIC-081 — Credential Isolation** — P0
+- **EPIC-081 — Credential Isolation** — P0 — APPROVED ([spec](EPIC-081-Credential-Isolation.md))
 - **EPIC-082 — Secret Detection & Exclusion** — P0 — VALIDATED ([spec](EPIC-082-Secret-Detection.md), [evidence](validation/EPIC-082-VALIDATION.md))
 - **EPIC-083 — Authorization Enforcement** — P0 — IMPLEMENTED ([spec](EPIC-083-Authorization-Enforcement.md), [evidence](validation/EPIC-083-VALIDATION.md))
 - **EPIC-084 — Prompt-Injection Resistance** — P0 — VALIDATED ([spec](EPIC-084-Prompt-Injection-Resistance.md), [evidence](validation/EPIC-084-VALIDATION.md))
@@ -199,10 +199,10 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Reliability & Operations
 
-- **EPIC-091 — Structured Logging** — P0
+- **EPIC-091 — Structured Logging** — P0 — APPROVED ([spec](EPIC-091-Structured-Logging.md))
 - **EPIC-092 — Metrics & Tracing** — P1
 - **EPIC-093 — Provider Failure Isolation** — P0
-- **EPIC-094 — Index Integrity & Recovery** — P0
+- **EPIC-094 — Index Integrity & Recovery** — P0 — APPROVED ([spec](EPIC-094-Index-Integrity-And-Recovery.md))
 - **EPIC-095 — Operational Diagnostics** — P0
 
 ### Evaluation & Quality
