@@ -1,5 +1,7 @@
 import type { CanonicalEntity, CanonicalEvidence } from '../domain/index.js';
 
+import type { AccessContext, WithheldReport } from './access.js';
+
 /**
  * What Ferret can be asked, expressed in the core.
  *
@@ -155,11 +157,37 @@ export interface SearchHit {
   readonly highlight: string | undefined;
 }
 
+/**
+ * Hits, and how much the caller was not allowed to see — EPIC-058.
+ *
+ * A result object rather than a bare array *only* here, and deliberately: search
+ * covers evidence statements, so it is the path where a permission scope decides
+ * whether content reaches an answer, and it is therefore the path where a caller
+ * most needs to know the answer is short. `withheld` carries counts and nothing
+ * else.
+ */
+export interface SearchResult {
+  readonly hits: readonly SearchHit[];
+  readonly withheld: WithheldReport;
+}
+
+/**
+ * Every read Ferret can be asked to perform, and the authorization it is
+ * performed under.
+ *
+ * `access` is a **required second parameter** on every method — EPIC-058, and
+ * `Checkpoints/EPIC-008.md:112` states the reason: "EPIC-058 must make it
+ * mandatory on the retrieval path — an internal caller omitting it is correct, a
+ * retrieval caller omitting it is a leak." A parameter that can be omitted is a
+ * parameter that will be, and Governance §12 puts the control here rather than
+ * in a convention. `PUBLIC_ACCESS` is how a caller says "the default view" in
+ * code a reviewer can grep for.
+ */
 export interface RetrievalPort {
-  findEntities(query: EntityQuery): Promise<readonly CanonicalEntity[]>;
-  getEntity(id: string): Promise<CanonicalEntity | undefined>;
-  neighbours(query: TraversalQuery): Promise<readonly Neighbour[]>;
-  search(query: SearchQuery): Promise<readonly SearchHit[]>;
+  findEntities(query: EntityQuery, access: AccessContext): Promise<readonly CanonicalEntity[]>;
+  getEntity(id: string, access: AccessContext): Promise<CanonicalEntity | undefined>;
+  neighbours(query: TraversalQuery, access: AccessContext): Promise<readonly Neighbour[]>;
+  search(query: SearchQuery, access: AccessContext): Promise<SearchResult>;
 }
 
 /** Results returned by default, when a caller does not say. */

@@ -316,7 +316,7 @@ describeDb(`evidence and provenance (${databaseAvailable() ? 'real PostgreSQL' :
          VALUES ($1, $2) ON CONFLICT DO NOTHING`,
         [observation, conclusion],
       );
-      const chain = await store.provenanceOf(conclusion, 5);
+      const chain = await store.provenanceOf(conclusion, { maxDepth: 5 });
       expect(chain.length).toBeLessThan(20);
 
       await db.pool.query(

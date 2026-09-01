@@ -11,9 +11,11 @@ import {
   type EntityQuery,
   type CanonicalEvidence,
   type ConflictGroup,
+  NOTHING_WITHHELD,
   type EvidenceState,
   type Neighbour,
   type StatedEvidence,
+  type WithheldReport,
   type RetrievalPort,
   type TraversalQuery,
   type SearchHit,
@@ -121,7 +123,7 @@ class FakeRetrieval implements RetrievalPort {
     ]);
   }
 
-  search(): Promise<readonly SearchHit[]> {
+  search(): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
     if (this.failNext) {
       this.failNext = false;
       return Promise.reject(new Error('the database is on fire: password=hunter2'));
@@ -129,7 +131,7 @@ class FakeRetrieval implements RetrievalPort {
     const hits: SearchHit[] = [
       { source: HitSource.ENTITY, entity: COMMIT, evidence: undefined, score: 0.9, highlight: '<b>x</b>' },
     ];
-    return Promise.resolve(hits);
+    return Promise.resolve({ hits, withheld: NOTHING_WITHHELD });
   }
 }
 
@@ -169,8 +171,11 @@ class FakeEvidence {
     );
   }
 
-  provenanceOf(_id: string, maxDepth = 10): Promise<readonly CanonicalEvidence[]> {
-    return Promise.resolve(this.lineage.slice(0, maxDepth));
+  provenanceOf(
+    _id: string,
+    options: { maxDepth?: number; permittedScopes?: readonly string[] } = {},
+  ): Promise<readonly CanonicalEvidence[]> {
+    return Promise.resolve(this.lineage.slice(0, options.maxDepth ?? 10));
   }
 
   verify(id: string): Promise<CanonicalEvidence> {

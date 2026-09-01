@@ -22,7 +22,14 @@ import {
 } from '../domain/index.js';
 import { serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
-import { MAX_LIMIT, type QueryPlanner, type RetrievalPort, type SearchHit } from '../retrieval/index.js';
+import {
+  MAX_LIMIT,
+  PUBLIC_ACCESS,
+  type AccessContext,
+  type QueryPlanner,
+  type RetrievalPort,
+  type SearchHit,
+} from '../retrieval/index.js';
 import { VERSION } from '../version.js';
 
 /**
@@ -78,6 +85,19 @@ export interface McpServerDependencies {
    * is honestly not there, because a client cannot tell the two apart.
    */
   readonly evidence?: EvidenceReader;
+  /**
+   * Who this server answers for — EPIC-058.
+   *
+   * From **configuration**, never from tool input: no tool here accepts a scope,
+   * a selector or an exclusion, so nothing an AI client sends can widen what it
+   * sees. Governance §12 puts the control in Ferret rather than in a prompt, and
+   * a tool parameter would put it back in the prompt.
+   *
+   * Defaults to {@link PUBLIC_ACCESS} — unscoped content only — so a caller that
+   * composes a server without thinking about authorization gets the restricted
+   * view rather than everything.
+   */
+  readonly access?: AccessContext;
   readonly logger: Logger;
 }
 
@@ -89,7 +109,8 @@ export interface McpServerDependencies {
  */
 export function createMcpServer(dependencies: McpServerDependencies): McpServer {
   const { retrieval, planner, evidence, logger } = dependencies;
-  const packs = new ContextPackBuilder(retrieval, evidence);
+  const access = dependencies.access ?? PUBLIC_ACCESS;
+  const packs = new ContextPackBuilder(retrieval, access, evidence);
 
   const server = new McpServer(
     { name: MCP_SERVER_NAME, version: VERSION },
@@ -150,11 +171,14 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         // requirement for answering, so its absence changes nothing a caller
         // depends on.
         if (planner === undefined) {
-          const hits = await retrieval.search({
-            text: query,
-            ...(kinds === undefined ? {} : { kinds }),
-            limit: bounded,
-          });
+          const { hits, withheld } = await retrieval.search(
+            {
+              text: query,
+              ...(kinds === undefined ? {} : { kinds }),
+              limit: bounded,
+            },
+            access,
+          );
           const safety = new ContentSafety();
           const results = hits.map((hit) => describeHit(hit, safety));
           return {
@@ -162,14 +186,20 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             count: hits.length,
             results,
             contentSafety: safety.report,
+            // EPIC-058. A count and nothing else. It tells a caller the answer is
+            // short without telling it what is missing.
+            withheld: withheld.total,
           };
         }
 
-        const { plan, hits } = await planner.search({
-          question: query,
-          ...(kinds === undefined ? {} : { kinds }),
-          limit: bounded,
-        });
+        const { plan, hits, withheld } = await planner.search(
+          {
+            question: query,
+            ...(kinds === undefined ? {} : { kinds }),
+            limit: bounded,
+          },
+          access,
+        );
 
         const safety = new ContentSafety();
         const plannedResults = hits.map((hit) => ({ ...describeHit(hit, safety), foundBy: hit.foundBy }));
@@ -177,6 +207,10 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           notice: CONTENT_NOTICE,
           count: hits.length,
           contentSafety: safety.report,
+          // EPIC-058. Present on both branches of this tool: dogfooding found it
+          // on the unplanned one and absent on the planned one, which is the path
+          // the CLI wires — so in production the count reached nobody.
+          withheld: withheld.total,
           // Reported, not hidden. A caller cannot tell a complete answer from a
           // partial one unless the answer says which it is, and `partial` is the
           // single field that says so.
@@ -210,7 +244,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
     },
     async ({ id }) =>
       guard('getEntity', async () => {
-        const entity = await retrieval.getEntity(id);
+        const entity = await retrieval.getEntity(id, access);
         // Absence is an answer, not an error. A client asking about something
         // Ferret has not indexed should be told that, not handed a failure it
         // has to interpret.
@@ -255,7 +289,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           ...(at === undefined ? {} : { at }),
           ...(includeHistorical === undefined ? {} : { includeHistorical }),
           limit: Math.min(limit ?? 20, TOOL_RESULT_LIMIT),
-        });
+        }, access);
         const safety = new ContentSafety();
         return {
           notice: CONTENT_NOTICE,
@@ -348,7 +382,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           ...(scope === undefined ? {} : { scope }),
           ...(lifecycle === undefined ? {} : { lifecycle }),
           limit: Math.min(requested + 1, MAX_LIMIT),
-        });
+        }, access);
         const truncated = entities.length > requested;
         const page = truncated ? entities.slice(0, requested) : entities;
         const safety = new ContentSafety();
@@ -382,6 +416,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
     const answers = new AnswerPackBuilder({
       retrieval,
       evidence,
+      access,
       ...(planner === undefined ? {} : { planner }),
     });
 
@@ -485,7 +520,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           const safety = new ContentSafety();
           const described = await Promise.all(
             held.map(async (record) => {
-              const lineage = await evidence.provenanceOf(record.id, maxDepth);
+              const lineage = await evidence.provenanceOf(record.id, { maxDepth, permittedScopes: access.permittedScopes });
               return describeEvidence(record, lineage, maxDepth, safety);
             }),
           );

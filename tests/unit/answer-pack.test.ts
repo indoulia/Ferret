@@ -7,6 +7,8 @@ import {
   EvidenceState,
   MAX_ANSWER_CLAIMS,
   MAX_CITATIONS_PER_CLAIM,
+  NOTHING_WITHHELD,
+  PUBLIC_ACCESS,
   QueryPlanner,
   QueryShape,
   SourceAuthority,
@@ -114,17 +116,18 @@ class FakeRetrieval implements RetrievalPort {
   neighbours(_query: TraversalQuery): Promise<readonly Neighbour[]> {
     return Promise.resolve([]);
   }
-  search(query: { text: string }): Promise<readonly SearchHit[]> {
+  search(query: { text: string }): Promise<{ hits: readonly SearchHit[]; withheld: typeof NOTHING_WITHHELD }> {
     this.searched.push(query.text);
-    return Promise.resolve(
-      this.entities.map((candidate) => ({
+    return Promise.resolve({
+      hits: this.entities.map((candidate) => ({
         source: 'entity' as const,
         entity: candidate,
         evidence: undefined,
         score: 1,
         highlight: undefined,
       })),
-    );
+      withheld: NOTHING_WITHHELD,
+    });
   }
 }
 
@@ -163,7 +166,7 @@ function planner(options: {
 
   return new QueryPlanner({
     exact: { byIdentifier: () => Promise.resolve(hits) },
-    text: { search: () => Promise.resolve([]) },
+    text: { search: () => Promise.resolve({ hits: [], withheld: NOTHING_WITHHELD }) },
     ...(options.semanticUnavailable === undefined
       ? {}
       : {
@@ -183,6 +186,7 @@ function builder(
   return new AnswerPackBuilder({
     retrieval: new FakeRetrieval(entities),
     evidence: new FakeEvidence(records),
+    access: PUBLIC_ACCESS,
     ...(withPlanner === undefined ? {} : { planner: withPlanner }),
   });
 }
@@ -211,6 +215,7 @@ describe('deciding whether a question can be answered at all', () => {
     const pack = await new AnswerPackBuilder({
       retrieval,
       evidence: new FakeEvidence([stated(EvidenceState.CURRENT)]),
+      access: PUBLIC_ACCESS,
     }).answer({ question: SUBJECT_ID });
 
     expect(retrieval.searched).toStrictEqual([]);

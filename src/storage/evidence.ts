@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 
 import {
   EvidenceState,
@@ -41,6 +41,20 @@ export interface RecordedEvidence {
   readonly deduplicated: boolean;
 }
 
+/**
+ * Which permission scopes a read is performed under — EPIC-058.
+ *
+ * Optional here rather than required, and the distinction is the one
+ * `Checkpoints/EPIC-008.md:112` draws: "an internal caller omitting it is
+ * correct, a retrieval caller omitting it is a leak." The indexer and the
+ * reconciler read this store directly and must see everything they wrote. The
+ * *retrieval path* reaches evidence through `EvidenceReader`, where EPIC-058
+ * makes the context mandatory, so a caller on a user's behalf cannot omit it.
+ */
+export interface ScopedRead {
+  readonly permittedScopes?: readonly string[];
+}
+
 export interface EvidenceQuery {
   readonly field?: string;
   readonly state?: EvidenceState;
@@ -54,6 +68,24 @@ export interface EvidenceQuery {
    */
   readonly permittedScopes?: readonly string[];
   readonly limit?: number;
+}
+
+/**
+ * The permission predicate for a read — EPIC-058.
+ *
+ * `undefined` scopes means unrestricted, which is right for the indexer reading
+ * back what it wrote and wrong for a query on a user's behalf. An empty array is
+ * the caller who holds nothing: unscoped rows only.
+ *
+ * One definition, used by every read here, so the rule cannot differ between
+ * `forSubject` and a lineage walk — which is exactly how a filter ends up applied
+ * on the path everyone tests and missing on the path nobody does.
+ */
+function permissionFilter(permittedScopes: readonly string[] | undefined): SQL | undefined {
+  if (permittedScopes === undefined) return undefined;
+  return permittedScopes.length === 0
+    ? isNull(evidence.permissionScope)
+    : sql`(${evidence.permissionScope} IS NULL OR ${inArray(evidence.permissionScope, [...permittedScopes])})`;
 }
 
 function toCanonical(row: EvidenceRow, derivedFrom: readonly string[]): CanonicalEvidence {
@@ -245,17 +277,12 @@ export class EvidenceStore {
     const filters = [eq(evidence.subjectId, subjectId)];
     if (query.field !== undefined) filters.push(eq(evidence.field, query.field));
     if (query.state !== undefined) filters.push(eq(evidence.state, query.state));
-    if (query.permittedScopes !== undefined) {
-      // Unscoped evidence is visible to everyone; scoped evidence only to a
-      // caller holding that scope. Filtering here rather than after assembly is
-      // what stops protected content reaching an answer at all — Governance §12
-      // requires authorization before information enters retrieval results.
-      filters.push(
-        query.permittedScopes.length === 0
-          ? isNull(evidence.permissionScope)
-          : sql`(${evidence.permissionScope} IS NULL OR ${inArray(evidence.permissionScope, [...query.permittedScopes])})`,
-      );
-    }
+    // Unscoped evidence is visible to everyone; scoped evidence only to a caller
+    // holding that scope. Filtering here rather than after assembly is what stops
+    // protected content reaching an answer at all — Governance §12 requires
+    // authorization before information enters retrieval results.
+    const permission = permissionFilter(query.permittedScopes);
+    if (permission !== undefined) filters.push(permission);
 
     try {
       return await this.#db
@@ -276,7 +303,11 @@ export class EvidenceStore {
    * turns into a user-facing explanation. Depth-limited because a chain with a
    * cycle, however it got there, must not hang the query.
    */
-  async provenanceOf(id: string, maxDepth = 10): Promise<CanonicalEvidence[]> {
+  async provenanceOf(
+    id: string,
+    options: { readonly maxDepth?: number } & ScopedRead = {},
+  ): Promise<CanonicalEvidence[]> {
+    const maxDepth = options.maxDepth ?? 10;
     const seen = new Set<string>([id]);
     const chain: CanonicalEvidence[] = [];
     let frontier = [id];
@@ -291,7 +322,18 @@ export class EvidenceStore {
       for (const candidate of next) seen.add(candidate);
       if (next.length === 0) break;
 
-      const rows = await this.#db.select().from(evidence).where(inArray(evidence.id, next));
+      // EPIC-058 AC-12. Filtered in the query, not after: an ancestor the caller
+      // may not see must not be read, and a lineage is exactly where a protected
+      // observation would otherwise surface — the chain is walked *because* the
+      // caller asked why, and "why" is the most revealing answer Ferret gives.
+      //
+      // The walk continues past a withheld ancestor rather than stopping, because
+      // stopping would make the chain's *shape* disclose where the protected row
+      // sits.
+      const rows = await this.#db
+        .select()
+        .from(evidence)
+        .where(and(inArray(evidence.id, next), permissionFilter(options.permittedScopes)));
       chain.push(...(await this.#hydrate(rows)));
       frontier = next;
     }
@@ -362,8 +404,11 @@ export class EvidenceStore {
    * reporting the disagreement is the honest answer when no authority rule
    * applies, and Governance §15 forbids resolving it by discarding one side.
    */
-  async conflictsFor(subjectId: string): Promise<ConflictGroup[]> {
-    const current = await this.forSubject(subjectId, { state: EvidenceState.CURRENT });
+  async conflictsFor(subjectId: string, options: ScopedRead = {}): Promise<ConflictGroup[]> {
+    const current = await this.forSubject(subjectId, {
+      state: EvidenceState.CURRENT,
+      ...(options.permittedScopes === undefined ? {} : { permittedScopes: options.permittedScopes }),
+    });
     return detectConflicts(current);
   }
 
@@ -377,9 +422,19 @@ export class EvidenceStore {
    * @throws {FerretError} `E_EVIDENCE_TAMPERED` when the content does not match
    * its recorded hash.
    */
-  async verify(id: string): Promise<CanonicalEvidence> {
+  async verify(id: string, options: ScopedRead = {}): Promise<CanonicalEvidence> {
     const record = await this.get(id);
-    if (record === undefined) {
+    // Withheld and absent give the same answer, deliberately: a distinct error
+    // for "you may not verify this" would confirm the record exists, which is the
+    // question the filter refuses.
+    const visible =
+      record !== undefined &&
+      // Undefined means an unrestricted internal caller; an empty array means a
+      // caller holding nothing, which sees unscoped records only.
+      (options.permittedScopes === undefined ||
+        record.permissionScope === undefined ||
+        options.permittedScopes.includes(record.permissionScope));
+    if (record === undefined || !visible) {
       throw new FerretError(ErrorCode.ENTITY_NOT_FOUND, `No evidence with id ${id}`, {
         details: { evidenceId: id },
       });

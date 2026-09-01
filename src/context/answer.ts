@@ -9,9 +9,11 @@ import {
   QueryShape,
   classify,
   type Classification,
+  type AccessContext,
   type QueryPlan,
   type QueryPlanner,
   type RetrievalPort,
+  type WithheldReport,
 } from '../retrieval/index.js';
 import { ContentSafety, containAttributes, type ContentSafetyReport } from '../security/index.js';
 import { VERSION } from '../version.js';
@@ -192,6 +194,13 @@ export interface AnswerDependencies {
   readonly retrieval: RetrievalPort;
   readonly evidence: EvidenceReader;
   /**
+   * Who this builder answers for — EPIC-058, required.
+   *
+   * Composed in rather than passed per request, so a tool call cannot widen it.
+   * Governance §12: the control is Ferret's, not the client's.
+   */
+  readonly access: AccessContext;
+  /**
    * EPIC-055's planner, when one is wired.
    *
    * Optional, and its absence is *reported* rather than worked around: without
@@ -206,11 +215,13 @@ export interface AnswerDependencies {
 export class AnswerPackBuilder {
   readonly #retrieval: RetrievalPort;
   readonly #evidence: EvidenceReader;
+  readonly #access: AccessContext;
   readonly #planner: QueryPlanner | undefined;
 
   constructor(dependencies: AnswerDependencies) {
     this.#retrieval = dependencies.retrieval;
     this.#evidence = dependencies.evidence;
+    this.#access = dependencies.access;
     this.#planner = dependencies.planner;
   }
 
@@ -250,7 +261,21 @@ export class AnswerPackBuilder {
       });
     }
 
-    const { subjects, plan, unknowns: routingUnknowns } = await this.#resolve(question, classification);
+    const resolved = await this.#resolve(question, classification);
+    const { subjects, plan } = resolved;
+    // EPIC-058 AC-13. `unknowns` is this surface's omission channel, so a
+    // withheld result belongs there rather than in a field of its own — and it is
+    // a count and nothing else. Saying which subject was withheld would answer
+    // the question the filter refuses.
+    const routingUnknowns = [
+      ...resolved.unknowns,
+      ...((resolved.withheld?.total ?? 0) > 0
+        ? [
+            `${String(resolved.withheld?.total ?? 0)} candidate(s) were withheld because this ` +
+              'caller is not permitted to see them.',
+          ]
+        : []),
+    ];
 
     if (subjects.length === 0) {
       return this.#finish({
@@ -333,20 +358,25 @@ export class AnswerPackBuilder {
     readonly subjects: readonly CanonicalEntity[];
     readonly plan: QueryPlan | undefined;
     readonly unknowns: readonly string[];
+    readonly withheld?: WithheldReport;
   }> {
     // An entity id is Ferret's own key, so it is looked up directly rather than
     // searched: exactly one thing can carry it, and a search would be a slower
     // way to learn the same fact.
     if (classification.shape === QueryShape.ENTITY_ID) {
-      const found = await this.#retrieval.getEntity(classification.term);
+      const found = await this.#retrieval.getEntity(classification.term, this.#access);
       return { subjects: found === undefined ? [] : [found], plan: undefined, unknowns: [] };
     }
 
     if (this.#planner === undefined) {
-      const hits = await this.#retrieval.search({ text: classification.term, limit: MAX_ANSWER_CANDIDATES });
+      const found = await this.#retrieval.search(
+        { text: classification.term, limit: MAX_ANSWER_CANDIDATES },
+        this.#access,
+      );
       return {
-        subjects: identified(hits.map((hit) => hit.entity), classification),
+        subjects: identified(found.hits.map((hit) => hit.entity), classification),
         plan: undefined,
+        withheld: found.withheld,
         unknowns: [
           'No query planner is wired, so exact identifier routing did not run. An ' +
             'abbreviated object id cannot be resolved this way.',
@@ -354,7 +384,7 @@ export class AnswerPackBuilder {
       };
     }
 
-    const planned = await this.#planner.search({ question, limit: MAX_ANSWER_CANDIDATES });
+    const planned = await this.#planner.search({ question, limit: MAX_ANSWER_CANDIDATES }, this.#access);
     const unknowns = planned.plan.strategies
       .filter((outcome) => outcome.skipped !== undefined)
       .map((outcome) => `Strategy ${outcome.strategy} did not contribute: ${outcome.skipped ?? ''}`);
@@ -389,6 +419,7 @@ export class AnswerPackBuilder {
   ): Promise<AnswerPack> {
     const held = await this.#evidence.forSubjectWithState(subject.id, {
       limit: EVIDENCE_CANDIDATE_WINDOW + 1,
+      permittedScopes: this.#access.permittedScopes,
     });
     const windowTruncated = held.length > EVIDENCE_CANDIDATE_WINDOW;
     const candidates = held.slice(0, EVIDENCE_CANDIDATE_WINDOW);

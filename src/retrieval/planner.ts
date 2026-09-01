@@ -1,8 +1,9 @@
 import type { Logger } from '../logging/index.js';
 
+import { NOTHING_WITHHELD, type AccessContext, type WithheldReport } from './access.js';
 import { classify, type Classification, type QueryShape } from './classify.js';
 import { fuse, type FusedHit, type RankedList } from './fuse.js';
-import { boundedLimit, type SearchHit } from './query.js';
+import { boundedLimit, type SearchHit, type SearchResult } from './query.js';
 
 /**
  * Choosing how to answer a question, and reporting what was not tried.
@@ -15,18 +16,36 @@ import { boundedLimit, type SearchHit } from './query.js';
  * nothing here imports `storage/`.
  */
 
+/**
+ * Each strategy takes the caller's authorization — EPIC-058.
+ *
+ * Threaded rather than applied once at the end: a strategy that fetched
+ * everything and let the planner filter would have read protected rows, and
+ * Governance §12 puts the evaluation *before* information enters results.
+ */
 export interface ExactStrategy {
   /** Entities whose object id or path begins with this. */
-  byIdentifier(term: string, limit: number): Promise<readonly SearchHit[]>;
+  byIdentifier(term: string, access: AccessContext, limit: number): Promise<readonly SearchHit[]>;
 }
 
 export interface TextStrategy {
-  search(query: {
-    text: string;
-    kinds?: readonly string[];
-    limit?: number;
-    relax?: boolean;
-  }): Promise<readonly SearchHit[]>;
+  /**
+   * Returns what was withheld as well as what was found — EPIC-058.
+   *
+   * A `SearchResult` rather than an array because the planner is what the CLI
+   * wires, so this is the path a real client takes. Found by dogfooding: the
+   * withheld count was reported on the unplanned path and vanished on the
+   * planned one, which meant it never reached anybody.
+   */
+  search(
+    query: {
+      text: string;
+      kinds?: readonly string[];
+      limit?: number;
+      relax?: boolean;
+    },
+    access: AccessContext,
+  ): Promise<SearchResult>;
 }
 
 export interface SemanticStrategy {
@@ -34,7 +53,7 @@ export interface SemanticStrategy {
    * `undefined`, not `[]`, when it cannot run. An empty array says "nothing is
    * similar", which is a finding; `undefined` says "nobody looked".
    */
-  nearest(question: string, limit: number): Promise<readonly SearchHit[] | undefined>;
+  nearest(question: string, access: AccessContext, limit: number): Promise<readonly SearchHit[] | undefined>;
   /** Why it is unavailable, when it is. Shown to the caller verbatim. */
   unavailableReason(): Promise<string | undefined>;
 }
@@ -61,6 +80,8 @@ export interface QueryPlan {
 export interface PlannedResults {
   readonly plan: QueryPlan;
   readonly hits: readonly FusedHit[];
+  /** What the caller was not permitted to see — EPIC-058. Counts only. */
+  readonly withheld: WithheldReport;
 }
 
 export interface PlannerDependencies {
@@ -92,7 +113,7 @@ export class QueryPlanner {
     this.#logger = dependencies.logger;
   }
 
-  async search(query: PlannedQuery): Promise<PlannedResults> {
+  async search(query: PlannedQuery, access: AccessContext): Promise<PlannedResults> {
     const limit = boundedLimit(query.limit);
     const classification = classify(query.question);
     const outcomes: StrategyOutcome[] = [];
@@ -101,11 +122,13 @@ export class QueryPlanner {
     // helped by the commit ranked above three documents mentioning it.
     if (classification.exact) {
       const exact = await this.#attempt('exact', outcomes, () =>
-        this.#exact.byIdentifier(classification.term, limit),
+        this.#exact.byIdentifier(classification.term, access, limit),
       );
 
       if (exact !== undefined && exact.length > 0) {
-        return this.#finish(classification, outcomes, [{ strategy: 'exact', hits: exact }], limit);
+        // An exact match is not blended with ranked results, so nothing was
+        // withheld from *this* answer — the ranked branches never ran.
+        return this.#finish(classification, outcomes, [{ strategy: 'exact', hits: exact }], limit, NOTHING_WITHHELD);
       }
 
       // A path that no longer exists is still discussed in commit messages, so
@@ -116,15 +139,25 @@ export class QueryPlanner {
 
     // `all` is safe only because `#attempt` turns every rejection into a
     // recorded skip, so no branch here can reject.
+    // Carried out of the closures rather than returned through `#attempt`, whose
+    // job is turning a rejection into a recorded skip and which should not also
+    // learn about authorization.
+    let withheld: WithheldReport = NOTHING_WITHHELD;
+
     const [strict, semantic] = await Promise.all([
-      this.#attempt('text', outcomes, () =>
-        this.#text.search({
-          text: classification.term,
-          ...(query.kinds === undefined ? {} : { kinds: query.kinds }),
-          limit,
-        }),
-      ),
-      this.#runSemantic(query, classification, outcomes, limit),
+      this.#attempt('text', outcomes, async () => {
+        const result = await this.#text.search(
+          {
+            text: classification.term,
+            ...(query.kinds === undefined ? {} : { kinds: query.kinds }),
+            limit,
+          },
+          access,
+        );
+        withheld = result.withheld;
+        return result.hits;
+      }),
+      this.#runSemantic(query, classification, outcomes, limit, access),
     ]);
 
     // DEFECT: full-text ANDs every term, so more context gave worse answers —
@@ -133,14 +166,21 @@ export class QueryPlanner {
     // the better answer and starting loose would bury it.
     let text = strict;
     if (strict !== undefined && strict.length === 0 && !classification.exact) {
-      const relaxed = await this.#attempt('text-relaxed', outcomes, () =>
-        this.#text.search({
-          text: classification.term,
-          ...(query.kinds === undefined ? {} : { kinds: query.kinds }),
-          limit,
-          relax: true,
-        }),
-      );
+      const relaxed = await this.#attempt('text-relaxed', outcomes, async () => {
+        const result = await this.#text.search(
+          {
+            text: classification.term,
+            ...(query.kinds === undefined ? {} : { kinds: query.kinds }),
+            limit,
+            relax: true,
+          },
+          access,
+        );
+        // The widened query is the one that produced these hits, so its count is
+        // the one that describes them.
+        withheld = result.withheld;
+        return result.hits;
+      });
       if (relaxed !== undefined && relaxed.length > 0) {
         annotate(
           outcomes,
@@ -155,7 +195,7 @@ export class QueryPlanner {
     if (text !== undefined) lists.push({ strategy: 'text', hits: text });
     if (semantic !== undefined) lists.push({ strategy: 'semantic', hits: semantic });
 
-    return this.#finish(classification, outcomes, lists, limit);
+    return this.#finish(classification, outcomes, lists, limit, withheld);
   }
 
   /** A thrown strategy is a skip, not a failed query. */
@@ -184,6 +224,7 @@ export class QueryPlanner {
     classification: Classification,
     outcomes: StrategyOutcome[],
     limit: number,
+    access: AccessContext,
   ): Promise<readonly SearchHit[] | undefined> {
     if (query.deterministicOnly === true) {
       outcomes.push({
@@ -214,7 +255,7 @@ export class QueryPlanner {
     }
 
     const found = await this.#attempt('semantic', outcomes, async () => {
-      const hits = await this.#semantic?.nearest(classification.term, limit);
+      const hits = await this.#semantic?.nearest(classification.term, access, limit);
       // Declining to answer is not finding nothing; collapsing the two here
       // would erase the distinction the interface exists for.
       if (hits === undefined) throw new Error('The embedding provider declined to answer.');
@@ -229,6 +270,7 @@ export class QueryPlanner {
     outcomes: readonly StrategyOutcome[],
     lists: readonly RankedList[],
     limit: number,
+    withheld: WithheldReport,
   ): PlannedResults {
     const plan: QueryPlan = {
       shape: classification.shape,
@@ -252,7 +294,7 @@ export class QueryPlanner {
       `Planned a ${plan.shape} query`,
     );
 
-    return { plan, hits: fuse(lists, limit) };
+    return { plan, hits: fuse(lists, limit), withheld };
   }
 }
 
