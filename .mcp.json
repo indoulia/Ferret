@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "ferret": {
+      "command": "node",
+      "args": ["dist/cli/main.js", "mcp"],
+      "env": {
+        "FERRET_DATABASE_HOST": "${FERRET_DATABASE_HOST:-127.0.0.1}",
+        "FERRET_DATABASE_PORT": "${FERRET_DATABASE_PORT:-55432}",
+        "FERRET_DATABASE_NAME": "${FERRET_DATABASE_NAME:-ferret}",
+        "FERRET_DATABASE_USER": "${FERRET_DATABASE_USER:-ferret}",
+        "FERRET_DATABASE_PASSWORD": "${FERRET_DATABASE_PASSWORD}",
+        "FERRET_CONFIG_HOME": "${FERRET_CONFIG_HOME:-.local/ferret-config}"
+      }
+    }
+  }
+}

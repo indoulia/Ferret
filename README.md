@@ -405,6 +405,7 @@ npm run build
 npm test
 npm run baseline   # record startup and package-size baselines
 npm run dogfood    # index this repository, then check Ferret's answers against git
+npm run dogfood:db # start the dogfood database and index into it, for the MCP server
 ```
 
 ### Dogfooding is a test, not a demo
@@ -430,6 +431,45 @@ npm run dogfood -- --check    # check what is already indexed, without re-indexi
 ```
 
 It exits non-zero on any disagreement.
+
+### Ferret is wired in as an MCP server for its own development
+
+`.mcp.json` registers Ferret as a project MCP server, so an AI client working on
+this repository navigates this repository **through Ferret**. That is dogfooding
+in the sense that finds things: EPIC-058's withheld count reaching no client,
+EPIC-060 answering `ambiguous` for a file path, and issue #71's 465 evidence-free
+file entities were all found by running the product, and none of them was visible
+from a passing test suite.
+
+```bash
+npm run build
+npm run dogfood:db          # start the container, migrate, index this repository
+```
+
+It prints the one variable that is not committed. Export it and restart the
+client:
+
+```bash
+export FERRET_DATABASE_PASSWORD=ferret_dogfood        # bash
+$env:FERRET_DATABASE_PASSWORD = 'ferret_dogfood'      # PowerShell
+```
+
+The password stays out of `.mcp.json` even though the container publishes on
+loopback and holds only an index of a public repository — what makes that safe is
+the binding, not the secret, and a committed credential teaches the wrong habit
+more reliably than it protects anything.
+
+**Re-index after every merge**, so Ferret answers about the code that is on
+`main` rather than the code that was:
+
+```bash
+node scripts/dogfood-db.mjs --index
+```
+
+This database is deliberately separate from the test one.
+`tests/global-setup.ts` creates a fresh database per test file and drops it; this
+one persists, because an index built over half a minute is not something to
+rebuild per question.
 
 Schema changes are generated, not hand-written:
 
