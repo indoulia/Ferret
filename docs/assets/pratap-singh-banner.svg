@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+  <title id="title">Pratap Singh — Technical Architect</title>
+  <desc id="desc">Technical Architect, Software Engineer and AI Engineering. 18+ years. Architecture, cloud, security, distributed systems and AI.</desc>
+  <rect width="1200" height="300" fill="#0d1117"/>
+  <path d="M0 248 C180 205 300 290 480 238 S800 185 1200 232" fill="none" stroke="#30363d" stroke-width="2"/>
+  <path d="M0 255 C220 220 340 270 540 246 S900 205 1200 250" fill="none" stroke="#58a6ff" stroke-opacity="0.28" stroke-width="1"/>
+  <g fill="#8b949e" opacity="0.35">
+    <circle cx="1040" cy="65" r="2"/><circle cx="1080" cy="92" r="1.5"/><circle cx="1115" cy="54" r="2"/><circle cx="1150" cy="112" r="1.5"/>
+  </g>
+  <text x="70" y="105" fill="#f0f6fc" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="44" font-weight="700">PRATAP SINGH</text>
+  <text x="72" y="148" fill="#8b949e" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="21">Technical Architect · Software Engineer · AI Engineering</text>
+  <text x="72" y="190" fill="#58a6ff" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17">18+ YEARS  ·  ARCHITECTURE  ·  CLOUD  ·  SECURITY  ·  DISTRIBUTED SYSTEMS  ·  AI</text>
+  <text x="72" y="235" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="14">indoulia.com  ·  github.com/indoulia  ·  linkedin.com/in/indoulia</text>
+</svg>
