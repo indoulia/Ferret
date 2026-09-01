@@ -150,7 +150,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 ### Context Compilation
 
 - **EPIC-059 — Context Packs** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
-- **EPIC-060 — Answer Packs** — P0
+- **EPIC-060 — Answer Packs** — P0 — IMPLEMENTED ([spec](EPIC-060-Answer-Packs.md), [evidence](validation/EPIC-060-VALIDATION.md))
 - **EPIC-061 — Token Budgeting** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
 - **EPIC-062 — Evidence Selection** — P0 — IMPLEMENTED ([spec](EPIC-062-Evidence-Selection.md), [evidence](validation/EPIC-062-VALIDATION.md))
 - **EPIC-063 — Query Explanation** — P1

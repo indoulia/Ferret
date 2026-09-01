@@ -3,10 +3,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 
 import {
+  AnswerPackBuilder,
   CONTENT_NOTICE,
   ContextPackBuilder,
+  MAX_ANSWER_BUDGET,
   MAX_BUDGET,
   MAX_LINEAGE_DEPTH,
+  renderAnswer,
   renderPack,
   type EvidenceReader,
 } from '../context/index.js';
@@ -370,6 +373,54 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         };
       }),
   );
+
+  // EPIC-060. Registered under the same rule as `ferret_why` and for the same
+  // reason: an answer pack whose every claim is uncited is not an answer, and a
+  // client cannot tell that tool from a subject Ferret genuinely holds no
+  // evidence about.
+  if (evidence !== undefined) {
+    const answers = new AnswerPackBuilder({
+      retrieval,
+      evidence,
+      ...(planner === undefined ? {} : { planner }),
+    });
+
+    server.registerTool(
+      'ferret_answer',
+      {
+        title: 'Answer a question with one right answer',
+        description:
+          'Answer a question that identifies one thing — a Ferret entity id, a ' +
+          'Git object id or abbreviation, or a file path — as claims with the ' +
+          'observations behind each, plus an explicit list of what Ferret does ' +
+          'not know. Unlike a context pack this does not rank: it either answers ' +
+          'about one subject, reports that several match, reports that nothing ' +
+          'matches, or says the question has no single right answer and a ' +
+          'context pack is the right tool. Ferret never writes the prose answer; ' +
+          'it states the claims and cites them. ' + CONTENT_NOTICE,
+        inputSchema: z.strictObject({
+          question: z.string().min(1).max(1024),
+          budget: z
+            .number()
+            .int()
+            .min(100)
+            .max(MAX_ANSWER_BUDGET)
+            .optional()
+            .describe('Estimated tokens the answer may occupy.'),
+          format: z.enum(['json', 'text']).optional(),
+        }),
+        annotations: { readOnlyHint: true, openWorldHint: false },
+      },
+      async ({ question, budget, format }) =>
+        guard('answer', async () => {
+          const pack = await answers.answer({
+            question,
+            ...(budget === undefined ? {} : { budget }),
+          });
+          return format === 'text' ? { notice: CONTENT_NOTICE, rendered: renderAnswer(pack) } : pack;
+        }),
+    );
+  }
 
   // EPIC-048. Registered only when an evidence reader is wired: a tool that is
   // present and always answers "nothing held" is indistinguishable, to a client,
