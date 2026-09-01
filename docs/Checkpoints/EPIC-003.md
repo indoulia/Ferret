@@ -65,7 +65,7 @@ src/cli/commands/config.ts       `ferret config`
 
 tests/unit/config-layers.test.ts               39 cases
 tests/integration/config/persistence.test.ts   30 cases
-tests/integration/config/config-cli.test.ts    26 cases
+tests/integration/config/config-cli-*.test.ts  26 cases
 tests/fixtures/concurrent-config-writer.mjs    cross-process lock exercise
 ```
 
