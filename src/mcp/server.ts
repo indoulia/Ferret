@@ -13,12 +13,7 @@ import {
   renderPack,
   type EvidenceReader,
 } from '../context/index.js';
-import {
-  ANONYMOUS_PRINCIPAL,
-  Permission,
-  assertPermitted,
-  type Principal,
-} from '../authorization/index.js';
+import { ANONYMOUS_PRINCIPAL, Permission, type Principal } from '../authorization/index.js';
 import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
 import {
   EvidenceState,
@@ -26,7 +21,6 @@ import {
   type CanonicalEntity,
   type CanonicalEvidence,
 } from '../domain/index.js';
-import { serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 import {
   MAX_LIMIT,
@@ -37,6 +31,8 @@ import {
   type SearchHit,
 } from '../retrieval/index.js';
 import { VERSION } from '../version.js';
+
+import { createToolGuard } from './guards.js';
 
 /**
  * The AI control plane.
@@ -61,9 +57,18 @@ import { VERSION } from '../version.js';
  *   no template anywhere in this file with a hole for source text.
  *
  * Every tool is also **read-only**, declared as such through `readOnlyHint`, and
- * there is nothing here that writes. Indexing is a command a human runs;
- * EPIC-069 is where a destructive operation would need confirmation, and until
- * then the safest number of destructive tools is none.
+ * there is nothing here that writes. Indexing is a command a human runs.
+ *
+ * A destructive tool is now *possible* rather than forbidden: EPIC-068 supplies
+ * the permission it must be granted, EPIC-069 the confirmation it must be given,
+ * and `createDestructiveToolGuard` in `./guards.ts` is the only path it may take.
+ * Both controls hold, in that order — a caller that was not granted the
+ * permission never learns what the operation would have done, because a plan is a
+ * disclosure about Ferret's state. `tests/unit/mcp-destructive-tools.test.ts`
+ * reads this file and fails if a tool is registered without `readOnlyHint: true`
+ * and without that guard, so the guarantee does not rest on the next author
+ * remembering it. There is still no such tool here; EPIC-066 registers the
+ * first.
  */
 
 export const MCP_SERVER_NAME = 'ferret';
@@ -143,34 +148,11 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
     },
   );
 
-  /**
-   * Wraps a handler so a failure becomes a redacted tool error, never a crash —
-   * and so no handler runs for a caller that was not granted its permission.
-   *
-   * The permission is checked **here**, before `run`, rather than inside each
-   * handler. EPIC-068 AC-9: a check a handler performs is a check a handler can
-   * forget, and this is the one place every tool already passes through. Every
-   * tool names its permission at its call site, so a new tool cannot be added
-   * without naming one.
-   */
-  const guard = async (
-    operation: string,
-    permission: Permission,
-    run: () => Promise<unknown>,
-  ): Promise<{ content: { type: 'text'; text: string }[]; isError?: boolean }> => {
-    try {
-      assertPermitted(principal, permission, `mcp.${operation}`);
-      const result = await run();
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    } catch (error) {
-      // Serialized, therefore redacted: an error crossing to an AI client is
-      // exactly the path a credential must not take, and EPIC-009's serializer
-      // is the one place that guarantee lives.
-      const serialized = serializeError(error);
-      logger.warn({ operation: `mcp.${operation}`, err: error }, `MCP tool ${operation} failed`);
-      return { content: [{ type: 'text', text: JSON.stringify(serialized, null, 2) }], isError: true };
-    }
-  };
+  // EPIC-068. The permission is checked here rather than in each handler; see
+  // `createToolGuard`. A destructive tool would use `createDestructiveToolGuard`
+  // from the same module and there is none yet — EPIC-069 built that path and
+  // EPIC-066 registers the first tool to walk it.
+  const guard = createToolGuard({ principal, logger });
 
   server.registerTool(
     'ferret_search',

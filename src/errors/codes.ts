@@ -71,6 +71,22 @@ export const ErrorCode = {
    * probe for the existence of something it may not see.
    */
   NOT_PERMITTED: 'E_NOT_PERMITTED',
+  /**
+   * A destructive operation was requested without confirmation — EPIC-069.
+   *
+   * Not a failure: the operation was well formed and permitted, and Ferret
+   * disclosed what it would do instead of doing it. The error carries the plan
+   * and a token, and the remediation is to present that token.
+   */
+  CONFIRMATION_REQUIRED: 'E_CONFIRMATION_REQUIRED',
+  /**
+   * A confirmation token cannot be used — EPIC-069.
+   *
+   * Returned identically whether the token was never issued, has expired, has
+   * already been spent, or was issued for a different operation: a refusal that
+   * distinguished them would let a caller probe for a token's existence.
+   */
+  CONFIRMATION_INVALID: 'E_CONFIRMATION_INVALID',
   /** The capability exists in the roadmap but is not implemented in this release. */
   NOT_IMPLEMENTED: 'E_NOT_IMPLEMENTED',
   /** The operation was interrupted by a signal. */

@@ -7,3 +7,21 @@
  */
 
 export { MCP_SERVER_NAME, createMcpServer, serveStdio, type McpServerDependencies } from './server.js';
+
+/**
+ * The controls every tool passes through — EPIC-068, EPIC-069.
+ *
+ * `createDestructiveToolGuard` is exported rather than private because it is the
+ * *contract* a destructive tool satisfies: EPIC-066 composes with it, and a test
+ * drives a tool of its own through it to prove the confirmation flow works over
+ * the real protocol without Ferret shipping a destructive tool to prove it.
+ */
+export {
+  CONFIRM_PARAMETER_DESCRIPTION,
+  createDestructiveToolGuard,
+  createToolGuard,
+  type DestructiveToolGuard,
+  type GuardDependencies,
+  type ToolGuard,
+  type ToolResult,
+} from './guards.js';

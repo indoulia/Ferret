@@ -26,3 +26,30 @@ export {
   type AuthorizationDecision,
   type Principal,
 } from './authorization.js';
+
+/**
+ * Whether the operation was *intended* — EPIC-069.
+ *
+ * Beside authorization because both are controls on what a *caller* may make
+ * happen, they compose at the same point, and they carry the same boundary
+ * constraints. EPIC-068 §4 drew the line between them: "This Epic decides whether
+ * an operation is permitted; EPIC-069 decides whether it was *intended*, and both
+ * must hold."
+ *
+ * Its own file rather than the same one because it differs in the way that
+ * matters most about `authorize`: a decision is pure, and a gate necessarily
+ * holds state.
+ */
+export {
+  ConfirmationGate,
+  DEFAULT_CONFIRMATION_TTL_MS,
+  DEFAULT_MAX_PENDING_CONFIRMATIONS,
+  EffectChange,
+  planDigest,
+  type ConfirmationGateOptions,
+  type ConfirmationRequest,
+  type DisclosedEffect,
+  type DisclosedPlan,
+  type OperationPlan,
+  type PlannedEffect,
+} from './confirmation.js';

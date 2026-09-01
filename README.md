@@ -213,6 +213,7 @@ ferret env --log-level debug 2> ferret.log
 | `5` | The command is planned but not implemented in this release |
 | `6` | The database is reachable but its schema is unusable — a migration failed, is pending under a policy that forbids applying it, was applied by a newer Ferret, or was edited after being applied |
 | `7` | The caller was not granted the permission the operation requires |
+| `8` | A destructive operation was requested without a usable confirmation |
 | `130` | Interrupted (`SIGINT`) |
 | `143` | Terminated (`SIGTERM`) |
 
