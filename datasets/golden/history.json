@@ -1,0 +1,65 @@
+{
+  "author": {
+    "name": "Ledger Fixture",
+    "email": "fixture@example.invalid"
+  },
+  "startedAt": "2026-01-05T09:00:00Z",
+  "commits": [
+    {
+      "subject": "feat(auth): authenticate a user with email and secret",
+      "files": [
+        "src/auth/login.ts",
+        "README.md"
+      ]
+    },
+    {
+      "subject": "feat(auth): keep an open session per user",
+      "files": [
+        "src/auth/session.ts"
+      ]
+    },
+    {
+      "subject": "feat(billing): create an invoice in minor units",
+      "files": [
+        "src/billing/invoice.ts",
+        "docs/decisions/0001-currency-in-minor-units.md"
+      ]
+    },
+    {
+      "subject": "feat(billing): calculate tax on an invoice total",
+      "files": [
+        "src/billing/tax.ts"
+      ]
+    },
+    {
+      "subject": "fix(billing): refund returns a negative amount",
+      "files": [
+        "src/billing/refund.ts"
+      ]
+    },
+    {
+      "subject": "feat(auth): issue a password reset token",
+      "files": [
+        "src/auth/password-reset.ts"
+      ]
+    },
+    {
+      "subject": "feat(reporting): total a month of amounts",
+      "files": [
+        "src/reporting/monthly.ts"
+      ]
+    },
+    {
+      "subject": "docs: describe the ports and adapters layout",
+      "files": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "subject": "docs: onboarding guide for a new engineer",
+      "files": [
+        "docs/onboarding.md"
+      ]
+    }
+  ]
+}

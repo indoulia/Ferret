@@ -68,7 +68,7 @@
     "tag": "next"
   },
   "scripts": {
-    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs && node scripts/copy-grammars.mjs",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/copy-migrations.mjs && node scripts/copy-grammars.mjs && node scripts/copy-datasets.mjs",
     "prepack": "npm run build",
     "clean": "node scripts/clean.mjs",
     "migration:generate": "node scripts/generate-migration.mjs",
@@ -80,7 +80,8 @@
     "baseline": "node scripts/baseline.mjs",
     "dogfood": "node scripts/dogfood.mjs",
     "dogfood:db": "node scripts/dogfood-db.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run build && npm run test"
+    "verify": "npm run lint && npm run typecheck && npm run build && npm run test",
+    "golden:checksum": "npm run build && node scripts/golden-checksum.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

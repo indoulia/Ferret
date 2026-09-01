@@ -1,0 +1,15 @@
+export {
+  CORPUS_SCOPE,
+  GOLDEN_DATASET_DIR,
+  QueryShape,
+  computeGoldenChecksum,
+  Relevance,
+  loadGoldenDataset,
+  resolveIdentity,
+  type GoldenDataset,
+  type GoldenEvidenceExpectation,
+  type GoldenExpected,
+  type GoldenHistory,
+  type GoldenIdentity,
+  type GoldenQuery,
+} from './dataset.js';
