@@ -9,6 +9,7 @@ import { createLogger, isLogLevel, type LogLevel } from '../logging/index.js';
 import { installSignalHandlers } from '../runtime/index.js';
 
 import { ExitCode, exitCodeFor } from './exit-codes.js';
+import { effectiveLogLevel } from './log-level.js';
 import { emitError } from './output.js';
 import { buildProgram, type ProgramOptions } from './program.js';
 
@@ -110,7 +111,11 @@ export async function run(options: RunOptions = {}): Promise<number> {
  * {@link run} stays free of them so tests and embedders are unaffected.
  */
 async function main(): Promise<void> {
-  const level = earlyLogLevel(process.argv) ?? 'warn';
+  // EPIC-091 AC-7. `earlyLogLevel` reads argv before Commander parses, so a
+  // failure *during* parsing is still logged; it ignored configuration, so
+  // signal handling and `uncaughtException` were mute for a user who had set
+  // a level rather than typed one. `effectiveLogLevel` keeps the flag winning.
+  const level = effectiveLogLevel(earlyLogLevel(process.argv)) ?? 'warn';
   const logger = createLogger({ level, base: { component: 'cli' } });
 
   let settled = false;

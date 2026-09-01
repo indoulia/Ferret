@@ -10,6 +10,8 @@
  * defect, under-redaction is a security defect.
  */
 
+import { SECRET_KINDS } from '../security/secrets.js';
+
 export const REDACTED = '[redacted]';
 
 /**
@@ -50,8 +52,17 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set(['keys', 'keyword', 'keywords'
 /**
  * Value patterns redacted regardless of the key they appear under, because
  * their shape alone identifies them as a credential.
+ *
+ * **A superset of EPIC-082's kinds, never a subset — EPIC-091 §8.** Two
+ * redactors exist by design: this one for errors and logs, where
+ * over-redaction is cosmetic, and `security/secrets.ts` for indexed content,
+ * where a false positive destroys data. The split is right; the coverage was
+ * not. This list carried six patterns and EPIC-082's carried twelve, so a Slack
+ * token, a Google API key, an npm token and a Stripe key were values Ferret
+ * refused to *store* and printed verbatim to an operator's terminal, a CI
+ * transcript and a client's captured stderr.
  */
-const SECRET_VALUE_PATTERNS: readonly RegExp[] = [
+const OWN_VALUE_PATTERNS: readonly RegExp[] = [
   // PEM-encoded private key blocks.
   /-----BEGIN[A-Z ]*PRIVATE KEY-----[\s\S]*?-----END[A-Z ]*PRIVATE KEY-----/g,
   // GitHub tokens (classic, fine-grained, OAuth, app, refresh).
@@ -63,6 +74,23 @@ const SECRET_VALUE_PATTERNS: readonly RegExp[] = [
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
   // OpenAI-style and generic long prefixed secrets.
   /\bsk-[A-Za-z0-9_-]{16,}\b/g,
+];
+
+/**
+ * The patterns above, plus every kind EPIC-082 detects.
+ *
+ * Composed rather than copied. A credential format added to
+ * `security/secrets.ts` is redacted here on the same commit, which is the only
+ * version of parity that survives the next one.
+ *
+ * The overlap is deliberate and harmless: several entries above are *looser*
+ * than EPIC-082's equivalents -- a 16-character GitHub token body rather than
+ * 36 -- because a log line may be truncated and over-redacting one costs
+ * nothing. Keeping both means neither list has to be the weaker one.
+ */
+const SECRET_VALUE_PATTERNS: readonly RegExp[] = [
+  ...OWN_VALUE_PATTERNS,
+  ...SECRET_KINDS.map((kind) => kind.pattern),
 ];
 
 /** The userinfo segment of a URI, such as the credentials in a `postgres://` connection URL. */

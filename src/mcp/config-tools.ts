@@ -457,6 +457,23 @@ export function registerConfigTools(server: McpServer, dependencies: ConfigToolD
           // An invalid value throws `E_CONFIG_INVALID` from inside here and the
           // file is left byte-identical.
           const result = configuration.store.set(path, value);
+          // EPIC-091 AC-12, the line EPIC-066 §262 wrote as "loggable" and
+          // never wrote. The path and the principal; never the value — that is
+          // the whole point, and `redacted` records whether the value *would*
+          // have been masked had anything printed it.
+          logger.info(
+            {
+              // Not `mcp.config.set` — that is the tool name, and the guard
+              // already logs the authorization decision under it. This record
+              // says the file changed, which is a different event.
+              operation: 'mcp.config.stored',
+              principal: principal.id,
+              path,
+              file: result.path,
+              redacted: isSecretKey(path.split('.').at(-1) ?? path),
+            },
+            `Configuration ${path} written`,
+          );
           return Promise.resolve({
             path,
             stored: true,

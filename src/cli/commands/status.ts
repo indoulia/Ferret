@@ -2,6 +2,7 @@ import { Command, Option } from 'commander';
 
 import { DependencyStatus, type HealthComponent } from '../../index.js';
 import { createLogger, type LogLevel } from '../../logging/index.js';
+import { effectiveLogLevel } from '../log-level.js';
 import { exitCodeForHealth, probeHealth } from '../health.js';
 import { emitResult, type OutputOptions } from '../output.js';
 
@@ -44,10 +45,14 @@ export function statusCommand(
     .action(async (options: { strict: boolean }, command: Command) => {
       const globals = command.optsWithGlobals<{ json?: boolean; logLevel?: LogLevel }>();
       const json = globals.json === true;
+      // EPIC-091 AC-7 — the configured level, not only the flag. `silent` is
+      // still no logger at all rather than a logger that discards: constructing
+      // a stream nothing will write to is work for nothing.
+      const level = effectiveLogLevel(globals.logLevel);
       const logger =
-        globals.logLevel === undefined
+        level === undefined || level === 'silent'
           ? undefined
-          : createLogger({ level: globals.logLevel, base: { component: 'status' } });
+          : createLogger({ level, base: { component: 'status' } });
 
       const report = await probeHealth(logger === undefined ? {} : { logger });
 

@@ -5,7 +5,7 @@ import {
   type Permission,
   type Principal,
 } from '../authorization/index.js';
-import { serializeError } from '../errors/index.js';
+import { ErrorCode, FerretError, serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 
 /**
@@ -70,9 +70,28 @@ export function createToolGuard({ principal, logger }: GuardDependencies): ToolG
   return async (operation, permission, run) => {
     try {
       assertPermitted(principal, permission, `mcp.${operation}`);
+      // EPIC-091 AC-13, the line EPIC-068 §218 wrote as "loggable" and never
+      // wrote. The principal id and the permission, at debug — no argument, no
+      // result, and nothing with an audit-event shape: a log line is
+      // level-gated and discardable, and EPIC-085 owns the durable record.
+      logger.debug(
+        { operation: `mcp.${operation}`, principal: principal.id, permission, decision: 'permitted' },
+        `Permitted ${principal.id} to ${permission}`,
+      );
       const result = await run();
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
+      // EPIC-091 AC-15, from EPIC-083 §216. A denial is the case an operator
+      // most needs to see and the one most easily mistaken for a bug, so it is
+      // logged as a denial with the permission that was missing rather than
+      // only as a failure. No protected value: the permission is a capability
+      // name, and the operation is Ferret's own.
+      if (error instanceof FerretError && error.code === ErrorCode.NOT_PERMITTED) {
+        logger.warn(
+          { operation: `mcp.${operation}`, principal: principal.id, permission, decision: 'denied' },
+          `Denied ${principal.id}: ${permission} is not granted`,
+        );
+      }
       // Serialized, therefore redacted: an error crossing to an AI client is
       // exactly the path a credential must not take, and EPIC-009's serializer
       // is the one place that guarantee lives.
@@ -110,7 +129,24 @@ export function createDestructiveToolGuard(
 ): DestructiveToolGuard {
   return async (operation, permission, plan, confirm, run) =>
     guard(operation, permission, async () => {
-      dependencies.confirmations.consume(await plan(), confirm);
+      const built = await plan();
+      // EPIC-091 AC-14, from EPIC-069 §259. Two lines, because a request and a
+      // consume are different events and an operator chasing "why did nothing
+      // happen" needs to know which one occurred. The token is *not* logged:
+      // it is the thing that authorises the change, and printing it to stderr
+      // would put it in a CI transcript. What identifies the event is the
+      // operation and whether a token was presented at all.
+      dependencies.logger.debug(
+        {
+          operation: `mcp.${operation}`,
+          phase: confirm === undefined ? 'requested' : 'consumed',
+          effects: built.effects.length,
+        },
+        confirm === undefined
+          ? `Confirmation requested for ${operation}`
+          : `Confirmation consumed for ${operation}`,
+      );
+      dependencies.confirmations.consume(built, confirm);
       return run();
     });
 }
