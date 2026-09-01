@@ -1,5 +1,9 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { createMcpServer } from '../../../src/mcp/index.js';
 
 import { ferretConfigSchema } from '../../../src/config/index.js';
 import {
@@ -238,6 +242,51 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
       // back what it wrote; only the retrieval path is gated, and there the
       // context is a required parameter.
       expect(await evidence.forSubject(subject)).toHaveLength(1);
+    });
+  });
+
+  describe('the AI surface must not bypass the filter the store implements', () => {
+    /**
+     * EPIC-083. `EvidenceStore` filters correctly on every read and says so:
+     * "Omitted means unrestricted, which is correct for internal callers and
+     * **wrong for a query on behalf of a user**" (`storage/evidence.ts`). Its
+     * `permissionFilter` even names the failure mode — "exactly how a filter ends
+     * up applied on the path everyone tests and missing on the path nobody does".
+     *
+     * `ferret_why` is that path. It calls `forSubject` without `permittedScopes`,
+     * so a protected statement withheld from `ferret_search` is returned by the
+     * traceability tool. Nothing in EPIC-058's suite caught it, because every case
+     * there exercises the *store* rather than the wiring above it.
+     */
+    it('does not return through ferret_why what it withholds from search', async () => {
+      const server = createMcpServer({
+        retrieval,
+        evidence,
+        // Holds nothing, exactly like the default principal.
+        access: holding(),
+        logger,
+      });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'why-leak-probe', version: '0.0.0' });
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+      try {
+        // The control: search withholds it, which is EPIC-058 working.
+        const searched = (await client.callTool({
+          name: 'ferret_search',
+          arguments: { query: SECRET_PHRASE },
+        })) as { content: { text: string }[] };
+        expect(searched.content[0]?.text).not.toContain(SECRET_PHRASE);
+
+        // The same protected statement, asked for a different way.
+        const traced = (await client.callTool({
+          name: 'ferret_why',
+          arguments: { id: subject },
+        })) as { content: { text: string }[] };
+        expect(traced.content[0]?.text ?? '').not.toContain(SECRET_PHRASE);
+      } finally {
+        await client.close();
+      }
     });
   });
 
