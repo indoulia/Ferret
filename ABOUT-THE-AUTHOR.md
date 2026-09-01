@@ -1,9 +1,3 @@
-<div align="center">
-
-<img src="docs/assets/pratap-singh-banner.svg" alt="Pratap Singh — Technical Architect, Software Engineer and AI Engineering" width="100%">
-
-</div>
-
 # About the Author
 
 ## Pratap Singh
