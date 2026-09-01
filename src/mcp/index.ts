@@ -16,6 +16,19 @@ export { MCP_SERVER_NAME, createMcpServer, serveStdio, type McpServerDependencie
  * drives a tool of its own through it to prove the confirmation flow works over
  * the real protocol without Ferret shipping a destructive tool to prove it.
  */
+/**
+ * Configuration over MCP — EPIC-066.
+ *
+ * `registerConfigTools` is exported so a consumer embedding Ferret can compose
+ * the configuration surface onto a server of its own, the same way
+ * `createMcpServer` does.
+ */
+export {
+  registerConfigTools,
+  type ConfigToolDependencies,
+  type ConfigurationAccess,
+} from './config-tools.js';
+
 export {
   CONFIRM_PARAMETER_DESCRIPTION,
   createDestructiveToolGuard,

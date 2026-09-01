@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -16,9 +16,22 @@ import { describe, expect, it } from 'vitest';
  * tool that simply never calls the gate. The first destructive tool registered
  * without `guardDestructive` fails here, which is the point at which someone is
  * still looking.
+ *
+ * Scans **every** module in `src/mcp/`, discovered by reading the directory
+ * rather than listed here. EPIC-069 shipped this reading `server.ts` alone, and
+ * EPIC-066 registers its tools from a second file — a control that named one file
+ * would have silently stopped covering the surface at exactly the moment the
+ * surface grew its first destructive tool.
  */
 
-const SERVER = fileURLToPath(new URL('../../src/mcp/server.ts', import.meta.url));
+const MCP_DIR = fileURLToPath(new URL('../../src/mcp', import.meta.url));
+
+/** Every MCP module, so a new one is covered the day it is added. */
+function mcpSources(): { file: string; source: string }[] {
+  return readdirSync(MCP_DIR)
+    .filter((name) => name.endsWith('.ts') && !name.endsWith('.d.ts'))
+    .map((name) => ({ file: `src/mcp/${name}`, source: readFileSync(`${MCP_DIR}/${name}`, 'utf8') }));
+}
 
 /** Block comments wholesale, line comments only when they start a line. */
 function stripComments(source: string): string {
@@ -27,6 +40,7 @@ function stripComments(source: string): string {
 
 interface Registration {
   readonly name: string;
+  readonly file: string;
   readonly readOnly: boolean;
   readonly body: string;
 }
@@ -38,21 +52,27 @@ interface Registration {
  * is exactly the text belonging to that tool. A real parser would be more precise
  * and would also be a second implementation of TypeScript in the test suite.
  */
-function registrations(source: string): Registration[] {
-  const chunks = stripComments(source).split('server.registerTool(');
+function registrations(file: string, source: string): Registration[] {
+  const chunks = stripComments(source).split(/\.registerTool\(/);
   return chunks.slice(1).map((chunk) => {
     const name = /^\s*'([^']+)'/.exec(chunk)?.[1] ?? '<unnamed>';
     return {
       name,
+      file,
       readOnly: /readOnlyHint:\s*true/.test(chunk),
       body: chunk,
     };
   });
 }
 
+/** Every tool registered anywhere on the MCP surface. */
+function allRegistrations(): Registration[] {
+  return mcpSources().flatMap(({ file, source }) => registrations(file, source));
+}
+
 describe('destructive MCP tools', () => {
-  const source = readFileSync(SERVER, 'utf8');
-  const tools = registrations(source);
+  const tools = allRegistrations();
+  const label = (tool: Registration): string => `${tool.name} (${tool.file})`;
 
   it('finds the tools, so a passing suite is not an empty one', () => {
     // Without this the whole file passes vacuously the day someone renames
@@ -65,7 +85,7 @@ describe('destructive MCP tools', () => {
     // A tool that declares neither is the dangerous case: a client cannot tell
     // whether to prompt, and this test cannot tell whether to require a gate.
     for (const tool of tools) {
-      expect(/readOnlyHint:\s*(true|false)/.test(tool.body), tool.name).toBe(true);
+      expect(/readOnlyHint:\s*(true|false)/.test(tool.body), label(tool)).toBe(true);
     }
   });
 
@@ -73,7 +93,7 @@ describe('destructive MCP tools', () => {
     for (const tool of tools.filter((candidate) => !candidate.readOnly)) {
       expect(
         /guardDestructive\(|createDestructiveToolGuard\(/.test(tool.body),
-        `${tool.name} is not annotated readOnlyHint: true, so it must pass through ` +
+        `${label(tool)} is not annotated readOnlyHint: true, so it must pass through ` +
           'the destructive guard — EPIC-069. Either it is read-only and the ' +
           'annotation is wrong, or it changes something and needs a plan, a ' +
           'permission and a confirmation.',
@@ -86,35 +106,43 @@ describe('destructive MCP tools', () => {
     // conforming client for one, and specification §16 records that the client's
     // approval UI is the client's control while the token is Ferret's.
     for (const tool of tools.filter((candidate) => !candidate.readOnly)) {
-      expect(/destructiveHint:\s*true/.test(tool.body), tool.name).toBe(true);
+      expect(/destructiveHint:\s*true/.test(tool.body), label(tool)).toBe(true);
     }
   });
 
   it('names a permission at every tool call site — EPIC-068 AC-9', () => {
     for (const tool of tools) {
-      expect(/Permission\.[A-Z_]+/.test(tool.body), tool.name).toBe(true);
+      expect(/Permission\.[A-Z_]+/.test(tool.body), label(tool)).toBe(true);
     }
   });
 
   it('is currently all read-only, and says so rather than assuming it', () => {
-    // The measured state of `main`, pinned deliberately. EPIC-069 §4 excludes
-    // adding a destructive tool and EPIC-066 registers the first, so this
-    // assertion is expected to be *changed* by that Epic — and changing it is a
-    // visible, reviewable line in that diff rather than a silent widening.
-    expect(tools.filter((tool) => !tool.readOnly).map((tool) => tool.name)).toStrictEqual([]);
+    // The measured state of `main`, pinned deliberately, so widening it is a
+    // visible reviewable line in a diff rather than something that happens
+    // quietly. EPIC-066 adds the first two.
+    expect(tools.filter((tool) => !tool.readOnly).map((tool) => tool.name)).toStrictEqual([
+      'ferret_config_set',
+      'ferret_config_unset',
+    ]);
   });
 
   it('checks the permission in one place rather than in each handler', () => {
     // EPIC-068 AC-9, restated as a source property now that the guards have moved
-    // out of this file: a check a handler performs is a check a handler can
-    // forget, and `server.ts` must not perform one itself.
-    expect(stripComments(source)).not.toContain('assertPermitted(');
+    // out of `server.ts`: a check a handler performs is a check a handler can
+    // forget. `guards.ts` is the one place allowed to make it.
+    for (const { file, source } of mcpSources()) {
+      if (file === 'src/mcp/guards.ts') continue;
+      expect(stripComments(source), file).not.toContain('assertPermitted(');
+    }
   });
 
   it('consumes the confirmation gate only through the guard', () => {
-    // `server.ts` must not call `consume` for itself either. If it did, the
-    // ordering guarantee — authorization first, so a refused caller sees no plan —
-    // would be restated in each handler rather than held in one place.
-    expect(stripComments(source)).not.toContain('.consume(');
+    // No tool module may call `consume` for itself. If one did, the ordering
+    // guarantee — authorization first, so a refused caller sees no plan — would be
+    // restated per handler rather than held in one place.
+    for (const { file, source } of mcpSources()) {
+      if (file === 'src/mcp/guards.ts') continue;
+      expect(stripComments(source), file).not.toContain('.consume(');
+    }
   });
 });

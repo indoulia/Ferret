@@ -335,14 +335,21 @@ export interface ChangeResult {
  */
 export class ConfigStore {
   readonly path: string;
-  readonly #auditPath: string;
+  /**
+   * The journal this store appends to.
+   *
+   * Public because a caller that reads the journal back must read *this* store's
+   * one. EPIC-066 read the platform default instead and reported an empty journal
+   * beside a store with two entries in it.
+   */
+  readonly auditPath: string;
   readonly #env: NodeJS.ProcessEnv;
   readonly #lock: LockOptions;
 
   constructor(options: ConfigStoreOptions = {}) {
     this.#env = options.env ?? process.env;
     this.path = options.path ?? userConfigPath(this.#env);
-    this.#auditPath = options.auditPath ?? auditLogPath(this.#env);
+    this.auditPath = options.auditPath ?? auditLogPath(this.#env);
     this.#lock = options.lock ?? {};
   }
 
@@ -375,7 +382,7 @@ export class ConfigStore {
             buildAuditEntry({ action: AuditAction.CREATE, path: '(file)', hadPreviousValue: false }),
             ...entries,
           ];
-      const auditError = appendAudit(journal, this.#auditPath);
+      const auditError = appendAudit(journal, this.auditPath);
 
       return { config: next, path: this.path, entries: journal, auditError };
     } finally {
