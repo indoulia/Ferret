@@ -338,7 +338,13 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
                 more: `More than ${requested} entities match. This is a partial answer — raise \`limit\` (max ${MAX_LIMIT}) or narrow the query.`,
               }
             : { truncated: false }),
-          entities: described,
+          // `results`, the same key `ferret_search` uses. It was `entities`, and
+          // a client reading `response.results` from this tool got `undefined`,
+          // which flows into `(x ?? []).find(...)` and reads as a confident
+          // "not found" rather than as an error. Ferret's own dogfood script hit
+          // exactly that and reported an empty index that was in fact correct.
+          // One key for row-bearing responses. Issue #51.
+          results: described,
         };
       }),
   );

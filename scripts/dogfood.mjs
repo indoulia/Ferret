@@ -176,12 +176,12 @@ async function main() {
     // other repository then reads as a phantom. Found by asking Ferret which
     // repositories it held, which is the point of this script.
     const all = await call(client, 'ferret_find', { kind: 'repository', limit: 50 });
-    const repository = thisCheckout(all.entities ?? []);
+    const repository = thisCheckout(all.results ?? []);
     if (repository === undefined) {
       fail(
         'repository indexed',
-        `Ferret holds no entity for this checkout. It holds ${(all.entities ?? []).length}: ` +
-          `${(all.entities ?? []).map((e) => e.source?.id).slice(0, 3).join(', ')}. ` +
+        `Ferret holds no entity for this checkout. It holds ${(all.results ?? []).length}: ` +
+          `${(all.results ?? []).map((e) => e.source?.id).slice(0, 3).join(', ')}. ` +
           'Checking one of those would compare one repository against another.',
       );
       return;
@@ -192,7 +192,7 @@ async function main() {
     const tracked = trackedFiles();
     const indexed = new Map();
     const page = await call(client, 'ferret_find', { kind: 'file', scope: repository.id, limit: 500 });
-    for (const entity of page.entities ?? []) {
+    for (const entity of page.results ?? []) {
       indexed.set(entity.attributes?.path, entity);
     }
 
@@ -256,7 +256,7 @@ async function main() {
         attributes: { name: 'RepositoryIndexer' },
         limit: 10,
       });
-      const declared = (symbols.entities ?? []).filter(
+      const declared = (symbols.results ?? []).filter(
         (row) => row.attributes?.name === 'RepositoryIndexer',
       );
       if (declared.length === 0) {
