@@ -19,5 +19,6 @@ __pycache__/
 spikes/corpus/
 spikes/.state/
 
-# Local scratch, never committed
+# Local scratch, never committed. Holds the dogfood MCP server's config home,
+# which `.mcp.json` points at by default.
 .local/

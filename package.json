@@ -79,6 +79,7 @@
     "test:integration": "vitest run tests/integration",
     "baseline": "node scripts/baseline.mjs",
     "dogfood": "node scripts/dogfood.mjs",
+    "dogfood:db": "node scripts/dogfood-db.mjs",
     "verify": "npm run lint && npm run typecheck && npm run build && npm run test"
   },
   "dependencies": {
