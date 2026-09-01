@@ -300,7 +300,13 @@ describe('the dataset measures nothing — AC-12', () => {
     // the words "precision" and "recall" — the module quotes Governance §19 in
     // its own doc comment, so a text scan fails on the sentence explaining why
     // the rule exists. The surface is the contract; prose is not.
-    const module = (await import('../../src/evaluation/index.js')) as Record<string, unknown>;
+    //
+    // Aimed at the *dataset module*, not the `evaluation` barrel. It was the
+    // barrel until EPIC-098 added the retrieval-quality harness alongside, which
+    // is exactly what that Epic is for — so a barrel assertion would have made
+    // the intended next Epic a test failure. What AC-12 actually protects is
+    // that the dataset does not measure, and §8's dependency direction below.
+    const module = (await import('../../src/evaluation/dataset.js')) as Record<string, unknown>;
     const functions = Object.entries(module)
       .filter(([, value]) => typeof value === 'function')
       .map(([name]) => name)
@@ -311,6 +317,16 @@ describe('the dataset measures nothing — AC-12', () => {
       'loadGoldenDataset',
       'resolveIdentity',
     ]);
+  });
+
+  it('is never imported *by* the dataset, so the dependency runs one way', () => {
+    // The harness reads the dataset; the dataset must not read the harness. A
+    // cycle here would let a label be shaped by what scored well, which is the
+    // one thing a golden dataset cannot survive.
+    const source = readFileSync('src/evaluation/dataset.ts', 'utf8');
+
+    expect(source).not.toContain('quality.js');
+    expect(source).not.toContain('metrics.js');
   });
 
   it('reaches no retrieval or storage module, so it cannot run a query', () => {

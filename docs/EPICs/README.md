@@ -209,7 +209,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 - **EPIC-096 — Golden Evaluation Dataset** — P0 — IMPLEMENTED ([spec](EPIC-096-Golden-Evaluation-Dataset.md), [evidence](validation/EPIC-096-VALIDATION.md))
 - **EPIC-097 — Parser Quality Harness** — P0
-- **EPIC-098 — Retrieval Quality Harness** — P0
+- **EPIC-098 — Retrieval Quality Harness** — P0 — IMPLEMENTED ([spec](EPIC-098-Retrieval-Quality-Harness.md), [evidence](validation/EPIC-098-VALIDATION.md))
 - **EPIC-099 — Provider Conformance Harness** — P0
 - **EPIC-100 — Security Regression Suite** — P0
 - **EPIC-101 — Performance & Scale Benchmarks** — P1

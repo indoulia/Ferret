@@ -9,9 +9,11 @@ import {
   RepositoryIndexer,
   createNullLogger,
   loadGoldenDataset,
+  measureRetrievalQuality,
   resolveIdentity,
   type GoldenDataset,
 } from '../../../src/index.js';
+import { PUBLIC_ACCESS } from '../../../src/retrieval/index.js';
 import { CORPUS_SCOPE } from '../../../src/evaluation/index.js';
 import { GitSourceProvider } from '../../../src/git/index.js';
 import { createTestOperationContext, createTestProviderContext } from '../../../src/providers/sdk/testing.js';
@@ -21,6 +23,7 @@ import {
   EvidenceStore,
   MigrationPolicy,
   RelationshipStore,
+  RetrievalStore,
   migrate,
   type FerretDatabase,
 } from '../../../src/storage/index.js';
@@ -60,6 +63,7 @@ let workspace: { path: string; cleanup: () => Promise<void> };
 let provider: GitSourceProvider;
 let dataset: GoldenDataset;
 let repositoryId: string;
+let retrieval: RetrievalStore;
 
 /**
  * Builds the corpus into a real repository, one commit per history entry.
@@ -135,6 +139,7 @@ beforeAll(async () => {
     `SELECT id FROM ferret.entity WHERE kind = 'repository' LIMIT 1`,
   );
   repositoryId = (found.rows[0] as { id: string }).id;
+  retrieval = new RetrievalStore(handle);
 }, 120_000);
 
 afterAll(async () => {
@@ -211,6 +216,94 @@ describeGolden(`the golden dataset against a real index (${runnable ? 'real Post
       );
 
       expect((hit.rows[0] as { n: number }).n, absent.id).toBe(0);
+    }
+  });
+});
+
+/**
+ * The first measured retrieval figures Ferret has — EPIC-098.
+ *
+ * Shares this file's indexed corpus rather than building a second one: the
+ * measurement needs exactly what EPIC-096's fixture already produces, and
+ * indexing it twice would double the slowest part of the suite to keep two Epics
+ * in separate files.
+ *
+ * **The assertions are about the report's shape, never its figures.** A test that
+ * asserted `meanNdcg > 0.8` would make improving retrieval a build failure and
+ * would freeze whatever the first run happened to produce into a requirement
+ * nobody argued for. EPIC-096 §4 deferred the threshold decision here precisely
+ * so it could be argued from data; the data is printed below and the decision is
+ * recorded in the Epic's §16.
+ */
+describeGolden(`measuring retrieval against the golden dataset (${runnable ? 'real PostgreSQL' : SKIP_REASON})`, () => {
+  it('produces a well-formed report over every labelled query — AC-4, AC-6', async () => {
+    const report = await measureRetrievalQuality(
+      dataset,
+      retrieval,
+      { corpus: repositoryId },
+      { access: PUBLIC_ACCESS },
+    );
+
+    // Printed, not asserted. This is the number the Epic exists to produce, and
+    // it belongs in the validation record rather than in an expectation.
+    process.stderr.write(`
+[EPIC-098] ${JSON.stringify(report.aggregate)}
+`);
+    for (const one of report.queries) {
+      process.stderr.write(
+        `[EPIC-098] ${one.id.padEnd(22)} returned=${String(one.returned)} ` +
+          `p@k=${String(one.precisionAtK)} recall=${String(one.recall)} ` +
+          `rr=${String(one.reciprocalRank)} ndcg=${String(one.ndcg)} ` +
+          `fp=${String(one.falsePositives)}
+`,
+      );
+    }
+
+    expect(report.queries).toHaveLength(dataset.queries.length);
+    expect(report.aggregate.measured).toBeGreaterThan(0);
+    expect(report.dataset.checksum).toBe(dataset.checksum);
+
+    // The one threshold this Epic gates on, and the only one the data supports —
+    // EPIC-098 §16. A result returned for a term that appears nowhere in the
+    // corpus is a defect under any floor anyone would later choose, so it is safe
+    // to fail a build on. The four scored means are deliberately NOT asserted:
+    // 8 labels over 11 files is too small to turn into a requirement, and
+    // freezing today's 0.32 precision as a floor would enshrine a number nobody
+    // argued for.
+    expect(report.aggregate.falsePositives).toBe(0);
+  });
+
+  it('reports which entity kinds a text query actually reaches', async () => {
+    // Not a diagnostic left behind by accident. The first measurement scored
+    // `text-authentication` at zero, and the reason is a property of the product
+    // rather than of the label: a term that appears only in a commit message
+    // reaches the commit, never the file that commit touched. Recording the kinds
+    // here is what makes that claim checkable rather than asserted, and it is the
+    // measured form of the EPIC-087 gap the validation record cites.
+    const kinds = new Map<string, readonly string[]>();
+    for (const label of dataset.queries.filter((query) => query.shape === 'text')) {
+      const result = await retrieval.search({ text: label.query }, PUBLIC_ACCESS);
+      kinds.set(label.id, result.hits.map((hit) => hit.entity.kind));
+      process.stderr.write(
+        `[EPIC-098] ${label.id} "${label.query}" reached: ${result.hits.map((hit) => hit.entity.kind).join(', ') || '(nothing)'}\n`,
+      );
+    }
+
+    // A text query reaches something for at least one label, so the zero above
+    // is a ranking/coverage result and not a broken query path.
+    expect([...kinds.values()].some((found) => found.length > 0)).toBe(true);
+  });
+
+  it('never reports NaN — AC-11', async () => {
+    const report = await measureRetrievalQuality(dataset, retrieval, { corpus: repositoryId });
+
+    for (const value of Object.values(report.aggregate)) {
+      if (typeof value === 'number') expect(Number.isNaN(value)).toBe(false);
+    }
+    for (const one of report.queries) {
+      for (const value of [one.precisionAtK, one.recall, one.reciprocalRank, one.ndcg]) {
+        if (value !== undefined) expect(Number.isNaN(value)).toBe(false);
+      }
     }
   });
 });
