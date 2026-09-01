@@ -113,6 +113,7 @@ export {
   type ConflictGroup,
   type EvidenceInput,
   type EvidenceLocator,
+  type StatedEvidence,
 } from './evidence.js';
 
 export {

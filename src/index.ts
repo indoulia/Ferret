@@ -342,17 +342,27 @@ export {
   ContextPackBuilder,
   DEFAULT_BUDGET,
   ESTIMATE_MARGIN,
+  EVIDENCE_CANDIDATE_WINDOW,
+  EvidenceExclusion,
   MAX_BUDGET,
+  MAX_EVIDENCE_PER_FIELD,
+  MAX_EVIDENCE_PER_ITEM,
   PACK_FORMAT_VERSION,
   TokenBudget,
   TruncationReason,
   estimateJsonTokens,
   estimateTokens,
   renderPack,
+  selectEvidence,
   type ContextPack,
+  type EvidenceReader,
+  type EvidenceSelection,
+  type ExcludedEvidence,
   type PackItem,
   type PackOmission,
   type PackRequest,
+  type SelectedEvidence,
+  type SelectionOptions,
 } from './context/index.js';
 
 export {
@@ -548,6 +558,7 @@ export {
   type CanonicalEvidence,
   type ConflictGroup,
   type EvidenceInput,
+  type StatedEvidence,
   type EvidenceLocator,
 } from './domain/index.js';
 

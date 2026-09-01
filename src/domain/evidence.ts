@@ -397,6 +397,25 @@ export function integrityHashOf(evidence: Omit<CanonicalEvidence, 'integrityHash
   });
 }
 
+/**
+ * A record paired with Ferret's current interpretation of whether it holds.
+ *
+ * `CanonicalEvidence` deliberately carries no `state`: the observation is
+ * append-only and immutable, while state is Ferret's revisable reading of it, and
+ * the integrity hash excludes it so a superseded record still verifies. The pair
+ * lives here rather than in either the store or the consumer because both need
+ * it and neither owns it — evidence selection (EPIC-062) cannot prefer a current
+ * record over a replaced one without being handed both halves.
+ *
+ * `state` is optional: undefined means *unassessed* — a caller that did not read
+ * it — which is neither current nor replaced, and is ranked as neither.
+ */
+export interface StatedEvidence {
+  readonly evidence: CanonicalEvidence;
+  readonly state?: EvidenceState | undefined;
+  readonly supersededBy?: string | undefined;
+}
+
 export interface ConflictGroup {
   readonly subjectId: string;
   readonly field: string | undefined;
