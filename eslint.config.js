@@ -4,7 +4,19 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'spikes/**', 'coverage/**', '.tokensave/**', '.local/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'spikes/**',
+      'coverage/**',
+      '.tokensave/**',
+      '.local/**',
+      // The golden corpus is *data* — EPIC-096. Its `.ts` files are input to a
+      // measurement, not project source, and linting them would make the
+      // dataset answerable to this repository's style rules rather than to what
+      // it is meant to represent.
+      'datasets/golden/corpus/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

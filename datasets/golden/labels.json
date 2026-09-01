@@ -1,0 +1,139 @@
+{
+  "queries": [
+    {
+      "id": "exact-invoice-path",
+      "shape": "exact",
+      "query": "src/billing/invoice.ts",
+      "intent": "An exact path is a structurally known question and must be answered deterministically.",
+      "expected": [
+        {
+          "kind": "file",
+          "sourceSystem": "git",
+          "scope": "corpus",
+          "sourceId": "src/billing/invoice.ts",
+          "relevance": 3
+        }
+      ]
+    },
+    {
+      "id": "exact-login-path",
+      "shape": "exact",
+      "query": "src/auth/login.ts",
+      "intent": "The same, for a file in a different area.",
+      "expected": [
+        {
+          "kind": "file",
+          "sourceSystem": "git",
+          "scope": "corpus",
+          "sourceId": "src/auth/login.ts",
+          "relevance": 3
+        }
+      ]
+    },
+    {
+      "id": "text-invoice",
+      "shape": "text",
+      "query": "invoice",
+      "intent": "Two commits and one file concern invoices; the commit that creates one is the better answer.",
+      "expected": [
+        {
+          "kind": "file",
+          "sourceSystem": "git",
+          "scope": "corpus",
+          "sourceId": "src/billing/invoice.ts",
+          "relevance": 3
+        },
+        {
+          "kind": "file",
+          "sourceSystem": "git",
+          "scope": "corpus",
+          "sourceId": "src/billing/tax.ts",
+          "relevance": 1
+        }
+      ]
+    },
+    {
+      "id": "text-authentication",
+      "shape": "text",
+      "query": "authenticate",
+      "intent": "Only the login commit uses the word.",
+      "expected": [
+        {
+          "kind": "file",
+          "sourceSystem": "git",
+          "scope": "corpus",
+          "sourceId": "src/auth/login.ts",
+          "relevance": 3
+        }
+      ]
+    },
+    {
+      "id": "text-refund",
+      "shape": "text",
+      "query": "refund",
+      "intent": "A single unambiguous answer, so a wrong one is unmistakable.",
+      "expected": [
+        {
+          "kind": "file",
+          "sourceSystem": "git",
+          "scope": "corpus",
+          "sourceId": "src/billing/refund.ts",
+          "relevance": 3
+        }
+      ]
+    },
+    {
+      "id": "text-onboarding",
+      "shape": "text",
+      "query": "onboarding",
+      "intent": "Documentation is retrievable, not only code.",
+      "expected": [
+        {
+          "kind": "file",
+          "sourceSystem": "git",
+          "scope": "corpus",
+          "sourceId": "docs/onboarding.md",
+          "relevance": 3
+        }
+      ]
+    },
+    {
+      "id": "absent-kubernetes",
+      "shape": "text",
+      "query": "kubernetes",
+      "intent": "Nothing in the corpus mentions it. Returning anything is a false positive, and a precision figure that never sees one is not measuring precision.",
+      "expected": []
+    },
+    {
+      "id": "absent-graphql",
+      "shape": "text",
+      "query": "graphql",
+      "intent": "A second absence, so the first is not a fluke of one term.",
+      "expected": []
+    }
+  ],
+  "evidence": [
+    {
+      "id": "evidence-invoice-file",
+      "subject": {
+        "kind": "file",
+        "sourceSystem": "git",
+        "scope": "corpus",
+        "sourceId": "src/billing/invoice.ts"
+      },
+      "intent": "Ferret must hold at least one observation about a file it indexed, or nothing it says about that file is traceable.",
+      "atLeast": 1
+    },
+    {
+      "id": "evidence-login-file",
+      "subject": {
+        "kind": "file",
+        "sourceSystem": "git",
+        "scope": "corpus",
+        "sourceId": "src/auth/login.ts"
+      },
+      "intent": "The same, in another area of the corpus.",
+      "atLeast": 1
+    }
+  ]
+}

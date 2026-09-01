@@ -662,3 +662,19 @@ export {
   type StrategyOutcome,
   type TextStrategy,
 } from './retrieval/index.js';
+
+export {
+  CORPUS_SCOPE,
+  GOLDEN_DATASET_DIR,
+  QueryShape as GoldenQueryShape,
+  Relevance,
+  computeGoldenChecksum,
+  loadGoldenDataset,
+  resolveIdentity,
+  type GoldenDataset,
+  type GoldenEvidenceExpectation,
+  type GoldenExpected,
+  type GoldenHistory,
+  type GoldenIdentity,
+  type GoldenQuery,
+} from './evaluation/index.js';
