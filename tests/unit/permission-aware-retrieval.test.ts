@@ -90,10 +90,21 @@ describe('permission scopes', () => {
   it('does not treat one scope as another', () => {
     const held = access({ permittedScopes: ['jira:team-a'] });
     expect(permits(held, 'jira:team-b')).toBe(false);
-    // Not a prefix match, not a hierarchy. The token is opaque
-    // (`Checkpoints/EPIC-008.md:128`); turning it into a membership decision is
-    // EPIC-083, and guessing at one here would be inventing a policy.
-    expect(permits(held, 'jira:team-a:sub')).toBe(false);
+    // This assertion used to continue: `permits(held, 'jira:team-a:sub')` is
+    // false, "not a prefix match, not a hierarchy … turning it into a membership
+    // decision is EPIC-083, and guessing at one here would be inventing a
+    // policy." EPIC-083 has now made that decision, and it is the opposite: a
+    // grant covers its descendants. The change is recorded rather than quietly
+    // deleted, because this Epic was right to refuse to guess and the answer
+    // arriving later is not the same as this Epic having been wrong.
+    //
+    // What EPIC-058 was protecting against is still protected, and by a stricter
+    // rule than "not a hierarchy" — see the near-miss below and
+    // `tests/unit/permission-scope.test.ts`.
+    expect(permits(held, 'jira:team-a:sub')).toBe(true);
+    // A sibling that merely starts the same way is a different team, and a bare
+    // prefix test would have handed it over.
+    expect(permits(held, 'jira:team-ab')).toBe(false);
   });
 });
 

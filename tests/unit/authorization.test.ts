@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ANONYMOUS_PRINCIPAL,
+  LOCAL_OPERATOR_PRINCIPAL,
   PERMISSIONS,
   Permission,
   PrincipalClass,
@@ -9,6 +10,7 @@ import {
   assertPermitted,
   authorize,
   isPermission,
+  localOperatorFrom,
   principalFrom,
   type Principal,
 } from '../../src/authorization/index.js';
@@ -124,6 +126,72 @@ describe('the default principal', () => {
   it('holds no permission scope, so scoped content stays hidden', () => {
     expect(ANONYMOUS_PRINCIPAL.permittedScopes).toStrictEqual([]);
     expect(accessContextFor(ANONYMOUS_PRINCIPAL).permittedScopes).toStrictEqual([]);
+  });
+});
+
+describe('the principal a locally invoked command runs under — EPIC-083 AC-3, AC-4', () => {
+  const unconfigured = ferretConfigSchema.parse({});
+
+  it('may index, because refusing the operator at their own machine protects nobody', () => {
+    // The anonymous default is right for a client that arrived over a transport
+    // and wrong for the CLI: enforcing `INDEX` against `READ`-only would have
+    // stopped `ferret index` working out of the box. Same argument EPIC-068 used
+    // to grant the anonymous principal `READ`.
+    expect(authorize(localOperatorFrom(unconfigured), Permission.INDEX).allowed).toBe(true);
+    expect(authorize(localOperatorFrom(unconfigured), Permission.READ).allowed).toBe(true);
+  });
+
+  it('may not mutate, configure or administer providers', () => {
+    // Indexing a repository the operator owns is not a privileged act. Changing
+    // what Ferret believes is, and EPIC-069's confirmation is a separate control
+    // besides.
+    for (const permission of [
+      Permission.MUTATE,
+      Permission.CONFIG_WRITE,
+      Permission.PROVIDER_ADMIN,
+    ]) {
+      expect(authorize(LOCAL_OPERATOR_PRINCIPAL, permission).allowed, permission).toBe(false);
+    }
+  });
+
+  it('is an operator rather than an AI client, and says so in a denial', () => {
+    expect(LOCAL_OPERATOR_PRINCIPAL.class).toBe(PrincipalClass.OPERATOR);
+    expect(LOCAL_OPERATOR_PRINCIPAL.id).toBe('ferret.local-operator');
+  });
+
+  it('holds no permission scope, so scoped content stays hidden from the CLI too', () => {
+    expect(LOCAL_OPERATOR_PRINCIPAL.permittedScopes).toStrictEqual([]);
+  });
+
+  it('yields to configuration wherever configuration speaks — AC-4', () => {
+    // Not a second grant surface. The moment an `authorization` block exists,
+    // the CLI reads exactly what the MCP surface reads, through the same
+    // function — which is what makes `ferret index` deniable for the first time.
+    const locked = ferretConfigSchema.parse({ authorization: { permissions: ['read'] } });
+
+    expect(localOperatorFrom(locked)).toStrictEqual(principalFrom(locked));
+    expect(authorize(localOperatorFrom(locked), Permission.INDEX).allowed).toBe(false);
+  });
+
+  it('refuses with NOT_PERMITTED when configuration withholds the permission — AC-3', () => {
+    const locked = ferretConfigSchema.parse({ authorization: { permissions: ['read'] } });
+
+    expect(() =>
+      assertPermitted(localOperatorFrom(locked), Permission.INDEX, 'index'),
+    ).toThrowError(expect.objectContaining({ code: ErrorCode.NOT_PERMITTED }));
+  });
+
+  it('names the permission in the refusal and nothing about the repository — AC-9', () => {
+    const locked = ferretConfigSchema.parse({ authorization: { permissions: ['read'] } });
+    try {
+      assertPermitted(localOperatorFrom(locked), Permission.INDEX, 'index');
+      expect.unreachable('should have refused');
+    } catch (error) {
+      const serialized = JSON.stringify(error instanceof Error ? { ...error, message: error.message } : error);
+      expect(serialized).toContain(Permission.INDEX);
+      // A denial is a fact about the caller, never about the data behind it.
+      expect(serialized).not.toContain('/');
+    }
   });
 });
 

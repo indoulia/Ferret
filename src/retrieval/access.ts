@@ -157,7 +157,59 @@ export class WithheldTally {
  */
 export function permits(access: AccessContext, permissionScope: string | undefined): boolean {
   if (permissionScope === undefined) return true;
-  return access.permittedScopes.includes(permissionScope);
+  return access.permittedScopes.some((grant) => scopeGrants(grant, permissionScope));
+}
+
+/**
+ * The separator between the segments of a permission scope.
+ *
+ * Chosen because it is what the scopes already written use — `jira:restricted-team`
+ * in EPIC-058's own fixture — rather than introduced here.
+ */
+export const SCOPE_SEPARATOR = ':';
+
+/**
+ * Whether holding `grant` lets a caller see something scoped `scope` — EPIC-083.
+ *
+ * Until now a scope was an opaque token compared by string equality
+ * (`Checkpoints/EPIC-008.md:128`), and four records park deciding what one *means*
+ * here. This is that decision, and it is deliberately the smallest one that is
+ * useful: a scope is a `:`-separated path, and a grant covers itself and its
+ * descendants. `jira:proj-a` grants `jira:proj-a:issue-1`.
+ *
+ * **Segment-wise, never a substring.** `jira:proj-a` must not grant
+ * `jira:proj-ab`, which is what a bare `startsWith` would do — a silent
+ * over-grant, and the failure mode of every prefix-matching authorization bug
+ * there has ever been. The separator is required, so a descendant is a descendant
+ * and a sibling with a longer name is not.
+ *
+ * **Total, and denying on anything it does not understand.** No throw: this runs
+ * per row on the read path, and EPIC-058 already learned that failing loudly
+ * there turns a policy typo into an unusable index (`withholds` fails closed per
+ * row for the same reason). An empty grant is denied rather than treated as a
+ * wildcard — `'' + ':'` is a prefix of everything, and a blank line in a config
+ * file must not become root access.
+ *
+ * Pure: no clock, no I/O, same answer every time. The SQL predicates in
+ * `storage/` implement this same rule and are tested against it, because a
+ * membership decision that differs between the filter and the checker is two
+ * decisions.
+ */
+export function scopeDescendantPattern(grant: string): string {
+  // `%` and `_` are LIKE wildcards and `\` is its escape character, so a grant
+  // containing one would otherwise match more than it names — the same
+  // caller-controlled-pattern hazard `storage/retrieval.ts` already guards for
+  // abbreviated object ids. The value is still bound as a parameter; escaping is
+  // what makes the *pattern* mean what the grant says.
+  const escaped = grant.replace(/[\\%_]/g, (character) => `\\${character}`);
+  return `${escaped}${SCOPE_SEPARATOR}%`;
+}
+
+export function scopeGrants(grant: string, scope: string): boolean {
+  if (typeof grant !== 'string' || typeof scope !== 'string') return false;
+  if (grant.length === 0 || scope.length === 0) return false;
+  if (grant === scope) return true;
+  return scope.startsWith(grant + SCOPE_SEPARATOR);
 }
 
 /**
