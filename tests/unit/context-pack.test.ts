@@ -13,6 +13,7 @@ import {
   estimateTokens,
   renderPack,
   type CanonicalEntity,
+  type CanonicalEvidence,
   type Neighbour,
   type RetrievalPort,
   type SearchHit,
@@ -379,5 +380,103 @@ describe('rendering', () => {
     const rendered = renderPack(await builder.build({ question: 'nothing' }));
     expect(rendered).toContain('complete');
     expect(rendered).toContain('# Ferret context pack');
+  });
+});
+
+
+/**
+ * EPIC-048 AC-6 and AC-8 — what a pack item rests on.
+ *
+ * Before this, `#toItem` did `hit.evidence === undefined ? [] : [hit.evidence]`.
+ * A hit that matched the entity's own attributes — the common case, and the one
+ * `hit()` above builds — therefore produced an item with **no evidence at all**,
+ * which looks exactly like an item nothing supports. An answer built from it
+ * could not be traced anywhere.
+ */
+describe('evidence on a pack item', () => {
+  function evidenceRecord(id: string, subjectId: string, derivedFrom: readonly string[]): CanonicalEvidence {
+    return Object.freeze({
+      id,
+      subjectId,
+      field: 'attributes.message',
+      statement: 'observed this',
+      method: 'observed',
+      producer: 'ferret.source.git',
+      producerVersion: '0.1.0',
+      sourceSystem: 'git',
+      sourceId: undefined,
+      sourceUrl: undefined,
+      locator: { kind: 'path', detail: 'src/main.ts' },
+      sourceContentHash: undefined,
+      confidence: undefined,
+      completeness: 'complete',
+      authority: 80,
+      observedAt: '2026-01-01T00:00:00.000Z',
+      derivedFrom: Object.freeze([...derivedFrom]),
+      permissionScope: undefined,
+      integrityHash: `hash-${id}`,
+      redacted: false,
+    });
+  }
+
+  class FakeEvidence {
+    calls: string[] = [];
+    constructor(private readonly records: readonly CanonicalEvidence[]) {}
+
+    forSubject(subjectId: string): Promise<readonly CanonicalEvidence[]> {
+      this.calls.push(subjectId);
+      return Promise.resolve(this.records.filter((record) => record.subjectId === subjectId));
+    }
+
+    provenanceOf(): Promise<readonly CanonicalEvidence[]> {
+      return Promise.resolve([]);
+    }
+
+    verify(): Promise<CanonicalEvidence> {
+      return Promise.resolve(this.records[0] as CanonicalEvidence);
+    }
+
+    conflictsFor(): Promise<readonly never[]> {
+      return Promise.resolve([]);
+    }
+  }
+
+  it('carries nothing for an entity-matched hit when no reader is wired', async () => {
+    // The behaviour being corrected, asserted so the correction below is not
+    // mistaken for something that always worked.
+    const builder = new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]));
+    const pack = await builder.build({ question: 'why' });
+
+    expect(pack.items[0]?.evidence).toStrictEqual([]);
+  });
+
+  it('carries what the entity rests on, from the store — AC-6', async () => {
+    const store = new FakeEvidence([evidenceRecord('e1', 'c1', ['e0'])]);
+    const builder = new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]), store);
+
+    const pack = await builder.build({ question: 'why' });
+
+    expect(store.calls).toStrictEqual(['c1']);
+    expect(pack.items[0]?.evidence).toHaveLength(1);
+    expect(pack.items[0]?.evidence[0]?.id).toBe('e1');
+  });
+
+  it('carries a real lineage rather than the empty one a hit reports — AC-8', async () => {
+    // A search hit's `derivedFrom` is always `[]` — `storage/retrieval.ts` says
+    // why, and the reason is sound — but empty is indistinguishable from "nothing
+    // derived this". Reading from the store is what makes the chain true.
+    const store = new FakeEvidence([evidenceRecord('e1', 'c1', ['ancestor-1', 'ancestor-2'])]);
+    const builder = new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]), store);
+
+    const pack = await builder.build({ question: 'why' });
+
+    expect(pack.items[0]?.evidence[0]?.derivedFrom).toStrictEqual(['ancestor-1', 'ancestor-2']);
+  });
+
+  it('reports an empty list for a subject the store holds nothing for — AC-3', async () => {
+    const builder = new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x' })]), new FakeEvidence([]));
+    const pack = await builder.build({ question: 'why' });
+
+    expect(pack.items[0]?.evidence).toStrictEqual([]);
   });
 });

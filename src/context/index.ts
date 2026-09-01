@@ -25,3 +25,12 @@ export {
   type PackOmission,
   type PackRequest,
 } from './pack.js';
+
+// EPIC-048. The narrow evidence-read port answer traceability needs, and its
+// bounds. Exported from the context barrel rather than from `storage/` so a
+// caller can name what it needs without importing a database.
+export {
+  MAX_EVIDENCE_PER_ITEM,
+  MAX_LINEAGE_DEPTH,
+  type EvidenceReader,
+} from './evidence-port.js';
