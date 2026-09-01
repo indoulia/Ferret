@@ -194,3 +194,60 @@ both are decisions rather than findings:
 | Governance | §12, §11, §6, §7, §5 |
 | Dependencies validated | EPIC-003, 006, 008, 009, 044, 048, 052, 053, 055, 059, 060, 062, 064, 065 |
 | Known blockers | None |
+
+## 9. Defects found after this document, and fixed
+
+Appended rather than folded into §2. Nothing above is rewritten: those sections
+record what was demonstrated when this Epic was assessed, and a validation
+document that edited itself whenever a later defect appeared would stop being
+evidence of anything.
+
+### 9.1 `ferret_why` did not supply the access context
+
+**Found:** 2026-09-01, while assessing EPIC-083 readiness.
+**Issue:** [#85](https://github.com/indoulia/Ferret/issues/85).
+**Severity:** low as shipped; the control it defeats is the point of this Epic.
+
+`ferret_why` called `EvidenceStore.forSubject` without `permittedScopes`.
+`permissionFilter` treats an omitted scope set as **unrestricted** — no `WHERE`
+clause — so a permission-scoped statement withheld from `ferret_search` was
+returned in full by the traceability tool. Demonstrated against real PostgreSQL
+using this suite's own scoped fixture and an access context holding nothing, which
+is what the default principal holds.
+
+Exactly one call site. Every other caller-facing evidence read already supplied
+the context: `context/pack.ts`, `context/answer.ts`, and — in the same handler,
+ten lines later — `ferret_why`'s own lineage walk. The nested call was right and
+the outer one was wrong.
+
+**What this says about AC-12.** That criterion reads "evidence reads on the
+traceability and selection paths filter by the same context", and it was
+demonstrated by five store-level tests, all of which still pass. The reads do
+filter, correctly, whenever they are given a context. What was never asserted is
+that the *tool* supplies one. So the row is not false and the intent behind it was
+not met, and the distinction is the lesson: a criterion satisfied one layer below
+where it matters is a criterion with a gap above it.
+
+This Epic's own code predicted the shape, in `src/storage/evidence.ts`:
+
+> One definition, used by every read here, so the rule cannot differ between
+> `forSubject` and a lineage walk — which is exactly how a filter ends up applied
+> on the path everyone tests and missing on the path nobody does.
+
+That is what happened, almost to the letter, and it happened because the parameter
+is **optional with an unsafe default**. `undefined` meaning "unrestricted" is
+right for the indexer reading back what it wrote and wrong for every caller-facing
+read, and nothing in the type system distinguishes the two.
+
+**Fix.** `permittedScopes: access.permittedScopes` at the `ferret_why` call site.
+
+**Coverage.** `permission.test.ts` — *"does not return through ferret_why what it
+withholds from search"*, driving the real MCP protocol against a real
+`EvidenceStore` and a real database. It asserts the control case in the same test:
+search withholds the phrase, so a passing assertion cannot be the fixture failing
+to protect anything.
+
+**Follow-up.** This is the argument for EPIC-083 (Authorization Enforcement)
+having substance. Making the access context impossible to omit on a caller-facing
+read — rather than optional with an unsafe default — is that Epic's work, and this
+defect is the demonstration that it is needed.

@@ -557,6 +557,15 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             state: EvidenceState.CURRENT,
             ...(field === undefined ? {} : { field }),
             limit: TOOL_RESULT_LIMIT,
+            // EPIC-058, and it was missing here. `permissionFilter` treats
+            // `undefined` as unrestricted — correct for the indexer reading back
+            // what it wrote, wrong for a query on a caller's behalf — so this tool
+            // returned protected statements that `ferret_search` withheld. The
+            // lineage walk below supplied it and this call did not, which is the
+            // shape `storage/evidence.ts` warned about: "exactly how a filter ends
+            // up applied on the path everyone tests and missing on the path nobody
+            // does."
+            permittedScopes: access.permittedScopes,
           });
 
           // Absence is an answer, not an error — EPIC-065 AC-20. Said in words
