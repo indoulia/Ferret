@@ -482,6 +482,58 @@ withGit('the commit graph', () => {
     expect(stable(second)).toStrictEqual(stable(first));
   });
 
+  /**
+   * Every entity the history builder creates rests on an observation — #71.
+   *
+   * Measured on a full index of Ferret's own repository: 0 of 465 `file`
+   * entities and 0 of 1 `developer` entities carried any evidence. A file
+   * reached only through history — one that was deleted — never passes through
+   * the tree listing, so it is this builder that has to supply its evidence.
+   */
+  it('gives every file and actor evidence for its identity — #71', async () => {
+    const fixture = await history('identity-evidence');
+    await writeFile(join(fixture.path, 'kept.txt'), 'kept\n');
+    await git(fixture.path, ['add', '-A']);
+    await commit(fixture.path, 'add kept');
+    await git(fixture.path, ['rm', 'kept.txt']);
+    await commit(fixture.path, 'remove kept');
+
+    const { commits } = await provider.readHistory(fixture.discovered, { withChanges: true }, context);
+    const graph = provider.emitHistory(fixture.discovered, commits);
+    const subjects = new Set(graph.evidence.map((record) => record.subjectId));
+
+    // Including `kept.txt`, which no longer exists in the tree: a tombstone
+    // nothing supports cannot be explained.
+    const files = graph.entities.filter((entity) => entity.kind === 'file');
+    expect(files.length).toBeGreaterThan(0);
+    expect(files.filter((file) => !subjects.has(file.id))).toStrictEqual([]);
+    expect(files.map((file) => file.attributes['path'])).toContain('kept.txt');
+
+    const actors = graph.entities.filter(
+      (entity) => entity.kind === 'developer' || entity.kind === 'agent',
+    );
+    expect(actors.length).toBeGreaterThan(0);
+    expect(actors.filter((actor) => !subjects.has(actor.id))).toStrictEqual([]);
+  });
+
+  it('records an actor identity once, however many commits they made — #71', async () => {
+    // A repository with a thousand commits by one person needs one row, and the
+    // `observedAt` of any single commit would be arbitrary.
+    const fixture = await history('actor-once');
+    for (let i = 0; i < 3; i += 1) {
+      await writeFile(join(fixture.path, `f${String(i)}.txt`), `${String(i)}\n`);
+      await git(fixture.path, ['add', '-A']);
+      await commit(fixture.path, `commit ${String(i)}`);
+    }
+
+    const { commits } = await provider.readHistory(fixture.discovered, { withChanges: true }, context);
+    const graph = provider.emitHistory(fixture.discovered, commits);
+
+    const identities = graph.evidence.filter((record) => record.field === 'attributes.emails');
+    expect(identities.length).toBeGreaterThan(0);
+    expect(new Set(identities.map((record) => record.subjectId)).size).toBe(identities.length);
+  });
+
   it('reads a large history within budget', { timeout: 120_000 }, async () => {
     const fixture = await history('bulk');
     // Twenty-five, not a thousand: the cost here is *creating* the fixture —

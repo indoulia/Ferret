@@ -604,6 +604,9 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
      * happen. `.mailmap` is applied first where the caller supplied one,
      * because it is the project's own maintained answer.
      */
+    /** Actors already given identity evidence on this page — one row each. */
+    const actorEvidence = new Set<string>();
+
     const actorFor = (
       name: string,
       email: string,
@@ -642,7 +645,39 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
                 ...(identity.login === undefined ? {} : { usernames: [identity.login] }),
               },
             });
-      return { entity: add(entity), actorClass };
+      const actor = add(entity);
+
+      // DEFECT (#71), the third kind. A `developer` entity carried no evidence
+      // either: 0 of 1 on a full index of Ferret's own repository. The identity
+      // that answers "who has worked on this file" rested on nothing, and
+      // EPIC-036 resolution is built on exactly these addresses.
+      //
+      // Emitted once per actor rather than once per commit, guarded by the id —
+      // a repository with a thousand commits by one person needs one row, and
+      // the `observedAt` of any single commit would be arbitrary.
+      //
+      // `observed` only when Git's own answer is what was recorded. When a
+      // `.mailmap` rewrote the address, the stored value is the project's
+      // maintained answer applied to a different one Ferret read, so the method
+      // is `parsed` — claiming otherwise would say Ferret saw an address it did
+      // not.
+      if (!actorEvidence.has(actor.id)) {
+        actorEvidence.add(actor.id);
+        const rewritten = identity.comparable !== raw.comparable;
+        const emails = actor.attributes['emails'] ?? [identity.comparable];
+        evidence.push(
+          rewritten
+            ? emitter.parsed({
+                subjectId: actor.id,
+                field: 'attributes.emails',
+                statement: emails,
+                sourceId: raw.comparable,
+              })
+            : emitter.about(actor, 'attributes.emails', emails),
+        );
+      }
+
+      return { entity: actor, actorClass };
     };
 
     const fileFor = (path: string): CanonicalEntity =>
@@ -812,6 +847,25 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     // Emitted after the whole page, so each interval opens at the earliest
     // instant the page saw rather than the first one it happened to read.
     for (const { at, file } of firstSeen.values()) {
+      // DEFECT (#71), the other half. A file reached only through history — one
+      // that was deleted, or that lives outside the current tree — never passes
+      // through the tree listing, so without this it would still have no
+      // evidence. Those are precisely the files EPIC-032 tombstones, and a
+      // tombstone nothing supports cannot be explained.
+      //
+      // Emitted from `firstSeen` rather than per change, which is what makes it
+      // one row per file and gives it the *earliest* instant the path was
+      // observed rather than whichever commit happened to be last.
+      const path = file.attributes['path'];
+      if (typeof path === 'string') {
+        evidence.push(
+          emitter.about(file, 'attributes.path', path, {
+            observedAt: at.toISOString(),
+            locator: { kind: 'path', detail: path },
+          }),
+        );
+      }
+
       link(
         emitter.relationship(
           {
@@ -1025,6 +1079,25 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         ),
       );
 
+      // DEFECT (#71): a `file` entity carried no evidence at all.
+      //
+      // Measured on a full index of Ferret's own repository: 0 of 465 `file`
+      // entities had any evidence, while all 463 `file_version` entities did.
+      // So the one entity kind a developer names by hand — a path — was the one
+      // kind Ferret could not justify holding, and `ferret_why` on a file
+      // answered `held: false`. Governance §8 makes files first-class and §18
+      // requires an important answer to be traceable to evidence.
+      //
+      // The observation is the *path*, which is what the tree listing read and
+      // what the file's identity is. Not the extension: that is computed from
+      // the path, so a row for it would record Ferret's own arithmetic as though
+      // it were an observation. One row per file, deduplicated by content in the
+      // store, so re-indexing does not grow it.
+      evidence.push(
+        emitter.about(file, 'attributes.path', entry.path, {
+          locator: { kind: 'path', detail: entry.path },
+        }),
+      );
       evidence.push(
         emitter.observed({
           subjectId: version.id,

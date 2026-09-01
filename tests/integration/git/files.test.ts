@@ -433,6 +433,56 @@ withGit('emitting files and their versions', () => {
     expect(second.entities.map((e) => e.id)).toStrictEqual(first.entities.map((e) => e.id));
   });
 
+  /**
+   * Every file entity rests on an observation — issue #71.
+   *
+   * The defect measured on a full index of Ferret's own repository: **0 of 465**
+   * `file` entities carried any evidence, while all 463 `file_version` entities
+   * did. So the one entity kind a developer names by hand was the one kind
+   * Ferret could not justify holding, and `ferret_why` on a file answered
+   * `held: false`. Governance §8 makes files first-class; §18 requires an
+   * important answer to be traceable to evidence.
+   */
+  it('gives every file entity evidence for its own path — #71', async () => {
+    const fixture = await repository('file-evidence');
+    await writeFile(join(fixture.path, 'main.ts'), 'export const x = 1;\n');
+    await git(fixture.path, ['add', '-A']);
+    await git(fixture.path, ['commit', '-m', 'add main']);
+
+    const { entries } = await provider.listFiles(fixture.discovered, {}, context);
+    const graph = provider.emitFiles(fixture.discovered, entries);
+
+    const files = graph.entities.filter((entity) => entity.kind === 'file');
+    expect(files.length).toBeGreaterThan(0);
+
+    const subjects = new Set(graph.evidence.map((record) => record.subjectId));
+    // Every one, not most: the count is what makes this a regression test rather
+    // than a demonstration.
+    expect(files.filter((file) => !subjects.has(file.id))).toStrictEqual([]);
+
+    const target = files.find((file) => file.attributes['path'] === 'main.ts');
+    const record = graph.evidence.find(
+      (candidate) => candidate.subjectId === target?.id && candidate.field === 'attributes.path',
+    );
+    expect(record?.statement).toBe('main.ts');
+    // `observed`, because the tree listing read it. A parsed or inferred method
+    // here would claim Ferret worked the path out rather than saw it.
+    expect(record?.method).toBe('observed');
+    expect(record?.locator).toStrictEqual({ kind: 'path', detail: 'main.ts' });
+  });
+
+  it('records the path once per file, not once per observation', async () => {
+    // One row per file. The store deduplicates by content, so re-indexing does
+    // not grow the table — but emitting N copies per page would still spend the
+    // budget of a large repository on rows that collapse to one.
+    const fixture = await repository('file-evidence-once');
+    const { entries } = await provider.listFiles(fixture.discovered, {}, context);
+    const graph = provider.emitFiles(fixture.discovered, entries);
+
+    const paths = graph.evidence.filter((record) => record.field === 'attributes.path');
+    expect(new Set(paths.map((record) => record.subjectId)).size).toBe(paths.length);
+  });
+
   it('lists and emits a large tree within budget', async () => {
     const fixture = await repository('bulk-files');
     for (let i = 0; i < 400; i += 1) {
