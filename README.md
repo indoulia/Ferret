@@ -455,10 +455,13 @@ export FERRET_DATABASE_PASSWORD=ferret_dogfood        # bash
 $env:FERRET_DATABASE_PASSWORD = 'ferret_dogfood'      # PowerShell
 ```
 
-The password stays out of `.mcp.json` even though the container publishes on
-loopback and holds only an index of a public repository — what makes that safe is
-the binding, not the secret, and a committed credential teaches the wrong habit
-more reliably than it protects anything.
+The container is published on **127.0.0.1** explicitly, not on `0.0.0.0` — which
+is what the shorter `-p 55432:5432` does, and what makes the difference between a
+database only this machine can reach and one the network can. The password stays
+out of `.mcp.json` regardless: what makes this safe is the binding, not the
+secret, and a committed credential teaches the wrong habit more reliably than it
+protects anything. Put it in `.claude/settings.local.json`, which the repository
+ignores.
 
 **Re-index after every merge**, so Ferret answers about the code that is on
 `main` rather than the code that was:
