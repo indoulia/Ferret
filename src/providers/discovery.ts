@@ -25,7 +25,17 @@ export interface ProviderDiscoveryResult {
 
 export interface ProviderDiscoverySkip {
   readonly module: string;
-  readonly reason: 'unavailable' | 'invalid' | 'duplicate';
+  /**
+   * Why the candidate was skipped, as a value rather than as prose.
+   *
+   * `lifecycle` is not a property of the provider: the module loaded and the
+   * provider was well-formed, and the registry refused it because the caller
+   * discovered it after `initializeAll` sealed the registry. That is a
+   * composition-root mistake, and collapsing it into `invalid` left the only
+   * distinguishing signal in `detail` — human text, which EPIC-013 AC-10
+   * forbids a caller from having to parse.
+   */
+  readonly reason: 'unavailable' | 'invalid' | 'duplicate' | 'lifecycle';
   readonly detail: string;
 }
 
@@ -115,6 +125,12 @@ export async function discoverProviders(
         const failure = toFerretError(error);
         if (failure.code === ErrorCode.PROVIDER_DUPLICATE) {
           skipped.push({ module: specifier, reason: 'duplicate', detail: failure.message });
+          continue;
+        }
+        // A sealed registry is the caller's error, not the provider's, and it is
+        // the one skip here that skipping cannot recover from.
+        if (failure.code === ErrorCode.LIFECYCLE_INVALID_STATE) {
+          skipped.push({ module: specifier, reason: 'lifecycle', detail: failure.message });
           continue;
         }
         skipped.push({ module: specifier, reason: 'invalid', detail: failure.message });
