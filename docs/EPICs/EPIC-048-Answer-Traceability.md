@@ -1,6 +1,6 @@
 # EPIC-048 — Answer Traceability
 
-**Status: PROPOSED | Priority: P0 | Domain: Evidence & Provenance**
+**Status: IMPLEMENTED | Priority: P0 | Domain: Evidence & Provenance**
 
 > **Specification note.** The registry approved this Epic by name, domain and
 > priority; no specification was ever written. This document supplies one.

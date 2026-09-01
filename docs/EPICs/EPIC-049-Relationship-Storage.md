@@ -1,6 +1,6 @@
 # EPIC-049 — Relationship Storage
 
-**Status: PROPOSED | Priority: P0 | Domain: Knowledge Graph & Relationships**
+**Status: IMPLEMENTED | Priority: P0 | Domain: Knowledge Graph & Relationships**
 
 > **Specification note.** The registry approved this Epic by name, domain and
 > priority; no specification was ever written. This document supplies one.
