@@ -339,6 +339,47 @@ describe('capability boundary', () => {
   });
 });
 
+/**
+ * EPIC-068's module boundary, and why it is a module of its own.
+ *
+ * Found by the test below on its first run: authorization was written into
+ * `security/`, and `domain/memory-extraction.ts` imports that barrel — so
+ * reading configuration and producing a retrieval context dragged `picomatch`
+ * and `pino` into the graph EPIC-006 requires to depend on nothing but the error
+ * model and zod.
+ *
+ * The split the failure forced is also the honest one. `security/` holds
+ * *content* controls, which the model itself needs. This holds a *caller*
+ * control, which only the surfaces a caller reaches need.
+ */
+describe('authorization boundary', () => {
+  const authorization = importGraph('authorization/index.ts');
+
+  it('is not reachable from the canonical model', () => {
+    const model = importGraph('domain/index.ts');
+    expect([...model.files].filter((file) => file.startsWith('authorization/'))).toStrictEqual([]);
+  });
+
+  it('reads configuration and produces a retrieval context, which is why it is separate', () => {
+    expect(authorization.files).toContain('config/schema.ts');
+    expect(authorization.files).toContain('retrieval/access.ts');
+  });
+
+  it('does not reach storage, the CLI, a provider or the MCP surface', () => {
+    // A decision must be makeable without any of them. The MCP server depends on
+    // authorization; the reverse would make the model untestable without a
+    // transport and would invite a decision that varied by surface.
+    const forbidden = [...authorization.files].filter(
+      (file) =>
+        file.startsWith('storage/') ||
+        file.startsWith('cli/') ||
+        file.startsWith('providers/') ||
+        file.startsWith('mcp/'),
+    );
+    expect(forbidden).toStrictEqual([]);
+  });
+});
+
 describe('canonical model boundary', () => {
   const domain = importGraph('domain/index.ts');
 

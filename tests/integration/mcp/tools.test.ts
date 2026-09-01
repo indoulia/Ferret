@@ -123,7 +123,11 @@ class FakeRetrieval implements RetrievalPort {
     ]);
   }
 
+  /** Counts calls, so EPIC-068's "refused before the handler ran" is assertable. */
+  searches = 0;
+
   search(): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
+    this.searches += 1;
     if (this.failNext) {
       this.failNext = false;
       return Promise.reject(new Error('the database is on fire: password=hunter2'));
@@ -805,5 +809,99 @@ describe('answering a question that has one right answer', () => {
       arguments: { question: '' },
     })) as { isError?: boolean };
     expect(result.isError).toBe(true);
+  });
+});
+
+/**
+ * Authorization on the AI surface — EPIC-068, through the real protocol.
+ *
+ * The row this closes, from EPIC-059/065's own validation: "No authorization:
+ * every indexed thing is reachable by any client that can spawn the process …
+ * it is not an authorization model."
+ *
+ * What only the protocol can show is that the refusal *reaches a client as a
+ * refusal* — an error with a code it can branch on, not an empty result that
+ * reads as an absence.
+ */
+describe('refusing a caller that was not granted a permission', () => {
+  let deniedClient: Client;
+
+  beforeAll(async () => {
+    // A principal granted nothing at all. Every tool here declares READ, so
+    // every one must refuse.
+    const server = createMcpServer({
+      retrieval,
+      evidence,
+      principal: {
+        id: 'test.ungranted',
+        class: 'agent',
+        permissions: [],
+        permittedScopes: [],
+        scope: { include: [], exclude: [] },
+      },
+      logger: createNullLogger(),
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    deniedClient = new Client({ name: 'denied-client', version: '0.0.0' });
+    await Promise.all([deniedClient.connect(clientTransport), server.connect(serverTransport)]);
+  });
+
+  afterAll(async () => {
+    await deniedClient.close();
+  });
+
+  it('refuses every read tool with NOT_PERMITTED — AC-6, AC-9', async () => {
+    for (const [name, args] of [
+      ['ferret_search', { query: 'anything' }],
+      ['ferret_get_entity', { id: COMMIT.id }],
+      ['ferret_context_pack', { question: 'anything' }],
+      ['ferret_answer', { question: COMMIT.id }],
+      ['ferret_why', { id: COMMIT.id }],
+    ] as const) {
+      const result = (await deniedClient.callTool({ name, arguments: args })) as {
+        content: { text: string }[];
+        isError?: boolean;
+      };
+
+      expect(result.isError, name).toBe(true);
+      const body = JSON.parse(result.content[0]?.text ?? '{}') as { code?: string };
+      // An error with a code, not an empty result: an unpermitted operation did
+      // not happen, and reporting success for it would be a lie.
+      expect(body.code, name).toBe('E_NOT_PERMITTED');
+    }
+  });
+
+  it('names the missing permission and leaks no configuration — AC-5, AC-10', async () => {
+    const result = (await deniedClient.callTool({
+      name: 'ferret_search',
+      arguments: { query: 'anything' },
+    })) as { content: { text: string }[] };
+    const text = result.content[0]?.text ?? '';
+
+    expect(text).toContain('read');
+    expect(text).toMatch(/configuration/i);
+    // Through EPIC-009's serializer, which is the one place the no-credentials
+    // guarantee lives.
+    expect(text).not.toMatch(/password|secret|token|connectionString/i);
+  });
+
+  it('refuses before the handler runs — AC-9', async () => {
+    // The check is in `guard`, ahead of `run`. A check each handler performed
+    // would be a check a handler could forget, and this asserts the ordering
+    // rather than the intention: the fake retrieval records every search it is
+    // asked for, and it must record none.
+    const before = retrieval.searches;
+    await deniedClient.callTool({ name: 'ferret_search', arguments: { query: 'anything' } });
+    expect(retrieval.searches).toBe(before);
+  });
+
+  it('still serves a caller granted READ — the default', async () => {
+    // The assertion that makes the refusals mean something: a server that
+    // refused everyone would prove nothing about authorization.
+    const result = (await traceClient.callTool({
+      name: 'ferret_search',
+      arguments: { query: 'anything' },
+    })) as { isError?: boolean };
+    expect(result.isError).not.toBe(true);
   });
 });
