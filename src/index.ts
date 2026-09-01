@@ -678,3 +678,16 @@ export {
   type GoldenIdentity,
   type GoldenQuery,
 } from './evaluation/index.js';
+
+export {
+  DEFAULT_K,
+  measureRetrievalQuality,
+  ndcgAtK,
+  precisionAtK,
+  recallOf,
+  reciprocalRank,
+  type Grades,
+  type MeasurableRetrieval,
+  type QueryMeasurement,
+  type RetrievalQualityReport,
+} from './evaluation/index.js';
