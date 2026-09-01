@@ -700,28 +700,41 @@ function groupIntoClaims(
 }
 
 /**
- * Wraps a claim's statement, unconditionally when it is a string.
+ * Wraps a claim's statement, unless the statement is a bare token.
  *
- * **Not** `containAttributes`. That draws its line at *prose* — wrapping by key
- * name or by length — and the reasoning it gives is sound where it is applied: "a
- * client that compares `attributes.path` to a file it knows about would find
- * every comparison fail", and a symbol name is a token rather than a sentence.
+ * Two defects shaped this, in opposite directions.
  *
- * A claim statement is neither of those things. It is repository-authored content
- * in the most trusted position Ferret has — the *answer*, handed to a model as
- * Ferret's own finding — and nothing compares a claim statement to a known value,
- * so the matchability cost that justifies the attribute heuristic does not exist
- * here. Found by the integration test: a 110-character injection attempt was
- * marked and not wrapped, because it was short and `statement` is not a prose
- * attribute name.
+ * **First**, `containAttributes` was reused, and it draws its line by *key name
+ * or length*: `statement` is not a prose attribute name, so a 110-character
+ * injection attempt was marked and not wrapped. Found by an integration test
+ * written to the criterion rather than to the implementation.
  *
- * A non-string statement is classified rather than wrapped: wrapping would change
- * its type, and a number or a boolean cannot carry an instruction. A structured
- * statement has its top-level strings wrapped, which is what `containAttributes`
- * is for.
+ * **Then**, wrapping every string statement reintroduced the exact cost EPIC-084
+ * had reasoned its way out of: "a client that compares `attributes.path` to a
+ * file it knows about would find every comparison fail". A claim whose field is
+ * `attributes.path` and whose statement is `src/context/pack.ts` is precisely
+ * such a value, and the answer surface is where a client would compare it. Found
+ * by dogfooding, in the output of the fix for issue #71.
+ *
+ * So the line is EPIC-084's — prose is wrapped, a token is marked — drawn by
+ * *shape* rather than by key name, because that is the property `statement`
+ * actually has. **An injection needs sentences.** A path, an object id, a symbol
+ * name and a timestamp have no whitespace; a paragraph telling a model to ignore
+ * its instructions cannot avoid it. A single-token statement is still classified,
+ * so `IGNORE_ALL_PREVIOUS_INSTRUCTIONS` is reported in `contentSafety.marked` —
+ * the same exposure EPIC-084 already accepts for a path and a symbol name, and
+ * consistency with the validated Epic is worth more than a second policy here.
+ *
+ * A non-string statement is passed through: wrapping would change its type, and
+ * a number or a boolean cannot carry an instruction. A structured statement has
+ * its top-level strings handled by `containAttributes`, which is what it is for.
  */
 function containStatement(statement: unknown, safety: ContentSafety): unknown {
-  if (typeof statement === 'string') return safety.contain(statement);
+  if (typeof statement === 'string') {
+    if (/\s/.test(statement)) return safety.contain(statement);
+    safety.mark(statement);
+    return statement;
+  }
   if (statement === null || typeof statement !== 'object' || Array.isArray(statement)) {
     return statement;
   }

@@ -120,9 +120,11 @@ Named here so it is not quietly adopted:
 - `RetrievalPort` (EPIC-052) for the exact lookup and the subject.
 - `EvidenceReader.forSubjectWithState` (EPIC-048, EPIC-062).
 - `selectEvidence` (EPIC-062) — which records a claim cites, and why.
-- `ContentSafety`, `contain` and `containAttributes` (EPIC-084). A claim
-  statement is contained **unconditionally**, not through the attribute prose
-  heuristic — see the validation document §5.
+- `ContentSafety`, `contain`, `mark` and `containAttributes` (EPIC-084). A claim
+  statement is contained when it is **prose** and marked when it is a bare token,
+  which is EPIC-084's own line drawn by *shape* rather than by key name — a
+  statement has no key name to draw it by. Both halves were defects first; see the
+  validation document §5.
 - `TokenBudget` and `estimateJsonTokens` (EPIC-061).
 
 ## 6. Outputs
