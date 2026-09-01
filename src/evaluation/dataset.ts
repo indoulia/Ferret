@@ -171,21 +171,30 @@ function corpusFiles(corpusRoot: string): string[] {
  *
  * Paths are hashed alongside content, so moving a file changes the checksum —
  * a label names a path, and a dataset whose paths moved is a different dataset.
- * Content is hashed as raw bytes with the path normalised to POSIX separators,
- * so the same checkout on Windows and Linux produces the same digest.
+ *
+ * Separators are normalised to POSIX and **newlines to LF**, for the corpus as
+ * well as the label files. Git checks text out with CRLF on Windows by default
+ * and this repository has no `.gitattributes` pinning it, so a digest over raw
+ * bytes passes on Linux and fails on Windows — which is what CI caught, on the
+ * one file group that was left unnormalised. A checksum that is wrong on half
+ * the platforms is worse than no checksum.
+ *
+ * Every corpus file is authored text (AC-13), so there is nothing binary here to
+ * be damaged by reading it as UTF-8.
  */
+function normalised(path: string): string {
+  return readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+}
+
 function computeChecksum(root: string, files: readonly string[]): string {
   const hash = createHash('sha256');
   for (const file of files) {
     hash.update(file, 'utf8');
-    hash.update(readFileSync(join(root, 'corpus', ...file.split(posix.sep))));
+    hash.update(normalised(join(root, 'corpus', ...file.split(posix.sep))), 'utf8');
   }
   for (const name of ['history.json', 'labels.json']) {
     hash.update(name, 'utf8');
-    // Newlines normalised: git may check these out with CRLF, and a checksum
-    // that depended on the line ending would fail on one platform and pass on
-    // the other, which is worse than no checksum.
-    hash.update(readFileSync(join(root, name), 'utf8').replace(/\r\n/g, '\n'), 'utf8');
+    hash.update(normalised(join(root, name)), 'utf8');
   }
   return hash.digest('hex');
 }

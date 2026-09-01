@@ -1,4 +1,12 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -77,6 +85,31 @@ describe('the committed dataset', () => {
 
     expect(dataset.computedChecksum).toBe(dataset.checksum);
     expect(dataset.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('hashes to the same value on a CRLF checkout — AC-1', () => {
+    // CI caught this and the local run did not. The digest normalised newlines
+    // for the two label files and hashed the corpus as raw bytes, so the same
+    // commit produced one checksum on Linux and another on Windows, where git
+    // checks text out with CRLF by default and this repository pins nothing in
+    // `.gitattributes`.
+    //
+    // "Reproducible from a clean checkout" is AC-1, and a clean checkout on
+    // Windows is a clean checkout.
+    const crlf = corrupt((at) => {
+      const rewrite = (directory: string): void => {
+        for (const entry of readdirSync(directory)) {
+          const full = join(directory, entry);
+          if (statSync(full).isDirectory()) rewrite(full);
+          else writeFileSync(full, readFileSync(full, 'utf8').replace(/\n/g, '\r\n'), 'utf8');
+        }
+      };
+      rewrite(at);
+    });
+
+    expect(computeGoldenChecksum(crlf)).toBe(computeGoldenChecksum(GOLDEN_DATASET_DIR));
+    // And it still loads: the manifest survived the same conversion.
+    expect(() => loadGoldenDataset(crlf)).not.toThrow();
   });
 
   it('does not depend on the EPIC-005 spike corpus — AC-2', () => {

@@ -75,9 +75,15 @@ temporary directory produces different ids every run. Labels therefore name a
 specification's first draft; it was added to §8 when the integration test made it
 unavoidable.
 
-**The digest had to normalise newlines.** Hashing raw bytes would have made the
-checksum fail on a Windows checkout and pass on Linux — a checksum that is wrong
-half the time is worse than none.
+**The digest had to normalise newlines, and CI is what proved it.** The first
+implementation normalised the two label files and hashed the corpus as raw bytes.
+Every local run passed; Windows CI failed six assertions with "does not match its
+manifest checksum", because git checks text out with CRLF there and this
+repository pins nothing in `.gitattributes`. Reproduced locally by converting a
+copy of the dataset to CRLF — two different digests — then fixed and covered by
+*"hashes to the same value on a CRLF checkout"*, which fails on the old code.
+A checksum that is wrong on half the platforms is worse than no checksum, and
+"reproducible from a clean checkout" (AC-1) includes a Windows one.
 
 **The corpus is data, not source.** ESLint tried to type-check the corpus's `.ts`
 files against this repository's `tsconfig` and failed the build. `eslint.config.js`
@@ -100,7 +106,7 @@ not to this repository's style rules.
 
 ## Run
 
-`npm run verify` green: 102 files, 2247 passed, 3 skipped. Suites bearing on this
-Epic: `golden-dataset.test.ts` unit (17, no database) and
+`npm run verify` green: 102 files, 2248 passed, 3 skipped. Suites bearing on this
+Epic: `golden-dataset.test.ts` unit (18, no database) and
 `tests/integration/evaluation/golden-dataset.test.ts` (5, real PostgreSQL and
 real `git`).
