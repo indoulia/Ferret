@@ -66,6 +66,17 @@ interface Measurement {
 
 const measurements: Measurement[] = [];
 
+/**
+ * Whether this run is a deliberate baseline refresh.
+ *
+ * Opt-in rather than opt-out: an ordinary run must leave the repository exactly
+ * as it found it, and someone re-recording the baseline knows they are doing it.
+ * `FERRET_RECORD_BASELINE=1 npx vitest run tests/integration/storage/performance.test.ts`
+ */
+function recordingBaseline(): boolean {
+  return process.env['FERRET_RECORD_BASELINE'] === '1';
+}
+
 const round = (value: number): number => Math.round(value * 100) / 100;
 
 function summarize(label: string, durations: readonly number[], budgetMs: number): Measurement {
@@ -110,7 +121,13 @@ describeDb(`storage performance (${databaseAvailable() ? 'real PostgreSQL' : SKI
 
     // Recorded as evidence rather than asserted-and-forgotten. EPIC-101
     // (Performance & Scale Benchmarks) compares against this file.
-    if (measurements.length > 0) {
+    //
+    // Only when asked. The file is tracked, and `recordedAt` plus real timings
+    // make every run a genuine diff, so writing it unconditionally left the
+    // working tree dirty after `npm run verify` — which trains a reviewer to
+    // ignore an unexpected modification in the pre-commit diff check, and makes
+    // `git status` useless as a signal while investigating. Issue #62.
+    if (measurements.length > 0 && recordingBaseline()) {
       const target = join(ROOT, 'docs', 'Performance');
       mkdirSync(target, { recursive: true });
       const report = {
