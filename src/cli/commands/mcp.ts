@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 
 import { accessContextFor, principalFrom } from '../../authorization/index.js';
+import { ConfigStore, defaultConfigSources, resolveConfig } from '../../config/index.js';
 import type { LogLevel } from '../../logging/index.js';
 import { createMcpServer, serveStdio } from '../../mcp/index.js';
 import { Capability, assertSupported } from '../../providers/index.js';
@@ -70,6 +71,18 @@ export function mcpCommand(): Command {
         // here and nothing else changes.
         const server = createMcpServer({
           retrieval,
+          // EPIC-066. Governance §1 and §16: configuration is performed through
+          // the connected AI client, and must be accessible through the control
+          // plane. `resolve` re-reads on every call rather than closing over the
+          // configuration this process started with — a tool that changed
+          // configuration and then reported it as it was at startup would be
+          // lying about its own effect. `ConfigStore` is EPIC-003's writer and
+          // the only one: the lock, the validation, the atomic write and the
+          // journal are its, not a second copy.
+          configuration: {
+            resolve: () => resolveConfig(defaultConfigSources().sources),
+            store: new ConfigStore(),
+          },
           // EPIC-048. Without this the traceability tool is not registered at
           // all, and the 556 evidence rows a single index run records stay
           // unreachable from the only surface an AI client has.

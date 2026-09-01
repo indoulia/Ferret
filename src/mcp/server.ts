@@ -13,7 +13,12 @@ import {
   renderPack,
   type EvidenceReader,
 } from '../context/index.js';
-import { ANONYMOUS_PRINCIPAL, Permission, type Principal } from '../authorization/index.js';
+import {
+  ANONYMOUS_PRINCIPAL,
+  ConfirmationGate,
+  Permission,
+  type Principal,
+} from '../authorization/index.js';
 import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
 import {
   EvidenceState,
@@ -32,6 +37,7 @@ import {
 } from '../retrieval/index.js';
 import { VERSION } from '../version.js';
 
+import { registerConfigTools, type ConfigurationAccess } from './config-tools.js';
 import { createToolGuard } from './guards.js';
 
 /**
@@ -67,8 +73,9 @@ import { createToolGuard } from './guards.js';
  * disclosure about Ferret's state. `tests/unit/mcp-destructive-tools.test.ts`
  * reads this file and fails if a tool is registered without `readOnlyHint: true`
  * and without that guard, so the guarantee does not rest on the next author
- * remembering it. There is still no such tool here; EPIC-066 registers the
- * first.
+ * remembering it. The two that exist — `ferret_config_set` and
+ * `ferret_config_unset`, EPIC-066's — live in `./config-tools.ts`; nothing in
+ * this file writes.
  */
 
 export const MCP_SERVER_NAME = 'ferret';
@@ -123,6 +130,33 @@ export interface McpServerDependencies {
    * second from the first without letting them drift.
    */
   readonly principal?: Principal;
+  /**
+   * Whether a destructive operation was intended — EPIC-069.
+   *
+   * A third question beside `access` and `principal`: *may you do this at all*,
+   * *what of it may you see*, and *did you mean it*. All three are separate
+   * because a caller can pass one and fail another.
+   *
+   * Defaults to a gate with default bounds rather than to no gate, so a caller
+   * that composes a server without thinking about confirmation gets the
+   * confirming one. An `undefined` that meant "do not confirm" would be a way to
+   * switch off a Governance §12 control by omission.
+   *
+   * EPIC-069 deliberately did not add this field, on the grounds that a
+   * dependency a server accepts and hands to nothing is not a seam. EPIC-066
+   * brings the first tools that need it.
+   */
+  readonly confirmations?: ConfirmationGate;
+  /**
+   * Reading and writing Ferret's own configuration — EPIC-066.
+   *
+   * Optional, and when it is absent the configuration tools are **not
+   * registered** rather than registered and failing. Same reasoning as
+   * `evidence`: a tool that is honestly not there is better than one a client
+   * cannot distinguish from a broken one. A consumer embedding Ferret with only
+   * a `RetrievalPort` still gets a working knowledge server.
+   */
+  readonly configuration?: ConfigurationAccess;
   readonly logger: Logger;
 }
 
@@ -136,6 +170,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
   const { retrieval, planner, evidence, logger } = dependencies;
   const access = dependencies.access ?? PUBLIC_ACCESS;
   const principal = dependencies.principal ?? ANONYMOUS_PRINCIPAL;
+  const confirmations = dependencies.confirmations ?? new ConfirmationGate();
   const packs = new ContextPackBuilder(retrieval, access, evidence);
 
   const server = new McpServer(
@@ -149,10 +184,20 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
   );
 
   // EPIC-068. The permission is checked here rather than in each handler; see
-  // `createToolGuard`. A destructive tool would use `createDestructiveToolGuard`
-  // from the same module and there is none yet — EPIC-069 built that path and
-  // EPIC-066 registers the first tool to walk it.
+  // `createToolGuard`. The two destructive tools live in `./config-tools.ts` and
+  // take `createDestructiveToolGuard` from the same module.
   const guard = createToolGuard({ principal, logger });
+
+  // EPIC-066. Registered only when a caller supplied the access, so a knowledge-
+  // only server does not advertise tools it cannot serve.
+  if (dependencies.configuration !== undefined) {
+    registerConfigTools(server, {
+      principal,
+      confirmations,
+      configuration: dependencies.configuration,
+      logger,
+    });
+  }
 
   server.registerTool(
     'ferret_search',

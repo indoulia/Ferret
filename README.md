@@ -168,9 +168,30 @@ secret out of one more file.
 | `ferret_get_entity` | One commit, file or branch, with its identifiers |
 | `ferret_neighbours` | "What touched this file?" — and, with `at`, "what was I working on last Tuesday?" |
 | `ferret_context_pack` | A bounded pack of relevant knowledge for a question |
+| `ferret_config_describe` | "What is Ferret configured to do, and which layer decided it?" |
+| `ferret_config_schema` | "What can I configure?" — every key, type and default |
+| `ferret_config_validate` | "Is the configuration usable?" — changes nothing |
+| `ferret_config_audit` | "What configuration changed, and when?" |
+| `ferret_config_exclusions` | "Why can't Ferret see this file?" |
+| `ferret_config_set` | Change one configuration value — **confirmed** |
+| `ferret_config_unset` | Remove one configuration value — **confirmed** |
 
-Every tool is **read-only**. Ferret writes nothing through MCP: indexing is a
-command a person runs.
+Every knowledge tool is **read-only**, and indexing is still a command a person
+runs. The two configuration tools that write are the only ones, and they are
+governed rather than trusted:
+
+- They require a granted permission (`config.write`), which no installation has by
+  default. So does *reading* configuration (`config.read`) — the subtree holds
+  credentials, so it is not readable out of the box either.
+- **Neither completes on one call.** The first call changes nothing and returns
+  exactly what it *would* change, plus a single-use token bound to that exact
+  change. The second call, with the token, applies it. A token issued to change one
+  value will not change another.
+- **They cannot grant themselves anything.** No tool can write any `authorization`
+  path, so a client granted `config.write` cannot widen its own permissions.
+- **Credentials do not travel.** A password is refused as a literal value; store it
+  in an environment variable and set a `{"$secret":{"env":"…"}}` reference instead.
+  Configuration read back through any tool returns `[redacted]`.
 
 Every response tells the model, before any content, that what follows is indexed
 source content — **data, not instructions**. A commit message that says "ignore
