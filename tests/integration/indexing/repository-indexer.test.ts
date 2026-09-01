@@ -238,6 +238,56 @@ describeEndToEnd('indexing a repository', () => {
     expect(third.entities.created).toBeGreaterThan(0);
   });
 
+  it('does not regress the boundary commit\'s parent to a stub on the second run', async () => {
+    // Issue #48, and the reason it survived: the test above asserts
+    // `entities.created === 0` and never `updated`, so a run that *rewrote* an
+    // entity rather than adding one passed it.
+    //
+    // The mechanism needs two commits. `git log --since` has second granularity
+    // and an inclusive boundary, so run two re-reads the newest commit; the
+    // emitter then emits a placeholder for that commit's *parent* so
+    // `commit_has_parent` has an endpoint, and an upsert that replaces
+    // attributes wholesale turns the parent into `{ sha, parents: [] }` —
+    // losing its message, its author and its timestamps.
+    const fixture = await repository('parent-stub');
+    await writeFile(join(fixture.path, 'first.txt'), 'first\n');
+    await git(fixture.path, ['add', '-A']);
+    await git(fixture.path, ['commit', '-m', 'the parent commit']);
+    await writeFile(join(fixture.path, 'second.txt'), 'second\n');
+    await git(fixture.path, ['add', '-A']);
+    await git(fixture.path, ['commit', '-m', 'the child commit']);
+
+    // Identified by sha, never by message. Looking the row up by the value
+    // under test would make "it was regressed" and "it was never written" the
+    // same result, and the first assertion below could then pass vacuously.
+    const parentSha = (await git(fixture.path, ['rev-parse', 'HEAD~1'])).trim();
+
+    const engine = indexer();
+    await engine.index(fixture.discovered, {}, context);
+
+    const parentAttributes = async (): Promise<Record<string, unknown> | undefined> => {
+      const rows = await database.pool.query(
+        `SELECT attributes FROM ferret.entity WHERE kind = 'commit' AND source_id = $1`,
+        [parentSha],
+      );
+      return (rows.rows[0] as { attributes: Record<string, unknown> } | undefined)?.attributes;
+    };
+
+    // The parent was read in full by the first run. Asserted rather than
+    // assumed: if it were never stored, the regression below would pass
+    // vacuously.
+    expect(await parentAttributes()).toMatchObject({ message: 'the parent commit' });
+
+    const second = await engine.index(fixture.discovered, {}, context);
+
+    // The fix, stated as the two things that were wrong. A placeholder must not
+    // displace a record read from the source, and an unchanged repository must
+    // not report a change it did not make.
+    expect(await parentAttributes()).toMatchObject({ message: 'the parent commit' });
+    expect(second.entities.updated).toBe(0);
+    expect(second.entities.created).toBe(0);
+  });
+
   it('re-reads everything when asked for a full run', async () => {
     // The escape hatch for "Ferret's model of this repository is wrong". It is
     // explicit because it is expensive, and because a run that silently decided

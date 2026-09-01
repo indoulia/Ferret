@@ -218,6 +218,16 @@ interface Graph {
   readonly entities: readonly CanonicalEntity[];
   readonly relationships: readonly CanonicalRelationship[];
   readonly evidence: readonly CanonicalEvidence[];
+  /**
+   * Entities present only so an edge has an endpoint, by id.
+   *
+   * Optional, so a source that never emits a placeholder is unaffected and
+   * every existing implementation still satisfies this interface. When a source
+   * does report them, the writer inserts them if they are absent and leaves
+   * them alone if they are not — a gap-filler must never overwrite a record
+   * some earlier run read in full.
+   */
+  readonly placeholderEntityIds?: readonly string[];
 }
 
 export interface IndexerDependencies {
@@ -333,8 +343,13 @@ export class RepositoryIndexer {
     const write = async (graph: Graph): Promise<void> => {
       // Entities, then relationships, then evidence. The database has foreign
       // keys; the reverse order fails on a repository never indexed before.
+      const placeholders = new Set(graph.placeholderEntityIds ?? []);
       for (const entity of graph.entities) {
-        const result = await this.#entities.upsert(toInput(entity), observedAt);
+        const result = await this.#entities.upsert(
+          toInput(entity),
+          observedAt,
+          placeholders.has(entity.id) ? { ifAbsent: true } : {},
+        );
         entities.record(result.outcome);
       }
       for (const edge of graph.relationships) {
@@ -761,7 +776,7 @@ function withoutRewrittenFiles(graph: Graph, written: ReadonlySet<string>): Grap
   if (written.size === 0) return graph;
   const entities = graph.entities.filter((entity) => !(entity.kind === 'file' && written.has(entity.id)));
   if (entities.length === graph.entities.length) return graph;
-  return { entities, relationships: graph.relationships, evidence: graph.evidence };
+  return { ...graph, entities };
 }
 
 function counter(): { record(outcome: string): void; readonly counts: WriteCounts } {

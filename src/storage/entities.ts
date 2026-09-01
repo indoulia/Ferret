@@ -113,8 +113,24 @@ export class EntityStore {
    * Validation happens before anything touches the database, so an invalid
    * entity never becomes a partially-written row.
    */
-  async upsert(input: EntityInput, now: Date = new Date()): Promise<UpsertResult> {
+  async upsert(
+    input: EntityInput,
+    now: Date = new Date(),
+    options: { readonly ifAbsent?: boolean } = {},
+  ): Promise<UpsertResult> {
     const canonical = createEntity(input);
+
+    // A placeholder — emitted only so an edge has an endpoint — must not
+    // replace a record an earlier run read in full. The emitter knows which of
+    // its entities are gap-fillers and cannot see the store; the store can see
+    // the row and cannot tell a gap-filler from an observation. Neither side
+    // can decide this alone, so the caller carries the fact across. Issue #48.
+    if (options.ifAbsent === true) {
+      const stored = await this.get(canonical.id);
+      if (stored !== undefined) {
+        return { entity: stored, outcome: UpsertOutcome.UNCHANGED };
+      }
+    }
 
     // Retried around the whole transaction — EPIC-079. Concurrent writers of one
     // entity contend for one row, and PostgreSQL resolves that by rolling one of

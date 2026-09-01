@@ -553,6 +553,16 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     entities: readonly CanonicalEntity[];
     relationships: readonly CanonicalRelationship[];
     evidence: readonly CanonicalEvidence[];
+    /**
+     * Entities emitted only so an edge has an endpoint — see `add` below.
+     *
+     * Reported rather than kept private because the invariant the placeholder
+     * set enforces ("never displaces a record read from the source") is only
+     * enforceable inside one batch. Across runs the store holds the richer
+     * record and the emitter cannot see it, so the emitter states which of its
+     * entities are placeholders and the writer declines to regress them.
+     */
+    placeholderEntityIds: readonly string[];
   } {
     const emitter = this.#requireEmitter();
     const observedAt = options.observedAt ?? new Date();
@@ -820,6 +830,10 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       entities: [...entities.values()],
       relationships: [...relationships.values()],
       evidence,
+      // Whatever is still marked at the end of the loop was never reached as a
+      // real commit, so it is a genuine gap-filler rather than one this batch
+      // went on to describe properly.
+      placeholderEntityIds: [...placeholders],
     };
   }
 

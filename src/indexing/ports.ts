@@ -38,7 +38,18 @@ export interface EntityWriteResult {
 }
 
 export interface EntityWriter {
-  upsert(input: EntityInput, now?: Date): Promise<EntityWriteResult>;
+  upsert(input: EntityInput, now?: Date, options?: EntityWriteOptions): Promise<EntityWriteResult>;
+}
+
+export interface EntityWriteOptions {
+  /**
+   * Write only when the entity is absent; leave a stored one exactly as it is.
+   *
+   * For an entity emitted purely so a relationship has an endpoint. Without it
+   * a gap-filler carrying one attribute overwrites the record an earlier run
+   * read in full, and the commit loses its message and its author.
+   */
+  readonly ifAbsent?: boolean;
 }
 
 export interface RelationshipWriteResult {
