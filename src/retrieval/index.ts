@@ -17,8 +17,25 @@ export {
   type RetrievalPort,
   type SearchHit,
   type SearchQuery,
+  type SearchResult,
   type TraversalQuery,
 } from './query.js';
+
+// EPIC-058. Authorization is a parameter on every read, not a convention.
+export {
+  NOTHING_WITHHELD,
+  PUBLIC_ACCESS,
+  WithheldTally,
+  WithholdReason,
+  assertUsableAccess,
+  includedRepositories,
+  permits,
+  restricts,
+  visibleEntities,
+  withholds,
+  type AccessContext,
+  type WithheldReport,
+} from './access.js';
 
 export { QueryShape, classify, type Classification } from './classify.js';
 export { RRF_K, fuse, type FusedHit, type RankedList } from './fuse.js';

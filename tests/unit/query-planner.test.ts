@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  NOTHING_WITHHELD,
+  PUBLIC_ACCESS,
   QueryPlanner,
   QueryShape,
   RRF_K,
@@ -147,8 +149,38 @@ describe('planning a query', () => {
   const exactStore = (hits: readonly SearchHit[] = []) => ({
     byIdentifier: () => Promise.resolve(hits),
   });
-  const textStore = (hits: readonly SearchHit[] = []) => ({
-    search: () => Promise.resolve(hits),
+  // EPIC-058: a text strategy reports what it withheld as well as what it found,
+  // so the count survives the planner rather than stopping at the store.
+  const textStore = (hits: readonly SearchHit[] = [], withheld = NOTHING_WITHHELD) => ({
+    search: () => Promise.resolve({ hits, withheld }),
+  });
+
+  it('carries the withheld count out of the text strategy — EPIC-058', async () => {
+    // Found by dogfooding, not by design. The count was reported on the
+    // unplanned search path and dropped on the planned one — and the planner is
+    // what the CLI wires, so in production it reached nobody.
+    const planner = new QueryPlanner({
+      exact: exactStore(),
+      text: textStore([hit('a')], { total: 2, byReason: { permission: 2 } }),
+    });
+
+    const { withheld } = await planner.search({ question: 'anything at all' }, PUBLIC_ACCESS);
+
+    expect(withheld.total).toBe(2);
+    expect(withheld.byReason).toStrictEqual({ permission: 2 });
+  });
+
+  it('reports nothing withheld from an exact answer, because the ranked branches never ran', async () => {
+    const planner = new QueryPlanner({
+      exact: exactStore([hit('the-commit')]),
+      text: textStore([], { total: 9, byReason: { permission: 9 } }),
+    });
+
+    const { withheld } = await planner.search({ question: 'b9559ab' }, PUBLIC_ACCESS);
+
+    // An exact match is not blended with ranked results, so a count from a
+    // branch that did not contribute would describe a different answer.
+    expect(withheld.total).toBe(0);
   });
 
   it('answers an exact question exactly, without blending in ranked results', async () => {
@@ -159,7 +191,7 @@ describe('planning a query', () => {
       text: textStore([hit('a'), hit('b')]),
     });
 
-    const { plan, hits } = await planner.search({ question: 'b9559ab' });
+    const { plan, hits } = await planner.search({ question: 'b9559ab' }, PUBLIC_ACCESS);
 
     expect(plan.shape).toBe(QueryShape.OBJECT_ID);
     expect(hits).toHaveLength(1);
@@ -176,7 +208,7 @@ describe('planning a query', () => {
       text: textStore([hit('a')]),
     });
 
-    const { plan, hits } = await planner.search({ question: 'src/gone.ts' });
+    const { plan, hits } = await planner.search({ question: 'src/gone.ts' }, PUBLIC_ACCESS);
 
     expect(hits).toHaveLength(1);
     const exact = plan.strategies.find((s) => s.strategy === 'exact');
@@ -187,7 +219,7 @@ describe('planning a query', () => {
     // Two rows for one strategy read as two attempts, and a reader counting
     // them would be counting something that never happened.
     const planner = new QueryPlanner({ exact: exactStore([]), text: textStore([]) });
-    const { plan } = await planner.search({ question: 'src/gone.ts' });
+    const { plan } = await planner.search({ question: 'src/gone.ts' }, PUBLIC_ACCESS);
 
     const names = plan.strategies.map((s) => s.strategy);
     expect(new Set(names).size).toBe(names.length);
@@ -198,7 +230,7 @@ describe('planning a query', () => {
     // matched", which is a finding. Ferret ships no embedding provider, and
     // must not let that read as a finding.
     const planner = new QueryPlanner({ exact: exactStore(), text: textStore([hit('a')]) });
-    const { plan } = await planner.search({ question: 'where did we discuss timeouts' });
+    const { plan } = await planner.search({ question: 'where did we discuss timeouts' }, PUBLIC_ACCESS);
 
     const semantic = plan.strategies.find((s) => s.strategy === 'semantic');
     expect(semantic?.ran).toBe(false);
@@ -218,7 +250,7 @@ describe('planning a query', () => {
       },
     });
 
-    const { plan, hits } = await planner.search({ question: 'why is this slow' });
+    const { plan, hits } = await planner.search({ question: 'why is this slow' }, PUBLIC_ACCESS);
 
     expect(hits).toHaveLength(1);
     const semantic = plan.strategies.find((s) => s.strategy === 'semantic');
@@ -236,7 +268,7 @@ describe('planning a query', () => {
       },
     });
 
-    const { plan } = await planner.search({ question: 'why is this slow' });
+    const { plan } = await planner.search({ question: 'why is this slow' }, PUBLIC_ACCESS);
     expect(plan.strategies.find((s) => s.strategy === 'semantic')?.skipped).toBeDefined();
   });
 
@@ -250,7 +282,7 @@ describe('planning a query', () => {
       },
     });
 
-    const { plan, hits } = await planner.search({ question: 'why is this slow' });
+    const { plan, hits } = await planner.search({ question: 'why is this slow' }, PUBLIC_ACCESS);
 
     expect(plan.partial).toBe(false);
     // `a` was found by both, so it leads.
@@ -271,7 +303,7 @@ describe('planning a query', () => {
     const { plan, hits } = await planner.search({
       question: 'why is this slow',
       deterministicOnly: true,
-    });
+    }, PUBLIC_ACCESS);
 
     expect(hits.map((h) => h.entity.id)).toStrictEqual(['a']);
     expect(plan.strategies.find((s) => s.strategy === 'semantic')?.skipped).toContain(
@@ -291,14 +323,14 @@ describe('planning a query', () => {
         search: (q: { relax?: boolean }) => {
           if (q.relax === true) {
             relaxedCall = true;
-            return Promise.resolve([hit('found-loosely')]);
+            return Promise.resolve({ hits: [hit('found-loosely')], withheld: NOTHING_WITHHELD });
           }
-          return Promise.resolve([]);
+          return Promise.resolve({ hits: [], withheld: NOTHING_WITHHELD });
         },
       },
     });
 
-    const { plan, hits } = await planner.search({ question: 'how are deleted files tombstoned' });
+    const { plan, hits } = await planner.search({ question: 'how are deleted files tombstoned' }, PUBLIC_ACCESS);
 
     expect(relaxedCall).toBe(true);
     expect(hits.map((h) => h.entity.id)).toStrictEqual(['found-loosely']);
@@ -314,12 +346,12 @@ describe('planning a query', () => {
       text: {
         search: (q: { relax?: boolean }) => {
           if (q.relax === true) relaxedCall = true;
-          return Promise.resolve([hit('strict')]);
+          return Promise.resolve({ hits: [hit('strict')], withheld: NOTHING_WITHHELD });
         },
       },
     });
 
-    await planner.search({ question: 'how are deleted files tombstoned' });
+    await planner.search({ question: 'how are deleted files tombstoned' }, PUBLIC_ACCESS);
     expect(relaxedCall).toBe(false);
   });
 
@@ -330,12 +362,12 @@ describe('planning a query', () => {
       text: {
         search: (q: { relax?: boolean }) => {
           if (q.relax === true) relaxedCall = true;
-          return Promise.resolve([]);
+          return Promise.resolve({ hits: [], withheld: NOTHING_WITHHELD });
         },
       },
     });
 
-    await planner.search({ question: 'b9559ab' });
+    await planner.search({ question: 'b9559ab' }, PUBLIC_ACCESS);
     expect(relaxedCall).toBe(false);
   });
 });

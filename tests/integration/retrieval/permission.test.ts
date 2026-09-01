@@ -1,0 +1,306 @@
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import {
+  EntityKind,
+  EvidenceMethod,
+  PUBLIC_ACCESS,
+  ScopeKind,
+  WithholdReason,
+  createNullLogger,
+  type AccessContext,
+} from '../../../src/index.js';
+import {
+  EntityStore,
+  EvidenceStore,
+  RetrievalStore,
+  migrate,
+  type FerretDatabase,
+} from '../../../src/storage/index.js';
+import {
+  SKIP_REASON,
+  createTestDatabase,
+  databaseAvailable,
+  type TestDatabase,
+} from '../../support/postgres.js';
+
+/**
+ * Permission-aware retrieval against a real PostgreSQL — EPIC-058.
+ *
+ * The evaluation rules are pure and are proved without a database in
+ * `tests/unit/permission-aware-retrieval.test.ts`. What only a real server can
+ * demonstrate is the property Governance §12 actually asks for — that
+ * authorization is evaluated **before** protected information enters a result.
+ *
+ * That is not a filtering assertion, it is a *fetching* one, and a mock cannot
+ * make it: the test that matters here searches for a term appearing **only**
+ * inside a protected evidence statement and asserts the response contains
+ * neither the hit nor the statement. Before this Epic that query returned the
+ * statement verbatim, because the evidence branch of the search selected
+ * `permission_scope` onto the hit and never consulted it.
+ */
+
+const describeDb = databaseAvailable() ? describe : describe.skip;
+const logger = createNullLogger();
+
+/** A phrase that exists nowhere but inside the protected observation. */
+const SECRET_PHRASE = 'zarquon embargo disclosure';
+const OPEN_PHRASE = 'ordinary public observation';
+const SCOPE = 'jira:restricted-team';
+
+let db: TestDatabase;
+let handle: FerretDatabase;
+let entities: EntityStore;
+let evidence: EvidenceStore;
+let retrieval: RetrievalStore;
+let subject: string;
+let openSubject: string;
+let repositoryA: string;
+let repositoryB: string;
+let fileInB: string;
+
+const holding = (...scopes: readonly string[]): AccessContext => ({
+  ...PUBLIC_ACCESS,
+  permittedScopes: scopes,
+});
+
+describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REASON})`, () => {
+  beforeAll(async () => {
+    db = await createTestDatabase('permission');
+    await migrate(db.pool, { logger });
+    handle = drizzle(db.pool);
+    entities = new EntityStore(handle);
+    evidence = new EvidenceStore(handle);
+    retrieval = new RetrievalStore(handle);
+
+    repositoryA = (
+      await entities.upsert({
+        kind: EntityKind.REPOSITORY,
+        source: { system: 'git', id: '/repo-a' },
+        attributes: { path: '/repo-a' },
+      })
+    ).entity.id;
+    repositoryB = (
+      await entities.upsert({
+        kind: EntityKind.REPOSITORY,
+        source: { system: 'git', id: '/repo-b' },
+        attributes: { path: '/repo-b' },
+      })
+    ).entity.id;
+
+    subject = (
+      await entities.upsert({
+        kind: EntityKind.ISSUE,
+        source: { system: 'jira', id: 'FER-58' },
+        attributes: { key: 'FER-58', title: 'Permission-aware retrieval' },
+      })
+    ).entity.id;
+    openSubject = (
+      await entities.upsert({
+        kind: EntityKind.ISSUE,
+        source: { system: 'jira', id: 'FER-59' },
+        attributes: { key: 'FER-59', title: 'An open issue' },
+      })
+    ).entity.id;
+
+    fileInB = (
+      await entities.upsert({
+        kind: EntityKind.FILE,
+        source: { system: 'git', id: 'secrets/keys.txt', scope: repositoryB },
+        attributes: { path: 'secrets/keys.txt' },
+      })
+    ).entity.id;
+    await entities.upsert({
+      kind: EntityKind.FILE,
+      source: { system: 'git', id: 'src/open.ts', scope: repositoryA },
+      attributes: { path: 'src/open.ts' },
+    });
+
+    // The protected observation. Its statement is the only place the phrase
+    // appears anywhere in the database.
+    await evidence.record({
+      subjectId: subject,
+      field: 'summary',
+      statement: `${SECRET_PHRASE} — the restricted summary`,
+      method: EvidenceMethod.OBSERVED,
+      producer: 'ferret.provider.jira',
+      producerVersion: '1.0.0',
+      sourceSystem: 'jira',
+      permissionScope: SCOPE,
+    });
+    await evidence.record({
+      subjectId: openSubject,
+      field: 'summary',
+      statement: `${OPEN_PHRASE} — anyone may read this`,
+      method: EvidenceMethod.OBSERVED,
+      producer: 'ferret.provider.jira',
+      producerVersion: '1.0.0',
+      sourceSystem: 'jira',
+    });
+  });
+
+  afterAll(async () => {
+    await db.drop();
+  });
+
+  describe('the leak this Epic closes', () => {
+    it('never returns a protected statement to a caller holding nothing — AC-2, AC-5', async () => {
+      const result = await retrieval.search({ text: SECRET_PHRASE }, PUBLIC_ACCESS);
+
+      expect(result.hits).toStrictEqual([]);
+      // Not "no hit about that entity" — the *phrase* must be absent from the
+      // whole response. A highlight is generated from the matched text, and a
+      // highlight of a protected statement is the same disclosure as the
+      // statement.
+      expect(JSON.stringify(result)).not.toContain('zarquon');
+    });
+
+    it('returns it to a caller holding the scope — AC-3', async () => {
+      // The assertion that makes the previous one mean something: a filter that
+      // hides everything proves nothing about authorization.
+      const result = await retrieval.search({ text: SECRET_PHRASE }, holding(SCOPE));
+
+      expect(result.hits).toHaveLength(1);
+      expect(result.hits[0]?.entity.id).toBe(subject);
+      expect(String(result.hits[0]?.evidence?.statement)).toContain(SECRET_PHRASE);
+    });
+
+    it('still returns unscoped evidence to a caller holding nothing — AC-4', async () => {
+      const result = await retrieval.search({ text: OPEN_PHRASE }, PUBLIC_ACCESS);
+
+      expect(result.hits).toHaveLength(1);
+      expect(result.hits[0]?.entity.id).toBe(openSubject);
+    });
+
+    it('counts what it withheld, and says nothing about it — AC-10', async () => {
+      const result = await retrieval.search({ text: SECRET_PHRASE }, PUBLIC_ACCESS);
+
+      expect(result.withheld.total).toBe(1);
+      expect(result.withheld.byReason).toStrictEqual({ [WithholdReason.PERMISSION]: 1 });
+      expect(Object.keys(result.withheld).sort()).toStrictEqual(['byReason', 'total']);
+    });
+
+    it('does not throw when everything matching is protected — AC-11', async () => {
+      // A denial is not an error. An error is itself a disclosure, and it would
+      // let a caller probe for existence by watching which queries fail.
+      await expect(retrieval.search({ text: SECRET_PHRASE }, PUBLIC_ACCESS)).resolves.toBeDefined();
+    });
+
+    it('withholds nothing when nothing matching is protected', async () => {
+      const result = await retrieval.search({ text: OPEN_PHRASE }, PUBLIC_ACCESS);
+      expect(result.withheld.total).toBe(0);
+    });
+  });
+
+  describe('evidence reads on the traceability path — AC-12', () => {
+    it('hides a protected record from a scoped subject read', async () => {
+      const held = await evidence.forSubject(subject, { permittedScopes: [] });
+      expect(held).toStrictEqual([]);
+
+      const permitted = await evidence.forSubject(subject, { permittedScopes: [SCOPE] });
+      expect(permitted).toHaveLength(1);
+    });
+
+    it('hides it from the state projection the selection path uses', async () => {
+      const stated = await evidence.forSubjectWithState(subject, { permittedScopes: [] });
+      expect(stated).toStrictEqual([]);
+    });
+
+    it('reports no conflict it may not see', async () => {
+      // `conflictsFor` reads current evidence and groups it. Unfiltered, a
+      // disagreement between two protected records would be reported to a caller
+      // who may see neither — and the fields in a conflict group name the fact.
+      expect(await evidence.conflictsFor(subject, { permittedScopes: [] })).toStrictEqual([]);
+      expect(await evidence.conflictsFor(subject, { permittedScopes: [SCOPE] })).toStrictEqual([]);
+    });
+
+    it('refuses to verify a record the caller may not see, as if absent', async () => {
+      const [record] = await evidence.forSubject(subject, { permittedScopes: [SCOPE] });
+      const id = record?.id ?? '';
+
+      await expect(evidence.verify(id, { permittedScopes: [] })).rejects.toMatchObject({
+        // The same error as a genuinely unknown id, deliberately: a distinct
+        // "you may not verify this" would confirm the record exists.
+        code: 'E_ENTITY_NOT_FOUND',
+      });
+      await expect(evidence.verify(id, { permittedScopes: [SCOPE] })).resolves.toBeDefined();
+    });
+
+    it('reads everything for an internal caller that supplies no scopes at all', async () => {
+      // `Checkpoints/EPIC-008.md:112`: "an internal caller omitting it is
+      // correct, a retrieval caller omitting it is a leak." The indexer reads
+      // back what it wrote; only the retrieval path is gated, and there the
+      // context is a required parameter.
+      expect(await evidence.forSubject(subject)).toHaveLength(1);
+    });
+  });
+
+  describe('scope selectors on every read path — AC-6', () => {
+    // Built per test rather than in the describe body: the repository id is
+    // resolved in `beforeAll`, and a describe-body literal captures `undefined`.
+    const onlyA = (): AccessContext => ({
+      ...PUBLIC_ACCESS,
+      scope: { include: [{ kind: ScopeKind.REPOSITORY, id: repositoryA }], exclude: [] },
+    });
+
+    it('hides an entity from another repository in an exact query', async () => {
+      const found = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, onlyA());
+      expect(found.map((entity) => entity.id)).not.toContain(fileInB);
+      expect(found.length).toBeGreaterThan(0);
+    });
+
+    it('hides it from an exact lookup, as absent rather than forbidden', async () => {
+      // Withheld and absent give the same answer, so an exact lookup cannot be
+      // used to probe for the existence of something protected.
+      expect(await retrieval.getEntity(fileInB, onlyA())).toBeUndefined();
+      expect(await retrieval.getEntity(fileInB, PUBLIC_ACCESS)).toBeDefined();
+    });
+
+    it('hides it from search', async () => {
+      const result = await retrieval.search({ text: 'keys.txt' }, onlyA());
+      expect(result.hits.map((hit) => hit.entity.id)).not.toContain(fileInB);
+    });
+
+    it('hides it from an identifier lookup', async () => {
+      const hits = await retrieval.byIdentifier('secrets/keys.txt', onlyA());
+      expect(hits).toStrictEqual([]);
+      expect(await retrieval.byIdentifier('secrets/keys.txt', PUBLIC_ACCESS)).toHaveLength(1);
+    });
+  });
+
+  describe('path exclusion at retrieval time — AC-8', () => {
+    const excluded: AccessContext = {
+      ...PUBLIC_ACCESS,
+      exclusions: [{ pattern: 'secrets/**', scope: 'global' }],
+    };
+
+    it('withholds an indexed path a rule now excludes', async () => {
+      // EPIC-003 made exclusion incapable of deletion precisely so this case
+      // would work: the file is indexed, the rule arrived afterwards, and the
+      // history is intact.
+      const hits = await retrieval.byIdentifier('secrets/keys.txt', excluded);
+      expect(hits).toStrictEqual([]);
+
+      const found = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, excluded);
+      expect(found.map((entity) => entity.attributes['path'])).not.toContain('secrets/keys.txt');
+    });
+
+    it('cannot be widened by a caller-supplied scope — AC-14', async () => {
+      // `ferret_find` accepts a `scope` filter, which a probe flagged as a
+      // possible way in. It is not: the caller's scope is ANDed with the access
+      // context's predicate, so a supplied scope can only ever narrow. Asserted
+      // rather than reasoned about, because "it can only narrow" is exactly the
+      // kind of claim that stops being true after a refactor.
+      const found = await retrieval.findEntities(
+        { kind: EntityKind.FILE, scope: repositoryB, limit: 50 },
+        excluded,
+      );
+      expect(found.map((entity) => entity.attributes['path'])).not.toContain('secrets/keys.txt');
+    });
+
+    it('leaves an unexcluded path alone', async () => {
+      const found = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, excluded);
+      expect(found.map((entity) => entity.attributes['path'])).toContain('src/open.ts');
+    });
+  });
+});

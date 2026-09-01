@@ -10,9 +10,11 @@ import { ErrorCode, FerretError } from '../errors/index.js';
 import {
   Direction,
   HitSource,
+  type AccessContext,
   type Neighbour,
   type RetrievalPort,
   type SearchHit,
+  type WithheldReport,
 } from '../retrieval/index.js';
 import { VERSION } from '../version.js';
 
@@ -75,6 +77,14 @@ export const TruncationReason = {
    * excluded, and "a limit was hit" is not that explanation.
    */
   SELECTION: 'evidence-selection',
+  /**
+   * Held, and this caller may not see it — EPIC-058.
+   *
+   * Distinct from every other reason here, which are all about *room*. This one
+   * is about permission, and a client that treated them alike would report a
+   * budget problem where there is an authorization boundary.
+   */
+  PERMISSION: 'permission-withheld',
 } as const;
 
 export type TruncationReason = (typeof TruncationReason)[keyof typeof TruncationReason];
@@ -154,6 +164,15 @@ export interface ContextPack {
    * the same fact.
    */
   readonly contentSafety: ContentSafetyReport;
+  /**
+   * How much this caller was not permitted to see — EPIC-058.
+   *
+   * Counts only. Beside `omitted` rather than inside it because a client
+   * weighting an answer needs a number it can find without parsing a sentence,
+   * and because the two answer different questions: `omitted` is what did not
+   * fit, this is what was not allowed.
+   */
+  readonly withheld: WithheldReport;
 }
 
 export const CONTENT_NOTICE =
@@ -191,17 +210,24 @@ export const MAX_BUDGET = 100_000;
 
 export class ContextPackBuilder {
   readonly #retrieval: RetrievalPort;
+  readonly #access: AccessContext;
   readonly #evidence: EvidenceReader | undefined;
 
   /**
-   * `evidence` is EPIC-048's addition and is optional, so every existing caller
-   * keeps working unchanged. When it is supplied, an item carries what its
-   * entity actually rests on rather than only the record that matched the query
-   * — and that evidence comes from the store, so its lineage is real rather than
-   * the empty array a search hit carries.
+   * `access` is EPIC-058's addition and is **required**, and it is a constructor
+   * parameter rather than a request field on purpose: a pack is built for a
+   * caller, and a builder composed with one authorization cannot be talked into
+   * another by whatever arrives in a tool call. Governance §12 — the control is
+   * Ferret's, not the client's.
+   *
+   * `evidence` is EPIC-048's addition and is optional. When it is supplied, an
+   * item carries what its entity actually rests on rather than only the record
+   * that matched the query — and that evidence comes from the store, so its
+   * lineage is real rather than the empty array a search hit carries.
    */
-  constructor(retrieval: RetrievalPort, evidence?: EvidenceReader) {
+  constructor(retrieval: RetrievalPort, access: AccessContext, evidence?: EvidenceReader) {
     this.#retrieval = retrieval;
+    this.#access = access;
     this.#evidence = evidence;
   }
 
@@ -224,11 +250,14 @@ export class ContextPackBuilder {
     const budget = new TokenBudget(Math.min(request.budget ?? DEFAULT_BUDGET, MAX_BUDGET));
     const maxItems = request.maxItems ?? 20;
 
-    const hits = await this.#retrieval.search({
-      text: question,
-      ...(request.kinds === undefined ? {} : { kinds: request.kinds }),
-      limit: Math.max(maxItems * 2, 20),
-    });
+    const { hits, withheld } = await this.#retrieval.search(
+      {
+        text: question,
+        ...(request.kinds === undefined ? {} : { kinds: request.kinds }),
+        limit: Math.max(maxItems * 2, 20),
+      },
+      this.#access,
+    );
 
     const items: PackItem[] = [];
     // One accumulator for the whole pack: containment happens per item and the
@@ -296,6 +325,18 @@ export class ContextPackBuilder {
         detail: `stopped after ${String(maxItems)} results`,
       });
     }
+    // EPIC-058 AC-13. A count and nothing else: no id, no kind, no path, no
+    // source, no rule. It says the answer is short; it does not say what is
+    // missing, which is the question the filter exists to refuse.
+    if (withheld.total > 0) {
+      omitted.push({
+        reason: TruncationReason.PERMISSION,
+        count: withheld.total,
+        detail:
+          `${String(withheld.total)} result(s) were withheld because this caller is not ` +
+          'permitted to see them; an answer built from this pack is partial',
+      });
+    }
 
     return {
       formatVersion: PACK_FORMAT_VERSION,
@@ -309,6 +350,7 @@ export class ContextPackBuilder {
       estimatedTokens: budget.spent,
       budget: budget.total,
       contentNotice: CONTENT_NOTICE,
+      withheld,
     };
   }
 
@@ -316,11 +358,10 @@ export class ContextPackBuilder {
     const selection = await this.#evidenceFor(hit);
     const evidence = selection.selected.map((entry) => entry.evidence);
     const neighbours = withNeighbours
-      ? await this.#retrieval.neighbours({
-          from: hit.entity.id,
-          direction: Direction.BOTH,
-          limit: 10,
-        })
+      ? await this.#retrieval.neighbours(
+          { from: hit.entity.id, direction: Direction.BOTH, limit: 10 },
+          this.#access,
+        )
       : [];
 
     let reason =
@@ -395,6 +436,10 @@ export class ContextPackBuilder {
 
     const held = await this.#evidence.forSubjectWithState(hit.entity.id, {
       limit: EVIDENCE_CANDIDATE_WINDOW + 1,
+      // EPIC-058. The parameter EPIC-048 threaded through and nothing ever
+      // supplied; three Epics built the seam and none of them put anything
+      // through it.
+      permittedScopes: this.#access.permittedScopes,
     });
     if (held.length > 0) {
       return selectEvidence(held.slice(0, EVIDENCE_CANDIDATE_WINDOW), {

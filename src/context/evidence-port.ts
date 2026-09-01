@@ -59,14 +59,30 @@ export interface EvidenceReader {
     },
   ): Promise<readonly StatedEvidence[]>;
 
-  /** "Why does Ferret believe this" — EPIC-008 D-006, walked backwards, bounded. */
-  provenanceOf(id: string, maxDepth?: number): Promise<readonly CanonicalEvidence[]>;
+  /**
+   * "Why does Ferret believe this" — EPIC-008 D-006, walked backwards, bounded.
+   *
+   * `permittedScopes` is not optional decoration here — EPIC-058 AC-12. A lineage
+   * is the most revealing answer Ferret gives: the chain is walked *because* the
+   * caller asked why, so an unfiltered walk is where a protected observation
+   * surfaces after every other path has been closed.
+   */
+  provenanceOf(
+    id: string,
+    options?: { readonly maxDepth?: number; readonly permittedScopes?: readonly string[] },
+  ): Promise<readonly CanonicalEvidence[]>;
 
   /** Recomputes the integrity hash, so a citation can be shown to be untampered. */
-  verify(id: string): Promise<CanonicalEvidence>;
+  verify(
+    id: string,
+    options?: { readonly permittedScopes?: readonly string[] },
+  ): Promise<CanonicalEvidence>;
 
   /** Disagreement about a subject, reported and never resolved here. */
-  conflictsFor(subjectId: string): Promise<readonly ConflictGroup[]>;
+  conflictsFor(
+    subjectId: string,
+    options?: { readonly permittedScopes?: readonly string[] },
+  ): Promise<readonly ConflictGroup[]>;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 
 import type { CanonicalEntity, CanonicalEvidence } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
@@ -6,12 +6,19 @@ import {
   Direction,
   HitSource,
   DEFAULT_LIMIT,
+  WithheldTally,
+  WithholdReason,
   boundedLimit,
+  includedRepositories,
+  visibleEntities,
+  withholds,
+  type AccessContext,
   type EntityQuery,
   type Neighbour,
   type RetrievalPort,
   type SearchHit,
   type SearchQuery,
+  type SearchResult,
   type TraversalQuery,
 } from '../retrieval/index.js';
 
@@ -104,6 +111,50 @@ const ENTITY_COLUMNS = sql`e.id, e.kind, e.canonical_key, e.schema_version, e.so
  * caller-controlled matching. The value is still bound as a parameter — the
  * test is what makes the *pattern* trustworthy, not the binding.
  */
+/**
+ * The permission predicate, as SQL — EPIC-058 AC-5.
+ *
+ * A `WHERE` clause rather than a filter after assembly, because Governance §12
+ * says authorization is evaluated *before* protected information enters a
+ * result. A protected row is therefore never read: it cannot leak through a
+ * highlight, a log line, an error message or a half-built hit.
+ *
+ * Unscoped rows are visible to everyone — everything Ferret indexes today is
+ * unscoped, and a default that hid it would be a different product rather than a
+ * safer one. Scoped rows require the token, which makes a provider that sets one
+ * protected from the moment it does.
+ */
+function permissionPredicate(column: SQL, access: AccessContext): SQL {
+  if (access.permittedScopes.length === 0) return sql`${column} IS NULL`;
+  return sql`(${column} IS NULL OR ${column} = ANY(${sql.raw('ARRAY[')}${sql.join(
+    access.permittedScopes.map((scope) => sql`${scope}`),
+    sql`, `,
+  )}${sql.raw(']::text[]')}))`;
+}
+
+/**
+ * The repository-scope predicate, as SQL.
+ *
+ * Only the *inclusion* half is expressible here, and only for repositories: an
+ * empty `include` means everything (EPIC-009's documented default), and
+ * exclusion plus the worktree and session dimensions are evaluated by EPIC-009's
+ * own evaluator in the core, so include/exclude precedence stays that model's
+ * rule rather than becoming a second copy of it in SQL.
+ *
+ * Narrowing here as well as in the core is not redundancy — it keeps a caller
+ * restricted to one repository from paging through another repository's rows and
+ * discarding them, which would turn a `LIMIT 50` into fifty withheld hits and an
+ * empty answer.
+ */
+function scopePredicate(access: AccessContext): SQL {
+  const repositories = includedRepositories(access);
+  if (repositories.length === 0) return sql`true`;
+  return sql`(e.source_scope IS NULL OR e.source_scope = ANY(${sql.raw('ARRAY[')}${sql.join(
+    repositories.map((scope) => sql`${scope}`),
+    sql`, `,
+  )}${sql.raw(']::text[]')}))`;
+}
+
 function abbreviatedObjectId(text: string): string | undefined {
   return /^[0-9a-f]{7,40}$/i.test(text) ? text.toLowerCase() : undefined;
 }
@@ -123,11 +174,13 @@ export class RetrievalStore implements RetrievalPort {
    * be worse than returning nothing — a caller cannot tell the difference
    * between "these are the files" and "these are probably the files".
    */
-  async findEntities(query: EntityQuery): Promise<readonly CanonicalEntity[]> {
+  async findEntities(query: EntityQuery, access: AccessContext): Promise<readonly CanonicalEntity[]> {
     const limit = boundedLimit(query.limit);
     const offset = query.offset ?? 0;
 
-    const conditions = [sql`true`];
+    // EPIC-058. The scope predicate is first so it reads as the gate it is
+    // rather than as one filter among several.
+    const conditions = [scopePredicate(access)];
     if (query.kind !== undefined) conditions.push(sql`e.kind = ${query.kind}`);
     if (query.kinds !== undefined && query.kinds.length > 0) {
       conditions.push(sql`e.kind = ANY(${sql.raw('ARRAY[')}${sql.join(query.kinds.map((k) => sql`${k}`), sql`, `)}${sql.raw(']::text[]')})`);
@@ -158,7 +211,7 @@ export class RetrievalStore implements RetrievalPort {
          ORDER BY e.kind, e.source_id
          LIMIT ${limit} OFFSET ${offset}
       `);
-      return rows.rows.map(toEntity);
+      return visibleEntities(rows.rows.map(toEntity), (entity) => entity, access, new WithheldTally());
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.findEntities');
     }
@@ -175,7 +228,7 @@ export class RetrievalStore implements RetrievalPort {
    * matches, which is why the three shapes are handled together — a caller who
    * pasted something has not told Ferret which kind of thing it is.
    */
-  async byIdentifier(term: string, limit = DEFAULT_LIMIT): Promise<readonly SearchHit[]> {
+  async byIdentifier(term: string, access: AccessContext, limit = DEFAULT_LIMIT): Promise<readonly SearchHit[]> {
     const bounded = boundedLimit(limit);
     const abbreviated = abbreviatedObjectId(term);
 
@@ -197,12 +250,12 @@ export class RetrievalStore implements RetrievalPort {
       const rows = await this.#db.execute<EntityRowShape>(sql`
         SELECT ${ENTITY_COLUMNS}
           FROM ferret.entity e
-         WHERE ${sql.join(conditions, sql` OR `)}
+         WHERE (${sql.join(conditions, sql` OR `)}) AND ${scopePredicate(access)}
          ORDER BY e.kind, e.source_id
          LIMIT ${bounded}
       `);
 
-      return rows.rows.map((row) => ({
+      const identified = rows.rows.map((row) => ({
         source: HitSource.ENTITY,
         entity: toEntity(row),
         evidence: undefined,
@@ -211,18 +264,25 @@ export class RetrievalStore implements RetrievalPort {
         score: 1,
         highlight: row.source_id,
       }));
+      return visibleEntities(identified, (hit) => hit.entity, access, new WithheldTally());
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.byIdentifier');
     }
   }
 
-  async getEntity(id: string): Promise<CanonicalEntity | undefined> {
+  async getEntity(id: string, access: AccessContext): Promise<CanonicalEntity | undefined> {
     try {
       const rows = await this.#db.execute<EntityRowShape>(sql`
-        SELECT ${ENTITY_COLUMNS} FROM ferret.entity e WHERE e.id = ${id} LIMIT 1
+        SELECT ${ENTITY_COLUMNS} FROM ferret.entity e
+         WHERE e.id = ${id} AND ${scopePredicate(access)} LIMIT 1
       `);
       const row = rows.rows[0];
       if (row === undefined) return undefined;
+      // Withheld and absent are the same answer here, deliberately. `undefined`
+      // for "you may not see it" and `undefined` for "it does not exist" is what
+      // stops an exact lookup being used to probe for the existence of something
+      // protected.
+      if (withholds(access, toEntity(row)) !== undefined) return undefined;
 
       const ids = await this.#db.execute<{ system: string; external_id: string; url: string | null }>(sql`
         SELECT system, external_id, url FROM ferret.entity_external_id WHERE entity_id = ${id}
@@ -253,7 +313,7 @@ export class RetrievalStore implements RetrievalPort {
    * convention EPIC-007 uses everywhere, and mixing the two is how a worktree
    * appears to be on two branches for one instant.
    */
-  async neighbours(query: TraversalQuery): Promise<readonly Neighbour[]> {
+  async neighbours(query: TraversalQuery, access: AccessContext): Promise<readonly Neighbour[]> {
     const limit = boundedLimit(query.limit);
     const direction = query.direction ?? Direction.BOTH;
     const at = query.at ?? new Date().toISOString();
@@ -275,13 +335,13 @@ export class RetrievalStore implements RetrievalPort {
       SELECT ${ENTITY_COLUMNS}, r.type AS rel_type, 'out' AS rel_direction, r.valid_from, r.valid_to, r.metadata AS rel_metadata
         FROM ferret.relationship r
         JOIN ferret.entity e ON e.id = r.to_id
-       WHERE r.from_id = ${query.from} AND ${typeFilter} AND ${temporal}`;
+       WHERE r.from_id = ${query.from} AND ${typeFilter} AND ${temporal} AND ${scopePredicate(access)}`;
 
     const inward = sql`
       SELECT ${ENTITY_COLUMNS}, r.type AS rel_type, 'in' AS rel_direction, r.valid_from, r.valid_to, r.metadata AS rel_metadata
         FROM ferret.relationship r
         JOIN ferret.entity e ON e.id = r.from_id
-       WHERE r.to_id = ${query.from} AND ${typeFilter} AND ${temporal}`;
+       WHERE r.to_id = ${query.from} AND ${typeFilter} AND ${temporal} AND ${scopePredicate(access)}`;
 
     const body =
       direction === Direction.OUT
@@ -303,7 +363,7 @@ export class RetrievalStore implements RetrievalPort {
         sql`SELECT * FROM (${body}) neighbours ORDER BY rel_type, valid_from DESC, source_id LIMIT ${limit}`,
       );
 
-      return rows.rows.map((row) => ({
+      const reached = rows.rows.map((row) => ({
         entity: toEntity(row),
         relationshipType: row.rel_type,
         direction: row.rel_direction,
@@ -311,6 +371,11 @@ export class RetrievalStore implements RetrievalPort {
         validTo: instant(row.valid_to) ?? null,
         metadata: row.rel_metadata ?? {},
       }));
+      // EPIC-049 states the relationship table has no `permission_scope` and did
+      // not add one, so an edge is as visible as the entity it reaches. Filtering
+      // on the reached entity is therefore the whole control available, and §4 of
+      // this Epic's specification declines to add the column.
+      return visibleEntities(reached, (neighbour) => neighbour.entity, access, new WithheldTally());
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.neighbours');
     }
@@ -330,7 +395,7 @@ export class RetrievalStore implements RetrievalPort {
    * answer the same question from different angles: a commit's message is on the
    * commit, but a sentence extracted from a document exists only as evidence.
    */
-  async search(query: SearchQuery): Promise<readonly SearchHit[]> {
+  async search(query: SearchQuery, access: AccessContext): Promise<SearchResult> {
     const limit = boundedLimit(query.limit);
     const text = query.text.trim();
     if (text.length === 0) {
@@ -388,7 +453,8 @@ export class RetrievalStore implements RetrievalPort {
                          q.query,
                          'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
         FROM ferret.entity e, ${tsquery}
-       WHERE e.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}`;
+       WHERE e.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}
+         AND ${scopePredicate(access)}`;
 
     const evidenceMatches = sql`
       SELECT ${ENTITY_COLUMNS},
@@ -399,7 +465,13 @@ export class RetrievalStore implements RetrievalPort {
                          'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
         FROM ferret.evidence ev
         JOIN ferret.entity e ON e.id = ev.subject_id, ${tsquery}
-       WHERE ev.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}`;
+       WHERE ev.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}
+         AND ${scopePredicate(access)}
+         -- EPIC-058 AC-2, and the leak this Epic exists to close. Full-text
+         -- search covers evidence statements, and this branch used to select
+         -- permission_scope onto the hit and never consult it, so a protected
+         -- observation's content was matched by a query and returned verbatim.
+         AND ${permissionPredicate(sql`ev.permission_scope`, access)}`;
 
     // An abbreviated object id — how every person and every tool refers to a
     // commit.
@@ -429,7 +501,7 @@ export class RetrievalStore implements RetrievalPort {
         FROM ferret.entity e
        WHERE (e.source_id LIKE ${`${abbreviated}%`}
               OR e.attributes->>'sha' LIKE ${`${abbreviated}%`})
-         AND ${kindFilter} AND ${systemFilter}`;
+         AND ${kindFilter} AND ${systemFilter} AND ${scopePredicate(access)}`;
 
     const textual =
       query.includeEvidence === false ? entityMatches : sql`${entityMatches} UNION ALL ${evidenceMatches}`;
@@ -450,6 +522,7 @@ export class RetrievalStore implements RetrievalPort {
          ORDER BY score DESC, kind, source_id
          LIMIT ${limit}`);
 
+      const tally = new WithheldTally();
       const hits: SearchHit[] = [];
       for (const row of rows.rows) {
         const evidence =
@@ -462,9 +535,51 @@ export class RetrievalStore implements RetrievalPort {
           highlight: row.highlight ?? undefined,
         });
       }
-      return hits;
+
+      // The scope and exclusion dimensions SQL cannot express — worktree,
+      // session, and glob path exclusion — plus the count of what went.
+      const visible = visibleEntities(hits, (hit) => hit.entity, access, tally);
+      tally.add(WithholdReason.PERMISSION, await this.#countProtected(query, access));
+      return { hits: visible, withheld: tally.report };
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.search');
+    }
+  }
+
+  /**
+   * How many evidence matches the caller may not see — EPIC-058 AC-10.
+   *
+   * A separate query, and one that selects **no content**: `count(*)` over the
+   * same text predicate with the permission predicate negated. So the answer is
+   * exact and no protected statement, path or attribute is ever read — which is
+   * the property AC-5 is about, and a windowed count over the main query would
+   * have broken it to save a round trip.
+   *
+   * Skipped entirely when nothing could be protected, which is the common case:
+   * a caller holding no scope only needs this if scoped rows exist at all, and
+   * the `evidence_permission_idx` partial scan answers that cheaply.
+   *
+   * The count is a deliberate, bounded disclosure — it says an answer is short
+   * without saying what is missing. Specification §16 records that this is a
+   * decision rather than a finding.
+   */
+  async #countProtected(query: SearchQuery, access: AccessContext): Promise<number> {
+    if (query.includeEvidence === false) return 0;
+    const text = query.text.trim();
+    if (text.length === 0) return 0;
+
+    try {
+      const rows = await this.#db.execute<{ withheld: string | number }>(sql`
+        SELECT count(*) AS withheld
+          FROM ferret.evidence ev
+          JOIN ferret.entity e ON e.id = ev.subject_id,
+               websearch_to_tsquery('english', ${text}) AS q(query)
+         WHERE ev.search_vector @@ q.query
+           AND ev.permission_scope IS NOT NULL
+           AND NOT ${permissionPredicate(sql`ev.permission_scope`, access)}`);
+      return Number(rows.rows[0]?.withheld ?? 0);
+    } catch (error) {
+      throw classifyDatabaseError(error, 'retrieval.search.withheld');
     }
   }
 
