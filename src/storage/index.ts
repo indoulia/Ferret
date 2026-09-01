@@ -150,3 +150,15 @@ export {
 } from './embeddings.js';
 
 export { SymbolStore, escapeLikePrefix } from './symbols.js';
+export {
+  ContentStore,
+  MAX_STORED_TEXT_BYTES,
+  OMITTED_REASONS,
+  classifyContent,
+  type ContentBody,
+  type ContentStats,
+  type OmittedReason,
+  type StoreContentInput,
+  type StoredContent,
+} from './content.js';
+export { contentBlob, type ContentBlobRow } from './schema/content.js';

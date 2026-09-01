@@ -33,6 +33,7 @@ export {
 export { ContentStageSkip } from './ports.js';
 export type {
   ContentArtifactStore,
+  ContentBlobWriter,
   ContentReader,
   DerivedArtifactRecord,
   EntityWriteResult,
