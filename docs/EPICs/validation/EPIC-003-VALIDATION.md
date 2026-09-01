@@ -17,13 +17,13 @@ implementation.
 | # | Criterion | Status | Evidence |
 | --- | --- | --- | --- |
 | AC-1 | Required bootstrap inputs are database host, port, database, username, password plus optional repository exclusions | **PASS** | `config.test.ts` → "reads the documented bootstrap surface" asserts the whole mandatory surface is those five plus `exclude`. `config-layers.test.ts` → "starts with no configuration at all" proves nothing else is required. `init-cli.test.ts` → "--save" persists exactly those five and then runs with no `FERRET_DATABASE_*` present at all. |
-| AC-2 | Safe defaults eliminate unnecessary configuration questions | **PASS** | `parseConfig({})` succeeds and yields `logLevel: warn`, `port: 5432`, `migrate: auto`, empty exclusions and providers. `DEFAULT_EXCLUSIONS` covers `.git`, `node_modules`, build and dependency trees with a stated reason each, so a user never has to configure them (`config-layers.test.ts`, `config-cli.test.ts` → "lists Ferret's defaults alongside the user's own rules"). |
+| AC-2 | Safe defaults eliminate unnecessary configuration questions | **PASS** | `parseConfig({})` succeeds and yields `logLevel: warn`, `port: 5432`, `migrate: auto`, empty exclusions and providers. `DEFAULT_EXCLUSIONS` covers `.git`, `node_modules`, build and dependency trees with a stated reason each, so a user never has to configure them (`config-layers.test.ts`, `config-cli-policy.test.ts` → "lists Ferret's defaults alongside the user's own rules"). |
 | AC-3 | Configuration precedence is deterministic | **PASS** | `config-layers.test.ts` → "precedence" (6 cases): the Governance §16 ladder is asserted directly; layers resolve identically in every input permutation; repeated resolution of the same layers is byte-identical; nested objects merge rather than replace. |
-| AC-4 | Invalid values produce actionable errors | **PASS** | `config.test.ts` (invalid port, bad log level, malformed provider entry), `config-layers.test.ts` → provider id and shape rejection naming the path, `persistence.test.ts` → "validation before activation", `config-cli.test.ts` → exit code 3 with `E_CONFIG_INVALID`. Every error names the offending path and carries remediation. |
-| AC-5 | Secrets are redacted from output/logs | **PASS** | `config-cli.test.ts` → "secrets" (4 cases): a stored password appears in neither stdout nor stderr at `--log-level trace`, in `list`, `get` or human mode, nor in the audit journal — and `[redacted]` *is* present, proving masking rather than absence. `persistence.test.ts` → a rejected value is never echoed. `init-cli.test.ts` → `--save` does not print or journal the password. |
+| AC-4 | Invalid values produce actionable errors | **PASS** | `config.test.ts` (invalid port, bad log level, malformed provider entry), `config-layers.test.ts` → provider id and shape rejection naming the path, `persistence.test.ts` → "validation before activation", `config-cli-reading.test.ts` and `config-cli-writing.test.ts` → exit code 3 with `E_CONFIG_INVALID`. Every error names the offending path and carries remediation. |
+| AC-5 | Secrets are redacted from output/logs | **PASS** | `config-cli-secrets.test.ts` (4 cases): a stored password appears in neither stdout nor stderr at `--log-level trace`, in `list`, `get` or human mode, nor in the audit journal — and `[redacted]` *is* present, proving masking rather than absence. `persistence.test.ts` → a rejected value is never echoed. `init-cli.test.ts` → `--save` does not print or journal the password. |
 | AC-6 | Configuration changes are validated before activation | **PASS** | `persistence.test.ts` → "validation before activation" (5 cases): an invalid change leaves the stored file byte-identical; an unresolvable secret reference fails *before* any write; a bad path is rejected. The whole merged document is validated, not just the changed key, so one change cannot make the result invalid. |
-| AC-7 | Configuration can be queried by the future AI control plane | **PASS** | `ferret config` has eight subcommands, all with `--json`: `list` (with `--explain` origins), `get`, `set`, `unset`, `validate`, `path`, `exclude list/test`, `audit`. `config-cli.test.ts` → "stream discipline" asserts every one emits exactly one parseable JSON document on stdout even at `--log-level trace`. EPIC-066 can wrap these without a second implementation. |
-| AC-8 | Repository/session exclusions can be represented without deleting historical evidence | **PASS** | Exclusions are a **pure decision**: `evaluateExclusion` returns which rule matched and why, and there is deliberately no code path that removes anything. Asserted by `config-layers.test.ts` → "never mutates the rules it is given". Every rule carries `effectiveFrom`, so a question about the past is answered as policy stood then — `config-cli.test.ts` → "answers as policy stood at an earlier instant". The CLI states the contract in its own output ("An exclusion governs indexing and retrieval. It never deletes evidence already recorded."). |
+| AC-7 | Configuration can be queried by the future AI control plane | **PASS** | `ferret config` has eight subcommands, all with `--json`: `list` (with `--explain` origins), `get`, `set`, `unset`, `validate`, `path`, `exclude list/test`, `audit`. `config-cli-journal.test.ts` → "stream discipline" asserts every one emits exactly one parseable JSON document on stdout even at `--log-level trace`. EPIC-066 can wrap these without a second implementation. |
+| AC-8 | Repository/session exclusions can be represented without deleting historical evidence | **PASS** | Exclusions are a **pure decision**: `evaluateExclusion` returns which rule matched and why, and there is deliberately no code path that removes anything. Asserted by `config-layers.test.ts` → "never mutates the rules it is given". Every rule carries `effectiveFrom`, so a question about the past is answered as policy stood then — `config-cli-policy.test.ts` → "answers as policy stood at an earlier instant". The CLI states the contract in its own output ("An exclusion governs indexing and retrieval. It never deletes evidence already recorded."). |
 
 **8 / 8 PASS.**
 
@@ -38,16 +38,16 @@ The Epic names eight test areas. All eight exist and pass.
 | Defaults | PASS | `config-layers.test.ts` → "starts with no configuration at all"; default exclusions |
 | Precedence | PASS | `config-layers.test.ts` → "precedence" (6 cases), "mutable scopes" (3 cases) |
 | Malformed values | PASS | `config.test.ts`, `config-layers.test.ts` → "configuration file parsing" (5 cases) |
-| Secret redaction | PASS | `config-cli.test.ts` → "secrets" (4 cases); `persistence.test.ts` → auditing (2 cases) |
+| Secret redaction | PASS | `config-cli-secrets.test.ts` (4 cases); `persistence.test.ts` → auditing (2 cases) |
 | Persistence | PASS | `persistence.test.ts` → "persistence" (6 cases) |
 | Concurrent changes | PASS | `persistence.test.ts` → 8 OS processes writing at once; lock timeout; stale-lock recovery |
-| Exclusions | PASS | `config-layers.test.ts` → "exclusions" (9 cases); `config-cli.test.ts` → "exclusions" (4 cases) |
+| Exclusions | PASS | `config-layers.test.ts` → "exclusions" (9 cases); `config-cli-policy.test.ts` → "exclusions" (4 cases) |
 | Invalid provider configuration | PASS | `config-layers.test.ts` → "provider configuration" (4 cases) |
 
 ### Coverage beyond the required list
 
 - **Repository trust boundary** — a `.ferret/config.json` may set *only*
-  exclusions. `config-cli.test.ts` proves a hostile policy cannot repoint the
+  exclusions. `config-cli-policy.test.ts` proves a hostile policy cannot repoint the
   database, change the log level or enable a provider, and that the refusal is
   reported rather than silent.
 - **Durability** — atomic write proven by 40 interleaved read/write cycles, a
@@ -120,7 +120,7 @@ satisfies it. This strengthened a control that EPIC-001 and EPIC-002 both rely o
 | Item | Status | Evidence |
 | --- | --- | --- |
 | Schema documented | **PASS** | `README.md` → Configuration; `docs/Architecture/EPIC-003-DECISIONS.md`; every schema field carries a doc comment naming the governance rule it serves. |
-| Validation covered | **PASS** | 39 unit cases in `config-layers.test.ts`, 30 in `persistence.test.ts`, 26 end-to-end in `config-cli.test.ts`. |
+| Validation covered | **PASS** | 39 unit cases in `config-layers.test.ts`, 30 in `persistence.test.ts`, 26 end-to-end across `config-cli-reading`, `-writing`, `-secrets`, `-policy` and `-journal` (one file when this Epic was validated; split for suite runtime, cases unchanged). |
 | Secrets protected | **PASS** | Redaction asserted at unit, integration and real-process level, on stdout, stderr, the config file and the audit journal. Secret references keep the secret out of the file entirely. |
 | Migration path defined | **PASS** | The file carries `version` (`CONFIG_FILE_VERSION = 1`). A bare object is read as version 1, so hand-written files work; a *newer* version is refused with "upgrade Ferret" rather than misread. Tested in `config-layers.test.ts` → "configuration file parsing". |
 | Deterministic behaviour proven by tests | **PASS** | `config-layers.test.ts` → "is deterministic" and "applies layers in precedence order regardless of the order they are passed". |
