@@ -1,15 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
-  <title id="title">Ferret — Persistent Engineering Context</title>
-  <desc id="desc">Ferret, a persistent engineering context and knowledge layer for AI-assisted development.</desc>
-  <rect width="1200" height="300" rx="18" fill="#0d1117"/>
-  <circle cx="1030" cy="150" r="82" fill="#161b22" stroke="#30363d" stroke-width="2"/>
-  <circle cx="1004" cy="126" r="9" fill="#f0f6fc"/>
-  <circle cx="1056" cy="126" r="9" fill="#f0f6fc"/>
-  <path d="M982 164 Q1030 202 1078 164" fill="none" stroke="#58a6ff" stroke-width="8" stroke-linecap="round"/>
-  <path d="M930 82 Q1030 28 1130 82" fill="none" stroke="#58a6ff" stroke-opacity="0.35" stroke-width="2"/>
-  <path d="M900 224 Q1030 274 1160 224" fill="none" stroke="#58a6ff" stroke-opacity="0.2" stroke-width="2"/>
-  <text x="70" y="105" fill="#f0f6fc" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="52" font-weight="700">FERRET</text>
-  <text x="72" y="151" fill="#8b949e" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="22">Persistent Engineering Context</text>
-  <text x="72" y="193" fill="#58a6ff" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17">KNOWLEDGE  ·  EVIDENCE  ·  RETRIEVAL  ·  MCP</text>
-  <text x="72" y="235" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="14">Engineering context for AI-assisted development</text>
+<title id="title">Ferret — Persistent Engineering Context</title>
+<desc id="desc">Ferret, a persistent engineering context and knowledge layer for AI-assisted development.</desc>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071414"/><stop offset="1" stop-color="#0d1117"/></linearGradient><linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#39d98a"/><stop offset="1" stop-color="#58a6ff"/></linearGradient></defs>
+<rect width="1200" height="300" rx="18" fill="url(#bg)"/>
+<g opacity="0.18" stroke="#39d98a" fill="none"><path d="M770 70h80v45h75v55h90v-80h95" stroke-width="2"/><path d="M770 230h80v-42h75v-55h90v80h95" stroke-width="1"/><circle cx="850" cy="70" r="4" fill="#39d98a"/><circle cx="925" cy="115" r="4" fill="#39d98a"/><circle cx="1015" cy="170" r="4" fill="#39d98a"/></g>
+<g transform="translate(70 73)" stroke="url(#accent)" fill="none" stroke-width="5"><circle cx="62" cy="62" r="54"/><path d="M28 55c8-27 49-39 70-13 16 20 7 47-17 58-26 12-54-5-53-31z"/><circle cx="47" cy="54" r="5" fill="#f0f6fc"/><circle cx="76" cy="54" r="5" fill="#f0f6fc"/><path d="M47 76q15 13 30 0" stroke="#39d98a" stroke-linecap="round"/></g>
+<text x="190" y="115" fill="#f0f6fc" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="56" font-weight="700">FERRET</text>
+<text x="193" y="157" fill="#39d98a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="22">Persistent Engineering Context</text>
+<text x="193" y="198" fill="#8b949e" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17">KNOWLEDGE  ·  EVIDENCE  ·  RETRIEVAL  ·  MCP</text>
+<text x="193" y="238" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="14">Engineering context for AI-assisted development</text>
 </svg>
