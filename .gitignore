@@ -22,3 +22,12 @@ spikes/.state/
 # Local scratch, never committed. Holds the dogfood MCP server's config home,
 # which `.mcp.json` points at by default.
 .local/
+
+# Per-developer Claude Code settings. Holds the dogfood database password, which
+# `.mcp.json` deliberately does not.
+#
+# Ignored here rather than relying on a global rule: it was covered only by one
+# developer's `~/.config/git/ignore`, so anyone without that would have committed
+# the credential. A protection that lives outside the repository is a protection
+# the repository does not have.
+.claude/settings.local.json
