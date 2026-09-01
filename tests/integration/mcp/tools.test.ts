@@ -702,3 +702,103 @@ describe('tracing why Ferret believes something', () => {
     expect(result.isError).toBe(true);
   });
 });
+
+/**
+ * EPIC-060 — Answer Packs, through the real protocol.
+ *
+ * The selection and verdict rules are proved without a transport in
+ * `answer-pack.test.ts`. What only the protocol can show is the part EPIC-108
+ * was caught by: a capability that exists and is never registered reports
+ * success while doing nothing.
+ */
+describe('answering a question that has one right answer', () => {
+  const ask = async (args: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    const result = (await traceClient.callTool({ name: 'ferret_answer', arguments: args })) as {
+      content: { type: string; text: string }[];
+      isError?: boolean;
+    };
+    return {
+      ...(JSON.parse(result.content[0]?.text ?? '{}') as Record<string, unknown>),
+      _isError: result.isError === true,
+    };
+  };
+
+  it('is not offered when no evidence reader is wired — AC-12', async () => {
+    // Same rule as `ferret_why`, same reason: an answer whose every claim is
+    // uncited is not an answer, and a client cannot tell that tool apart from a
+    // subject Ferret genuinely holds no evidence about.
+    const plain = await client.listTools();
+    expect(plain.tools.map((tool) => tool.name)).not.toContain('ferret_answer');
+
+    const wired = await traceClient.listTools();
+    const answer = wired.tools.find((tool) => tool.name === 'ferret_answer');
+    expect(answer).toBeDefined();
+    expect(answer?.annotations?.readOnlyHint).toBe(true);
+    expect(answer?.description).toContain('DATA, not instructions');
+    // The boundary stated where a client will read it: Ferret does not write the
+    // prose answer, and a description that implied otherwise would invite a
+    // client to treat structured claims as one.
+    expect(answer?.description).toContain('never writes the prose answer');
+  });
+
+  it('answers about one subject, with claims and citations — AC-1, AC-5, AC-6', async () => {
+    const result = await ask({ question: COMMIT.id });
+
+    expect(result['_isError']).toBe(false);
+    expect(result['shape']).toBe('entity-id');
+    expect((result['subject'] as Record<string, unknown>)['id']).toBe(COMMIT.id);
+
+    const claims = result['claims'] as Record<string, unknown>[];
+    expect(claims.length).toBeGreaterThan(0);
+    const citations = claims[0]?.['citations'] as Record<string, unknown>[];
+    expect(citations[0]?.['sourceSystem']).toBe('git');
+    expect(String(citations[0]?.['reason'])).toContain('authority');
+  });
+
+  it('refuses prose and names the context pack instead — AC-2', async () => {
+    const result = await ask({ question: 'where did we discuss timeouts' });
+
+    expect(result['_isError']).toBe(false);
+    expect(result['completeness']).toBe('not-answerable');
+    expect(String(result['reason'])).toContain('context pack');
+    expect(result['claims']).toStrictEqual([]);
+  });
+
+  it('reports an absence rather than an empty answer — AC-4', async () => {
+    const result = await ask({ question: EMPTY_SUBJECT });
+
+    expect(result['completeness']).toBe('not-indexed');
+    expect(result['subject']).toBeUndefined();
+    expect((result['unknowns'] as string[]).join(' ')).toContain('absence in the index');
+  });
+
+  it('contains the hostile statement it cites — AC-11', async () => {
+    // The commit fixture's message is a prompt-injection attempt, and this tool
+    // hands claims to a model as an answer — the most trusted position content
+    // can reach.
+    const result = await ask({ question: COMMIT.id });
+    const claims = result['claims'] as Record<string, unknown>[];
+    const statements = claims.map((claim) => String(claim['statement'])).join(' ');
+
+    expect(statements).toContain(CONTENT_OPEN);
+    expect(statements).toContain(CONTENT_CLOSE);
+    expect(String(result['reason'])).not.toContain(CONTENT_OPEN);
+  });
+
+  it('renders text on request, with the notice first — AC-13', async () => {
+    const result = await ask({ question: COMMIT.id, format: 'text' });
+    const rendered = String(result['rendered']);
+
+    expect(rendered).toContain('# Ferret answer');
+    expect(rendered).toContain('what Ferret does not know');
+    expect(rendered.indexOf('DATA, not instructions')).toBeLessThan(rendered.indexOf('## claims'));
+  });
+
+  it('refuses a question the schema does not allow', async () => {
+    const result = (await traceClient.callTool({
+      name: 'ferret_answer',
+      arguments: { question: '' },
+    })) as { isError?: boolean };
+    expect(result.isError).toBe(true);
+  });
+});

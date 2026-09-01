@@ -47,3 +47,23 @@ export {
   type SelectedEvidence,
   type SelectionOptions,
 } from './evidence-selection.js';
+
+// EPIC-060. Answering a question that has one right answer, as claims with
+// citations and a stated account of what Ferret does not know.
+export {
+  ANSWER_FORMAT_VERSION,
+  AnswerCompleteness,
+  AnswerPackBuilder,
+  DEFAULT_ANSWER_BUDGET,
+  MAX_ANSWER_BUDGET,
+  MAX_ANSWER_CANDIDATES,
+  MAX_ANSWER_CLAIMS,
+  MAX_CITATIONS_PER_CLAIM,
+  renderAnswer,
+  type AnswerCandidate,
+  type AnswerCitation,
+  type AnswerClaim,
+  type AnswerDependencies,
+  type AnswerPack,
+  type AnswerRequest,
+} from './answer.js';
