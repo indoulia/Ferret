@@ -62,6 +62,13 @@ provider's access to `config.database` for no gain this Epic claims. What is
 new is that a provider no longer has to reach into `config.providers[myId]`
 itself, and that the settings it does get are validated.
 
+**Resolved by EPIC-081.** `ProviderContext.config` no longer carries a
+credential — `database.password` is absent from the type, so reaching for it
+does not compile. The storage provider's access was preserved the way this
+paragraph anticipated it could not be: it *declares* the credential it needs and
+receives it in `context.credentials`, which is a visible line in the one
+provider that opens the connection rather than a property of being loaded.
+
 ## Boundary and surface changes
 
 `providers/configuration.ts` joins the boundary test's core allowlist, on the
@@ -80,9 +87,11 @@ parameter defaulting to `true`.
 
 - **Options are validated once, at startup.** Reconfiguring a running provider
   is out of scope; a change takes effect on the next run.
-- **No credential store.** Secrets still come only from an environment variable
-  or a file, through EPIC-003's existing reference form. Keychains and vaults
-  are EPIC-081.
+- **No credential store.** Secrets come from an environment variable or a file.
+  **Restated by EPIC-081**: those two are now registrations against a resolver
+  seam rather than branches in one function, so a keychain is a third
+  registration and needs no schema change. None is registered — the dependency
+  review a native binding requires has not happened (EPIC-081 §16-3).
 - **A provider that declares no `secretOptions` gets key-name redaction only**,
   which will miss a credential under an innocuous name. Declaration is the fix
   and nothing forces a provider to declare — EPIC-016 conformance is where that

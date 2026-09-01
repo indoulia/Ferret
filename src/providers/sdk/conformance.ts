@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { parseConfig, type FerretConfig } from '../../config/index.js';
+import { credentialsFor, parseConfig, type FerretConfig } from '../../config/index.js';
 import { DependencyStatus, type DependencyCheckResult } from '../../diagnostics/index.js';
 import { ErrorCode, FerretError } from '../../errors/index.js';
 import { validateCapabilityDeclaration, type Capability } from '../capabilities.js';
@@ -304,9 +304,18 @@ export async function runConformance(options: ConformanceOptions): Promise<Confo
 
   const scenario = (): Scenario => {
     const logger = new CapturingLogger();
-    const context = createTestProviderContext({ config, logger, settings });
+    const provider = options.create();
+    // Granted the way the registry grants — EPIC-081 §8.1 — so a provider that
+    // declares a credential is still probed for leaking it, and one that
+    // declares none cannot leak what it never received.
+    const context = createTestProviderContext({
+      config,
+      logger,
+      settings,
+      credentials: credentialsFor(config, provider.credentials ?? []),
+    });
     return {
-      provider: options.create(),
+      provider,
       context,
       logger,
       abort: (): void => {

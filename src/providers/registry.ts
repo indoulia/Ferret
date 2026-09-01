@@ -1,3 +1,4 @@
+import { credentialsFor, withoutCredentialFields } from '../config/index.js';
 import { ErrorCode, FerretError, toFerretError } from '../errors/index.js';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
 
@@ -249,9 +250,23 @@ export class ProviderRegistry {
     return this.#providers.size;
   }
 
-  /** The host context plus one provider's own settings, and nothing else's. */
-  #contextFor(host: ProviderHostContext, settings: ProviderSettings): ProviderContext {
-    return { ...host, settings };
+  /**
+   * The host context, narrowed to one provider.
+   *
+   * Two narrowings, and they are the same idea applied twice. EPIC-015 gave a
+   * provider its own `settings` so it never sees another provider's options;
+   * EPIC-081 removes every credential from `config` and hands back only the
+   * ones this provider *declared*. The registry is where both belong: it is the
+   * only code that knows which provider a context is being built for.
+   */
+  #contextFor(host: ProviderHostContext, provider: Provider, settings: ProviderSettings): ProviderContext {
+    const { config, ...rest } = host;
+    return {
+      ...rest,
+      config: withoutCredentialFields(config),
+      credentials: credentialsFor(config, provider.credentials ?? []),
+      settings,
+    };
   }
 
   /**
@@ -274,7 +289,7 @@ export class ProviderRegistry {
           continue;
         }
         this.#disabled.delete(provider.id);
-        await provider.initialize?.(this.#contextFor(host, settings));
+        await provider.initialize?.(this.#contextFor(host, provider, settings));
         this.#initialized.add(provider.id);
       } catch (error) {
         // A provider that already classified its own failure keeps that
@@ -310,7 +325,7 @@ export class ProviderRegistry {
       if (this.#disabled.has(provider.id)) continue;
       try {
         const settings = providerSettings(provider, host.config);
-        results.push(...(await provider.checkDependencies(this.#contextFor(host, settings))));
+        results.push(...(await provider.checkDependencies(this.#contextFor(host, provider, settings))));
       } catch (error) {
         results.push({
           name: `${provider.id}:dependencies`,

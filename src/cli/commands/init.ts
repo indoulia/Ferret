@@ -87,13 +87,29 @@ export function initCommand(output: (json: boolean) => OutputOptions): Command {
         let saved: string | undefined;
         if (options.save && !options.check && isDatabaseConfigured(context.config)) {
           const store = new ConfigStore();
-          store.setMany({
-            'database.host': context.config.database.host,
-            'database.port': context.config.database.port,
-            'database.database': context.config.database.database,
-            'database.user': context.config.database.user,
-            'database.password': context.config.database.password,
-          });
+          // EPIC-081 AC-3. `context.config` is *resolved*, so passing the
+          // password through unconditionally replaced a stored `$secret`
+          // reference with the literal it resolved to — the command that
+          // documents the mitigation removing it. Preserving the reference is
+          // the whole of the fix; a literal password is still written as a
+          // literal (AC-4), because D-011's reason has not changed.
+          //
+          // A password supplied only through `FERRET_DATABASE_PASSWORD` is
+          // still written as a literal, deliberately. Writing an env reference
+          // instead would look tidier and would break Governance §3: an AI
+          // client spawns Ferret with an environment Ferret does not control,
+          // so a saved configuration that only works inside today's shell is a
+          // configuration that does not work.
+          store.setMany(
+            {
+              'database.host': context.config.database.host,
+              'database.port': context.config.database.port,
+              'database.database': context.config.database.database,
+              'database.user': context.config.database.user,
+              'database.password': context.config.database.password,
+            },
+            { preserveSecretRefs: true },
+          );
           saved = store.path;
         }
 

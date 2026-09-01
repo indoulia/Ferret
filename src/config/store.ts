@@ -8,7 +8,7 @@ import { AuditAction, appendAudit, buildAuditEntry, type AuditEntry } from './au
 import { CONFIG_FILE_VERSION, ferretConfigSchema } from './schema.js';
 import { readConfigFile, type ConfigFile } from './file-source.js';
 import { auditLogPath, userConfigPath } from './paths.js';
-import { resolveSecrets } from './secret-ref.js';
+import { isSecretRef, resolveSecrets } from './secret-ref.js';
 
 /**
  * Persisting configuration.
@@ -333,6 +333,17 @@ export interface ChangeResult {
  * without it, two processes would each read the old document and the second
  * write would silently discard the first change.
  */
+export interface SetManyOptions {
+  /**
+   * Leave a stored `$secret` reference exactly as it is — EPIC-081 §8.2.
+   *
+   * For a caller writing values that have already been through
+   * `resolveSecrets`, where "the same value" and "the same configuration" are
+   * different things.
+   */
+  readonly preserveSecretRefs?: boolean;
+}
+
 export class ConfigStore {
   readonly path: string;
   /**
@@ -421,13 +432,26 @@ export class ConfigStore {
     }));
   }
 
-  /** Applies several dotted-path changes as one atomic, validated write. */
-  setMany(changes: Readonly<Record<string, unknown>>): ChangeResult {
+  /**
+   * Applies several dotted-path changes as one atomic, validated write.
+   *
+   * {@link SetManyOptions.preserveSecretRefs} exists because the one caller that
+   * writes a whole connection at once writes *resolved* values — EPIC-081 AC-3.
+   * The check belongs here rather than in that caller: `#commit` re-reads the
+   * unresolved document inside the lock, and a caller reading it beforehand
+   * would be deciding from a document another process may already have changed.
+   */
+  setMany(changes: Readonly<Record<string, unknown>>, options: SetManyOptions = {}): ChangeResult {
     const parsed = Object.entries(changes).map(([path, value]) => ({ path, segments: parsePath(path), value }));
     return this.#commit((current) => {
       let next = current;
       const entries: AuditEntry[] = [];
       for (const change of parsed) {
+        // The stored form wins. A `$secret` reference is a deliberate choice not
+        // to keep the credential here, and overwriting it with the value it
+        // resolved to destroys exactly the mitigation D-011 offers — silently,
+        // and by the command that recommends it.
+        if (options.preserveSecretRefs === true && isSecretRef(getAt(next, change.segments))) continue;
         entries.push(
           buildAuditEntry({
             action: AuditAction.SET,

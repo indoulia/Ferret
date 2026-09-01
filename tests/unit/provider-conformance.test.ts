@@ -257,9 +257,14 @@ describe('secret handling', () => {
   });
 
   it('fails a provider that logs the database password', async () => {
+    // Reached through the declared grant, because since EPIC-081 there is no
+    // other way to reach it: `context.config.database.password` does not
+    // compile. The check still has something to catch, and now it catches it on
+    // the only provider that could ever have it.
     class Nosy extends GoodProvider {
+      readonly credentials = ['database.password'];
       override initialize(context: ProviderContext): void {
-        context.logger.debug({ dsn: context.config.database.password }, 'connecting');
+        context.logger.debug({ dsn: context.credentials?.['database.password'] }, 'connecting');
       }
     }
 

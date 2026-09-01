@@ -5,6 +5,7 @@ import {
   buildDoctorReport,
   countBySeverity,
   describeConfig,
+  describeConfigProtection,
   type Diagnosis,
 } from '../../index.js';
 import { createLogger, type LogLevel } from '../../logging/index.js';
@@ -71,9 +72,15 @@ export function doctorCommand(
         configuration = core.config === undefined ? undefined : describeConfig(core.config);
       }
 
+      // EPIC-081 AC-10. Reported every run, not only when it is bad: "the file
+      // is readable only by its owner" and "this platform does not enforce
+      // that" are both facts an operator needs, and only one is a warning.
+      const protection = describeConfigProtection();
+
       const payload = {
         ...report,
         ...(options.showConfig ? { configuration: configuration ?? null } : {}),
+        configFile: protection,
         counts,
       };
 
@@ -91,6 +98,7 @@ export function doctorCommand(
             `${String(counts.error)} error(s), ${String(counts.warning)} warning(s), ${String(counts.unknown)} undetermined.`,
           );
         }
+        lines.push('', `configuration at rest: ${protection.detail}`);
         lines.push('', report.summary);
         return lines.join('\n');
       });

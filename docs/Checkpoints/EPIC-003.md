@@ -124,8 +124,8 @@ None.
 
 Full table in the validation evidence. Carried forward:
 
-- `0600` is not enforced on Windows; the file inherits the directory ACL → **EPIC-081**
-- Credentials are stored in a plain file, not an OS keychain → **EPIC-081**
+- `0600` is not enforced on Windows; the file inherits the directory ACL → **EPIC-081** reports it in `ferret doctor` rather than resolving it; the platform is unchanged
+- Credentials are stored in a plain file, not an OS keychain → **EPIC-081** delivered the resolver seam and stopped `--save` flattening a `$secret` reference; no keychain backend is registered
 - The audit journal is never rotated → **EPIC-085**
 - Repository policy may set only `exclude`; widening it is a security decision
 - No schema export for AI clients; agents use `get`/`set` → **EPIC-066**

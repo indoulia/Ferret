@@ -3,6 +3,7 @@ import { isAbsolute } from 'node:path';
 
 import { ErrorCode, FerretError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
+import { withoutCredentials } from '../security/credentials.js';
 
 /**
  * The single point at which Ferret executes `git`.
@@ -532,10 +533,15 @@ function classify(
  * `PATH`, `HOME`, `SystemRoot` and a dozen platform-specific variables, and a
  * hand-built environment would break in ways that are tedious to discover one
  * platform at a time. What is removed is the specific set that can redirect Git
- * at a different repository or name a program for it to run.
+ * at a different repository or name a program for it to run — and, since
+ * EPIC-081, every variable carrying a credential Ferret holds.
  */
 export function scrubEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = { ...source };
+  // Credentials first — EPIC-081 §8.4. The list below was written to stop Git
+  // being redirected, not to stop a secret leaving, and the two concerns want
+  // different lists in different places: this one is Ferret-wide and applies to
+  // every child process, not only to `git`.
+  const environment: NodeJS.ProcessEnv = withoutCredentials(source);
   for (const name of STRIPPED_ENV) delete environment[name];
   return { ...environment, ...FORCED_ENV };
 }

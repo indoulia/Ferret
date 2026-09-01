@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -817,6 +817,66 @@ describe('content never reaches a control path — EPIC-084 AC-6', () => {
       const graph = importGraph(file);
       expect([...graph.files].filter((f) => f.startsWith('storage/'))).toStrictEqual([]);
       expect([...graph.packages].filter((name) => name.startsWith('drizzle'))).toStrictEqual([]);
+    }
+  });
+});
+
+/**
+ * Every child process starts with a scrubbed environment — EPIC-081 AC-9.
+ *
+ * Structural rather than by review, because the failure it catches is an
+ * omission and an omission is invisible in a diff. `detectGit` passed no `env`
+ * at all and inherited `FERRET_DATABASE_PASSWORD` into `git --version`; it had
+ * been that way since EPIC-001, through every review of every Epic that touched
+ * the file, because nothing was looking.
+ *
+ * Two assertions, and both are needed. The first bounds *who* may start a child
+ * at all, so a third spawner has to be added here deliberately. The second
+ * requires each of them to import the scrub, which the import graph can see.
+ * Neither proves the scrub is applied at the call site — `tests/unit/credential-
+ * isolation.test.ts` does that behaviourally — and the division is deliberate:
+ * a structural test that tried to read call sites would be a parser, and a
+ * fragile one.
+ */
+describe('subprocess environment boundary', () => {
+  /**
+   * The only modules permitted to start a child process.
+   *
+   * `git/runner.ts` is Ferret's single point for executing `git`;
+   * `environment/detect.ts` asks the machine what `git` it has. Adding a third
+   * means adding it here, which is the point.
+   */
+  const SPAWNERS = ['environment/detect.ts', 'git/runner.ts'];
+
+  /** Every `.ts` under `src/`, walked directly — reachability is not the question. */
+  function sourceFiles(directory: string = SRC): string[] {
+    const found: string[] = [];
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const full = resolve(directory, entry.name);
+      if (entry.isDirectory()) found.push(...sourceFiles(full));
+      else if (entry.name.endsWith('.ts')) found.push(relative(SRC, full).split(sep).join('/'));
+    }
+    return found;
+  }
+
+  function imports(file: string): string[] {
+    const source = stripComments(readFileSync(resolve(SRC, file), 'utf8'));
+    return [...source.matchAll(SPECIFIER)]
+      .map((match) => match[1])
+      .filter((specifier): specifier is string => specifier !== undefined && MODULE_SPECIFIER.test(specifier));
+  }
+
+  it('starts a child process from two modules and no others', () => {
+    const spawners = sourceFiles().filter((file) => imports(file).includes('node:child_process'));
+
+    expect(spawners.sort()).toStrictEqual(SPAWNERS);
+  });
+
+  it('gives every spawner the credential scrub — AC-9', () => {
+    for (const file of SPAWNERS) {
+      const graph = importGraph(file);
+
+      expect([...graph.files], file).toContain('security/credentials.ts');
     }
   });
 });

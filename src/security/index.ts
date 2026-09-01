@@ -11,6 +11,7 @@ export {
   type ContentSafetyReport,
   type InstructionShapeVerdict,
 } from './containment.js';
+export { CREDENTIAL_ENV, withoutCredentials } from './credentials.js';
 export {
   SECRET_PATH_EXCLUSIONS,
   containsSecret,

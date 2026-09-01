@@ -22,6 +22,15 @@ import { ErrorCode, FerretError } from '../errors/index.js';
  * has to know a value was indirect. An unresolvable reference is a hard error —
  * falling back to an empty password would turn a misconfiguration into a
  * confusing authentication failure much further away.
+ *
+ * **The source is a registration, not a branch — EPIC-081 §8.3.** `env` and
+ * `file` are two {@link SecretResolver}s against one seam rather than two arms
+ * of one `if`. Four approved records park "OS keychain, vault or credential
+ * store" on EPIC-081, and the shape of that work is a third registration and no
+ * change to `databaseConfigSchema`. That the seam admits a third source without
+ * a schema change is EPIC-081 AC-5; which backend fills it is deferred under
+ * §16-3, because a Windows keychain binding is a native module and Ferret's
+ * eight runtime dependencies contain none.
  */
 
 /** Property that marks an object as a secret reference. */
@@ -35,90 +44,217 @@ export interface FileSecretRef {
   readonly file: string;
 }
 
-export type SecretRefBody = EnvironmentSecretRef | FileSecretRef;
+/**
+ * The body of a reference: exactly one source name, and where in it to look.
+ *
+ * `env` and `file` are named for the callers that construct them by hand; the
+ * index signature is what lets a registered third source be written without
+ * this type changing.
+ */
+export type SecretRefBody = EnvironmentSecretRef | FileSecretRef | Readonly<Record<string, string>>;
 
 export interface SecretRef {
   readonly [SECRET_REF_KEY]: SecretRefBody;
+}
+
+/** What a resolver is given. Never the configuration, and never another secret. */
+export interface SecretResolverContext {
+  readonly env: NodeJS.ProcessEnv;
+  readonly readFile: (path: string) => string;
+}
+
+/**
+ * One place a secret can come from.
+ *
+ * A resolver names its source in every failure and never its value — the rule
+ * the `env` and `file` branches already followed, made a contract so a third
+ * source cannot quietly break it.
+ */
+export interface SecretResolver {
+  /** The key inside `$secret` this resolver claims, e.g. `env`. */
+  readonly source: string;
+  /** Where the secret is, in words. Contains no secret. */
+  describe(target: string): string;
+  /**
+   * Why this source cannot be used here, or `undefined` when it can.
+   *
+   * EPIC-081 AC-7. A keychain that does not exist on this platform is an
+   * *unavailable source*, which is a different fact from a secret that is not
+   * there — and neither is an empty password.
+   */
+  unavailableReason?(): string | undefined;
+  /** @throws {FerretError} `E_CONFIG_INVALID`, naming the source, never the value. */
+  resolve(target: string, context: SecretResolverContext): string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** True when `value` has the shape of a secret reference. */
-export function isSecretRef(value: unknown): value is SecretRef {
-  if (!isRecord(value)) return false;
+const RESOLVERS = new Map<string, SecretResolver>();
+
+/**
+ * Registers a secret source.
+ *
+ * Replacing a registration is allowed and is how a test substitutes a resolver;
+ * it is not how production composes one, which is why nothing calls this at
+ * runtime except this module.
+ */
+export function registerSecretResolver(resolver: SecretResolver): void {
+  RESOLVERS.set(resolver.source, resolver);
+}
+
+/** The source names a reference may use, in registration order. */
+export function secretResolverSources(): readonly string[] {
+  return [...RESOLVERS.keys()];
+}
+
+/** The resolver for a source, or `undefined` when nothing claims it. */
+export function secretResolverFor(source: string): SecretResolver | undefined {
+  return RESOLVERS.get(source);
+}
+
+registerSecretResolver({
+  source: 'env',
+  describe: (target) => `environment variable ${target}`,
+  resolve: (target, context) => {
+    const value = context.env[target];
+    if (value === undefined || value === '') {
+      throw new FerretError(
+        ErrorCode.CONFIG_INVALID,
+        `Secret reference to environment variable ${target} could not be resolved: the variable is unset or empty`,
+        {
+          details: { source: 'env', variable: target },
+          remediation: `Set ${target} in the environment Ferret runs in, or replace the reference with a different secret source.`,
+        },
+      );
+    }
+    return value;
+  },
+});
+
+registerSecretResolver({
+  source: 'file',
+  describe: (target) => `file ${target}`,
+  resolve: (target, context) => {
+    let contents: string;
+    try {
+      contents = context.readFile(target);
+    } catch (error) {
+      throw new FerretError(ErrorCode.CONFIG_INVALID, `Secret reference to file ${target} could not be read`, {
+        details: { source: 'file', path: target },
+        remediation: `Check that ${target} exists and that Ferret's user can read it.`,
+        cause: error,
+      });
+    }
+
+    // A trailing newline is what `echo secret > file` and most secret mounts
+    // produce; treating it as part of the password would be a silent failure.
+    const value = contents.replace(/\r?\n$/, '');
+    if (value === '') {
+      throw new FerretError(
+        ErrorCode.CONFIG_INVALID,
+        `Secret reference to file ${target} resolved to an empty value`,
+        {
+          details: { source: 'file', path: target },
+          remediation: `Write the secret into ${target}, or remove the reference.`,
+        },
+      );
+    }
+    return value;
+  },
+});
+
+/**
+ * The one source name and target a reference body carries.
+ *
+ * `undefined` when the body is not exactly one non-empty string — which is what
+ * makes `{ $secret: {} }` and `{ $secret: { env: 'X', file: '/x' } }` not
+ * references rather than broken ones. Two sources would be ambiguous, and
+ * guessing between them is how the wrong secret gets used.
+ */
+function refBody(value: unknown): { source: string; target: string } | undefined {
+  if (!isRecord(value)) return undefined;
   const body: unknown = value[SECRET_REF_KEY];
-  if (!isRecord(body)) return false;
-  const hasEnv = typeof body['env'] === 'string' && body['env'] !== '';
-  const hasFile = typeof body['file'] === 'string' && body['file'] !== '';
-  // Exactly one source. Both would be ambiguous; neither is not a reference.
-  return hasEnv !== hasFile;
+  if (!isRecord(body)) return undefined;
+  const entries = Object.entries(body);
+  if (entries.length !== 1) return undefined;
+  const [source, target] = entries[0] as [string, unknown];
+  if (typeof target !== 'string' || target === '') return undefined;
+  return { source, target };
+}
+
+/**
+ * True when `value` has the shape of a secret reference.
+ *
+ * Shape only: a body naming a source nothing has registered is still a
+ * reference, and saying so is what lets resolution fail with "unknown secret
+ * source" instead of writing `{ $secret: { keychain: … } }` into a password
+ * field as though it were a literal.
+ */
+export function isSecretRef(value: unknown): value is SecretRef {
+  return refBody(value) !== undefined;
 }
 
 /** Human-readable description of where a secret comes from. Contains no secret. */
 export function describeSecretRef(ref: SecretRef): string {
-  const body = ref[SECRET_REF_KEY];
-  return 'env' in body ? `environment variable ${body.env}` : `file ${body.file}`;
+  const body = refBody(ref);
+  if (body === undefined) return 'an unrecognised secret reference';
+  const resolver = RESOLVERS.get(body.source);
+  return resolver === undefined ? `${body.source} ${body.target}` : resolver.describe(body.target);
 }
 
 /**
  * Resolves a secret reference to its value.
  *
- * @throws {FerretError} `E_CONFIG_INVALID` when the source is missing or empty.
- * The error names the *source*, never the value.
+ * @throws {FerretError} `E_CONFIG_INVALID` when the source is unknown,
+ * unavailable, missing or empty. The error names the *source*, never the value.
  */
 export function resolveSecretRef(
   ref: SecretRef,
   env: NodeJS.ProcessEnv = process.env,
   readFile: (path: string) => string = (path) => readFileSync(path, 'utf8'),
 ): string {
-  const body = ref[SECRET_REF_KEY];
-
-  if ('env' in body) {
-    const value = env[body.env];
-    if (value === undefined || value === '') {
-      throw new FerretError(
-        ErrorCode.CONFIG_INVALID,
-        `Secret reference to ${describeSecretRef(ref)} could not be resolved: the variable is unset or empty`,
-        {
-          details: { source: 'env', variable: body.env },
-          remediation: `Set ${body.env} in the environment Ferret runs in, or replace the reference with a different secret source.`,
-        },
-      );
-    }
-    return value;
+  const body = refBody(ref);
+  if (body === undefined) {
+    throw new FerretError(ErrorCode.CONFIG_INVALID, 'A secret reference must name exactly one source', {
+      details: { sources: secretResolverSources() },
+      remediation: `Write the reference as { "$secret": { "<source>": "<where>" } } using one of: ${secretResolverSources().join(', ')}.`,
+    });
   }
 
-  let contents: string;
-  try {
-    contents = readFile(body.file);
-  } catch (error) {
+  const resolver = RESOLVERS.get(body.source);
+  if (resolver === undefined) {
     throw new FerretError(
       ErrorCode.CONFIG_INVALID,
-      `Secret reference to ${describeSecretRef(ref)} could not be read`,
+      `Secret reference names an unknown source: ${body.source}`,
       {
-        details: { source: 'file', path: body.file },
-        remediation: `Check that ${body.file} exists and that Ferret's user can read it.`,
-        cause: error,
+        details: { source: body.source, known: secretResolverSources() },
+        remediation: `Use one of the registered secret sources: ${secretResolverSources().join(', ')}.`,
       },
     );
   }
 
-  // A trailing newline is what `echo secret > file` and most secret mounts
-  // produce; treating it as part of the password would be a silent failure.
-  const value = contents.replace(/\r?\n$/, '');
-  if (value === '') {
+  // AC-7 — an unavailable source is reported as one. Falling through to the
+  // resolver would produce whatever a missing keychain returns, and the most
+  // likely answer is nothing, which is the empty password this module has
+  // refused to produce since it was written.
+  const unavailable = resolver.unavailableReason?.();
+  if (unavailable !== undefined) {
     throw new FerretError(
       ErrorCode.CONFIG_INVALID,
-      `Secret reference to ${describeSecretRef(ref)} resolved to an empty value`,
+      `Secret source ${body.source} is not available here: ${unavailable}`,
       {
-        details: { source: 'file', path: body.file },
-        remediation: `Write the secret into ${body.file}, or remove the reference.`,
+        details: { source: body.source, reason: unavailable },
+        remediation: `Use a secret source available on this platform: ${secretResolverSources().join(', ')}.`,
       },
     );
   }
-  return value;
+
+  return resolver.resolve(body.target, {
+    env,
+    readFile,
+  });
 }
 
 export interface ResolveSecretsOptions {
