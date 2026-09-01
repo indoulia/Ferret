@@ -101,7 +101,14 @@ describe('the committed dataset', () => {
         for (const entry of readdirSync(directory)) {
           const full = join(directory, entry);
           if (statSync(full).isDirectory()) rewrite(full);
-          else writeFileSync(full, readFileSync(full, 'utf8').replace(/\n/g, '\r\n'), 'utf8');
+          // To LF first, then to CRLF. A bare `\n` → `\r\n` is not idempotent,
+          // and on Windows the checkout is *already* CRLF — so the naive version
+          // wrote `\r\r\n` and this test failed on the one platform it exists
+          // for. CI caught that too.
+          else {
+            const text = readFileSync(full, 'utf8').replace(/\r\n/g, '\n');
+            writeFileSync(full, text.replace(/\n/g, '\r\n'), 'utf8');
+          }
         }
       };
       rewrite(at);
