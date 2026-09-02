@@ -220,9 +220,11 @@ recorded as discharged.
 - **No signing or notarisation**, because Ferret ships JavaScript. If a future
   Epic ships a native binary or a `pkg` bundle, notarisation becomes real work
   and this Epic's non-scope stops being adequate.
-- **Alpine and musl are unmeasured.** A container-based deployment of Ferret is
-  likely to be Alpine, and `tree-sitter`'s WASM loading is the part most likely
-  to differ. EPIC-107 owns Docker distribution and is where that belongs.
+- **~~Alpine and musl are unmeasured.~~ Measured 2026-09-03 by EPIC-107.** The
+  Docker image is `node:22-alpine`, and a probe run inside it parsed TypeScript
+  through the real provider: `{"parserId":"ferret.parser.code","symbols":
+  ["arrow","named","Thing"],"segments":4}`. `tree-sitter`'s WASM grammars load
+  on musl; all four ship in the image.
 - **A nightly macOS run is not added.** Windows has one; if macOS moves off the
   PR gate, it should get the same nightly, and §8.9's decision records whether
   it did.

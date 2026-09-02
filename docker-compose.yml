@@ -1,0 +1,82 @@
+# PostgreSQL for Ferret — EPIC-107.
+#
+# `validation/EPIC-102-103-104-VALIDATION.md` carried the row this answers:
+# "Onboarding assumes PostgreSQL already exists. The README says how to point
+# Ferret at one, not how to get one."
+#
+# Two commands from nothing to a schema:
+#
+#     docker compose up -d --wait
+#     ferret config set database.host localhost \
+#       && ferret config set database.port 5432 \
+#       && ferret config set database.database ferret \
+#       && ferret config set database.user ferret \
+#       && ferret config set database.password ferret \
+#       && ferret init
+#
+# Or, without storing anything:
+#
+#     FERRET_DATABASE_HOST=localhost FERRET_DATABASE_PORT=5432 \
+#     FERRET_DATABASE_NAME=ferret FERRET_DATABASE_USER=ferret \
+#     FERRET_DATABASE_PASSWORD=ferret ferret init
+#
+# Ferret reads discrete `FERRET_DATABASE_*` variables rather than a connection
+# URL — `src/config/resolve.ts`'s `ENV_BINDINGS` is the list.
+#
+# **This is a development database, not a deployment.** No backups, no
+# replication, no resource limits, and the password below is a default anyone
+# can read. A compose file that looked production-ready would be the more
+# dangerous document — so this one says plainly that it is not one.
+#
+# It configures nothing about Ferret. Ferret is configured through
+# `ferret config set` or the environment, because EPIC-003's `ConfigStore` is
+# the only writer of Ferret's configuration and a second one would be a second
+# set of durability bugs.
+
+services:
+  postgres:
+    # The image EPIC-005 benchmarked and validated pgvector 0.8.6 against, and
+    # the one `tests/global-setup.ts` starts. So the database a new user gets is
+    # the database Ferret is tested against, rather than a similar one.
+    image: pgvector/pgvector:pg17
+    container_name: ferret-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ferret
+      # A development default. Change it, or use a real secret manager and point
+      # Ferret at it with `{"$secret": {"env": "..."}}` — EPIC-081's reference
+      # form, which stores where the secret is rather than what it is.
+      POSTGRES_PASSWORD: ferret
+      POSTGRES_DB: ferret
+    ports:
+      # Published on localhost only. A bare `5432:5432` would expose the
+      # database on every interface the host has, which for a container holding
+      # an index of someone's source code is the wrong default.
+      #
+      # The host port is overridable because 5432 is very often already taken —
+      # found immediately on the machine this was written on, where another
+      # project's PostgreSQL held it:
+      #
+      #     FERRET_POSTGRES_PORT=5433 docker compose up -d --wait
+      #
+      # Set `database.port` to match. The *container* port stays 5432, so
+      # nothing inside the image needs to know.
+      - '127.0.0.1:${FERRET_POSTGRES_PORT:-5432}:5432'
+    volumes:
+      # Named, so `docker compose down` does not silently discard an index that
+      # took minutes to build. `docker compose down -v` still does, which is the
+      # documented way to start over.
+      - ferret-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # So `docker compose up --wait` returns when the database can actually
+      # answer, rather than when the container has started. A `ferret init`
+      # against a still-starting PostgreSQL fails with a connection error that
+      # looks like a configuration problem.
+      test: ['CMD-SHELL', 'pg_isready -U ferret -d ferret']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  ferret-pgdata:
+    name: ferret-pgdata
