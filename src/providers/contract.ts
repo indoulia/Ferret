@@ -212,6 +212,19 @@ export interface ProviderDescriptor {
    * answer from "not installed", and only one of them is a missing dependency.
    */
   readonly enabled: boolean;
+  /**
+   * Why this provider did not start, when it tried and failed — EPIC-093 §8.4.
+   *
+   * Present only for an *optional* provider whose `initialize` threw. Failed
+   * and disabled are different facts: one is a configuration decision and the
+   * other is an event, and Governance §6 requires them to look different. An
+   * operator asking why content indexing is not running needs to know which
+   * happened.
+   *
+   * The error's code, not its message. A message can carry a path or a value;
+   * a code is a fact about the failure.
+   */
+  readonly failure?: string;
   /** Capabilities declared, so diagnostics can report what a provider offers. */
   readonly capabilities: readonly Capability[];
 }
@@ -220,6 +233,7 @@ export function describeProvider(
   provider: Provider,
   initialized: boolean,
   enabled = true,
+  failure?: string,
 ): ProviderDescriptor {
   const descriptor: {
     id: string;
@@ -228,6 +242,7 @@ export function describeProvider(
     description?: string;
     initialized: boolean;
     enabled: boolean;
+    failure?: string;
     capabilities: readonly Capability[];
   } = {
     id: provider.id,
@@ -235,6 +250,7 @@ export function describeProvider(
     contractVersion: provider.contractVersion,
     initialized,
     enabled,
+    ...(failure === undefined ? {} : { failure }),
     capabilities: (provider.capabilities ?? []).map((declaration) => declaration.capability),
   };
   if (provider.description !== undefined) descriptor.description = provider.description;
