@@ -31,6 +31,7 @@ import {
   MigrationPolicy,
   RelationshipStore,
   ContentStore,
+  IndexRunStore,
   SymbolStore,
   createStorageProvider,
   type FerretDatabase,
@@ -161,6 +162,10 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
             evidence: new EvidenceStore(storage.db),
             watermarks: compatibility,
             lifecycle: new IndexLifecycleStore(storage.db),
+            // EPIC-094 — every run records that it started, so a run that dies
+            // halfway is a fact on record rather than an inference from which
+            // tables happen to be empty.
+            runs: new IndexRunStore(storage.db),
             ...contentPorts,
             logger: context.logger,
           });

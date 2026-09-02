@@ -113,6 +113,33 @@ export function contentHash(value: unknown): string {
   return createHash('sha256').update(stableStringify(value), 'utf8').digest('hex');
 }
 
+/**
+ * An instant in one spelling, so the same moment hashes identically.
+ *
+ * **Found by EPIC-094, measured.** A commit's `sourceObservedAt` arrived from
+ * Git as `2026-09-01T21:33:28+05:30` and was hashed in that form; the column is
+ * a `timestamptz`, so it reads back as `2026-09-01T16:03:28.000Z`. The same
+ * instant, different bytes — which meant `content_hash` was a function of the
+ * *spelling* a source happened to use rather than of the value, and could not
+ * be recomputed from a stored row at all. On Ferret's own index that was 135
+ * commits, 14 files and 16 relationships reported as corrupt when nothing was.
+ *
+ * `contentHash`'s own doc comment already promised that "two encodings of the
+ * same content hash identically". For strings and objects it was true. For
+ * instants it was not, and this is what makes it true.
+ *
+ * **Hashing only.** Canonical keys and ids are deliberately not touched: they
+ * are stored identifiers, and renormalising them would re-point every row that
+ * carries a timestamp in its key. A value that does not parse is returned
+ * unchanged rather than replaced — Governance §6, an unparseable instant is
+ * data Ferret does not understand, not a reason to invent one.
+ */
+export function canonicalInstant(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+}
+
 /** Deterministic JSON: object keys sorted, arrays left in order. */
 export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';

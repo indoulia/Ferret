@@ -91,6 +91,7 @@ if the body throws — so a started runtime cannot leak.
 | `ferret status` | Implemented | EPIC-004 |
 | `ferret doctor` | Implemented | EPIC-004 |
 | `ferret index` | Implemented | EPIC-031 |
+| `ferret verify` | Implemented | EPIC-094 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
 
 Every approved command in this release is implemented. The mechanism for
@@ -203,6 +204,8 @@ around it, never the content itself. See
 ### Check it is working
 
 ```bash
+ferret verify          # does what Ferret stored still match what Ferret derived
+ferret verify --repair --yes   # re-read the affected repositories from source
 ferret status          # is the database reachable, is the schema current
 ferret doctor          # ...and what to do about it if not
 ```

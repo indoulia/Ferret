@@ -489,17 +489,36 @@ export class EvidenceStore {
   }
 
   /**
-   * Verifies many records, returning the ones that fail rather than throwing.
+   * Verifies one subject's records, returning the ones that fail rather than
+   * throwing.
    *
    * An integrity sweep wants the whole picture; stopping at the first bad row
    * would hide how much is affected.
+   *
+   * **The bound is reported, not applied silently — EPIC-094, issue #95.** This
+   * read at most 1 000 rows and returned `checked` as though it were the whole
+   * subject, so a subject with more observations than that was reported clean
+   * on the strength of its first thousand. A partial answer presented as a whole
+   * one is the exact failure Governance §6 forbids, and it is the worst possible
+   * place to make it: it looks like success.
+   *
+   * `complete` is the field a caller must read. An installation-wide sweep lives
+   * in {@link IntegrityService}; this stays subject-scoped because that is what
+   * its one caller asks for.
    */
-  async verifyAll(subjectId: string): Promise<{ checked: number; tampered: string[] }> {
-    const records = await this.forSubject(subjectId, { ...UNRESTRICTED_READ, limit: 1_000 });
+  async verifyAll(
+    subjectId: string,
+    options: { readonly limit?: number } = {},
+  ): Promise<{ checked: number; total: number; complete: boolean; tampered: string[] }> {
+    const limit = options.limit ?? 1_000;
+    // Named, not omitted — EPIC-083 AC-2. An integrity read sees everything
+    // Ferret wrote, including protected records, and says so.
+    const records = await this.forSubject(subjectId, { ...UNRESTRICTED_READ, limit });
+    const total = await this.count(subjectId);
     const tampered = records
       .filter((record) => integrityHashOf(record) !== record.integrityHash)
       .map((record) => record.id);
-    return { checked: records.length, tampered };
+    return { checked: records.length, total, complete: records.length >= total, tampered };
   }
 
   /** True when the source content has changed since the evidence was recorded. */

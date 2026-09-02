@@ -228,6 +228,33 @@ export interface ContentBlobWriter {
 }
 
 /**
+ * Where the indexer records that a run happened — EPIC-094 §3.3.
+ *
+ * Intent before effect: a row opened before the first stage writes anything and
+ * closed after the last one. The gap it fills is specific — transactions are
+ * per batch and the watermark moves only after every stage succeeds, both
+ * correct, and together they mean a run killed halfway leaves rows written and
+ * no record that it ever started. The health probe then answers "nothing has
+ * been indexed yet" to an operator whose database holds thousands of rows.
+ *
+ * Optional, and failure to journal never fails a run: Governance §20 asks for
+ * inspectability, not for a new way to abort an index.
+ */
+export interface RunJournal {
+  start(input: {
+    repositoryKey: string;
+    repositoryId?: string | undefined;
+    invocation?: string | undefined;
+  }): Promise<{ readonly id: string } | undefined>;
+  finish(
+    id: string,
+    outcome: 'succeeded' | 'failed',
+    summary?: Record<string, unknown>,
+    repositoryId?: string,
+  ): Promise<void>;
+}
+
+/**
  * Why the content stage did not run, when it did not.
  *
  * Never silence, and never a block of zeroes: EPIC-108 §8.8 and Governance §6

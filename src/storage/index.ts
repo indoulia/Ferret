@@ -151,6 +151,17 @@ export {
 
 export { SymbolStore, escapeLikePrefix } from './symbols.js';
 export {
+  DEFAULT_SWEEP_LIMIT,
+  IntegrityService,
+  UNFINISHED_RUN_AFTER_MS,
+  type SweepCounts,
+  type SweepCursor,
+  type SweepOptions,
+  type SweepReport,
+} from './integrity.js';
+export { IndexRunStore, RunOutcome, type StartedRun, type UnfinishedRun } from './runs.js';
+export { indexRun, type IndexRunRow } from './schema/runs.js';
+export {
   ContentStore,
   MAX_STORED_TEXT_BYTES,
   OMITTED_REASONS,

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { ErrorCode, FerretError } from '../errors/index.js';
 
-import { canonicalId, contentHash, encodeKeyParts } from './identity.js';
+import { canonicalId, canonicalInstant, contentHash, encodeKeyParts } from './identity.js';
 import { EntityKind } from './kinds.js';
 
 /**
@@ -362,8 +362,12 @@ export function createRelationship(
       fromId: value.fromId,
       type: value.type,
       toId: value.toId,
-      validFrom,
-      validTo,
+      // Canonicalised for the same reason as an entity's `sourceObservedAt`:
+      // both columns are `timestamptz` and normalise what they are given. The
+      // *key* above keeps the original spelling, deliberately — it is a stored
+      // identifier, and renormalising it would re-point every relationship.
+      validFrom: canonicalInstant(validFrom),
+      validTo: canonicalInstant(validTo),
       metadata: value.metadata,
       sourceSystem: value.sourceSystem,
       sourceId: value.sourceId ?? null,
