@@ -80,6 +80,13 @@ observation legitimately says — that the fact began before Ferret thought it d
 — is recorded as an `updated` outcome; moving an interval's start backwards is
 EPIC-076's, which is where reconciling out-of-order observations belongs.
 
+**Since resolved, and not by EPIC-076.** The start *does* move backwards: the
+row is deleted and replaced (`relationships.ts:204`), because `validFrom` is
+part of relationship identity and editing in place would leave an id that no
+longer derives from the row it names. That landed with the "what did this
+repository contain at noon" defect. EPIC-076 verified it by test rather than
+inheriting the paragraph.
+
 ---
 
 ## 4. Dogfooding: Ferret indexed its own repository
@@ -190,9 +197,9 @@ that were correct. It took reading real output.
 | Limitation | Impact | Owner |
 | --- | --- | --- |
 | **The file tree is read in full on every run.** Only history is incremental. | The second run is cheaper but not cheap: 9.3 s against 17.3 s on this repository. A tree hash comparison against the watermark would make an unchanged revision nearly free. | **EPIC-032** |
-| **An out-of-order observation does not move an interval's start backwards.** | An earlier observation of an already-open fact reports `updated` but leaves `valid_from` where it was. Never having two open intervals is worth more. | **EPIC-076** |
+| ~~**An out-of-order observation does not move an interval's start backwards.**~~ | **No longer true — verified by EPIC-076.** `relationships.ts:204` deletes and replaces the row when an earlier observation arrives, so the start *does* move backwards and exactly one interval stays open. Proved by `tests/integration/indexing/incremental-sync.test.ts` — "moves an interval start backwards for an earlier observation". The fix landed with the noon-query defect and nobody struck this row. | **Resolved** |
 | Indexing is one repository at a time, sequentially, with no back-pressure. | Correct and slow. Parallelism across repositories is a scheduling decision. | **EPIC-032** |
 | No untracked working-directory state. | Everything indexed is committed state. "What am I working on right now" is a different read. | **EPIC-032** |
-| The watermark is per repository, not per branch. | Indexing `HEAD` then a feature branch advances one watermark, so a later `HEAD` run may skip commits it has not seen on that branch. **This is a real correctness gap, not just a performance one.** | **EPIC-032** |
+| ~~The watermark is per repository, not per branch.~~ | **No longer true — verified by EPIC-076.** `watermarkScopeId` derives the scope from the repository *and* the revision (issue #19), so `HEAD` and a feature branch hold separate cursors. Proved by `incremental-sync.test.ts` — "keeps one cursor per revision, so neither skips the other". The row announced a real correctness gap that had already been closed. | **Resolved** |
 | A failed run repeats rather than resumes. | Deliberate: resuming from a position never reached would leave a permanent gap. Costly for a very large first index. | **EPIC-032** |
 | `--since` re-reads the boundary second. | Documented; the alternative risks losing history. On a fast runner an entire small history can be created inside one second, in which case an "incremental" run legitimately re-reads all of it — which is why the test asserts that the second run *writes* nothing rather than that it *reads* less. | — |
