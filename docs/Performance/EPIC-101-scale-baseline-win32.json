@@ -1,0 +1,81 @@
+{
+  "scale": {
+    "entities": 20000,
+    "evidence": 20000,
+    "relationships": 20000
+  },
+  "samples": 30,
+  "measurements": [
+    {
+      "label": "entity by canonical key",
+      "samples": 30,
+      "medianMs": 0.74,
+      "p95Ms": 0.85,
+      "budgetMs": 100
+    },
+    {
+      "label": "evidence by subject",
+      "samples": 30,
+      "medianMs": 0.75,
+      "p95Ms": 0.87,
+      "budgetMs": 150
+    },
+    {
+      "label": "edges by endpoint (one hop)",
+      "samples": 30,
+      "medianMs": 0.73,
+      "p95Ms": 0.84,
+      "budgetMs": 150
+    },
+    {
+      "label": "symbol by name prefix",
+      "samples": 30,
+      "medianMs": 1.63,
+      "p95Ms": 2.62,
+      "budgetMs": 200
+    },
+    {
+      "label": "evidence read, unscoped",
+      "samples": 30,
+      "medianMs": 1.43,
+      "p95Ms": 11.68,
+      "budgetMs": 150
+    },
+    {
+      "label": "evidence read, scoped",
+      "samples": 30,
+      "medianMs": 1.71,
+      "p95Ms": 6.12,
+      "budgetMs": 150
+    }
+  ],
+  "unexercised": [
+    "content_blob_search_idx",
+    "derived_artifact_producer_idx",
+    "derived_artifact_scope_idx",
+    "derived_artifact_state_idx",
+    "entity_code_symbol_path_idx",
+    "entity_code_symbol_qualified_name_idx",
+    "entity_external_lookup_idx",
+    "entity_file_version_content_hash_idx",
+    "entity_kind_idx",
+    "entity_kind_source_idx",
+    "entity_lifecycle_idx",
+    "entity_search_idx",
+    "evidence_derivation_source_idx",
+    "evidence_producer_idx",
+    "evidence_search_idx",
+    "evidence_source_idx",
+    "evidence_state_idx",
+    "identity_alias_actor_idx",
+    "identity_alias_class_idx",
+    "identity_alias_current_idx",
+    "identity_alias_lookup_idx",
+    "index_run_open_idx",
+    "index_run_repository_idx",
+    "relationship_assertion_idx",
+    "relationship_open_idx",
+    "relationship_type_idx",
+    "relationship_valid_from_idx"
+  ]
+}

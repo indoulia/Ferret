@@ -78,6 +78,8 @@ hard-coded that means nothing." Any metric here must therefore be computed from
 - **Semantic retrieval quality.** Ferret ships no embedding provider, so there is
   nothing to measure and the dataset carries no semantic labels (EPIC-096 §4).
 - **Performance** — EPIC-101. Quality and speed are different numbers.
+  **Delivered 2026-09-03**, and the split held: EPIC-101 measures milliseconds
+  and asserts query plans; this Epic still owns precision and recall.
 - **A score-based threshold.** §2 records why `ts_rank` cannot carry one.
 
 ## 5. Inputs
