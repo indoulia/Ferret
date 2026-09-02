@@ -189,3 +189,13 @@ export {
   type StoredContent,
 } from './content.js';
 export { contentBlob, type ContentBlobRow } from './schema/content.js';
+export {
+  DEFAULT_JOURNAL_KEEP,
+  RETENTION_TARGETS,
+  RetentionService,
+  RetentionTarget,
+  planReclaims,
+  type RetentionCount,
+  type RetentionPlan,
+  type RetentionRequest,
+} from './retention.js';

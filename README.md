@@ -92,6 +92,7 @@ if the body throws — so a started runtime cannot leak.
 | `ferret doctor` | Implemented | EPIC-004 |
 | `ferret index` | Implemented | EPIC-031 |
 | `ferret verify` | Implemented | EPIC-094 |
+| `ferret prune` | Implemented | EPIC-088 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
 
 Every approved command in this release is implemented. The mechanism for
@@ -209,6 +210,26 @@ ferret verify --repair --yes   # re-read the affected repositories from source
 ferret status          # is the database reachable, is the schema current
 ferret doctor          # ...and what to do about it if not
 ```
+
+### Reclaim space
+
+```bash
+ferret prune                       # what could be reclaimed; deletes nothing
+ferret prune --blobs --yes         # content no file version references
+ferret prune --journals --yes      # rotated audit journals above the kept count
+ferret prune --evidence --superseded-older-than 90 --yes
+```
+
+Nothing is deleted unless a target is named *and* `--yes` is given — `--yes`
+alone deletes nothing, because it is a confirmation and not a target. There is
+no schedule and no configured policy: a delete nobody can see run is a delete
+nobody can audit.
+
+A **tombstone is never deleted**, and there is no flag for it. "What happened to
+this file, when was it deleted, what did it contain" are the questions Ferret
+indexes history to answer, so a blob a deleted file version still names counts
+as referenced and stays. See
+[EPIC-088](docs/EPICs/EPIC-088-Retention-And-Exclusion-Policies.md).
 
 ## Global options
 
