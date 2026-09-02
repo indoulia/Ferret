@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -195,7 +196,24 @@ describe('package contents', () => {
     const digest = (path: string): string =>
       createHash('sha256').update(readFileSync(path)).digest('hex');
 
-    expect(digest(join(second, pack.filename))).toBe(digest(tarball));
+    // Issue #130 — this failed once and passed twice on the same tree, and its
+    // only message was a bare 64-character hex string. The uncompressed tar is
+    // compared first, so a recurrence says *which layer* differed: the archived
+    // bytes, or the gzip framing around them. A whole-file digest cannot
+    // distinguish those, which is what left #130's single occurrence without a
+    // cause.
+    const contentDigest = (path: string): string =>
+      createHash('sha256').update(gunzipSync(readFileSync(path))).digest('hex');
+
+    expect(
+      contentDigest(join(second, pack.filename)),
+      'the archived bytes differ, so the build itself is not reproducible',
+    ).toBe(contentDigest(tarball));
+
+    expect(
+      digest(join(second, pack.filename)),
+      'the archived bytes match, so the gzip framing differs',
+    ).toBe(digest(tarball));
   });
 
   it('stays small enough to install quickly', () => {

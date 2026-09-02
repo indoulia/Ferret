@@ -96,6 +96,28 @@ describeDb(`CLI authorization (${databaseAvailable() ? 'real PostgreSQL' : SKIP_
     expect(result.code).toBe(ExitCode.OK);
   });
 
+  it('refuses to export when configuration withholds read — EPIC-089 AC-6', async () => {
+    // An export is the largest read Ferret performs: every row it holds, in one
+    // file. So it is checked as a read, and a grant that withholds `read`
+    // withholds it — which is the point of checking a bulk read at all.
+    const result = await runCli(['export'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['index']) },
+    });
+
+    expect(result.code).toBe(ExitCode.NOT_PERMITTED);
+    expect(result.stderr).toContain('E_NOT_PERMITTED');
+    expect(result.stderr).toContain('export');
+  });
+
+  it('exports when configuration grants read — EPIC-089 AC-6, the control', async () => {
+    const result = await runCli(['export'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read']) },
+    });
+
+    expect(result.stderr).not.toContain('E_NOT_PERMITTED');
+    expect(result.code).toBe(ExitCode.OK);
+  });
+
   it('indexes with no authorization configured at all — AC-3, the default', async () => {
     // EPIC-083 §16. The CLI's unconfigured default is the local operator, not the
     // anonymous client: refusing a person at their own machine protects nobody,

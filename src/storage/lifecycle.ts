@@ -1,9 +1,27 @@
 import { sql } from 'drizzle-orm';
 
-import { EntityKind, LifecycleState, RelationshipType } from '../domain/index.js';
+import {
+  EntityKind,
+  LifecycleState,
+  RelationshipType,
+  createRelationship,
+} from '../domain/index.js';
 
 import { classifyDatabaseError } from './connection.js';
-import type { FerretDatabase } from './entities.js';
+import { recomputeEntityHash, type FerretDatabase } from './entities.js';
+
+/**
+ * A timestamp column as an ISO instant.
+ *
+ * `db.execute` is a raw query, so a `timestamptz` arrives as whatever the
+ * driver produced — a `Date` through Drizzle's mapping, a string without it.
+ * Assuming either one is how `row.valid_from.toISOString is not a function`
+ * reached a test. `canonicalInstant` normalises the result, which is what makes
+ * a content hash recomputable from the row it describes (EPIC-006).
+ */
+function instantOf(value: Date | string): string {
+  return (value instanceof Date ? value : new Date(value)).toISOString();
+}
 
 /**
  * Reconciling what Ferret believes exists with what it observed.
@@ -246,9 +264,15 @@ export class IndexLifecycleStore {
           sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${repositoryId}:${containment}:${entityId}`}, 0))`,
         );
 
+        // Issue #118 — the hash covers `lifecycle`, so it is recomputed for
+        // the state being written. Derived before the UPDATE and from the row
+        // as it will be, not as it is.
+        const retiredHash = await recomputeEntityHash(tx, entityId, LifecycleState.DELETED);
         const updated = await tx.execute<{ id: string }>(sql`
           UPDATE ferret.entity
-             SET lifecycle = ${LifecycleState.DELETED}, last_indexed_at = ${now}
+             SET lifecycle = ${LifecycleState.DELETED},
+                 last_indexed_at = ${now}
+                 ${retiredHash === undefined ? sql`` : sql`, content_hash = ${retiredHash}`}
            WHERE id = ${entityId} AND lifecycle <> ${LifecycleState.DELETED}
           RETURNING id
         `);
@@ -265,6 +289,18 @@ export class IndexLifecycleStore {
              AND valid_to IS NULL
           RETURNING id
         `);
+
+        // Issue #118's other half. After the close rather than before, because
+        // `GREATEST(valid_from, $at)` is PostgreSQL's answer and not one this
+        // side can predict — the hash has to be over the interval that was
+        // actually written.
+        for (const row of closed.rows) {
+          const hash = await this.#rehashRelationship(tx, row.id);
+          if (hash === undefined) continue;
+          await tx.execute(
+            sql`UPDATE ferret.relationship SET content_hash = ${hash} WHERE id = ${row.id}`,
+          );
+        }
 
         // The entity and the edge are retired independently, because they can
         // disagree: a full re-index reopens containment from the commit that
@@ -295,15 +331,64 @@ export class IndexLifecycleStore {
    */
   async reinstate(entityId: string, now: Date = new Date()): Promise<boolean> {
     try {
-      const updated = await this.#db.execute<{ id: string }>(sql`
-        UPDATE ferret.entity
-           SET lifecycle = ${LifecycleState.ACTIVE}, last_indexed_at = ${now}
-         WHERE id = ${entityId} AND lifecycle = ${LifecycleState.DELETED}
-        RETURNING id
-      `);
-      return updated.rows.length > 0;
+      // Issue #118 in the other direction: a reinstated row was mismatched for
+      // the same reason a retired one was.
+      return await this.#db.transaction(async (tx) => {
+        const activeHash = await recomputeEntityHash(tx, entityId, LifecycleState.ACTIVE);
+        const updated = await tx.execute<{ id: string }>(sql`
+          UPDATE ferret.entity
+             SET lifecycle = ${LifecycleState.ACTIVE},
+                 last_indexed_at = ${now}
+                 ${activeHash === undefined ? sql`` : sql`, content_hash = ${activeHash}`}
+           WHERE id = ${entityId} AND lifecycle = ${LifecycleState.DELETED}
+          RETURNING id
+        `);
+        return updated.rows.length > 0;
+      });
     } catch (error) {
       throw classifyDatabaseError(error, 'storage.lifecycle.reinstate');
     }
   }
+
+  /**
+   * The content hash a relationship row should carry once its interval closes.
+   *
+   * Issue #118's other half: EPIC-007's hash covers `validTo`, and closing an
+   * interval is the same kind of fact as retiring an entity — the containment
+   * ended at the source. Twenty-two relationship rows on the dogfood index.
+   */
+  async #rehashRelationship(
+    tx: Pick<FerretDatabase, 'execute'>,
+    relationshipId: string,
+  ): Promise<string | undefined> {
+    const rows = await tx.execute<{
+      [column: string]: unknown;
+      from_id: string;
+      type: string;
+      to_id: string;
+      valid_from: Date | string;
+      valid_to: Date | string | null;
+      metadata: Record<string, unknown>;
+      source_system: string;
+      source_id: string | null;
+    }>(sql`
+      SELECT from_id, type, to_id, valid_from, valid_to, metadata, source_system, source_id
+        FROM ferret.relationship
+       WHERE id = ${relationshipId}
+    `);
+    const row = rows.rows[0];
+    if (row === undefined) return undefined;
+
+    return createRelationship({
+      fromId: row.from_id,
+      type: row.type,
+      toId: row.to_id,
+      validFrom: instantOf(row.valid_from),
+      ...(row.valid_to === null ? {} : { validTo: instantOf(row.valid_to) }),
+      metadata: { ...row.metadata },
+      sourceSystem: row.source_system,
+      ...(row.source_id === null ? {} : { sourceId: row.source_id }),
+    }).contentHash;
+  }
+
 }

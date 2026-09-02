@@ -170,6 +170,30 @@ export class RelationshipStore {
           return { relationship: toCanonical(existing), outcome: AssertOutcome.UNCHANGED, closed: [] };
         }
 
+        // The same interval, which has since **ended**.
+        //
+        // Identity covers `validFrom` and not `validTo`, so a closed interval
+        // keeps the id it was opened with. Re-asserting it as open — which a
+        // full re-index does every time, from the commit that first added the
+        // file — must not reopen it: that would quietly claim the edge never
+        // ended, erasing the gap `IndexLifecycleStore.reinstate` is careful to
+        // preserve for exactly this reason.
+        //
+        // A genuine re-add is a *later* commit, so it carries a later
+        // `validFrom`, derives a different id, and opens a new interval through
+        // the normal path below. Nothing about that case reaches here.
+        //
+        // Issue #118 found this: idempotence had been resting on the stale
+        // content hash. The row's hash still described the interval as open, so
+        // the comparison above matched and this case never arose. Recomputing
+        // the hash on close removed that accident, and EPIC-032 AC-9's
+        // idempotence test caught it — a containment edge reopened and
+        // re-closed on every run.
+        if (existing !== undefined && existing.validTo !== null && canonical.validTo === null) {
+          await tx.update(relationship).set({ lastIndexedAt: now }).where(eq(relationship.id, canonical.id));
+          return { relationship: toCanonical(existing), outcome: AssertOutcome.UNCHANGED, closed: [] };
+        }
+
         // Re-observing something that is already open and unchanged.
         //
         // Identity includes `validFrom`, so an indexer that runs hourly against
