@@ -269,6 +269,13 @@ decision — taken here explicitly, unlike EPIC-108 which declined one), §6
 ## 16. Raised, not absorbed
 
 - **Unreferenced blobs accumulate.** Deliberate (§4); EPIC-088 owns collection.
+  **Closed 2026-09-02:** `ferret prune --blobs --yes` reclaims a blob no
+  `file_version` carries the hash of. §4's reading holds unchanged — a blob
+  still outlives the last reference, and this is reclamation after the fact
+  rather than eviction while a reference exists. A blob a *tombstoned* version
+  names is referenced and stays, because "what did it contain" is a question
+  Ferret indexes history to answer (EPIC-006 §D-009). See
+  [EPIC-088](EPIC-088-Retention-And-Exclusion-Policies.md).
   Recorded so the growth is a known cost rather than a later surprise.
 - **`text-invoice` may not reach 1.00.** `tax.ts` mentions invoices in prose;
   whether it ranks inside k is a ranking question EPIC-056 owns. AC-11 asks for

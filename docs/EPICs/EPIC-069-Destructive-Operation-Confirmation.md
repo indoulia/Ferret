@@ -99,6 +99,18 @@ Named here so it is not quietly adopted:
   advises by construction (EPIC-004 D-002) and no command takes `--force` or
   `--yes`. The gate is transport-independent so the adapter is small when the
   first such command exists; building it now would be building for no caller.
+
+  **Superseded 2026-09-02.** Two destructive CLI commands now exist —
+  `verify --repair --yes` (EPIC-094) and `ferret prune --yes`
+  ([EPIC-088](EPIC-088-Retention-And-Exclusion-Policies.md)) — and **neither
+  uses this gate**. Both take an explicit flag instead, for the reason EPIC-094
+  recorded and EPIC-088 §8.1 repeats: Ferret is spawned by an AI client as often
+  as by a person, and this Epic's confirmation is a *round trip* the CLI has no
+  channel for — a prompt would hang in a pipe. The adapter foreseen here would
+  therefore be an adapter to a mechanism the CLI cannot use, so the two surfaces
+  differ deliberately: MCP confirms with a token, the CLI confirms with a flag.
+  Recorded rather than reconciled; a future Epic that wants one shape for both
+  has to choose which surface changes.
 - **Undo, rollback, or a restore point.** EPIC-089/090 (Backup & Export, Data
   Import & Recovery). Confirmation prevents an unintended change; it does not
   reverse an intended one.
