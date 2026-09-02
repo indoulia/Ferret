@@ -19,6 +19,7 @@ import {
   Permission,
   type Principal,
 } from '../authorization/index.js';
+import type { AuditWriter } from '../audit/index.js';
 import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
 import {
   EvidenceState,
@@ -160,6 +161,14 @@ export interface McpServerDependencies {
    * a `RetrievalPort` still gets a working knowledge server.
    */
   readonly configuration?: ConfigurationAccess;
+  /**
+   * The durable audit trail — EPIC-085.
+   *
+   * Optional for the same reason `evidence` and `configuration` are: a caller
+   * embedding Ferret with only a `RetrievalPort` still gets a working server.
+   * Absent means decisions are logged and not journalled.
+   */
+  readonly audit?: AuditWriter;
   readonly logger: Logger;
 }
 
@@ -189,7 +198,13 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
   // EPIC-068. The permission is checked here rather than in each handler; see
   // `createToolGuard`. The two destructive tools live in `./config-tools.ts` and
   // take `createDestructiveToolGuard` from the same module.
-  const guard = createToolGuard({ principal, logger });
+  // EPIC-085. Optional: absent, the log line is the only record — which is the
+  // state EPIC-085 exists to end and still better than refusing to serve.
+  const guard = createToolGuard({
+    principal,
+    logger,
+    ...(dependencies.audit === undefined ? {} : { audit: dependencies.audit }),
+  });
 
   // EPIC-066. Registered only when a caller supplied the access, so a knowledge-
   // only server does not advertise tools it cannot serve.

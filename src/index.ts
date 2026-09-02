@@ -756,3 +756,16 @@ export {
   type MetricsSnapshot,
   type SpanRecord,
 } from './observability/index.js';
+
+// EPIC-085. A durable audit trail, on disk rather than in a table: an audit
+// trail that needs the database is absent when the database is the problem.
+export {
+  AUDIT_KEEP_FILES,
+  AUDIT_ROTATE_BYTES,
+  AuditCategory,
+  AuditOutcome,
+  AuditWriter,
+  auditEventsPath,
+  readAuditEvents,
+  type AuditEvent,
+} from './audit/index.js';
