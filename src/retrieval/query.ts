@@ -154,16 +154,49 @@ export interface SearchHit {
   /** The evidence that matched, when the hit came from one. */
   readonly evidence: CanonicalEvidence | undefined;
   /**
-   * Relevance, higher is better.
+   * Relevance, higher is better, in `[0, 1]`.
    *
-   * Comparable **within one result set and nowhere else**. PostgreSQL's
-   * `ts_rank` is a function of the document and the query, not a probability,
-   * and treating it as one across queries is how a threshold gets hard-coded
-   * that means nothing. EPIC-056 owns ranking that can be compared.
+   * Comparable across queries — EPIC-056 §8.1, which is what changed it. It
+   * used to be PostgreSQL's raw `ts_rank`: a function of the document and the
+   * query, unbounded above, so 0.09 in one search and 0.09 in another were
+   * unrelated quantities and "treating it as one across queries is how a
+   * threshold gets hard-coded that means nothing". Every branch now ranks with
+   * normalisation `32` (`rank / (rank + 1)`), and independent matches combine
+   * by probabilistic or. `1.0` is reserved for an exact identifier match.
    */
   readonly score: number;
   /** The matched text with the query terms marked, for showing a person why. */
   readonly highlight: string | undefined;
+  /**
+   * How the score was arrived at — EPIC-056 §12.
+   *
+   * Absent on a hit that did not come from the ranked path. Present, it is the
+   * observability for ranking: no metric and no log line, because the breakdown
+   * travels with the answer, which Governance §18 prefers to a number in a log
+   * nobody correlates.
+   */
+  readonly ranking?: RankBreakdown;
+}
+
+/**
+ * Why a hit ranks where it does — EPIC-056.
+ *
+ * Not an explanation feature; EPIC-063 owns that. This is the arithmetic, so a
+ * reader can check the order rather than trust it.
+ */
+export interface RankBreakdown {
+  /** This hit's own normalised relevance, before anything was combined. */
+  readonly relevance: number;
+  /**
+   * What contributed, one entry per independent contributor.
+   *
+   * `entity`, `evidence` and `content` are the hit's own branches;
+   * `subsumed:<id>` is a part of this thing that matched — a symbol it
+   * declares, a version of it — credited to it under §8.2.
+   */
+  readonly contributors: readonly string[];
+  /** Entity ids folded into this hit rather than returned beside it. */
+  readonly subsumed: readonly string[];
 }
 
 /**

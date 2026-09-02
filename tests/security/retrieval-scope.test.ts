@@ -101,3 +101,37 @@ describe('the withheld count discloses nothing — EPIC-058 AC-5', () => {
     expect(body).not.toMatch(/e\.attributes/);
   });
 });
+
+/**
+ * **Ranking cannot widen a result set — EPIC-056 §11, AC-11.**
+ *
+ * Reranking was the first thing added to the read path that reorders and *drops*
+ * rows after the query has run, which makes the order of two calls a security
+ * property: filter, then rank. Reversed, a hit the caller may not see could
+ * occupy one of the `limit` places, or a part of a file could be folded into a
+ * container outside the caller's scope.
+ *
+ * Structural for the same reason as the block above: the behavioural proof is in
+ * `tests/integration/retrieval/permission.test.ts`, and what cannot be proved
+ * there is that nobody later moved the two lines.
+ */
+describe('ranking runs after authorization, and can only ever narrow — EPIC-056', () => {
+  it('filters before it ranks', () => {
+    const filter = source.indexOf('visibleEntities(candidates');
+    const ranked = source.indexOf('rank(permitted');
+
+    expect(filter).toBeGreaterThan(-1);
+    expect(ranked).toBeGreaterThan(-1);
+    expect(filter).toBeLessThan(ranked);
+  });
+
+  it('gives the ranker no way to read a row it was not handed', () => {
+    // Pure and core: it takes candidate hits and returns candidate hits. A
+    // ranker that could query could rank something authorization never saw.
+    const ranker = readFileSync(resolve(SRC, 'retrieval/rank.ts'), 'utf8');
+
+    expect(ranker).not.toMatch(/from '\.\.\/storage/);
+    expect(ranker).not.toMatch(/\bsql`/);
+    expect(ranker).not.toMatch(/\bawait\b/);
+  });
+});

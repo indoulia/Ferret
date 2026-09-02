@@ -137,3 +137,43 @@ favour of nDCG, or to leave it failing until the `code_symbol` dilution is
 fixed. All three are defensible; choosing one to make this Epic pass is not.
 
 Until it is decided, EPIC-087 is **IMPLEMENTED**, not VALIDATED.
+
+## Addendum — 2026-09-02, after EPIC-056
+
+**AC-11 is now MET, as written. §Acceptance criteria's row, §"Precision fell"
+and §"Raised, not absorbed" are left exactly as they stand** — the precedent is
+EPIC-048's addendum: "a record that edited itself whenever a later Epic closed
+something would stop being evidence of anything."
+
+The criterion asked for `text-authentication` recall > 0 **and** mean
+precision@10 strictly above the 0.32 baseline, labels unchanged. Measured on the
+same corpus, the same dataset `1.0.0`, the same 8 labels, k = 10:
+
+| | mean p@10 | mean recall | mean RR | mean nDCG | false positives |
+| --- | --- | --- | --- | --- | --- |
+| C — this Epic, on `5293434` | 0.2639 | 0.9167 | 0.5972 | 0.6698 | 0 |
+| **D — with EPIC-056 ranking** | **0.3611** | **0.9167** | **0.6806** | **0.7313** | **0** |
+
+`text-authentication` recall is 1.00, so the first half held here already; the
+second half is now 0.3611 > 0.32.
+
+**Nothing was restated and no label was touched.** §"Raised, not absorbed" put
+three options on the table and named this one third: "to leave it failing until
+the `code_symbol` dilution is fixed". That is what happened. The dilution was
+[#98](https://github.com/indoulia/Ferret/issues/98), its owner was settled as
+EPIC-056 in `docs/Architecture/EPIC-087-DECISIONS.md` §D1, and EPIC-056 fixed it
+by crediting a symbol and a file version to the file that contains them instead
+of returning all three as competing answers:
+
+```
+before  text-refund "refund" reached: code_symbol, file, commit, file_version
+after   text-refund "refund" reached: file, commit
+```
+
+Recall is identical either side, which is the number to check first: the fix
+moved ordering, which is what #98 said had degraded.
+
+**EPIC-087 is therefore VALIDATED**, and the governance decision §"Raised" was
+waiting for is no longer needed — the option it was choosing between resolved
+itself when the P1 Epic it depended on landed. Evidence:
+`docs/EPICs/validation/EPIC-056-VALIDATION.md`.

@@ -95,3 +95,31 @@ returns `undefined` leaves the row `unassessable`, never stale. Reporting an
 artefact stale because nothing could judge it is what produced "584 of 585
 indexed scopes were built by a different Ferret" on a completely healthy index,
 and an operator who has seen that once stops reading the output.
+
+---
+
+## Addendum to D1 — 2026-09-02, after EPIC-056
+
+D1's assignment held and its open question closed without any of the three
+options being exercised. EPIC-056 — Ranking & Reranking was specified and
+implemented **at P1**, and EPIC-087 AC-11 was met as written: mean p@10 0.3611
+against the 0.32 baseline, `text-authentication` recall 1.00, labels unchanged,
+`falsePositives` 0.
+
+The two claims D1 made are worth marking as confirmed, because both were
+inferences from written non-scope rather than measurements:
+
+- **The owner.** The fix that moved the number is entirely a ranking change — a
+  symbol and a file version credited to the file that contains them — and it
+  needed no change to EPIC-034's symbol index or to EPIC-052/053's query
+  branches. The boundary both Epics had written down was the right one.
+- **The diagnosis.** "A defect that moves ordering and leaves recall untouched is
+  a ranking defect by definition." Recall is **identical** at 0.9167 either side
+  of the fix, exactly as it was identical either side of the regression.
+
+D1's "explicitly not done" also survives: symbols were not excluded from the
+untyped text branch. `kinds: ['code_symbol']` still returns symbol rows, and a
+symbol whose file is not in the candidate pool is still returned on its own
+relevance — EPIC-056 §8.4 records that as a contract rather than a coincidence.
+
+Evidence: `docs/EPICs/validation/EPIC-056-VALIDATION.md`.
