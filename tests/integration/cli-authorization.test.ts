@@ -172,6 +172,27 @@ describeDb(`CLI authorization (${databaseAvailable() ? 'real PostgreSQL' : SKIP_
     expect(result.code).toBe(ExitCode.OK);
   });
 
+  it('refuses to apply an upgrade when configuration withholds index — EPIC-106 AC-11', async () => {
+    // The plan is a read; applying changes the schema, so it takes the grant
+    // `index` needs. A read-only grant must not be a way to migrate.
+    const result = await runCli(['upgrade', '--yes'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read']) },
+    });
+
+    expect(result.code).toBe(ExitCode.NOT_PERMITTED);
+    expect(result.stderr).toContain('E_NOT_PERMITTED');
+    expect(result.stderr).toContain('upgrade');
+  });
+
+  it('plans an upgrade with only read — EPIC-106, the control', async () => {
+    const result = await runCli(['upgrade'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read']) },
+    });
+
+    expect(result.stderr).not.toContain('E_NOT_PERMITTED');
+    expect(result.code).toBe(ExitCode.OK);
+  });
+
   it('indexes with no authorization configured at all — AC-3, the default', async () => {
     // EPIC-083 §16. The CLI's unconfigured default is the local operator, not the
     // anonymous client: refusing a person at their own machine protects nobody,

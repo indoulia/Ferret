@@ -96,6 +96,7 @@ if the body throws — so a started runtime cannot leak.
 | `ferret export` | Implemented | EPIC-089 |
 | `ferret import` | Implemented | EPIC-090 |
 | `ferret reconcile` | Implemented | EPIC-078 |
+| `ferret upgrade` | Implemented | EPIC-106 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
 
 Every approved command in this release is implemented. The mechanism for
@@ -244,6 +245,26 @@ ferret verify --repair --yes   # re-read the affected repositories from source
 ferret status          # is the database reachable, is the schema current
 ferret doctor          # ...and what to do about it if not
 ```
+
+### Upgrade
+
+```bash
+ferret upgrade         # what upgrading the schema would change
+ferret upgrade --yes   # apply it
+```
+
+`ferret init` migrates as a side effect of provisioning, so upgrading used to
+mean running a command named *init* and hoping. `ferret upgrade` names every
+pending migration by version and name **before** anything runs, reports drift and
+any previous failure, and prints the `pg_dump` command while there is still time
+to take a backup. Already current is a success, so it is safe in a script.
+
+**If the database was migrated by a newer Ferret**, it is refused — reading a
+newer schema under the old meaning would apply an interpretation the writer never
+intended — and the command says what to do: reinstall the newer Ferret, or
+`ferret export` from it and `ferret import` the document into a database this
+build can read. There is no downgrade migration; a migration runs forward and
+there is no `down`.
 
 ### Keep it up to date, unattended
 

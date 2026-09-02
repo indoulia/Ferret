@@ -14,6 +14,7 @@ import { pruneCommand } from './commands/prune.js';
 import { reconcileCommand } from './commands/reconcile.js';
 import { exportCommand } from './commands/export.js';
 import { importCommand } from './commands/import.js';
+import { upgradeCommand } from './commands/upgrade.js';
 import { verifyCommand } from './commands/verify.js';
 import { PLANNED_COMMANDS, plannedCommand } from './commands/planned.js';
 import { versionCommand } from './commands/version.js';
@@ -91,6 +92,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program.addCommand(exportCommand(output));
   program.addCommand(importCommand(output));
   program.addCommand(reconcileCommand(output, reportExitCode));
+  program.addCommand(upgradeCommand(output, reportExitCode));
   for (const spec of PLANNED_COMMANDS) program.addCommand(plannedCommand(spec));
 
   // Commander's `addCommand` does not propagate `exitOverride` or the output
