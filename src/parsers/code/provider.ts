@@ -3,6 +3,7 @@ import { Language, Parser, type Node, type Tree } from 'web-tree-sitter';
 import { ErrorCode, FerretError, toFerretError } from '../../errors/index.js';
 import { Capability, CAPABILITY_VERSIONS } from '../../providers/capabilities.js';
 import {
+  OutlineKind,
   ParserSupport,
   SegmentKind,
   type ContentParser,
@@ -342,6 +343,9 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
     return {
       segments,
       outline,
+      // EPIC-029 §8.4. Said explicitly: this outline *is* a symbol table, and
+      // a parser that does not say so does not get symbols built from it.
+      outlineKind: OutlineKind.CODE,
       references,
       imports: [...importedNames].sort(),
       attributes: {

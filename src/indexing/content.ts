@@ -26,6 +26,7 @@ import {
   type ParserFramework,
   type UnparsedReason,
 } from '../parsing/index.js';
+import { OutlineKind } from '../providers/index.js';
 import type {
   CodeReference,
   DiscoveredRepository,
@@ -407,7 +408,15 @@ export async function runContentStage(
     // identity and `indexFileSymbols` owns storage; the scope is the repository
     // entity id and the path is repository-relative, which is the shape
     // `symbolScope` expects (§8.6).
-    const built = buildCodeSymbols(outcome, { scope: request.repositoryId, path: entry.path });
+    // EPIC-029 §8.4. Only an outline that says it is a symbol table becomes
+    // one. Without this a Markdown heading is indexed as a declaration —
+    // `codeSymbolKindOf` maps an unrecognised kind to `UNKNOWN` rather than
+    // refusing — and 206 files of Ferret's own prose would fill EPIC-034's
+    // symbol index.
+    const built =
+      outcome.outlineKind === OutlineKind.CODE
+        ? buildCodeSymbols(outcome, { scope: request.repositoryId, path: entry.path })
+        : [];
     const stored = await symbols.indexFileSymbols(
       { scope: request.repositoryId, path: entry.path },
       built,

@@ -183,3 +183,32 @@ the Epic under §18.
 | `tests/integration/indexing/content-indexing.test.ts` | 16 | End to end against real PostgreSQL and Git, including the mass-tombstoning regression |
 | `tests/integration/providers/parser-composition.test.ts` | 8 | The positive discovery test, and the runtime-lifecycle regression |
 | `tests/unit/boundaries.test.ts` | 1 added | The amendment is honest: subpath loaded dynamically, no parser named statically |
+
+## Addendum — 2026-09-02, after EPIC-029
+
+**The `no-parser` figure recorded above has moved.** The original text is left as
+written.
+
+It recorded that Markdown, JSON, SQL and YAML "have no parser yet (EPIC-026
+through EPIC-029)". EPIC-029 has landed, and on Ferret's own repository:
+
+| | parsed | unparsed | `no-parser` |
+| --- | --- | --- | --- |
+| before | 367 | 244 | 243 |
+| after | 572 | 47 | 46 |
+
+**205 more files parsed.** What remains genuinely has no owner: 26 JSON, 17 SQL,
+2 SVG, 1 YAML — the registry names an Epic for none of them — plus one `.wasm`
+correctly reported `binary`. The three `.txt` files are claimed by the new
+fallback parser.
+
+One contract change is worth knowing here, because this Epic's content stage is
+where it applies. `ParseOutput.outlineKind` now says whether an outline is a
+symbol table, and `runContentStage` builds code symbols only when it is
+`code`. Without it a Markdown heading became a `code_symbol` — this stage called
+`buildCodeSymbols` for every parse that produced an outline, and
+`codeSymbolKindOf` maps an unrecognised kind to `UNKNOWN` rather than refusing.
+**Absent now means no code symbols**, which is the safe default and the honest
+one.
+
+Evidence: `docs/EPICs/validation/EPIC-029-VALIDATION.md`.

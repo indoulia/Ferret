@@ -858,3 +858,92 @@ describeContent('the reference index end to end — EPIC-035', () => {
     expect(report.content?.references?.recursive).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Documents through the indexer — EPIC-029.
+ *
+ * The two claims that need a real run: a Markdown file gains structure, and it
+ * gains **no `code_symbol`**. The second is the defect §8.4 exists to prevent —
+ * `codeSymbolKindOf` maps an unrecognised outline kind to `UNKNOWN` rather than
+ * refusing, so without the contract a heading would be indexed as a
+ * declaration, 206 files' worth on Ferret's own repository.
+ */
+describeContent('documents — EPIC-029', () => {
+  const DOCUMENT = [
+    '---',
+    'title: Onboarding',
+    '---',
+    '',
+    '# Onboarding',
+    '',
+    'How to start work on this project.',
+    '',
+    '## Prerequisites',
+    '',
+    '```sh',
+    '# not a heading',
+    'npm install',
+    '```',
+    '',
+    '| tool | version |',
+    '| --- | --- |',
+    '| node | 22 |',
+    '',
+  ].join('\n');
+
+  it('parses a Markdown file rather than reporting no-parser — AC-17', async () => {
+    const fixture = await repository('markdown');
+    await commit(fixture, 'docs/onboarding.md', DOCUMENT);
+
+    const report = await index(fixture);
+
+    expect(report.content?.filesParsed).toBeGreaterThan(0);
+    expect(report.content?.unparsedReasons['no-parser'] ?? 0).toBe(0);
+  });
+
+  it('creates no code symbol for a document — AC-12', async () => {
+    // §8.4's whole purpose. A heading is a section, not a declaration.
+    const fixture = await repository('markdown-symbols');
+    await commit(fixture, 'docs/onboarding.md', DOCUMENT);
+
+    const report = await index(fixture);
+
+    expect(await symbolsOf(report.repositoryId, 'docs/onboarding.md')).toStrictEqual([]);
+    expect(report.content?.symbols.created).toBe(0);
+  });
+
+  it('still creates code symbols for code in the same run', async () => {
+    // The assertion that keeps the one above from passing because symbols broke.
+    const fixture = await repository('markdown-and-code');
+    await commit(fixture, 'docs/onboarding.md', DOCUMENT);
+    await commit(fixture, 'src/box.ts', SOURCE);
+
+    const report = await index(fixture);
+
+    expect(await symbolsOf(report.repositoryId, 'docs/onboarding.md')).toStrictEqual([]);
+    expect((await symbolsOf(report.repositoryId, 'src/box.ts')).length).toBeGreaterThan(0);
+  });
+
+  it('classifies the document and records what the parse found', async () => {
+    // Not a content search: this fixture wires no blob writer, so there is
+    // nothing full-text to match — EPIC-087's port is optional and absent here.
+    // What is assertable is that the document went through the parse path and
+    // is classified as one.
+    const fixture = await repository('markdown-structure');
+    await commit(fixture, 'docs/onboarding.md', DOCUMENT);
+
+    const report = await index(fixture);
+
+    const files = await handle.execute<{ attributes: Record<string, unknown> }>(sql`
+      SELECT attributes FROM "ferret"."entity"
+       WHERE kind = 'file' AND attributes->>'path' = 'docs/onboarding.md'
+         AND source_scope = ${report.repositoryId}
+       LIMIT 1
+    `);
+
+    expect(files.rows[0]?.attributes['mediaType']).toBe('text/markdown');
+    expect(files.rows[0]?.attributes['classification']).toBe('documentation');
+    expect(report.content?.filesParsed).toBeGreaterThan(0);
+    expect(report.content?.filesUnparsed).toBe(0);
+  });
+});

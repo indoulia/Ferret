@@ -7,6 +7,7 @@ import {
   type ContentParser,
   type ContentSegment,
   type CodeReference,
+  type OutlineKind,
   type OutlineNode,
   type ParseOutput,
   type ParseTarget,
@@ -79,6 +80,8 @@ export interface ParsedContent {
   readonly mediaType: string;
   readonly segments: readonly ContentSegment[];
   readonly outline: readonly OutlineNode[];
+  /** What the outline is — EPIC-029 §8.4. Absent means no code symbols. */
+  readonly outlineKind: OutlineKind | undefined;
   /**
    * Names the file uses — EPIC-035.
    *
@@ -281,6 +284,7 @@ export class ParserFramework {
       mediaType: detection.mediaType,
       segments,
       outline: output.outline ?? [],
+      outlineKind: output.outlineKind,
       references: output.references ?? [],
       imports: output.imports ?? [],
       attributes: output.attributes ?? {},

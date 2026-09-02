@@ -76,6 +76,7 @@ export {
   type ContentParser,
   type ContentSegment,
   type ContentSpan,
+  OutlineKind,
   ReferenceKind,
   type CodeReference,
   type OutlineNode,

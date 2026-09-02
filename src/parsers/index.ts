@@ -31,3 +31,16 @@ export {
   loadGrammarBytes,
   type GrammarIdentity,
 } from './code/grammars.js';
+
+// EPIC-029. Documents, without a grammar: 206 of Ferret's own files are
+// Markdown, and they are where most of its recorded knowledge lives.
+export {
+  TEXT_FALLBACK_MEDIA_TYPES,
+  TEXT_NATIVE_MEDIA_TYPES,
+  TEXT_PARSER_ID,
+  TEXT_PARSER_VERSION,
+  TextParserProvider,
+  createTextParserProvider,
+} from './text/provider.js';
+
+export { MAX_MARKDOWN_SEGMENTS, parseMarkdown, type MarkdownParse } from './text/markdown.js';

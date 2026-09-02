@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { ParserFramework, loadParsingDataset, measureParsingQuality, type ParsingDataset } from '../../../src/index.js';
-import { createCodeParserProvider } from '../../../src/parsers/index.js';
+import { createCodeParserProvider, createTextParserProvider } from '../../../src/parsers/index.js';
 import { createTestOperationContext } from '../../../src/providers/sdk/testing.js';
 
 /**
@@ -27,7 +27,12 @@ import { createTestOperationContext } from '../../../src/providers/sdk/testing.j
  */
 
 const ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
-const parser = new ParserFramework({ parsers: [createCodeParserProvider()] });
+// Both parsers, as `loadFerretParsers` composes them — EPIC-029. Measuring the
+// code parser alone would report the Markdown files unparsed and call it a fact
+// about the product.
+const parser = new ParserFramework({
+  parsers: [createCodeParserProvider(), createTextParserProvider()],
+});
 
 let dataset: ParsingDataset;
 
@@ -43,9 +48,14 @@ describe('the parsing dataset', () => {
     expect(dataset.checksum).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('expects at least one symbol from every file it says has a parser', () => {
+  it('expects at least one symbol from every file whose parser declares them', () => {
+    // Narrowed by EPIC-029, and it is the label that narrowed it. A parser can
+    // now claim a file and produce **no symbols**: a Markdown heading is a
+    // section, not a declaration (EPIC-029 §8.4), so `docs/onboarding.md` has a
+    // parser and an empty `expected` by design. The assertion that still means
+    // something is about the files whose labels *do* expect symbols.
     for (const label of dataset.files) {
-      if (label.language === null) continue;
+      if (label.language === null || label.language === 'markdown') continue;
       expect(label.expected.length, label.path).toBeGreaterThan(0);
     }
   });
