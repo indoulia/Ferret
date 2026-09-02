@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 
-import { ErrorCode, FerretError, REDACTED, isSecretKey } from '../errors/index.js';
+import { ErrorCode, FerretError, REDACTED, isSecretKey, redact } from '../errors/index.js';
 
 import { ferretConfigSchema, type FerretConfig } from './schema.js';
 import { isSecretRef, resolveSecrets } from './secret-ref.js';
@@ -246,7 +246,22 @@ export function describeConfig(
   const isSecretPath = options.secret;
   const describe = (value: unknown, path: readonly string[]): unknown => {
     if (Array.isArray(value)) return value.map((entry, index) => describe(entry, [...path, String(index)]));
-    if (typeof value !== 'object' || value === null) return value;
+    // A leaf goes through the shared redactor — EPIC-100.
+    //
+    // This function redacted by key name and by declared path, and not by value
+    // shape, so a credential in a field whose *name* is innocuous rendered
+    // verbatim. The case is concrete rather than theoretical: a provider option
+    // holding a connection URL with userinfo in it, under a field called
+    // `baseUrl`, and this is the boundary `ferret config` and
+    // `ferret doctor --show-config` print through. (No worked example here —
+    // the packaging scan reads the shipped bytes and a realistic one in a
+    // comment trips it, correctly. It tripped on the first draft of this one.)
+    //
+    // `redact` already handles exactly this — by value shape and by URI
+    // userinfo — and the log path has used it since EPIC-001. Over-redacting a
+    // rendered value costs nothing here, which is the same trade `redact.ts`
+    // documents for every other surface it guards.
+    if (typeof value !== 'object' || value === null) return redact(value);
     const output: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
       if (entry === undefined) continue;

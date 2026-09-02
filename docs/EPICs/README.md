@@ -211,7 +211,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-097 — Parser Quality Harness** — P0
 - **EPIC-098 — Retrieval Quality Harness** — P0 — IMPLEMENTED ([spec](EPIC-098-Retrieval-Quality-Harness.md), [evidence](validation/EPIC-098-VALIDATION.md))
 - **EPIC-099 — Provider Conformance Harness** — P0
-- **EPIC-100 — Security Regression Suite** — P0
+- **EPIC-100 — Security Regression Suite** — P0 — IMPLEMENTED ([spec](EPIC-100-Security-Regression-Suite.md), [evidence](validation/EPIC-100-VALIDATION.md))
 - **EPIC-101 — Performance & Scale Benchmarks** — P1
 
 ### Distribution & Developer Experience
