@@ -15,7 +15,18 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel a superseded *pull request* run; never cancel one on `main`.
+  #
+  # Windows moved off the PR gate and onto the push to `main`, which made this
+  # setting load-bearing in a way it had not been: two merges in quick
+  # succession cancelled the first one's run, and with it the only Windows
+  # check that commit would ever get. Observed — `f4e0c39` was cancelled that
+  # way, minutes after the arrangement was introduced.
+  #
+  # A superseded PR run is genuinely redundant, because the next one covers the
+  # same branch. A superseded `main` run is not: each commit on `main` is a
+  # squash that nothing else verifies on Windows.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
