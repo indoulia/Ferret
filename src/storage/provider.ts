@@ -319,7 +319,18 @@ export class PostgresStorageProvider extends BaseProvider {
                 max(built_at) AS newest,
                 array_agg(DISTINCT producer_version) FILTER (WHERE producer_version <> $1) AS versions
            FROM ferret.derived_artifact
-          WHERE producer LIKE 'ferret.%'`,
+          -- Only the indexer's own artefacts. EPIC-095 widened this from
+          -- kind = 'index' to every ferret.% producer, which swept in
+          -- content-index rows whose producer_version is a *parser identity*
+          -- rather than a Ferret version. Comparing those to Ferret's version
+          -- reported 584 of 585 scopes as built by a different Ferret on a
+          -- healthy index, and ferret status said "degraded" about nothing.
+          --
+          -- The same category error EPIC-094's sweep identified and excluded,
+          -- reintroduced here and caught by running the product. A parser
+          -- artefact's staleness is judged by EPIC-108's re-parse gate, which
+          -- has a parser in hand to compare against.
+          WHERE producer = 'ferret.indexer'`,
         [VERSION],
       );
 

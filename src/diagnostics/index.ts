@@ -32,6 +32,8 @@ export {
 
 export {
   plannedCapabilityComponents,
+  synchronizationComponent,
+  type SyncProgress,
   probeCore,
   type CoreProbe,
   type ProbeOptions,

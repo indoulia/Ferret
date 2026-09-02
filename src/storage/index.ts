@@ -161,6 +161,12 @@ export {
 } from './integrity.js';
 export { IndexRunStore, RunOutcome, type StartedRun, type UnfinishedRun } from './runs.js';
 export {
+  CURSOR_ARTIFACT_KIND,
+  SyncCursorStore,
+  type SyncCursor,
+  type SyncCursorStatus,
+} from './cursors.js';
+export {
   describeLockHolder,
   findLockHolder,
   readInventory,

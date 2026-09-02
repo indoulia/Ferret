@@ -7,6 +7,8 @@ import {
   isDatabaseConfigured,
   withoutCredentialFields,
   plannedCapabilityComponents,
+  synchronizationComponent,
+  type SyncProgress,
   probeCore,
   providerSettings,
   serializeError,
@@ -18,6 +20,7 @@ import {
 } from '../index.js';
 import {
   MigrationPolicy,
+  SyncCursorStore,
   createStorageProvider,
   readInventory,
   type IndexInventory,
@@ -151,6 +154,12 @@ export async function probeHealth(options: HealthProbeOptions = {}): Promise<Hea
   }
   components.push(...plannedCapabilityComponents());
 
+  // EPIC-075 AC-7. `Checkpoints/EPIC-004.md:94` said `synchronization` would be
+  // replaced when this Epic landed, and this is that replacement: a real status
+  // from real cursors rather than a constant telling every operator that no
+  // synchronization is configured.
+  components.push(synchronizationComponent(await readSyncProgress(logger)));
+
   // `index-integrity` is answered by the database when there is one to ask.
   // When there is not, the answer is unknown rather than absent: Governance §6
   // requires an operator reading a report to see that a check did not run,
@@ -207,6 +216,37 @@ export async function probeHealth(options: HealthProbeOptions = {}): Promise<Hea
   );
 
   return report;
+}
+
+/**
+ * How far behind each source is — EPIC-075 AC-7, AC-8.
+ *
+ * An empty list is "nothing has synced", which the component turns into
+ * `unknown` rather than into a clean bill of health. Returns an empty list
+ * rather than throwing when there is no database to ask: this feeds
+ * `ferret status`, which must stay dependable when other subsystems are not
+ * (Governance §20).
+ */
+async function readSyncProgress(logger?: Logger): Promise<readonly SyncProgress[]> {
+  const core = await probeCore();
+  if (core.config === undefined || !isDatabaseConfigured(core.config)) return [];
+
+  const provider = createStorageProvider({ policy: MigrationPolicy.OFF });
+  try {
+    await provider.initialize({
+      logger: logger ?? createNullLogger(),
+      config: withoutCredentialFields(core.config),
+      credentials: credentialsFor(core.config, provider.credentials ?? []),
+      environment: {} as never,
+      signal: new AbortController().signal,
+      settings: providerSettings(provider, core.config),
+    });
+    return await new SyncCursorStore(provider.db, provider.pool).list();
+  } catch {
+    return [];
+  } finally {
+    await provider.shutdown().catch(() => undefined);
+  }
 }
 
 /**

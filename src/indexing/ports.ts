@@ -113,6 +113,28 @@ export interface LifecycleStore {
   reinstate(entityId: string, now?: Date): Promise<boolean>;
 }
 
+/**
+ * Where a source records how far it got — EPIC-075.
+ *
+ * The port the indexer now uses, and the reason `WatermarkStore` below is no
+ * longer the only shape of that idea: a cursor's *position* is opaque, so a
+ * second source can resume from a page token without the core learning what a
+ * page token is. `SyncCursorStore` satisfies this structurally.
+ *
+ * Optional on the indexer. Without it a run reads everything, which is the
+ * honest degradation — resuming is an optimisation, and losing it costs time
+ * rather than correctness.
+ */
+export interface SyncCursors {
+  read(scopeId: string): Promise<{ readonly position: Readonly<Record<string, unknown>> } | undefined>;
+  advance(
+    producer: string,
+    scopeId: string,
+    position: Readonly<Record<string, unknown>>,
+    now?: Date,
+  ): Promise<void>;
+}
+
 export interface WatermarkStore {
   getArtifact(kind: string, scopeId?: string): Promise<WatermarkRecord | undefined>;
   recordArtifact(

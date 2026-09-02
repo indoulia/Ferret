@@ -93,6 +93,11 @@ Full rationale in [`docs/Architecture/EPIC-004-DECISIONS.md`](../Architecture/EP
   When EPIC-031 lands, replace `index-integrity` with a real check; when
   EPIC-075/076 land, replace `synchronization`. Leaving them as `unknown` is
   deliberate, not an oversight — see D-006.
+
+  **Both are done.** EPIC-032 replaced `index-integrity`; EPIC-075 replaced
+  `synchronization`, which now reports how long ago each source's cursor
+  advanced. `plannedCapabilityComponents` is empty and kept: the pattern is
+  right, and the next Epic to need it should find it rather than reinvent it.
 - **New provider health flows through `src/cli/health.ts`,** which maps a
   provider's `checkDependencies()` results onto `HealthArea`. EPIC-014 extends
   that mapping; the core does not change.
@@ -107,7 +112,7 @@ None.
 
 Full table in the validation evidence. Carried forward:
 
-- No index or synchronization health, because neither exists → **EPIC-031**, **EPIC-094**, **EPIC-075/076**
+- No index or synchronization health, because neither exists → resolved: **EPIC-031/094** for the index, **EPIC-075** for synchronization
 - No provider health beyond storage, because storage is the only provider → **EPIC-014**
 - A long migration lock wait is not a distinct finding; `doctor` reports the symptom → **EPIC-095** resolved it: the error names the holding session and what to do about it
 - Health is point-in-time; no metrics, tracing or history → **EPIC-092**

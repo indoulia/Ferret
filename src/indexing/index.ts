@@ -35,6 +35,7 @@ export type {
   ContentArtifactStore,
   ContentBlobWriter,
   RunJournal,
+  SyncCursors,
   ContentReader,
   DerivedArtifactRecord,
   EntityWriteResult,
