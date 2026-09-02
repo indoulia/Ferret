@@ -195,7 +195,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-087 — Deduplicated Content Storage** — P0 — VALIDATED ([spec](EPIC-087-Deduplicated-Content-Storage.md), [evidence](validation/EPIC-087-VALIDATION.md))
 - **EPIC-088 — Retention & Exclusion Policies** — P1 — VALIDATED ([spec](EPIC-088-Retention-And-Exclusion-Policies.md), [evidence](validation/EPIC-088-VALIDATION.md))
 - **EPIC-089 — Backup & Export** — P1 — VALIDATED ([spec](EPIC-089-Backup-And-Export.md), [evidence](validation/EPIC-089-VALIDATION.md))
-- **EPIC-090 — Data Import & Recovery** — P1
+- **EPIC-090 — Data Import & Recovery** — P1 — VALIDATED ([spec](EPIC-090-Data-Import-And-Recovery.md), [evidence](validation/EPIC-090-VALIDATION.md))
 
 ### Reliability & Operations
 

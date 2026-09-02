@@ -158,7 +158,7 @@ When a surface changes incompatibly:
 | Not covered | Owner |
 | --- | --- |
 | ~~Backup and restore, which is the real recovery path for a downgrade~~ **Half closed 2026-09-02 by EPIC-089:** `ferret export` writes a schema-version-stamped NDJSON document a *lower* version can read, which is the half a `pg_dump` cannot be. The backup half stays out of scope deliberately — that is `pg_dump`, and Ferret prints the command rather than wrapping it (`ferret export --backup-command`). **Restore** is still open. | **EPIC-090** (import), and `pg_dump` |
-| Import of data exported by another installation | **EPIC-090** |
+| ~~Import of data exported by another installation~~ **Closed 2026-09-02 by EPIC-090:** `ferret import` reads a document `ferret export` wrote, refusing a newer entity schema version and accepting an older one — which is the downgrade path §7 pointed at. A round trip through two databases is what validates the format. | closed |
 | Rebuilding derived artefacts once marked stale — the marking exists, the rebuild does not | **EPIC-031**, **EPIC-054**, **EPIC-094** |
 | The upgrade *experience* — what a user sees and is asked | **EPIC-106** |
 | Embedding-model versioning specifics | **EPIC-054** |

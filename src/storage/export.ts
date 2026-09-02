@@ -58,6 +58,64 @@ export const EXPORT_TABLES: readonly TableSpec[] = [
 export const EXPORT_BATCH_ROWS = 500;
 
 /**
+ * The columns PostgreSQL computes, which a document must not carry.
+ *
+ * Found by EPIC-090's importer, which is what an independent reader is for:
+ * `SELECT *` includes `search_vector`, a `GENERATED ALWAYS` column that
+ * migrations `0007` and `0011` declare — and inserting one is `428C9`, so a
+ * document carrying it could not be imported at all. It is also derived data,
+ * so exporting it inflates the document with bytes the target recomputes.
+ *
+ * Read from the catalogue rather than listed here, so a generated column added
+ * by a later migration is excluded without anyone remembering to.
+ */
+export async function generatedColumns(
+  reader: Pick<FerretDatabase, 'execute'>,
+): Promise<ReadonlySet<string>> {
+  return (await columnFacts(reader)).generated;
+}
+
+/**
+ * What each column is, keyed `table.column`.
+ *
+ * Two facts, one catalogue read, because both are needed at the same moments:
+ *
+ * - **generated** — must not be written, and must not be exported (above).
+ * - **json** — `jsonb` and `json` columns need a JSON *document*, and a scalar
+ *   is where that bites: `attributes` holds an object, which `JSON.stringify`
+ *   handles by accident, but `evidence.statement` can hold a bare string and
+ *   `typescript` is not valid JSON while `"typescript"` is. PostgreSQL says
+ *   `22P02`, which found this.
+ */
+export interface ColumnFacts {
+  readonly generated: ReadonlySet<string>;
+  readonly json: ReadonlySet<string>;
+}
+
+export async function columnFacts(reader: Pick<FerretDatabase, 'execute'>): Promise<ColumnFacts> {
+  const rows = await reader.execute<{
+    [column: string]: unknown;
+    table_name: string;
+    column_name: string;
+    is_generated: string;
+    data_type: string;
+  }>(
+    sql`SELECT table_name, column_name, is_generated, data_type
+          FROM information_schema.columns
+         WHERE table_schema = 'ferret'`,
+  );
+
+  const generated = new Set<string>();
+  const json = new Set<string>();
+  for (const row of rows.rows) {
+    const key = `${row.table_name}.${row.column_name}`;
+    if (row.is_generated === 'ALWAYS') generated.add(key);
+    if (row.data_type === 'jsonb' || row.data_type === 'json') json.add(key);
+  }
+  return { generated, json };
+}
+
+/**
  * The document's first line. EPIC-090 reads this before anything else.
  *
  * Carries only what is knowable *before* the rows: the versions an importer
@@ -183,6 +241,7 @@ export class ExportService {
     options: ExportOptions,
   ): Promise<ExportResult> {
     const scoped = options.scope === undefined ? undefined : await this.#closure(reader, options.scope);
+    const generated = await generatedColumns(reader);
 
     const manifest: ExportManifest = {
       kind: 'ferret-export',
@@ -202,7 +261,10 @@ export class ExportService {
     for (const spec of EXPORT_TABLES) {
       let written = 0;
       for await (const row of this.#rows(reader, spec, scoped, options.batch ?? EXPORT_BATCH_ROWS)) {
-        const line = JSON.stringify({ table: spec.table, row } satisfies ExportRow);
+        const carried = Object.fromEntries(
+          Object.entries(row).filter(([column]) => !generated.has(`${spec.table}.${column}`)),
+        );
+        const line = JSON.stringify({ table: spec.table, row: carried } satisfies ExportRow);
         // EPIC-091's redactor over the assembled line, as EPIC-085 §8.3 does:
         // the second line of defence, not the first. §8.4's first line is that
         // a `${env:...}` reference is stored as the reference and never

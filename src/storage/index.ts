@@ -214,3 +214,13 @@ export {
   type ExportSink,
   type ExportTrailer,
 } from './export.js';
+export {
+  ImportOutcome,
+  ImportService,
+  MAX_REPORTED_ORPHANS,
+  readDocument,
+  type CheckedDocument,
+  type ImportOptions,
+  type ImportReport,
+  type ImportTableReport,
+} from './import.js';

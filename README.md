@@ -94,6 +94,7 @@ if the body throws — so a started runtime cannot leak.
 | `ferret verify` | Implemented | EPIC-094 |
 | `ferret prune` | Implemented | EPIC-088 |
 | `ferret export` | Implemented | EPIC-089 |
+| `ferret import` | Implemented | EPIC-090 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
 
 Every approved command in this release is implemented. The mechanism for
@@ -229,6 +230,27 @@ downgrade is the case with no other answer.
 
 The configuration file needs no exporter: it already stores secret
 *references* rather than secrets, so copying it is the whole job.
+
+### Read it back
+
+```bash
+ferret import index.ndjson         # what it would write; writes nothing
+ferret import index.ndjson --yes   # write it
+```
+
+The manifest is checked before anything is written, and a document with no
+trailer is refused as truncated. A schema version *newer* than the running build
+is refused — reading a newer envelope under the old meaning would apply an
+interpretation the writer never intended — and an older one is accepted, which
+is what makes a downgrade possible.
+
+A row already present with different content is reported as **conflicting** and
+left alone. Ferret does not choose between two installations that disagree.
+
+To remove a credential from an index already written, the mechanism is
+`ferret export`, a filter of your own, then `ferret import` into a fresh
+database — auditable at every step, where an in-place rewrite would leave no
+record that anything was removed.
 
 ### Reclaim space
 

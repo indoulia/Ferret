@@ -243,6 +243,13 @@ notes.
 - **Import is EPIC-090's, and until it exists this Epic's output is unproven.**
   A format is validated by a reader written against it, not by the writer. AC-3
   round-trips through a reader in *this* Epic's tests, which is weaker.
+  **Closed 2026-09-02 by [EPIC-090](EPIC-090-Data-Import-And-Recovery.md),** and
+  it found two defects this Epic's own tests could not: `search_vector` is a
+  `GENERATED ALWAYS` column that `SELECT *` put in the document, making *every*
+  document unimportable (`428C9`); and a `jsonb` column holding a scalar needs
+  JSON quoting, which `attributes` satisfied by accident and
+  `evidence.statement` did not (`22P02`). Both fixed here; the round trip now
+  runs through two databases.
 - **A restore into a different major version is not tested here** — that needs
   two versions installed, which is EPIC-106's environment.
 - **The snapshot holds a transaction open** for the length of the export, which

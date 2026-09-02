@@ -125,7 +125,10 @@ integrity. The DBA §13 forbids is exactly who the current answer requires.
   the word this Epic used as one — a *backup* is `pg_dump` and Ferret does not
   wrap it; an *export* is a document a different schema version can read, which
   is the recovery path this Epic pointed at. Restore remains EPIC-090's.
-- **Restoring or importing data produced elsewhere** — **EPIC-090**. Recovery
+- **Restoring or importing data produced elsewhere** — **EPIC-090**.
+  **Closed 2026-09-02:** `ferret import` exists, and the split this Epic drew
+  holds unchanged — recovery *here* re-derives from a readable source, recovery
+  *there* reads a document. Recovery
   here means re-deriving from a source Ferret can still read; recovery from a
   source that is gone is EPIC-090's.
 - **Scheduling.** Nothing here runs on a timer. Cadence, drift between scheduled
