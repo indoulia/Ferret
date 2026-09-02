@@ -12,6 +12,15 @@
  */
 
 export {
+  IntegrityFindingKind,
+  IntegritySubject,
+  verifyEntity,
+  verifyEvidence,
+  verifyRelationship,
+  type IntegrityFinding,
+} from './integrity.js';
+
+export {
   ENTITY_KINDS,
   EntityKind,
   LIFECYCLE_STATES,
@@ -46,6 +55,7 @@ export {
 export {
   UUID_PATTERN,
   canonicalId,
+  canonicalInstant,
   canonicalKey,
   contentHash,
   encodeKeyParts,

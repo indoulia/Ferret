@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { ErrorCode, FerretError, redact } from '../errors/index.js';
 
-import { canonicalId, contentHash, encodeKeyParts, stableStringify } from './identity.js';
+import { canonicalId, canonicalInstant, contentHash, encodeKeyParts, stableStringify } from './identity.js';
 
 /**
  * Evidence and provenance.
@@ -324,24 +324,33 @@ export function createEvidence(input: EvidenceInput): CanonicalEvidence {
     locator: value.locator,
   });
 
+  // Hashed through `integrityHashOf`, not through a second copy of its field
+  // list — EPIC-094.
+  //
+  // This function used to build its own `immutable` object and hash that, so
+  // the write path and the verify path were two implementations of one hash,
+  // thirty lines apart. They drifted exactly as that arrangement predicts:
+  // canonicalising `observedAt` in one of them left every record with a
+  // non-UTC observation unverifiable, and the check had been silently failing
+  // on those rows before that. One definition, used twice.
   const immutable = {
     subjectId: value.subjectId,
-    field: value.field ?? null,
+    field: value.field,
     statement,
     method: value.method,
     producer: value.producer,
     producerVersion: value.producerVersion,
     sourceSystem: value.sourceSystem,
-    sourceId: value.sourceId ?? null,
-    sourceUrl: value.sourceUrl ?? null,
-    locator: value.locator ?? null,
-    sourceContentHash: value.sourceContentHash ?? null,
-    confidence: value.confidence ?? null,
+    sourceId: value.sourceId,
+    sourceUrl: value.sourceUrl,
+    locator: value.locator,
+    sourceContentHash: value.sourceContentHash,
+    confidence: value.confidence,
     completeness: value.completeness,
     authority: value.authority,
-    observedAt: value.observedAt ?? null,
-    derivedFrom: [...value.derivedFrom].sort(),
-    permissionScope: value.permissionScope ?? null,
+    observedAt: value.observedAt,
+    derivedFrom: value.derivedFrom,
+    permissionScope: value.permissionScope,
   };
 
   return Object.freeze({
@@ -363,7 +372,7 @@ export function createEvidence(input: EvidenceInput): CanonicalEvidence {
     observedAt: value.observedAt,
     derivedFrom: Object.freeze([...value.derivedFrom].sort()),
     permissionScope: value.permissionScope,
-    integrityHash: contentHash(immutable),
+    integrityHash: integrityHashOf(immutable),
     redacted,
   });
 }
@@ -391,7 +400,10 @@ export function integrityHashOf(evidence: Omit<CanonicalEvidence, 'integrityHash
     confidence: evidence.confidence ?? null,
     completeness: evidence.completeness,
     authority: evidence.authority,
-    observedAt: evidence.observedAt ?? null,
+    // Canonicalised — see `canonicalInstant`. Same round-trip asymmetry as an
+    // entity's `sourceObservedAt`, and the same consequence: without this the
+    // integrity hash cannot be recomputed from the row it protects.
+    observedAt: canonicalInstant(evidence.observedAt),
     derivedFrom: [...evidence.derivedFrom].sort(),
     permissionScope: evidence.permissionScope ?? null,
   });

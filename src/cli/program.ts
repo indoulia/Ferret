@@ -10,6 +10,7 @@ import { indexCommand } from './commands/index-command.js';
 import { initCommand } from './commands/init.js';
 import { mcpCommand } from './commands/mcp.js';
 import { statusCommand } from './commands/status.js';
+import { verifyCommand } from './commands/verify.js';
 import { PLANNED_COMMANDS, plannedCommand } from './commands/planned.js';
 import { versionCommand } from './commands/version.js';
 import type { OutputOptions } from './output.js';
@@ -81,6 +82,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program.addCommand(initCommand(output));
   program.addCommand(mcpCommand());
   program.addCommand(statusCommand(output, reportExitCode));
+  program.addCommand(verifyCommand(output, reportExitCode));
   for (const spec of PLANNED_COMMANDS) program.addCommand(plannedCommand(spec));
 
   // Commander's `addCommand` does not propagate `exitOverride` or the output

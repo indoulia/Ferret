@@ -319,13 +319,30 @@ export class PostgresStorageProvider extends BaseProvider {
                 max(built_at) AS newest,
                 array_agg(DISTINCT producer_version) FILTER (WHERE producer_version <> $1) AS versions
            FROM ferret.derived_artifact
-          WHERE kind = 'index'`,
+          WHERE producer LIKE 'ferret.%'`,
         [VERSION],
       );
 
       const row = rows[0];
       const total = Number(row?.total ?? '0');
       const current = Number(row?.current ?? '0');
+
+      // EPIC-094 AC-6. Reported *before* the "nothing indexed" branch, because
+      // that is the case it exists to correct: a run killed halfway leaves rows
+      // written and no watermark, and this probe then told an operator whose
+      // database held thousands of rows that nothing had been indexed. An open
+      // run is the fact that distinguishes the two.
+      const unfinished = await this.#unfinishedRuns(pool);
+      if (unfinished.count > 0) {
+        return {
+          name: 'index-integrity',
+          status: DependencyStatus.DEGRADED,
+          required: false,
+          detail: `${String(unfinished.count)} index run(s) started and never recorded finishing; the oldest began ${unfinished.oldest ?? 'at an unrecorded time'}`,
+          remediation:
+            'Indexing is idempotent. Run `ferret verify` to see what is affected, then `ferret index <path>` again.',
+        };
+      }
 
       if (total === 0) {
         return {
@@ -356,7 +373,11 @@ export class PostgresStorageProvider extends BaseProvider {
         name: 'index-integrity',
         status: DependencyStatus.OK,
         required: false,
-        detail: `${String(total)} indexed scope(s), all built by this version; last indexed ${when}`,
+        // "No skew and no unfinished run" — deliberately not "the index is
+        // correct". This probe reads artefact metadata and the run journal; it
+        // recomputes no hash. `ferret verify` is the check that does, and
+        // saying so here is what stops this line being read as one.
+        detail: `${String(total)} derived artefact(s), all built by this version; no unfinished runs; last indexed ${when}. Run \`ferret verify\` to recompute stored hashes.`,
       };
     } catch (error) {
       // An integrity check that cannot run reports unknown. It never reports ok,
@@ -367,6 +388,34 @@ export class PostgresStorageProvider extends BaseProvider {
         required: false,
         detail: `Index integrity could not be determined: ${classifyDatabaseError(error, 'storage.check.index').message}`,
       };
+    }
+  }
+
+  /**
+   * Index runs that started and never closed — EPIC-094 AC-6.
+   *
+   * Raw SQL against the pool, like every other probe in this file: a health
+   * check must work when the rest of the process does not, and reaching for a
+   * store would make it depend on more than the connection it is checking.
+   *
+   * A missing table is not a failure. An installation migrated by an older
+   * Ferret has no `index_run`, and reporting that as a health problem would
+   * make an upgrade look like a fault.
+   */
+  async #unfinishedRuns(pool: Pool): Promise<{ count: number; oldest: string | undefined }> {
+    try {
+      const { rows } = await pool.query<{ n: string; oldest: Date | null }>(
+        `SELECT count(*)::text AS n, min(started_at) AS oldest
+           FROM ferret.index_run
+          WHERE finished_at IS NULL
+            AND started_at < now() - interval '2 hours'`,
+      );
+      return {
+        count: Number(rows[0]?.n ?? '0'),
+        oldest: rows[0]?.oldest?.toISOString(),
+      };
+    } catch {
+      return { count: 0, oldest: undefined };
     }
   }
 

@@ -97,7 +97,12 @@ describe('the one unrestricted read is named rather than reached by omission —
     // `verifyAll` sweeps a subject's records for tampering and must see all of
     // them. That is a real requirement; what this Epic removes is arriving at it
     // by passing nothing.
-    expect(store).toContain('{ ...UNRESTRICTED_READ, limit: 1_000 }');
+    //
+    // The bound became a parameter in EPIC-094 (issue #95 — a silent cap
+    // reported as a whole subject), so the assertion is on the *name* rather
+    // than on the literal it used to sit beside. Naming the decision is the
+    // property; `1_000` was only where it happened to be written.
+    expect(store).toContain('{ ...UNRESTRICTED_READ, limit }');
   });
 
   it('has no other unrestricted read inside the store', () => {

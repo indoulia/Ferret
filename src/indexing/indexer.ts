@@ -28,6 +28,7 @@ import type {
   EvidenceWriter,
   LifecycleStore,
   RelationshipWriter,
+  RunJournal,
   WatermarkStore,
 } from './ports.js';
 
@@ -287,6 +288,14 @@ export interface IndexerDependencies {
    * composition into a broken one.
    */
   readonly blobs?: ContentBlobWriter;
+  /**
+   * Where a run records that it started — EPIC-094.
+   *
+   * Optional. Without it the indexer behaves exactly as it did before, and a
+   * run that dies halfway leaves no trace of having started — the state this
+   * port exists to end.
+   */
+  readonly runs?: RunJournal;
   readonly logger?: Logger;
 }
 
@@ -302,6 +311,7 @@ export class RepositoryIndexer {
   readonly #parser: ParserFramework | undefined;
   readonly #artifacts: ContentArtifactStore | undefined;
   readonly #blobs: ContentBlobWriter | undefined;
+  readonly #runs: RunJournal | undefined;
   readonly #logger: Logger | undefined;
 
   constructor(dependencies: IndexerDependencies) {
@@ -316,6 +326,7 @@ export class RepositoryIndexer {
     this.#parser = dependencies.parser;
     this.#artifacts = dependencies.artifacts;
     this.#blobs = dependencies.blobs;
+    this.#runs = dependencies.runs;
     this.#logger = dependencies.logger;
   }
 
@@ -328,6 +339,50 @@ export class RepositoryIndexer {
    * should leave Ferret knowing less, never knowing something wrong.
    */
   async index(
+    repository: DiscoveredRepository,
+    options: IndexOptions,
+    context: ProviderOperationContext,
+  ): Promise<IndexReport> {
+    // EPIC-094 §3.3 — intent before effect. The row is opened before anything
+    // is read or written and closed after everything succeeded, so an open row
+    // whose process is gone is a partially applied run rather than an inference
+    // from which tables happen to be empty.
+    //
+    // A *killed* process runs neither branch below, and that is the mechanism:
+    // the row stays open and the sweep finds it. A caught failure is closed as
+    // `failed`, because Ferret knows how that one ended.
+    const run = await this.#runs?.start({ repositoryKey: repository.identityKey });
+    try {
+      const report = await this.#indexOnce(repository, options, context);
+      if (run !== undefined) {
+        await this.#runs?.finish(
+          run.id,
+          'succeeded',
+          {
+            entities: report.entities,
+            relationships: report.relationships,
+            commitsRead: report.commitsRead,
+            filesRead: report.filesRead,
+            durationMs: Math.round(report.durationMs),
+          },
+          report.repositoryId,
+        );
+      }
+      return report;
+    } catch (error) {
+      // The summary carries the error *code*, never its message: a message can
+      // quote a path or a value, and the journal outlives the terminal it was
+      // printed to.
+      if (run !== undefined) {
+        await this.#runs?.finish(run.id, 'failed', {
+          code: error instanceof FerretError ? error.code : 'E_UNKNOWN',
+        });
+      }
+      throw error;
+    }
+  }
+
+  async #indexOnce(
     repository: DiscoveredRepository,
     options: IndexOptions,
     context: ProviderOperationContext,

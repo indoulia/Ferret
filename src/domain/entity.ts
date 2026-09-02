@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ErrorCode, FerretError } from '../errors/index.js';
 
 import { ENTITY_ATTRIBUTE_SCHEMAS } from './attributes.js';
-import { canonicalId, canonicalKey, contentHash, UUID_PATTERN } from './identity.js';
+import { canonicalId, canonicalInstant, canonicalKey, contentHash, UUID_PATTERN } from './identity.js';
 import { LifecycleState, isEntityKind, lifecycleStateSchema, type EntityKind } from './kinds.js';
 
 /**
@@ -264,7 +264,10 @@ export function createEntity(input: EntityInput): CanonicalEntity {
       unknownFields: value.unknownFields,
       externalIds: dedupeExternalIds(value.externalIds),
       source: value.source,
-      sourceObservedAt: value.sourceObservedAt ?? null,
+      // Canonicalised — see `canonicalInstant`. The column normalises this to
+      // UTC, so hashing the source's own spelling made the hash unrecomputable
+      // from the row it describes.
+      sourceObservedAt: canonicalInstant(value.sourceObservedAt),
     }),
   };
   return Object.freeze(created);
