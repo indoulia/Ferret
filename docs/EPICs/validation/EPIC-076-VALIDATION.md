@@ -47,12 +47,35 @@ them by name.
 | AC | verdict | evidence |
 | --- | --- | --- |
 | AC-1 a second run creates no entity, relationship or evidence row | MET | counted before and after, all three tables unchanged; `entities.created === 0`. Counted rather than read from the report, because the report saying `unchanged` is the thing under test |
-| AC-2 a second run reads fewer commits | MET | `second.commitsRead < first.commitsRead`, and `incremental === true`. Distinct from AC-1: a run that re-read everything and wrote nothing would pass AC-1 and fail this |
+| AC-2 a second run reads fewer commits | MET | `second.commitsRead < first.commitsRead`, and `incremental === true`, with **pinned commit dates** — see below. Distinct from AC-1: a run that re-read everything and wrote nothing would pass AC-1 and fail this |
 | AC-3 an earlier observation moves `valid_from` backwards, one interval open | MET | asserted against the store; one row, `valid_from` at the earlier instant, `valid_to` null |
 | AC-4 two revisions keep two cursors | MET | `HEAD` then `feature` leaves more than one additional cursor; the assertion that keeps issue #19 closed |
 | AC-5 the EPIC-031 records corrected or confirmed | MET | both struck with the deciding test named, and the narrative paragraph corrected too — a struck table row above an uncorrected paragraph is still a false claim |
 | AC-6 what is not incremental is stated with its owner | MET | the file tree, listed in full every run, assigned to EPIC-032 where EPIC-031's table already put it |
 | AC-7 no change to what a run reads or writes | MET | no file under `src/` touched; the existing indexing suites pass unchanged |
+
+## A cursor's resolution is one second, and CI found it
+
+The first AC-2 test failed on CI with `expected 2 to be less than 2`, having
+passed locally. Both runs read every commit, and neither the cursor nor the
+indexer was wrong.
+
+A cursor position is a commit **timestamp**, and Git's resolution is one second.
+The resume boundary is *inclusive*, so a second run re-reads every commit
+sharing the newest second — deliberately, because an exclusive boundary would
+silently drop a commit that landed in the same second as the watermark, and
+losing a commit is far worse than reading one twice. A fixture whose whole
+history lands inside one second therefore *cannot* read less. The CI runner is
+faster than this machine, so its two commits shared a second and mine did not.
+
+**The defect was in the test, not the product**, and the failure mode is worth
+naming: an assertion whose outcome depended on how fast the machine was. Fixed
+by pinning `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE` to distinct seconds, so
+exactly one commit sits at the newest one and the result is the same everywhere.
+
+This is also the honest bound on AC-2's claim. Ferret reads less on a second run
+*when history spans more than one second*, which is every real repository and
+not every fixture.
 
 ## Judgements worth review
 

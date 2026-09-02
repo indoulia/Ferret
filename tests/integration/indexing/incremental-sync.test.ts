@@ -84,12 +84,28 @@ async function fixture(name: string): Promise<DiscoveredRepository> {
   return provider.describeRepository(path, context);
 }
 
-async function commit(repository: DiscoveredRepository, path: string, body: string): Promise<void> {
+/**
+ * `at` pins the commit date, and AC-2 needs it.
+ *
+ * A cursor position is a commit *timestamp*, and Git's resolution is one
+ * second. A fixture whose whole history lands inside a single second cannot
+ * read less on a second run, because the boundary is inclusive — deliberately,
+ * since an exclusive one would silently drop a commit sharing the boundary
+ * second. Left to the wall clock this assertion passes on a slow machine and
+ * fails on a fast one; CI failed it with `expected 2 to be less than 2`.
+ */
+async function commit(
+  repository: DiscoveredRepository,
+  path: string,
+  body: string,
+  at?: string,
+): Promise<void> {
   const root = repository.root;
   await mkdir(dirname(join(root, path)), { recursive: true });
   await writeFile(join(root, path), body, 'utf8');
   await git(root, ['add', path]);
-  await git(root, ['commit', '-m', `write ${path}`]);
+  const when = at === undefined ? {} : { GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at };
+  await git(root, ['commit', '-m', `write ${path}`], when);
 }
 
 beforeAll(async () => {
@@ -134,7 +150,10 @@ describeSync(`incremental synchronization (${runnable ? 'real PostgreSQL and git
 
   it('reads fewer commits on the second run — AC-2', async () => {
     const repository = await fixture('incremental');
-    await commit(repository, 'src/b.ts', 'export const b = 1;\n');
+    // Distinct pinned seconds, so exactly one commit sits at the newest one and
+    // the second run has something to skip. See `commit` for why that matters.
+    await commit(repository, 'src/b.ts', 'export const b = 1;\n', '2027-01-01T00:00:00Z');
+    await commit(repository, 'src/e.ts', 'export const e = 1;\n', '2027-01-01T00:00:05Z');
 
     const first = await indexer().index(repository, { withHistory: true, withFiles: true }, context);
     const second = await indexer().index(repository, { withHistory: true, withFiles: true }, context);
@@ -142,7 +161,7 @@ describeSync(`incremental synchronization (${runnable ? 'real PostgreSQL and git
     // Two claims, and both matter. Writing nothing is idempotence; reading less
     // is incrementality, and a run that re-read everything and then wrote
     // nothing would satisfy the first while failing the second.
-    expect(first.commitsRead).toBeGreaterThan(0);
+    expect(first.commitsRead).toBeGreaterThan(1);
     expect(second.commitsRead).toBeLessThan(first.commitsRead);
     expect(second.incremental).toBe(true);
   }, 180_000);
