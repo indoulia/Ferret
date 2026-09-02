@@ -473,38 +473,7 @@ export function detectConflicts(evidence: readonly CanonicalEvidence[]): Conflic
   return conflicts;
 }
 
-/**
- * Picks the record a caller should believe, without discarding the others.
- *
- * Higher authority wins; then higher confidence; then the more recent
- * observation. Returns `undefined` when the input is empty or when nothing
- * distinguishes the candidates — an honest "cannot say" rather than an arbitrary
- * pick, because an arbitrary pick is indistinguishable from a considered one
- * once it reaches an answer.
- */
-export function preferredEvidence(evidence: readonly CanonicalEvidence[]): CanonicalEvidence | undefined {
-  if (evidence.length === 0) return undefined;
-  if (evidence.length === 1) return evidence[0];
-
-  const ranked = [...evidence].sort((a, b) => {
-    if (a.authority !== b.authority) return b.authority - a.authority;
-    const confidenceA = a.confidence ?? -1;
-    const confidenceB = b.confidence ?? -1;
-    if (confidenceA !== confidenceB) return confidenceB - confidenceA;
-    const observedA = a.observedAt ?? '';
-    const observedB = b.observedAt ?? '';
-    return observedA < observedB ? 1 : observedA > observedB ? -1 : 0;
-  });
-
-  const best = ranked[0];
-  const runnerUp = ranked[1];
-  if (best === undefined || runnerUp === undefined) return best;
-
-  const indistinguishable =
-    best.authority === runnerUp.authority &&
-    (best.confidence ?? -1) === (runnerUp.confidence ?? -1) &&
-    (best.observedAt ?? '') === (runnerUp.observedAt ?? '') &&
-    stableStringify(best.statement) !== stableStringify(runnerUp.statement);
-
-  return indistinguishable ? undefined : best;
-}
+// `preferredEvidence` now lives in `authority.ts`, beside the scale it ranks by
+// — EPIC-057 §8.4. It was here because evidence is what it takes; it belongs
+// there because authority is what it decides with, and EPIC-045 owns that
+// policy. Still exported from `domain/index.ts` under the same name.

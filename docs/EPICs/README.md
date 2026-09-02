@@ -144,7 +144,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-054 — Semantic Retrieval** — P1 — VALIDATED ([spec](EPIC-054-055-Semantic-And-Planner.md), [evidence](validation/EPIC-054-055-VALIDATION.md))
 - **EPIC-055 — Hybrid Query Planner** — P0 — VALIDATED ([spec](EPIC-054-055-Semantic-And-Planner.md), [evidence](validation/EPIC-054-055-VALIDATION.md))
 - **EPIC-056 — Ranking & Reranking** — P1 — VALIDATED ([spec](EPIC-056-Ranking-And-Reranking.md), [evidence](validation/EPIC-056-VALIDATION.md))
-- **EPIC-057 — Freshness & Authority Ranking** — P1
+- **EPIC-057 — Freshness & Authority Ranking** — P1 — VALIDATED ([spec](EPIC-057-Freshness-And-Authority-Ranking.md), [evidence](validation/EPIC-057-VALIDATION.md))
 - **EPIC-058 — Permission-Aware Retrieval** — P0 — VALIDATED ([spec](EPIC-058-Permission-Aware-Retrieval.md), [evidence](validation/EPIC-058-VALIDATION.md))
 
 ### Context Compilation
