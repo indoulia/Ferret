@@ -88,6 +88,88 @@ export interface TraversalQuery {
    */
   readonly includeHistorical?: boolean;
   readonly limit?: number;
+  /**
+   * Hops from the origin — EPIC-050.
+   *
+   * Default 1, which is exactly what `neighbours` has always done, so no
+   * existing caller changes. Clamped to {@link MAX_TRAVERSAL_DEPTH} rather than
+   * rejected: a caller asking for more than Ferret will walk is asking for
+   * everything, and the honest answer is as much as it will walk plus a
+   * `truncated` flag saying so.
+   */
+  readonly depth?: number;
+}
+
+/**
+ * Hops a single traversal will ever take — EPIC-050 §8.2.
+ *
+ * A bound rather than a preference. The walk costs one query per level, and the
+ * questions Ferret exists for — "which release contains this commit", "what does
+ * this function reach" — are shallow and typed. EPIC-007 §D-001 chose a table
+ * with indexes over a graph database on exactly that reasoning.
+ */
+export const MAX_TRAVERSAL_DEPTH = 6;
+
+export function boundedDepth(requested: number | undefined): number {
+  if (requested === undefined) return 1;
+  if (!Number.isInteger(requested) || requested < 1) return 1;
+  return Math.min(requested, MAX_TRAVERSAL_DEPTH);
+}
+
+/** One edge on the way to a reached entity — EPIC-050 §8.1. */
+export interface TraversalStep {
+  readonly relationshipType: string;
+  readonly direction: Exclude<Direction, 'both'>;
+  /** The entity this step arrived at. The last one is the reached entity. */
+  readonly entityId: string;
+}
+
+/**
+ * One entity a traversal reached, and how — EPIC-050 §8.1.
+ *
+ * The path is the answer to "how", and a flat node set throws it away: a caller
+ * handed a release cannot tell whether Ferret walked the edge it expected or a
+ * different one of the same kind.
+ */
+export interface TraversalPath {
+  readonly entity: CanonicalEntity;
+  /** Hops from the origin. `1` is a direct neighbour. */
+  readonly depth: number;
+  /**
+   * The steps from the origin to this entity, in order.
+   *
+   * One path per reached entity — the **first** found, which under breadth-first
+   * order is a shortest one. Enumerating every path is path-finding, which
+   * EPIC-050 §4 declines.
+   */
+  readonly steps: readonly TraversalStep[];
+  /** What the last edge's source said about it. */
+  readonly metadata: Readonly<Record<string, unknown>>;
+}
+
+/** Why a traversal stopped short — EPIC-050 §8.4. */
+export const TraversalBound = {
+  DEPTH: 'depth',
+  LIMIT: 'limit',
+} as const;
+
+export type TraversalBound = (typeof TraversalBound)[keyof typeof TraversalBound];
+
+export interface TraversalResult {
+  readonly paths: readonly TraversalPath[];
+  /**
+   * The bound that stopped the walk, when one did.
+   *
+   * `undefined` means the walk exhausted the reachable graph. Without this a
+   * caller cannot tell "nothing further exists" from "Ferret stopped looking" —
+   * the distinction EPIC-059 and EPIC-062 both exist to preserve, and the one a
+   * graph makes easiest to lose.
+   */
+  readonly truncated: TraversalBound | undefined;
+  /** How deep the walk actually went. */
+  readonly depthReached: number;
+  /** What the caller was not permitted to see — EPIC-058. Counts only. */
+  readonly withheld: WithheldReport;
 }
 
 export interface Neighbour {
@@ -260,6 +342,14 @@ export interface RetrievalPort {
   findEntities(query: EntityQuery, access: AccessContext): Promise<readonly CanonicalEntity[]>;
   getEntity(id: string, access: AccessContext): Promise<CanonicalEntity | undefined>;
   neighbours(query: TraversalQuery, access: AccessContext): Promise<readonly Neighbour[]>;
+  /**
+   * Multi-hop traversal — EPIC-050.
+   *
+   * Separate from `neighbours` because the *result* differs: a path rather than
+   * a neighbour. `neighbours` stays the one-hop primitive every existing caller
+   * uses, and EPIC-007's five recorded limitations are answered here.
+   */
+  traverse(query: TraversalQuery, access: AccessContext): Promise<TraversalResult>;
   search(query: SearchQuery, access: AccessContext): Promise<SearchResult>;
 }
 

@@ -29,6 +29,7 @@ import {
 import type { Logger } from '../logging/index.js';
 import {
   MAX_LIMIT,
+  MAX_TRAVERSAL_DEPTH,
   PUBLIC_ACCESS,
   explainQuery,
   renderExplanation,
@@ -375,7 +376,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         'Follow relationships from an entity: the commits that modified a file, ' +
         'the files a commit touched, the branch a worktree has checked out. ' +
         'Pass `at` to ask what was true at a past instant rather than now — ' +
-        'that is how to answer "what was I working on last Tuesday". ' +
+        'that is how to answer "what was I working on last Tuesday". Pass ' +
+        '`depth` above 1 to follow several hops, and each reached entity comes ' +
+        'back with the path that reached it; a walk stopped by a bound says so. ' +
         CONTENT_NOTICE,
       inputSchema: z.strictObject({
         id: z.string().uuid(),
@@ -387,20 +390,67 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           .optional()
           .describe('Include relationships that have ended, so a deletion is visible.'),
         limit: z.number().int().min(1).max(TOOL_RESULT_LIMIT).optional(),
+        depth: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAX_TRAVERSAL_DEPTH)
+          .optional()
+          .describe(
+            'Hops to follow. 1 (the default) is direct neighbours; more returns ' +
+              'each reached entity with the path that reached it.',
+          ),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ id, types, direction, at, includeHistorical, limit }) =>
+    async ({ id, types, direction, at, includeHistorical, limit, depth }) =>
       guard('neighbours', Permission.READ, async () => {
-        const neighbours = await retrieval.neighbours({
+        const query = {
           from: id,
           ...(types === undefined ? {} : { types }),
           ...(direction === undefined ? {} : { direction }),
           ...(at === undefined ? {} : { at }),
           ...(includeHistorical === undefined ? {} : { includeHistorical }),
           limit: Math.min(limit ?? 20, TOOL_RESULT_LIMIT),
-        }, access);
+        };
         const safety = new ContentSafety();
+
+        // EPIC-050 §8.5. `depth` grows this tool rather than adding a sibling: a
+        // second tool would duplicate the schema, the containment and the guard
+        // to change one number, and a client would have to know which to call.
+        // Absent or 1 takes the path every existing caller takes, byte for byte.
+        if (depth !== undefined && depth > 1) {
+          const walk = await retrieval.traverse({ ...query, depth }, access);
+          return {
+            notice: CONTENT_NOTICE,
+            asOf: includeHistorical === true ? 'all time' : (at ?? 'now'),
+            count: walk.paths.length,
+            depthReached: walk.depthReached,
+            // Reported, not inferred. Without it a caller cannot tell "nothing
+            // further exists" from "Ferret stopped looking".
+            ...(walk.truncated === undefined ? {} : { truncated: walk.truncated }),
+            reached: walk.paths.map((path) => ({
+              id: path.entity.id,
+              kind: path.entity.kind,
+              lifecycle: path.entity.lifecycle,
+              attributes: containAttributes(path.entity.attributes, safety),
+              depth: path.depth,
+              // The path is the answer to "how". A caller handed a release
+              // cannot otherwise tell whether Ferret walked the edge it expected
+              // or a different one of the same kind.
+              via: path.steps.map((step) => ({
+                relationship: step.relationshipType,
+                direction: step.direction,
+                id: step.entityId,
+              })),
+              ...(Object.keys(path.metadata).length === 0 ? {} : { metadata: path.metadata }),
+            })),
+            withheld: walk.withheld.total,
+            contentSafety: safety.report,
+          };
+        }
+
+        const neighbours = await retrieval.neighbours(query, access);
         return {
           notice: CONTENT_NOTICE,
           asOf: includeHistorical === true ? 'all time' : (at ?? 'now'),

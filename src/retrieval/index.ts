@@ -11,6 +11,9 @@ export {
   Direction,
   HitSource,
   MAX_LIMIT,
+  MAX_TRAVERSAL_DEPTH,
+  TraversalBound,
+  boundedDepth,
   boundedLimit,
   type EntityQuery,
   type Neighbour,
@@ -20,7 +23,10 @@ export {
   type SearchHit,
   type SearchQuery,
   type SearchResult,
+  type TraversalPath,
   type TraversalQuery,
+  type TraversalResult,
+  type TraversalStep,
 } from './query.js';
 
 // EPIC-058. Authorization is a parameter on every read, not a convention.
@@ -48,6 +54,10 @@ export { RRF_K, fuse, type FusedHit, type RankedList } from './fuse.js';
 // EPIC-056. Ranking is core and pure: it reorders, folds and truncates a pool
 // authorization already allowed through, and never queries.
 export { OVERFETCH, overfetchLimit, rank } from './rank.js';
+
+// EPIC-050. The walk is pure and takes the filtered one-hop read as a function,
+// which is what applies permission at every hop rather than only at the end.
+export { traverseFrom, type HopReader, type TraverseOptions } from './traverse.js';
 
 // EPIC-057. Freshness is an ordering over recorded lifecycle, not a decay curve.
 export { LIVE_STANDING, describeStanding, recencyKey, standing } from './freshness.js';

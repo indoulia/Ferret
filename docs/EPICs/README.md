@@ -134,7 +134,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 ### Knowledge Graph & Relationships
 
 - **EPIC-049 — Relationship Storage** — P0 — VALIDATED ([spec](EPIC-049-Relationship-Storage.md), [evidence](validation/EPIC-049-VALIDATION.md))
-- **EPIC-050 — Relationship Traversal** — P1
+- **EPIC-050 — Relationship Traversal** — P1 — VALIDATED ([spec](EPIC-050-Relationship-Traversal.md), [evidence](validation/EPIC-050-VALIDATION.md))
 - **EPIC-051 — Cross-Source Entity Resolution** — P1
 
 ### Search & Retrieval

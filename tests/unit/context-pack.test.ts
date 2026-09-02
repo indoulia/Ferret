@@ -19,6 +19,7 @@ import {
   type Neighbour,
   NOTHING_WITHHELD,
   type RetrievalPort,
+  type TraversalResult,
   type SearchHit,
   type WithheldReport,
   type StatedEvidence,
@@ -69,6 +70,16 @@ function hit(id: string, attributes: Record<string, unknown>, score = 1): Search
 }
 
 class FakeRetrieval implements RetrievalPort {
+  /** EPIC-050. Not exercised here; the traversal has its own suites. */
+  traverse(): Promise<TraversalResult> {
+    return Promise.resolve({
+      paths: [],
+      truncated: undefined,
+      depthReached: 0,
+      withheld: NOTHING_WITHHELD,
+    });
+  }
+
   constructor(
     private readonly hits: readonly SearchHit[],
     private readonly links: readonly Neighbour[] = [],

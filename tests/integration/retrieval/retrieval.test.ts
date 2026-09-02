@@ -1,6 +1,8 @@
+import { performance } from 'node:perf_hooks';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -10,6 +12,9 @@ import {
   ErrorCode,
   HitSource,
   MAX_LIMIT,
+  MAX_TRAVERSAL_DEPTH,
+  TraversalBound,
+  traverseFrom,
   RepositoryIndexer,
   RelationshipType,
   boundedLimit,
@@ -467,5 +472,255 @@ describeRetrieval(`ranking by standing (${runnable ? 'real PostgreSQL' : SKIP_RE
       expect(hit.ranking?.standing).toBe(0);
       expect(hit.ranking?.why).toBeUndefined();
     }
+  });
+});
+
+/**
+ * Multi-hop traversal — EPIC-050.
+ *
+ * EPIC-007's validation recorded that traversal was one hop and that depth and
+ * cycle protection "must be addressed before multi-hop traversal exists". This
+ * is that, against a real graph: the fixture repository has commits with
+ * parents, files with versions, and — since EPIC-035 — symbols that reference
+ * each other.
+ */
+describeRetrieval(`traversing more than one hop (${runnable ? 'real PostgreSQL' : SKIP_REASON})`, () => {
+  /** The repository, and a commit and file that are two hops apart. */
+  const originOf = async (): Promise<{ repositoryId: string; commitId: string }> => {
+    // No scope filter: a commit's `source_scope` is not the repository id, and
+    // this fixture holds one repository.
+    const commits = await handle.execute<{ id: string }>(sql`
+      SELECT id FROM ferret.entity
+       WHERE kind = 'commit' ORDER BY source_observed_at DESC LIMIT 1
+    `);
+    const commitId = commits.rows[0]?.id;
+    expect(commitId).toBeDefined();
+    return { repositoryId, commitId: commitId ?? '' };
+  };
+
+  it('returns exactly what neighbours returns at depth 1 — AC-2', async () => {
+    const { repositoryId: root } = await originOf();
+
+    const hop = await retrieval.neighbours({ from: root, limit: 50 }, PUBLIC_ACCESS);
+    const walk = await retrieval.traverse({ from: root, depth: 1, limit: 50 }, PUBLIC_ACCESS);
+
+    expect(walk.paths.map((one) => one.entity.id).sort()).toStrictEqual(
+      hop.map((one) => one.entity.id).sort(),
+    );
+    for (const path of walk.paths) expect(path.depth).toBe(1);
+  });
+
+  it('reaches a file through its repository in two hops, with the path — AC-1', async () => {
+    const walk = await retrieval.traverse({ from: repositoryId, depth: 2, limit: 200 }, PUBLIC_ACCESS);
+
+    const twoHops = walk.paths.filter((one) => one.depth === 2);
+    expect(twoHops.length).toBeGreaterThan(0);
+
+    const path = twoHops[0];
+    expect(path?.steps).toHaveLength(2);
+    // The path is the answer to "how": both edge types in order, and the
+    // intermediate node's id.
+    expect(path?.steps[0]?.relationshipType).toBeDefined();
+    expect(path?.steps[1]?.entityId).toBe(path?.entity.id);
+    expect(path?.steps[0]?.entityId).not.toBe(path?.entity.id);
+  });
+
+  it('never reports the same entity twice, and terminates on a cyclic graph — AC-4, AC-5', async () => {
+    // `commit_parent_of_commit` is genuinely cyclic in a repository with
+    // merges, and a visited set is what makes the walk terminate: the graph is
+    // walked, not the set of walks.
+    const walk = await retrieval.traverse(
+      { from: repositoryId, depth: 4, limit: 300 },
+      PUBLIC_ACCESS,
+    );
+    const ids = walk.paths.map((one) => one.entity.id);
+
+    expect(new Set(ids).size).toBe(ids.length);
+    // And the origin is never reported as something it reached.
+    expect(ids).not.toContain(repositoryId);
+  });
+
+  it('orders by depth, then deterministically — AC-6', async () => {
+    const first = await retrieval.traverse({ from: repositoryId, depth: 3, limit: 100 }, PUBLIC_ACCESS);
+    const second = await retrieval.traverse({ from: repositoryId, depth: 3, limit: 100 }, PUBLIC_ACCESS);
+
+    const depths = first.paths.map((one) => one.depth);
+    expect(depths).toStrictEqual([...depths].sort((a, b) => a - b));
+    expect(first.paths.map((one) => one.entity.id)).toStrictEqual(
+      second.paths.map((one) => one.entity.id),
+    );
+  });
+
+  it('applies the type filter at every hop — AC-7', async () => {
+    const walk = await retrieval.traverse(
+      { from: repositoryId, depth: 3, types: ['repository_contains_file'], limit: 200 },
+      PUBLIC_ACCESS,
+    );
+
+    for (const path of walk.paths) {
+      for (const step of path.steps) expect(step.relationshipType).toBe('repository_contains_file');
+    }
+    // One type that only leaves the repository means nothing beyond depth 1.
+    expect(walk.paths.every((one) => one.depth === 1)).toBe(true);
+  });
+
+  it('applies direction at every hop, and reaches the root from a leaf — AC-8', async () => {
+    const files = await handle.execute<{ id: string }>(sql`
+      SELECT id FROM ferret.entity
+       WHERE kind = 'file' AND source_scope = ${repositoryId} LIMIT 1
+    `);
+    const fileId = files.rows[0]?.id;
+    expect(fileId).toBeDefined();
+    if (fileId === undefined) return;
+
+    const inbound = await retrieval.traverse(
+      { from: fileId, depth: 2, direction: Direction.IN, limit: 100 },
+      PUBLIC_ACCESS,
+    );
+
+    expect(inbound.paths.map((one) => one.entity.id)).toContain(repositoryId);
+  });
+
+  it('says which bound stopped the walk — AC-12, AC-13', async () => {
+    const byDepth = await retrieval.traverse(
+      { from: repositoryId, depth: 1, limit: 500 },
+      PUBLIC_ACCESS,
+    );
+    const byLimit = await retrieval.traverse({ from: repositoryId, depth: 4, limit: 3 }, PUBLIC_ACCESS);
+
+    // The graph continues past one hop, so Ferret stopped looking and says so.
+    expect(byDepth.truncated).toBe(TraversalBound.DEPTH);
+    expect(byDepth.depthReached).toBe(1);
+
+    expect(byLimit.paths).toHaveLength(3);
+    expect(byLimit.truncated).toBe(TraversalBound.LIMIT);
+  });
+
+  it('reports no truncation when the walk exhausted the graph', async () => {
+    const files = await handle.execute<{ id: string }>(sql`
+      SELECT id FROM ferret.entity
+       WHERE kind = 'file_version' AND source_scope IN (
+         SELECT id::text FROM ferret.entity WHERE kind = 'file' AND source_scope = ${repositoryId}
+       ) LIMIT 1
+    `);
+    const versionId = files.rows[0]?.id;
+    if (versionId === undefined) return;
+
+    // A file version's only edges lead back up, and `out` from it leads nowhere.
+    const walk = await retrieval.traverse(
+      { from: versionId, depth: 3, direction: Direction.OUT, limit: 100 },
+      PUBLIC_ACCESS,
+    );
+
+    expect(walk.truncated).toBeUndefined();
+  });
+
+  it('clamps a depth beyond the bound rather than rejecting it — AC-3', async () => {
+    const walk = await retrieval.traverse(
+      { from: repositoryId, depth: 99, limit: 50 },
+      PUBLIC_ACCESS,
+    );
+
+    expect(walk.depthReached).toBeLessThanOrEqual(MAX_TRAVERSAL_DEPTH);
+  });
+
+  it('keeps every path reachable one hop at a time — AC-16', async () => {
+    // §8.3's invariant, which is what makes the iterative design a security
+    // property rather than a style: nothing is reachable transitively that is
+    // not reachable directly, under the same access context.
+    const walk = await retrieval.traverse({ from: repositoryId, depth: 3, limit: 40 }, PUBLIC_ACCESS);
+
+    for (const path of walk.paths) {
+      let previous = repositoryId;
+      for (const step of path.steps) {
+        const hop = await retrieval.neighbours({ from: previous, limit: 500 }, PUBLIC_ACCESS);
+        expect(hop.map((one) => one.entity.id)).toContain(step.entityId);
+        previous = step.entityId;
+      }
+    }
+  });
+
+  it('answers a question that needs two hops', async () => {
+    // The question EPIC-007's validation used to describe what was missing:
+    // "which release contains the fix for FER-12" needs several hops. The
+    // fixture has no releases, so the same shape one level down — which files
+    // does the commit at the tip of this repository reach, through the
+    // repository — is the assertion.
+    const { commitId } = await originOf();
+    if (commitId === '') return;
+
+    const walk = await retrieval.traverse(
+      { from: commitId, depth: 2, includeHistorical: true, limit: 100 },
+      PUBLIC_ACCESS,
+    );
+
+    expect(walk.paths.some((one) => one.depth === 2)).toBe(true);
+  });
+
+  it('reaches nothing from an entity that does not exist, without failing', async () => {
+    const walk = await retrieval.traverse(
+      { from: '00000000-0000-4000-8000-000000000000', depth: 3 },
+      PUBLIC_ACCESS,
+    );
+
+    expect(walk.paths).toStrictEqual([]);
+    expect(walk.truncated).toBeUndefined();
+  });
+});
+
+/**
+ * The measurement EPIC-007 §D-001 asked for — EPIC-050 §16.
+ *
+ * D-001 chose "a table with indexes, not a graph database", on the reasoning
+ * that "the traversals Ferret needs are shallow and typed … not arbitrary-depth
+ * path finding, and PostgreSQL answers those from an index". It ends with
+ * **"Revisit when EPIC-050 measures a traversal that PostgreSQL cannot serve."**
+ *
+ * So this Epic owes a number, whichever way it comes out. Printed rather than
+ * only asserted, for the same reason EPIC-098 prints its retrieval figures: the
+ * number belongs in the validation record, and a threshold nobody argued for is
+ * worse than none.
+ */
+describeRetrieval(`the D-001 measurement (${runnable ? 'real PostgreSQL' : SKIP_REASON})`, () => {
+  it('walks to the maximum depth well inside a budget a client would accept', async () => {
+    const started = performance.now();
+    const walk = await retrieval.traverse(
+      { from: repositoryId, depth: MAX_TRAVERSAL_DEPTH, limit: 200 },
+      PUBLIC_ACCESS,
+    );
+    const elapsed = performance.now() - started;
+
+    process.stderr.write(
+      `[EPIC-050] depth=${String(MAX_TRAVERSAL_DEPTH)} reached=${String(walk.depthReached)} ` +
+        `paths=${String(walk.paths.length)} truncated=${String(walk.truncated)} ` +
+        `elapsedMs=${elapsed.toFixed(1)}\n`,
+    );
+
+    // A generous ceiling, deliberately. The claim being tested is D-001's —
+    // that PostgreSQL *can* serve this shape of traversal — not that it hits a
+    // particular millisecond. A walk that took seconds would be the finding
+    // that overturns the decision, and this fails if it does.
+    expect(elapsed).toBeLessThan(2000);
+    expect(walk.paths.length).toBeGreaterThan(0);
+  });
+
+  it('costs at most one query per level', async () => {
+    // The performance property the design rests on, asserted rather than
+    // assumed: the walk is bounded by depth, and each level is one indexed
+    // lookup per frontier node.
+    let queries = 0;
+    const counted = await traverseFrom(
+      async (from, limit) => {
+        queries += 1;
+        return retrieval.neighbours({ from, limit }, PUBLIC_ACCESS);
+      },
+      { from: repositoryId, depth: 2, limit: 5 },
+    );
+
+    process.stderr.write(
+      `[EPIC-050] queries=${String(queries)} for depth=2 limit=5 paths=${String(counted.paths.length)}\n`,
+    );
+    // One for the origin, then at most one per node on the first level.
+    expect(queries).toBeLessThanOrEqual(1 + counted.paths.filter((one) => one.depth === 1).length);
   });
 });

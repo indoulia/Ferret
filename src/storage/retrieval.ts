@@ -9,6 +9,7 @@ import {
   WithheldTally,
   WithholdReason,
   boundedLimit,
+  traverseFrom,
   includedRepositories,
   overfetchLimit,
   rank,
@@ -23,6 +24,7 @@ import {
   type SearchQuery,
   type SearchResult,
   type TraversalQuery,
+  type TraversalResult,
 } from '../retrieval/index.js';
 
 import { classifyDatabaseError } from './connection.js';
@@ -363,6 +365,17 @@ export class RetrievalStore implements RetrievalPort {
    * appears to be on two branches for one instant.
    */
   async neighbours(query: TraversalQuery, access: AccessContext): Promise<readonly Neighbour[]> {
+    // The public one-hop read. The tally is discarded here because this
+    // signature has never carried one; `traverse` supplies its own so a node
+    // dropped at hop three is still counted — EPIC-050 AC-11.
+    return this.#neighbours(query, access, new WithheldTally());
+  }
+
+  async #neighbours(
+    query: TraversalQuery,
+    access: AccessContext,
+    tally: WithheldTally,
+  ): Promise<readonly Neighbour[]> {
     const limit = boundedLimit(query.limit);
     const direction = query.direction ?? Direction.BOTH;
     const at = query.at ?? new Date().toISOString();
@@ -424,10 +437,58 @@ export class RetrievalStore implements RetrievalPort {
       // not add one, so an edge is as visible as the entity it reaches. Filtering
       // on the reached entity is therefore the whole control available, and §4 of
       // this Epic's specification declines to add the column.
-      return visibleEntities(reached, (neighbour) => neighbour.entity, access, new WithheldTally());
+      return visibleEntities(reached, (neighbour) => neighbour.entity, access, tally);
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.neighbours');
     }
+  }
+
+
+  /**
+   * Multi-hop traversal — EPIC-050.
+   *
+   * EPIC-007's validation recorded five limitations and every one of them is
+   * here: traversal was one hop, so "which release contains the fix for FER-12"
+   * had to be walked by the caller, with its own visited set and its own depth
+   * bound and no way to be told a path existed but was truncated.
+   *
+   * **An iterative frontier, not a recursive CTE, and that is a security
+   * decision rather than a style one.** `neighbours` filters twice: in SQL
+   * through `scopePredicate`, and in TypeScript through `visibleEntities` for
+   * the dimensions SQL cannot express — worktree, session and glob path
+   * exclusion. A CTE can carry the first and not the second, so a walk would
+   * expand *through* a node the caller may not see and return what lies beyond
+   * it. That is a caller learning a relationship exists by receiving its far
+   * end. One level at a time, each filtered by both before it is expanded, is
+   * the only shape that closes it — and it is the shape
+   * `EvidenceStore.provenanceOf` already uses.
+   *
+   * Breadth-first, so `depth` means what a reader expects and the first path
+   * found is a shortest one. Cycle protection is a **visited set**, not a path
+   * check: the graph is walked, not the set of walks, so `A → B → A` yields `B`
+   * once and stops. Ferret's edges are genuinely cyclic — merge commits through
+   * `commit_parent_of_commit`, a rename undone through
+   * `entity_supersedes_entity` — and EPIC-007 made cycle protection a
+   * precondition of this Epic existing.
+   */
+  async traverse(query: TraversalQuery, access: AccessContext): Promise<TraversalResult> {
+    // The walk itself is core and pure — `retrieval/traverse.ts` — and it takes
+    // the one-hop read as a function. That is the security property rather than
+    // a testing convenience: every hop is filtered by `#neighbours`, which
+    // carries both the SQL predicate and the TypeScript one, so nothing is
+    // reachable transitively that is not reachable directly. EPIC-050 §8.3.
+    const tally = new WithheldTally();
+    const result = await traverseFrom(
+      async (from, limit) => this.#neighbours({ ...query, from, limit }, access, tally),
+      {
+        from: query.from,
+        ...(query.depth === undefined ? {} : { depth: query.depth }),
+        ...(query.limit === undefined ? {} : { limit: query.limit }),
+      },
+    );
+    // The tally is filled by the hops above, so it can only be read once they
+    // have run — which is why it is attached here rather than passed in.
+    return { ...result, withheld: tally.report };
   }
 
   /**

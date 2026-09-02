@@ -15,6 +15,7 @@ import {
   EntityKind,
   EvidenceMethod,
   PUBLIC_ACCESS,
+  RelationshipType,
   ScopeKind,
   WithholdReason,
   createNullLogger,
@@ -23,6 +24,7 @@ import {
 import {
   EntityStore,
   EvidenceStore,
+  RelationshipStore,
   RetrievalStore,
   migrate,
   type FerretDatabase,
@@ -484,6 +486,90 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
       // plus the separator is a prefix of every scoped token.
       const result = await retrieval.search({ text: DESCENDANT_PHRASE }, holding(''));
       expect(result.hits).toStrictEqual([]);
+    });
+  });
+
+
+  /**
+   * A walk must not continue through a node the caller cannot see — EPIC-050
+   * §8.3, AC-10.
+   *
+   * The sharpest disclosure a multi-hop read can make, and the reason the
+   * traversal is an iterative frontier rather than a recursive CTE: if the walk
+   * expands through an invisible intermediate, the caller learns that a
+   * relationship exists by receiving what lies on the other side of it.
+   *
+   * `A → B → fileInB`, where `B` and its file are outside the caller's scope.
+   */
+  describe('a traversal never passes through what it cannot see — EPIC-050 AC-10', () => {
+    const onlyA = (): AccessContext => ({
+      ...PUBLIC_ACCESS,
+      scope: { include: [{ kind: ScopeKind.REPOSITORY, id: repositoryA }], exclude: [] },
+    });
+
+    beforeAll(async () => {
+      const relationships = new RelationshipStore(handle);
+      const at = new Date('2026-01-01T00:00:00.000Z');
+      // `entity_supersedes_entity` accepts any endpoint kinds, so the chain
+      // needs no new registered type to prove the property.
+      await relationships.assert(
+        {
+          fromId: repositoryA,
+          type: RelationshipType.ENTITY_SUPERSEDES_ENTITY,
+          toId: repositoryB,
+          validFrom: at.toISOString(),
+          metadata: {},
+          sourceSystem: 'git',
+        },
+        at,
+      );
+      await relationships.assert(
+        {
+          fromId: repositoryB,
+          type: RelationshipType.ENTITY_SUPERSEDES_ENTITY,
+          toId: fileInB,
+          validFrom: at.toISOString(),
+          metadata: {},
+          sourceSystem: 'git',
+        },
+        at,
+      );
+    });
+
+    it('reaches the far end when the whole chain is visible', async () => {
+      // The assertion that stops the one below being vacuous: the graph really
+      // does connect A to fileInB in two hops.
+      const walk = await retrieval.traverse({ from: repositoryA, depth: 2, limit: 50 }, PUBLIC_ACCESS);
+
+      expect(walk.paths.map((one) => one.entity.id)).toContain(repositoryB);
+      expect(walk.paths.map((one) => one.entity.id)).toContain(fileInB);
+    });
+
+    it('stops at an invisible intermediate rather than walking through it', async () => {
+      const walk = await retrieval.traverse({ from: repositoryA, depth: 3, limit: 50 }, onlyA());
+      const reached = walk.paths.map((one) => one.entity.id);
+
+      expect(reached).not.toContain(repositoryB);
+      // The point of the Epic's §8.3: not merely that B is hidden, but that
+      // nothing *beyond* B comes back either.
+      expect(reached).not.toContain(fileInB);
+    });
+
+    it('never puts an invisible entity in a path, including as a step', async () => {
+      const walk = await retrieval.traverse({ from: repositoryA, depth: 3, limit: 50 }, onlyA());
+
+      for (const path of walk.paths) {
+        for (const step of path.steps) {
+          expect(step.entityId).not.toBe(repositoryB);
+          expect(step.entityId).not.toBe(fileInB);
+        }
+      }
+    });
+
+    it('reports nothing at all from an origin the caller cannot see', async () => {
+      const walk = await retrieval.traverse({ from: repositoryB, depth: 2, limit: 50 }, onlyA());
+
+      expect(walk.paths).toStrictEqual([]);
     });
   });
 

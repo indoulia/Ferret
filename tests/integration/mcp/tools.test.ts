@@ -18,6 +18,7 @@ import {
   type StatedEvidence,
   type WithheldReport,
   type RetrievalPort,
+  type TraversalResult,
   type TraversalQuery,
   type SearchHit,
 } from '../../../src/index.js';
@@ -94,6 +95,25 @@ function evidenceRecord(id: string, statement: unknown): CanonicalEvidence {
 const EVIDENCE = evidenceRecord('44444444-4444-4444-8444-444444444444', HOSTILE);
 
 class FakeRetrieval implements RetrievalPort {
+  /** EPIC-050. A one-hop graph, enough for the tool's shape to be asserted. */
+  traverse(): Promise<TraversalResult> {
+    return Promise.resolve({
+      paths: [
+        {
+          entity: FILE,
+          depth: 1,
+          steps: [
+            { relationshipType: 'commit_modifies_file', direction: 'out', entityId: FILE.id },
+          ],
+          metadata: { change: 'deleted' },
+        },
+      ],
+      truncated: undefined,
+      depthReached: 1,
+      withheld: NOTHING_WITHHELD,
+    });
+  }
+
   failNext = false;
   /** What the last call actually received, so a dropped filter is visible. */
   lastFind: EntityQuery | undefined;
@@ -1058,5 +1078,55 @@ describe('explaining why a query returned what it did', () => {
     expect(parsed.results[0]?.ranking?.builtFrom).toStrictEqual(['content', 'entity']);
     expect(parsed.results[0]?.ranking?.folded).toBe(1);
     expect(parsed.results[1]?.ranking?.standing).toBe(40);
+  });
+});
+
+/**
+ * `ferret_neighbours` with a depth — EPIC-050 §8.5, AC-15.
+ *
+ * `depth` grows the existing tool rather than adding a sibling: a second tool
+ * would duplicate the schema, the containment and the guard to change one
+ * number, and a client would have to know which to call.
+ */
+describe('following relationships more than one hop', () => {
+  it('takes the same path as before without a depth — AC-15', async () => {
+    const withoutDepth = await call('ferret_neighbours', { id: COMMIT.id });
+    const withOne = await call('ferret_neighbours', { id: COMMIT.id, depth: 1 });
+
+    // Byte-identical: `depth: 1` is exactly today's behaviour, so no existing
+    // caller changes.
+    expect(JSON.stringify(withOne)).toBe(JSON.stringify(withoutDepth));
+    expect(withoutDepth['neighbours']).toBeDefined();
+    expect(withoutDepth['reached']).toBeUndefined();
+  });
+
+  it('returns reached entities with the path that reached them', async () => {
+    const result = await call('ferret_neighbours', { id: COMMIT.id, depth: 2 });
+    const reached = result['reached'] as { id: string; depth: number; via: unknown[] }[];
+
+    expect(reached).toBeDefined();
+    // The one-hop shape is gone, because this is a different answer.
+    expect(result['neighbours']).toBeUndefined();
+    expect(reached[0]?.depth).toBe(1);
+    expect(reached[0]?.via).toHaveLength(1);
+    expect(result['depthReached']).toBeGreaterThanOrEqual(1);
+  });
+
+  it('refuses a depth beyond the bound at the schema, before Ferret runs', async () => {
+    // Validation is the SDK's, from the Zod schema, so the client is told which
+    // field rather than receiving a silently clamped answer it did not ask for.
+    const tooDeep = await callRaw('ferret_neighbours', { id: COMMIT.id, depth: 99 });
+
+    expect(tooDeep.isError).toBe(true);
+    expect(tooDeep.text).toContain('depth');
+  });
+
+  it('declares depth in its schema so a client can discover it', async () => {
+    const { tools } = await client.listTools();
+    const tool = tools.find((one) => one.name === 'ferret_neighbours');
+    const schema = tool?.inputSchema as { properties?: Record<string, unknown> } | undefined;
+
+    expect(schema?.properties?.['depth']).toBeDefined();
+    expect(tool?.description).toContain('depth');
   });
 });

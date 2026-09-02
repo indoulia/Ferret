@@ -82,3 +82,34 @@ against a real PostgreSQL rather than by inspection. Limitations are recorded
 with owners.
 
 Marked IMPLEMENTED rather than VALIDATED: an Epic is not validated by its author.
+
+## Addendum — 2026-09-02, after EPIC-050
+
+**The traversal limitations recorded above are closed.** The table is left as
+written.
+
+They read: "Traversal is one hop. *Which release contains the fix for FER-12*
+needs several hops, which a caller must currently walk itself", and "No
+traversal depth or cycle protection, because traversal is one hop. **Must be
+addressed before multi-hop traversal exists.**"
+
+`RetrievalPort.traverse` walks to a bounded depth, returns each reached entity
+with the path that reached it, protects against cycles with a visited set, and
+reports which bound stopped it — so a caller can tell "nothing further exists"
+from "Ferret stopped looking". `ferret_neighbours` gained an optional `depth`
+rather than acquiring a sibling tool.
+
+The decision worth knowing is why it is **not** a recursive CTE. `neighbours`
+filters twice — `scopePredicate` in SQL and `visibleEntities` in TypeScript for
+the dimensions SQL cannot express — and a CTE carries only the first, so a walk
+would expand *through* a node the caller may not see and return what lies beyond
+it. The walk therefore takes the filtered one-hop read as a function, and the
+invariant is asserted: every entity in every path is reachable by a one-hop
+`neighbours` from its predecessor.
+
+**EPIC-007 §D-001 is answered.** It ended "Revisit when EPIC-050 measures a
+traversal that PostgreSQL cannot serve." Depth 6 exhausted Ferret's own graph in
+**21.6 ms**, with three queries for a two-hop walk. D-001 stands; no second
+datastore is justified.
+
+Evidence: `docs/EPICs/validation/EPIC-050-VALIDATION.md`.
