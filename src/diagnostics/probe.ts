@@ -220,16 +220,66 @@ export async function probeCore(options: ProbeOptions = {}): Promise<CoreProbe> 
  * not-indexed and unavailable to be representable, and an operator reading a
  * clean bill of health should be able to see that indexing was never checked
  * because it does not exist yet — rather than infer it from an absence.
+ *
+ * **Now empty, and kept.** `Checkpoints/EPIC-004.md:94` called this "a to-do
+ * list" and said `synchronization` would be replaced when EPIC-075 landed. It
+ * has been: {@link synchronizationComponent} reports real cursors. The function
+ * stays because the pattern it establishes is right — a planned capability
+ * belongs in the report as `unknown`, not missing from it — and the next Epic
+ * to need it should find it here rather than reinvent it.
  */
 export function plannedCapabilityComponents(): readonly HealthComponent[] {
-  return [
-    {
+  return [];
+}
+
+/** How far behind a source is, in the shape the health report wants. */
+export interface SyncProgress {
+  readonly scopeId: string;
+  readonly producer: string;
+  readonly ageSeconds: number;
+}
+
+/**
+ * Synchronization health, from real cursors — EPIC-075 AC-7, AC-8.
+ *
+ * This replaced a hard-coded `unknown` that told every operator "no source
+ * synchronization is configured yet", including operators whose database held
+ * a cursor from an hour ago. EPIC-032 made the same correction to
+ * `index-integrity` and recorded why: *a health check that reports a constant
+ * is worse than no health check, because it is believed.*
+ *
+ * **Never synced and just synced must not look the same** (§6). An empty cursor
+ * list is `unknown` with a remediation, not `ok` with an age of zero.
+ *
+ * No threshold on the age. Deciding that four hours behind is degraded would
+ * invent a number nobody argued for, and how stale is too stale depends on how
+ * often the operator indexes — a question Ferret cannot answer for them and
+ * EPIC-078 will, when scheduling exists. The age is reported; the judgement is
+ * not made.
+ */
+export function synchronizationComponent(cursors: readonly SyncProgress[]): HealthComponent {
+  if (cursors.length === 0) {
+    return {
       name: 'synchronization',
       area: HealthArea.SOURCES,
       status: DependencyStatus.UNKNOWN,
       required: false,
-      detail: 'No source synchronization is configured yet',
-      remediation: 'Source synchronization arrives with EPIC-075 and EPIC-076.',
-    },
-  ];
+      detail: 'Nothing has been synchronized yet, so how far behind Ferret is cannot be assessed',
+      remediation: 'Run `ferret index <path>` to index a repository.',
+    };
+  }
+
+  const oldest = cursors.reduce((worst, one) => (one.ageSeconds > worst.ageSeconds ? one : worst));
+  const newest = cursors.reduce((best, one) => (one.ageSeconds < best.ageSeconds ? one : best));
+
+  return {
+    name: 'synchronization',
+    area: HealthArea.SOURCES,
+    status: DependencyStatus.OK,
+    required: false,
+    detail:
+      cursors.length === 1
+        ? `1 source, last advanced ${String(oldest.ageSeconds)}s ago`
+        : `${String(cursors.length)} sources, the most recent ${String(newest.ageSeconds)}s ago and the oldest ${String(oldest.ageSeconds)}s ago`,
+  };
 }

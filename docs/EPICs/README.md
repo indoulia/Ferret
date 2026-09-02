@@ -174,7 +174,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Synchronization & Reconciliation
 
-- **EPIC-075 — Sync Cursor Management** — P0
+- **EPIC-075 — Sync Cursor Management** — P0 — IMPLEMENTED ([spec](EPIC-075-Sync-Cursor-Management.md), [evidence](validation/EPIC-075-VALIDATION.md))
 - **EPIC-076 — Incremental Source Synchronization** — P0
 - **EPIC-077 — Event & Webhook Ingestion** — P1
 - **EPIC-078 — Periodic Reconciliation** — P1

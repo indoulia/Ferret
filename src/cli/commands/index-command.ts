@@ -33,6 +33,7 @@ import {
   ContentStore,
   IndexRunStore,
   SymbolStore,
+  SyncCursorStore,
   createStorageProvider,
   type FerretDatabase,
 } from '../../storage/index.js';
@@ -166,6 +167,8 @@ export function indexCommand(output: (json: boolean) => OutputOptions): Command 
             // halfway is a fact on record rather than an inference from which
             // tables happen to be empty.
             runs: new IndexRunStore(storage.db),
+            // EPIC-075 — the watermark, through the cursor store.
+            cursors: new SyncCursorStore(storage.db, storage.pool),
             ...contentPorts,
             logger: context.logger,
           });

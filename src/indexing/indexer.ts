@@ -29,6 +29,7 @@ import type {
   LifecycleStore,
   RelationshipWriter,
   RunJournal,
+  SyncCursors,
   WatermarkStore,
 } from './ports.js';
 
@@ -296,6 +297,14 @@ export interface IndexerDependencies {
    * port exists to end.
    */
   readonly runs?: RunJournal;
+  /**
+   * Where this run records how far it got — EPIC-075.
+   *
+   * Optional, and its absence falls back to the artefact store directly, so a
+   * caller that has not been updated behaves exactly as it did. Resuming is an
+   * optimisation: losing it costs time, not correctness.
+   */
+  readonly cursors?: SyncCursors;
   readonly logger?: Logger;
 }
 
@@ -312,6 +321,7 @@ export class RepositoryIndexer {
   readonly #artifacts: ContentArtifactStore | undefined;
   readonly #blobs: ContentBlobWriter | undefined;
   readonly #runs: RunJournal | undefined;
+  readonly #cursors: SyncCursors | undefined;
   readonly #logger: Logger | undefined;
 
   constructor(dependencies: IndexerDependencies) {
@@ -327,6 +337,7 @@ export class RepositoryIndexer {
     this.#artifacts = dependencies.artifacts;
     this.#blobs = dependencies.blobs;
     this.#runs = dependencies.runs;
+    this.#cursors = dependencies.cursors;
     this.#logger = dependencies.logger;
   }
 
@@ -770,14 +781,24 @@ export class RepositoryIndexer {
     return { retired, reinstated, skippedReason: undefined };
   }
 
+  /**
+   * Where the last run got to — EPIC-075 AC-6.
+   *
+   * Through the cursor port when one is composed, and through the artefact
+   * store otherwise. The version check that used to live here moved into
+   * `SyncCursorStore`, so the rule — *a position written by a different build
+   * is not trustworthy, because that build may read or model the source
+   * differently and resuming would leave a gap nothing fills* — is applied in
+   * one place rather than remembered per caller. The fallback below keeps it,
+   * because a run without a cursor port must not become a run that trusts a
+   * stale position.
+   */
   async #readWatermark(repositoryId: string): Promise<Readonly<Record<string, unknown>> | undefined> {
+    if (this.#cursors !== undefined) {
+      return (await this.#cursors.read(repositoryId))?.position;
+    }
     const artifact = await this.#watermarks.getArtifact(INDEX_ARTIFACT_KIND, repositoryId);
     if (artifact === undefined) return undefined;
-    // A watermark written by a different build of Ferret is not trustworthy: the
-    // producer may have changed what it reads or how it models it, and resuming
-    // from it would leave a gap nothing would ever fill. Falling back to a full
-    // read is the safe direction, and EPIC-010's artefact staleness exists for
-    // exactly this.
     if (artifact.producerVersion !== VERSION) return undefined;
     return artifact.metadata;
   }
@@ -787,6 +808,18 @@ export class RepositoryIndexer {
     lastCommitAt: string | undefined,
     now: Date,
   ): Promise<void> {
+    const position = {
+      ...(lastCommitAt === undefined ? {} : { lastCommitAt }),
+      indexedAt: now.toISOString(),
+    };
+    if (this.#cursors !== undefined) {
+      // Same kind, same scope, same metadata as the line below — EPIC-075 is a
+      // generalisation of this write, not a replacement for it, so an
+      // installation's existing watermarks keep working and no re-read is
+      // triggered by the change.
+      await this.#cursors.advance(INDEXER_PRODUCER, repositoryId, position, now);
+      return;
+    }
     await this.#watermarks.recordArtifact(
       {
         kind: INDEX_ARTIFACT_KIND,
