@@ -88,6 +88,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "commander": "^15.0.0",
     "drizzle-orm": "^0.45.2",
+    "pdfjs-dist": "^6.3.289",
     "pg": "^8.23.0",
     "picomatch": "^4.0.7",
     "pino": "^10.3.1",

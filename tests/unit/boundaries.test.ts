@@ -45,6 +45,23 @@ interface Graph {
 }
 
 /**
+ * The package a specifier installs, rather than the specifier.
+ *
+ * `pdfjs-dist/legacy/build/pdf.mjs` is one dependency, not a fourth one — the
+ * graph records what is written so a subpath policy stays visible, and this is
+ * for the assertions that ask what would be *installed*. EPIC-026.
+ */
+function packageNames(graph: Graph): Set<string> {
+  const names = new Set<string>();
+  for (const specifier of graph.packages) {
+    if (specifier.startsWith('node:')) continue;
+    const parts = specifier.split('/');
+    names.add(specifier.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] ?? specifier));
+  }
+  return names;
+}
+
+/**
  * Walks the static import graph from an entry module.
  *
  * Reads the TypeScript sources directly rather than the build output, so the
@@ -448,9 +465,19 @@ describe('code parser boundary', () => {
     expect([...parsers.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
   });
 
-  it('adds only the grammar runtime to the core dependency set', () => {
-    const external = [...parsers.packages].filter((name) => !name.startsWith('node:'));
-    expect(external.sort()).toStrictEqual([...ALLOWED_CORE_PACKAGES, 'web-tree-sitter'].sort());
+  it('adds only the parser runtimes to the core dependency set', () => {
+    // EPIC-026 widened this by one. `pdfjs-dist` is 33 MB installed and carries
+    // a font engine and a decompressor; the point of the subpath is that
+    // `@indoulia/ferret` needs none of it.
+    expect([...packageNames(parsers)].sort()).toStrictEqual(
+      [...ALLOWED_CORE_PACKAGES, 'pdfjs-dist', 'web-tree-sitter'].sort(),
+    );
+  });
+
+  it('is the only graph that carries a PDF engine — EPIC-026 AC-14', () => {
+    expect(packageNames(parsers).has('pdfjs-dist')).toBe(true);
+    expect(packageNames(core).has('pdfjs-dist')).toBe(false);
+    expect(packageNames(cli).has('pdfjs-dist')).toBe(false);
   });
 });
 

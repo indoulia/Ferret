@@ -4,7 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { createGitSourceProvider } from '../../src/git/index.js';
-import { createCodeParserProvider, createTextParserProvider } from '../../src/parsers/index.js';
+import {
+  createCodeParserProvider,
+  createPdfParserProvider,
+  createTextParserProvider,
+} from '../../src/parsers/index.js';
 import { runProviderConformance, summarizeConformance } from '../../src/providers/sdk/testing.js';
 import { BaseProvider } from '../../src/providers/sdk/base.js';
 import { PROVIDER_CONTRACT_VERSION, ProviderKind } from '../../src/providers/index.js';
@@ -92,6 +96,8 @@ const RUNNABLE = [
   // optional: a new provider cannot reach `main` without facing the conformance
   // suite or declaring where it is covered.
   { name: 'ferret.parser.text', create: () => createTextParserProvider() },
+  // EPIC-026, and the gate worked a second time.
+  { name: 'ferret.parser.pdf', create: () => createPdfParserProvider() },
 ];
 
 describe('every provider is covered — AC-1, AC-2', () => {

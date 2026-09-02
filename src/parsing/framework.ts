@@ -4,12 +4,14 @@ import {
   ParserSupport,
   isContentParser,
   isSegmentKind,
+  isSpanUnit,
   type ContentParser,
   type ContentSegment,
   type CodeReference,
   type OutlineKind,
   type OutlineNode,
   type ParseOutput,
+  type SpanUnit,
   type ParseTarget,
   type ParseWarning,
 } from '../providers/contracts/parser.js';
@@ -82,6 +84,8 @@ export interface ParsedContent {
   readonly outline: readonly OutlineNode[];
   /** What the outline is — EPIC-029 §8.4. Absent means no code symbols. */
   readonly outlineKind: OutlineKind | undefined;
+  /** What every span here counts — EPIC-026 §8.1. Absent means lines. */
+  readonly spanUnit: SpanUnit | undefined;
   /**
    * Names the file uses — EPIC-035.
    *
@@ -285,6 +289,7 @@ export class ParserFramework {
       segments,
       outline: output.outline ?? [],
       outlineKind: output.outlineKind,
+      spanUnit: output.spanUnit,
       references: output.references ?? [],
       imports: output.imports ?? [],
       attributes: output.attributes ?? {},
@@ -311,6 +316,13 @@ function validate(output: ParseOutput, sizeBytes: number): string | undefined {
   // parser's output is not trustworthy.
   const segments: unknown = output.segments;
   if (!isUnknownArray(segments)) return 'The parser returned no segments array';
+
+  // EPIC-026 §8.1. An unrecognised unit is worse than an absent one: a consumer
+  // would read the default meaning off a field that was trying to say otherwise.
+  const spanUnit: unknown = output.spanUnit;
+  if (spanUnit !== undefined && !isSpanUnit(spanUnit)) {
+    return `The parser declared unknown span unit ${JSON.stringify(spanUnit)}`;
+  }
 
   for (const [index, entry] of segments.entries()) {
     const where = `segment ${String(index)}`;
