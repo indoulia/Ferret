@@ -190,7 +190,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | No confidence on inferred relationships. | A `commit_resolves_issue` parsed from a commit message is stored with the same standing as one from an API. | **EPIC-046** — Confidence & Completeness |
 | `retire` closes the most recent open interval for an edge, not an arbitrary one. | An event retiring a specific historical interval cannot be expressed. | EPIC-007 follow-up if a provider needs it |
 | No traversal depth or cycle protection, because traversal is one hop. | Must be addressed before multi-hop traversal exists. | **EPIC-050** |
-| macOS unvalidated. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
 
 ## Addendum — 2026-09-02, after EPIC-046
 

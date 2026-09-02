@@ -118,6 +118,10 @@ complexity, and cross-platform reach.
 1. **macOS packaging unvalidated.** Recommend accepting this as EPIC-105
    (Cross-Platform Packaging) scope rather than holding EPIC-005 open, since
    EPIC-105 owns packaging validation. Requires governance acceptance.
+   **Discharged 2026-09-03:** macOS is in the CI matrix and passes — 112 test
+   files and 2 463 tests on `macos-latest`, the packaging suite included. The
+   acceptance this asked for is no longer needed, because the gap it was
+   accepting is measured.
 2. **Parser structure-preservation and provenance fidelity unmeasured.** Recommend
    folding into EPIC-024 (Parser Framework) and EPIC-097 (Parser Quality Harness),
    which own structural correctness and golden-dataset validation.

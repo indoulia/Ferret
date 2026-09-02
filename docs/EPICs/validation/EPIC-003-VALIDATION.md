@@ -153,7 +153,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | Repository policy may set only `exclude`. | A repository cannot express any other intent, even a benign one. Widening the allowlist is a security decision, not a convenience one. | EPIC-003 governance, if a need arises |
 | No `ferret config edit`, and no schema export for AI clients. | An agent must use `get`/`set` rather than discovering the schema. | **EPIC-066** — MCP Configuration Tools |
 | Exclusions are enforced only where they are consulted. | EPIC-003 delivers the model and the evaluator; applying them at discovery and retrieval time is later work. | **EPIC-022**, **EPIC-058** |
-| macOS unvalidated. | Inherited from EPIC-001/EPIC-005; no macOS host available. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | Inherited from EPIC-001/EPIC-005; no macOS host available. | **EPIC-105** |
 
 ## 8. Defects found after validation, and fixed
 

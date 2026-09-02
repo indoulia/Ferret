@@ -116,7 +116,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | Scope is not yet applied to retrieval. The evaluator exists; nothing filters by it. | Same caveat as EPIC-008's permission scopes. | **EPIC-058** — Permission-Aware Retrieval |
 | Confidence on an alias is stored but never computed. | A provider must supply it, and most will not. | **EPIC-046** |
 | No agent-to-agent or agent-to-developer "acted on behalf of" modelling. | An AI client acting for a developer is two actors with a session between them, which EPIC-039 will need to express. | **EPIC-039** — Session Model |
-| macOS unvalidated. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
 
 ## Addendum — 2026-09-02, after EPIC-046
 

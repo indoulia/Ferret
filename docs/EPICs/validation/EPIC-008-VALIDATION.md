@@ -137,7 +137,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | Staleness must be checked by a caller supplying the current source hash. | Nothing sweeps for stale evidence automatically. | **EPIC-078** — Periodic Reconciliation |
 | Secret detection is shape-based, not entropy-based. | A high-entropy credential in an unrecognised format would be stored. | **EPIC-082** — Secret Detection & Exclusion |
 | ~~Evidence rows are never pruned.~~ **Closed 2026-09-02 by EPIC-088.** | An append-only store grows without bound. | **EPIC-088** — `ferret prune --evidence --superseded-older-than <days>`. Only `superseded` records qualify, only past an age the caller names, and only when no `current` record was derived from them — `evidence_derivation` cascades, so deleting a source would erase a live provenance chain. Current evidence and tombstones are never deleted. |
-| macOS unvalidated. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
 
 ### Addendum — 2026-09-01
 

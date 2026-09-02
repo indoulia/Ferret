@@ -40,7 +40,10 @@ out, which is worse than one that says nothing.
 
 ## 4. Non-scope
 
-- Cross-platform packaging beyond Node's own reach (EPIC-105).
+- Cross-platform packaging beyond Node's own reach (EPIC-105). **Delivered
+  2026-09-03**, and the scope held: "cross-platform packaging" turned out to
+  mean *the npm package works on those platforms*, which macOS now demonstrates.
+  No new package format exists, and none was needed.
 - Upgrade and migration UX (EPIC-106).
 - Docker images (EPIC-107).
 - Registry publication itself, which is a release action rather than a build

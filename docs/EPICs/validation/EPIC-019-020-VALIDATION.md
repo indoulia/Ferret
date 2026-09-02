@@ -133,7 +133,7 @@ in this budget — which is how the budget was chosen.
 | Two addresses are two developers. | Deliberate. Resolution is a decision with evidence behind it. | **EPIC-036** |
 | Tags, remote-tracking refs and `branch_points_to_commit` still absent. | Commit entities now exist, so the last of these is finally *possible* — it was blocked on exactly that. | **EPIC-020's successors / EPIC-031** |
 | File entities carry only a path and extension. | No content, no media type, no language, no version. Those are the next Epics' subject, and this Epic's file identity is what they must agree with. | **EPIC-022, EPIC-023** |
-| macOS unvalidated. | Inherited. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | Inherited. | **EPIC-105** |
 
 ---
 
