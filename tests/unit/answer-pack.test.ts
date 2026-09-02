@@ -18,6 +18,7 @@ import {
   type EntityQuery,
   type Neighbour,
   type RetrievalPort,
+  type TraversalResult,
   type SearchHit,
   type StatedEvidence,
   type TraversalQuery,
@@ -104,6 +105,16 @@ function stated(state: EvidenceState | undefined, overrides: Partial<CanonicalEv
 }
 
 class FakeRetrieval implements RetrievalPort {
+  /** EPIC-050. Not exercised here; the traversal has its own suites. */
+  traverse(): Promise<TraversalResult> {
+    return Promise.resolve({
+      paths: [],
+      truncated: undefined,
+      depthReached: 0,
+      withheld: NOTHING_WITHHELD,
+    });
+  }
+
   searched: string[] = [];
   constructor(private readonly entities: readonly CanonicalEntity[]) {}
 

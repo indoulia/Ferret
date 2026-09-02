@@ -163,3 +163,49 @@ describe('ranking runs after authorization, and can only ever narrow — EPIC-05
     expect(explain).not.toMatch(/\.statement\b/);
   });
 });
+
+/**
+ * **A multi-hop walk must not disclose a node by returning what lies beyond it —
+ * EPIC-050 §8.3, §11.**
+ *
+ * `neighbours` filters twice: `scopePredicate` in SQL, and `visibleEntities` in
+ * TypeScript for the dimensions SQL cannot express — worktree, session and glob
+ * path exclusion. A recursive CTE can carry the first and not the second, so a
+ * walk would expand *through* a node the caller may not see and return its far
+ * end. That is a caller learning a relationship exists by receiving what is on
+ * the other side of it.
+ *
+ * Structural, because the behavioural proof cannot show that a *later* author
+ * did not replace the loop with a CTE.
+ */
+describe('traversal reuses the one-hop read at every level — EPIC-050', () => {
+  it('walks by calling the filtered one-hop query, not its own SQL', () => {
+    const traverse = source.slice(source.indexOf('async traverse('), source.indexOf('async search('));
+
+    // The one-hop read, which carries both filters.
+    expect(traverse).toContain('this.#neighbours(');
+    // And no SQL of its own: a second query here is a second place for a
+    // predicate to be forgotten.
+    expect(traverse).not.toMatch(/\bsql`/);
+    expect(traverse).not.toContain('RECURSIVE');
+  });
+
+  it('keeps the walk itself unable to read anything — EPIC-050', () => {
+    // Pure and core: it takes the filtered one-hop read as a *parameter*, so a
+    // later author cannot make it query around the filters without changing its
+    // signature.
+    const walker = readFileSync(resolve(SRC, 'retrieval/traverse.ts'), 'utf8');
+
+    expect(walker).not.toMatch(/from '\.\.\/storage/);
+    expect(walker).not.toMatch(/\bsql`/);
+    expect(walker).not.toContain('RECURSIVE');
+  });
+
+  it('keeps both filters on the one-hop read the walk depends on', () => {
+    const hop = bodyOf('outward');
+
+    expect(hop).toContain('scopePredicate(access)');
+    // The TypeScript half is applied to the mapped rows, not to the SQL.
+    expect(source).toContain('visibleEntities(reached, (neighbour) => neighbour.entity, access, tally)');
+  });
+});

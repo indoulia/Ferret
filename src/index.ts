@@ -420,7 +420,15 @@ export {
   type RetrievalPort,
   type SearchHit,
   type SearchQuery,
+  MAX_TRAVERSAL_DEPTH,
+  TraversalBound,
+  traverseFrom,
+  type HopReader,
+  boundedDepth,
+  type TraversalPath,
   type TraversalQuery,
+  type TraversalResult,
+  type TraversalStep,
 } from './retrieval/index.js';
 
 export {
