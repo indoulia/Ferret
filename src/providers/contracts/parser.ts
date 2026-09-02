@@ -44,16 +44,46 @@ export function isSegmentKind(value: unknown): value is SegmentKind {
  * Into the original rather than into the extracted text, and this is the whole
  * point: evidence has to be able to point at the file a human will open. A span
  * into a PDF's extracted text names a position in a string nobody can see.
+ *
+ * A format whose unit is not a line says so through `ParseOutput.spanUnit`
+ * rather than reinterpreting these fields silently — EPIC-026 §8.1, and §8.2
+ * for why a PDF's byte range is the file's.
  */
 export interface ContentSpan {
   /** Inclusive byte offset. */
   readonly startByte: number;
   /** Exclusive byte offset. */
   readonly endByte: number;
-  /** 1-based, inclusive. */
+  /** 1-based, inclusive. Counts `ParseOutput.spanUnit`, which defaults to lines. */
   readonly startLine: number;
   /** 1-based, inclusive. Equal to `startLine` for a single-line segment. */
   readonly endLine: number;
+}
+
+/**
+ * What a span's `startLine`/`endLine` count — EPIC-026 §8.1.
+ *
+ * `outlineKind` twice over. EPIC-029 §8.4 found that a consumer assuming what a
+ * field meant produced 206 files of prose in a symbol index, and the fix was to
+ * make the parser declare it. A PDF has pages where every parser before it had
+ * lines, and the same three options were available: index the extracted text
+ * (a position nobody can open), report `1` for everything (discarding the one
+ * locator a PDF has), or declare the unit.
+ *
+ * **Absent means `line`**, so no existing parser changes and no existing
+ * consumer becomes wrong.
+ */
+export const SpanUnit = {
+  LINE: 'line',
+  PAGE: 'page',
+} as const;
+
+export type SpanUnit = (typeof SpanUnit)[keyof typeof SpanUnit];
+
+const SPAN_UNITS: ReadonlySet<string> = new Set(Object.values(SpanUnit));
+
+export function isSpanUnit(value: unknown): value is SpanUnit {
+  return typeof value === 'string' && SPAN_UNITS.has(value);
 }
 
 export interface ContentSegment {
@@ -175,6 +205,8 @@ export interface ParseOutput {
   readonly outline?: readonly OutlineNode[];
   /** What the outline is — EPIC-029 §8.4. Absent means no code symbols. */
   readonly outlineKind?: OutlineKind;
+  /** What every span in this output counts — EPIC-026 §8.1. Absent means lines. */
+  readonly spanUnit?: SpanUnit;
   /**
    * Names this file uses — EPIC-035.
    *

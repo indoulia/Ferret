@@ -44,3 +44,25 @@ export {
 } from './text/provider.js';
 
 export { MAX_MARKDOWN_SEGMENTS, parseMarkdown, type MarkdownParse } from './text/markdown.js';
+
+// EPIC-026. PDFs, where a page is the locator and a line is not — see §8.1.
+export {
+  PDF_MEDIA_TYPE,
+  PDF_PARSER_ID,
+  PDF_PARSER_VERSION,
+  PdfParserProvider,
+  createPdfParserProvider,
+  type PdfParserOptions,
+} from './pdf/provider.js';
+
+export {
+  MAX_PDF_CHARACTERS,
+  MAX_PDF_PAGES,
+  PDF_SECURITY_SETTINGS,
+  PdfReadError,
+  PdfRefusal,
+  pdfLibraryIdentity,
+  readPdf,
+  type PdfExtraction,
+  type PdfProperties,
+} from './pdf/document.js';
