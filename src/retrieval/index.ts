@@ -15,6 +15,7 @@ export {
   type EntityQuery,
   type Neighbour,
   type RankBreakdown,
+  type RankSignals,
   type RetrievalPort,
   type SearchHit,
   type SearchQuery,
@@ -47,6 +48,9 @@ export { RRF_K, fuse, type FusedHit, type RankedList } from './fuse.js';
 // EPIC-056. Ranking is core and pure: it reorders, folds and truncates a pool
 // authorization already allowed through, and never queries.
 export { OVERFETCH, overfetchLimit, rank } from './rank.js';
+
+// EPIC-057. Freshness is an ordering over recorded lifecycle, not a decay curve.
+export { LIVE_STANDING, describeStanding, recencyKey, standing } from './freshness.js';
 export {
   QueryPlanner,
   type ExactStrategy,

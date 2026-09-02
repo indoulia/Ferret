@@ -2,6 +2,7 @@ import {
   EvidenceState,
   SourceAuthority,
   detectConflicts,
+  effectiveAuthority,
   isUnknownAuthority,
   type CanonicalEvidence,
   type StatedEvidence,
@@ -140,15 +141,10 @@ const UNASSESSED_BELIEVABILITY = 20;
 /** The rank a record Ferret still believes carries. */
 const CURRENT_BELIEVABILITY = 0;
 
-/**
- * Where an unassessed authority ranks.
- *
- * `isUnknownAuthority` exists precisely because `UNKNOWN` is the lowest *number*
- * and not the lowest *meaning* — it says "unassessed" where `ASSERTED` says
- * "assessed, and weak" (EPIC-045). Sorting it as zero would rank every source
- * Ferret has not yet classified below a model's unverified claim.
- */
-const UNASSESSED_AUTHORITY = (SourceAuthority.ASSERTED + SourceAuthority.DERIVED) / 2;
+// Where an unassessed authority ranks now lives in `domain/authority.ts`, beside
+// the scale it is derived from — EPIC-057 §8.4 moved it there so this ordering
+// and `preferredEvidence` cannot drift apart. The reasoning is unchanged and is
+// recorded at the definition.
 
 function believability(state: EvidenceState | undefined): number {
   if (state === undefined) return UNASSESSED_BELIEVABILITY;
@@ -157,10 +153,6 @@ function believability(state: EvidenceState | undefined): number {
   // providers, and a selection that crashes on an unexpected value takes the
   // whole answer with it.
   return BELIEVABILITY[state] ?? UNASSESSED_BELIEVABILITY;
-}
-
-function effectiveAuthority(authority: number): number {
-  return isUnknownAuthority(authority) ? UNASSESSED_AUTHORITY : authority;
 }
 
 /** `undefined` field means "about the subject as a whole", and groups as one. */

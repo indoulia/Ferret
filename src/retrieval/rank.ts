@@ -1,6 +1,7 @@
-import type { CanonicalEntity } from '../domain/index.js';
+import { effectiveAuthority, SourceAuthority, type CanonicalEntity } from '../domain/index.js';
 
-import { MAX_LIMIT, type RankBreakdown, type SearchHit } from './query.js';
+import { LIVE_STANDING, describeStanding, recencyKey, standing } from './freshness.js';
+import { MAX_LIMIT, type RankBreakdown, type RankSignals, type SearchHit } from './query.js';
 
 /**
  * Ranking retrieval results — EPIC-056.
@@ -120,7 +121,7 @@ interface Group<T extends SearchHit> {
  * storage layer threads an evidence id it only wants to resolve for the rows
  * that survive.
  */
-export function rank<T extends SearchHit>(
+export function rank<T extends SearchHit & RankSignals>(
   hits: readonly T[],
   limit: number,
 ): readonly (T & { readonly ranking: RankBreakdown })[] {
@@ -167,19 +168,64 @@ export function rank<T extends SearchHit>(
   return survivors
     .map((group) => {
       const score = noisyOr(group.contributions.values());
+      const where = standing(group.best.entity);
       const ranking: RankBreakdown = Object.freeze({
         relevance: clamp(group.best.score),
         contributors: Object.freeze([...group.contributions.keys()].sort()),
         subsumed: Object.freeze([...group.subsumed].sort()),
+        standing: where,
+        // Only when standing actually moved the hit. A sentence on every result
+        // saying "this is live" is noise a reader learns to skip, and then does
+        // not read the one that matters.
+        ...(where === LIVE_STANDING ? {} : { why: describeStanding(group.best.entity) }),
       });
       return { ...group.best, score, ranking };
     })
-    .sort(
-      (a, b) =>
-        b.score - a.score ||
-        a.entity.kind.localeCompare(b.entity.kind) ||
-        a.entity.source.id.localeCompare(b.entity.source.id) ||
-        a.entity.id.localeCompare(b.entity.id),
-    )
+    .sort(compareRanked)
     .slice(0, limit);
+}
+
+/**
+ * The full ordering — EPIC-057 §8.3.
+ *
+ * ```
+ * standing asc → relevance desc → authority desc → recency desc
+ *              → kind asc → sourceId asc → id asc
+ * ```
+ *
+ * **Standing outranks relevance, and it is the only thing that does.** A
+ * tombstoned file that matches perfectly is still the wrong answer while a live
+ * one matches at all, and no tiebreak can fix that. Everything below relevance
+ * acts where relevance has already tied — which after probabilistic or is
+ * common; the golden run has three files at 0.0797.
+ *
+ * `kind → sourceId → id` is EPIC-056's determinism tail, unchanged, so the order
+ * stays total and AC-2 still holds.
+ */
+function compareRanked<T extends SearchHit & RankSignals & { readonly ranking: RankBreakdown }>(
+  a: T,
+  b: T,
+): number {
+  return (
+    a.ranking.standing - b.ranking.standing ||
+    b.score - a.score ||
+    authorityOf(b) - authorityOf(a) ||
+    // Descending, and a missing timestamp is the empty string — so it never
+    // precedes a hit that has one, and is not called old either.
+    recencyKey(b.entity).localeCompare(recencyKey(a.entity)) ||
+    a.entity.kind.localeCompare(b.entity.kind) ||
+    a.entity.source.id.localeCompare(b.entity.source.id) ||
+    a.entity.id.localeCompare(b.entity.id)
+  );
+}
+
+/**
+ * The authority to order this hit by.
+ *
+ * Absent on every branch but evidence, where the candidate row carries it so
+ * ranking does not have to read a record it may then fold away. Absent means
+ * unassessed, which is what `effectiveAuthority` is for — not the weakest rank.
+ */
+function authorityOf(hit: SearchHit & RankSignals): number {
+  return effectiveAuthority(hit.authority ?? SourceAuthority.UNKNOWN);
 }

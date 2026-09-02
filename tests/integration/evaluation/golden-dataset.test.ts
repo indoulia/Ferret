@@ -413,6 +413,28 @@ describeGolden(`ranking the same index (${runnable ? 'real PostgreSQL' : SKIP_RE
     }
   });
 
+  it('costs no retrieval quality — EPIC-057 AC-15', async () => {
+    // A live corpus has no tombstones, so freshness ranking has nothing to
+    // reorder here and the figures must be EPIC-056's exactly. This is a
+    // no-regression check, not a measurement of EPIC-057's effect: adding a
+    // deleted file to the labelled corpus would measure it properly and is
+    // EPIC-096's decision, recorded in EPIC-057 §16.
+    const report = await measureRetrievalQuality(
+      dataset,
+      retrieval,
+      { corpus: repositoryId },
+      { access: PUBLIC_ACCESS },
+    );
+    const { meanPrecisionAtK, meanRecall, meanReciprocalRank, meanNdcg, falsePositives } =
+      report.aggregate;
+
+    expect(meanPrecisionAtK).toBeGreaterThanOrEqual(0.3611);
+    expect(meanReciprocalRank).toBeGreaterThanOrEqual(0.6805);
+    expect(meanNdcg).toBeGreaterThanOrEqual(0.7313);
+    expect(meanRecall).toBeGreaterThanOrEqual(0.9166);
+    expect(falsePositives).toBe(0);
+  });
+
   it('reads more candidates than it returns — AC-10', async () => {
     // Observable from the outside: one result must be chosen from a pool wider
     // than one, or the pool did not exist.

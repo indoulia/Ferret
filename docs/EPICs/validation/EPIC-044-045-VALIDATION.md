@@ -106,3 +106,34 @@ one was not given, so a provider that has already decided is not overruled.
 `vitest run tests/unit`: 38 files, 1094 passed.
 `vitest run tests/integration/domain/evidence-store.test.ts`: 30 passed, real
 PostgreSQL.
+
+## Addendum — 2026-09-02, after EPIC-057
+
+**The "Freshness is not in the ordering" limitation is closed.** The paragraph
+above is left as written, for the reason EPIC-048's addendum gave: a record that
+edited itself whenever a later Epic closed something would stop being evidence of
+anything.
+
+It read: "`preferredEvidence` breaks an authority tie with confidence and then
+recency, and a highly authoritative stale record still beats a fresh weak one.
+That is EPIC-057." EPIC-057 §8.4 decided the policy that answers it, and did so
+narrowly: **where two records share a `sourceSystem` and a `field`, the later
+`observedAt` supersedes the earlier before authority is consulted.** Two
+*different* systems disagreeing still tie on authority and still surface as a
+conflict, because that is EPIC-047's question and not this one.
+
+Two further things that Epic found in this one's territory, both recorded in
+`validation/EPIC-057-VALIDATION.md`:
+
+- **`preferredEvidence` sorted on the raw authority number**, so `UNKNOWN` ranked
+  below `ASSERTED` — the opposite of what `SourceAuthority.UNKNOWN` in this
+  Epic's own module has documented since it was written. EPIC-062 had already
+  built `effectiveAuthority` for its own ordering and the two had never met; the
+  helper now lives in `domain/authority.ts` and both use it.
+- **`preferredEvidence` moved to `authority.ts`**, beside the scale it decides
+  with. Same name, same export, no caller changed.
+
+The other limitations above stand: nothing back-fills authority on an
+already-indexed database, `systemOfRecord` is still per provider rather than per
+field, and the ranks are still a considered starting set rather than a measured
+one.

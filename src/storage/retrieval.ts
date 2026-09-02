@@ -493,6 +493,7 @@ export class RetrievalStore implements RetrievalPort {
       SELECT ${ENTITY_COLUMNS},
              'entity'::text AS hit_source,
              NULL::uuid AS evidence_id,
+             NULL::integer AS evidence_authority,
              ts_rank(e.search_vector, q.query, ${RANK_NORMALIZATION}) AS score,
              -- The same text migration 0007's generated column indexes, field
              -- for field.
@@ -524,6 +525,11 @@ export class RetrievalStore implements RetrievalPort {
       SELECT ${ENTITY_COLUMNS},
              'evidence'::text AS hit_source,
              ev.id AS evidence_id,
+             -- EPIC-057 §5. The ordering needs the authority rank, and the
+             -- ranked path deliberately does not read the evidence record
+             -- until it knows which hits survive — overfetching would
+             -- otherwise multiply round trips for objects nobody sees.
+             ev.authority AS evidence_authority,
              ts_rank(ev.search_vector, q.query, ${RANK_NORMALIZATION}) AS score,
              ts_headline('english', coalesce(ev.statement #>> '{}', ''), q.query,
                          'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
@@ -581,6 +587,7 @@ export class RetrievalStore implements RetrievalPort {
       SELECT ${ENTITY_COLUMNS},
              'content'::text AS hit_source,
              NULL::uuid AS evidence_id,
+             NULL::integer AS evidence_authority,
              ts_rank(cb.search_vector, q.query, ${RANK_NORMALIZATION}) AS score,
              ts_headline('english', coalesce(cb.text_content, ''), q.query,
                          'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
@@ -602,6 +609,7 @@ export class RetrievalStore implements RetrievalPort {
       SELECT ${ENTITY_COLUMNS},
              'entity'::text AS hit_source,
              NULL::uuid AS evidence_id,
+             NULL::integer AS evidence_authority,
              -- Ranked above every ranked hit: an exact identifier prefix is not
              -- a guess about relevance, it is the thing that was asked for.
              1.0::real AS score,
@@ -622,7 +630,13 @@ export class RetrievalStore implements RetrievalPort {
 
     try {
       const rows = await this.#db.execute<
-        EntityRowShape & { hit_source: string; evidence_id: string | null; score: number; highlight: string | null }
+        EntityRowShape & {
+          hit_source: string;
+          evidence_id: string | null;
+          evidence_authority: number | null;
+          score: number;
+          highlight: string | null;
+        }
       >(sql`
         SELECT * FROM (
           -- One row per entity per evidence record. A commit found both by its
@@ -651,6 +665,9 @@ export class RetrievalStore implements RetrievalPort {
         score: Number(row.score),
         highlight: row.highlight ?? undefined,
         evidenceId: row.evidence_id,
+        // EPIC-057. `undefined` rather than `0`: an absent rank is unassessed,
+        // and `effectiveAuthority` is what keeps that distinct from weakest.
+        authority: row.evidence_authority ?? undefined,
       }));
 
       // The scope and exclusion dimensions SQL cannot express — worktree,
@@ -661,7 +678,7 @@ export class RetrievalStore implements RetrievalPort {
       // into a container the caller cannot see.
       const permitted = visibleEntities(candidates, (hit) => hit.entity, access, tally);
       const visible: SearchHit[] = [];
-      for (const { evidenceId, ...hit } of rank(permitted, limit)) {
+      for (const { evidenceId, authority: _authority, ...hit } of rank(permitted, limit)) {
         visible.push({
           ...hit,
           evidence: evidenceId === null ? undefined : await this.#readEvidence(evidenceId),

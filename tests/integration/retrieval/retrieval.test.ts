@@ -396,3 +396,76 @@ describeRetrieval('full-text retrieval', () => {
     expect(elapsed).toBeLessThan(20_000);
   });
 });
+
+/**
+ * Freshness ranking against a real index — EPIC-057.
+ *
+ * Shares this file's repository because the claim needs an indexed corpus and
+ * nothing about it needs a second one. Each test restores the lifecycle it
+ * changed, so the fixture the tests above rely on is the fixture they get.
+ */
+describeRetrieval(`ranking by standing (${runnable ? 'real PostgreSQL' : SKIP_REASON})`, () => {
+  /** Marks one entity retired, runs the assertion, and puts it back. */
+  async function whileRetired(id: string, lifecycle: string, run: () => Promise<void>): Promise<void> {
+    await database.pool.query(`UPDATE ferret.entity SET lifecycle = $2 WHERE id = $1`, [id, lifecycle]);
+    try {
+      await run();
+    } finally {
+      await database.pool.query(`UPDATE ferret.entity SET lifecycle = 'active' WHERE id = $1`, [id]);
+    }
+  }
+
+  it('drops a tombstoned hit below every live one, and still returns it — AC-1, AC-9, AC-10', async () => {
+    const before = (await retrieval.search({ text: 'pool', limit: 10 }, PUBLIC_ACCESS)).hits;
+    expect(before.length).toBeGreaterThan(1);
+    const best = before[0];
+    expect(best).toBeDefined();
+    if (best === undefined) return;
+
+    await whileRetired(best.entity.id, 'deleted', async () => {
+      const after = (await retrieval.search({ text: 'pool', limit: 10 }, PUBLIC_ACCESS)).hits;
+
+      // Reordered, not filtered. A deleted file that matches is still an answer
+      // to "what used to be here".
+      expect(after).toHaveLength(before.length);
+      expect(after.map((hit) => hit.entity.id)).toContain(best.entity.id);
+
+      const moved = after[after.length - 1];
+      expect(moved?.entity.id).toBe(best.entity.id);
+      expect(moved?.ranking?.standing).toBeGreaterThan(0);
+      expect(moved?.ranking?.why).toContain('removed');
+
+      // And it really was the better match — the ordering changed because of
+      // standing, not because relevance did.
+      expect(moved?.ranking?.relevance).toBe(best.ranking?.relevance);
+      for (const hit of after.slice(0, -1)) expect(hit.ranking?.standing).toBe(0);
+    });
+  });
+
+  it('ranks a superseded hit below a deleted one — AC-2', async () => {
+    const hits = (await retrieval.search({ text: 'pool', limit: 10 }, PUBLIC_ACCESS)).hits;
+    const [first, second] = hits;
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    if (first === undefined || second === undefined) return;
+
+    await whileRetired(first.entity.id, 'superseded', async () => {
+      await whileRetired(second.entity.id, 'deleted', async () => {
+        const after = (await retrieval.search({ text: 'pool', limit: 10 }, PUBLIC_ACCESS)).hits;
+        const order = after.map((hit) => hit.entity.id);
+
+        expect(order.indexOf(second.entity.id)).toBeLessThan(order.indexOf(first.entity.id));
+        expect(after[after.length - 1]?.ranking?.why).toContain('replacement');
+      });
+    });
+  });
+
+  it('says nothing about standing on a live hit — AC-10', async () => {
+    const hits = (await retrieval.search({ text: 'pool', limit: 10 }, PUBLIC_ACCESS)).hits;
+
+    for (const hit of hits) {
+      expect(hit.ranking?.standing).toBe(0);
+      expect(hit.ranking?.why).toBeUndefined();
+    }
+  });
+});

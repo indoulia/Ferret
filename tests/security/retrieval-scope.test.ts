@@ -134,4 +134,14 @@ describe('ranking runs after authorization, and can only ever narrow — EPIC-05
     expect(ranker).not.toMatch(/\bsql`/);
     expect(ranker).not.toMatch(/\bawait\b/);
   });
+
+  it('keeps the freshness ordering just as unable to read anything — EPIC-057', () => {
+    // Standing decides where a hit ranks, so it is on the same footing as the
+    // ranker it feeds. It reads two fields already on the hit and nothing else.
+    const freshness = readFileSync(resolve(SRC, 'retrieval/freshness.ts'), 'utf8');
+
+    expect(freshness).not.toMatch(/from '\.\.\/storage/);
+    expect(freshness).not.toMatch(/\bsql`/);
+    expect(freshness).not.toMatch(/\bawait\b/);
+  });
 });

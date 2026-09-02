@@ -197,6 +197,37 @@ export interface RankBreakdown {
   readonly contributors: readonly string[];
   /** Entity ids folded into this hit rather than returned beside it. */
   readonly subsumed: readonly string[];
+  /**
+   * Whether what this hit says still holds — EPIC-057 §8.1. Lower is better.
+   *
+   * `0` is a thing the source reports as present. Anything above it is a hit
+   * ranked below every live result: removed, replaced, or never observed. It is
+   * an ordering over recorded lifecycle, never a decay curve — age alone is not
+   * evidence that something stopped being true.
+   */
+  readonly standing: number;
+  /**
+   * Why standing moved this hit, for a person to read.
+   *
+   * Absent on a live hit, because a sentence on every result saying "this is
+   * live" is noise a reader learns to skip — and then does not read the one that
+   * matters. Governance §18 asks Ferret to explain why evidence was "considered
+   * stale"; this is that sentence for a search hit.
+   */
+  readonly why?: string | undefined;
+}
+
+/**
+ * Ordering inputs a hit may carry that are not on `SearchHit` — EPIC-057 §5.
+ *
+ * `authority` lives on the evidence record, and the ranked path deliberately
+ * does not read evidence until it knows which hits survive. The candidate row
+ * carries the one field the ordering needs instead, so overfetching does not
+ * multiply round trips for objects nobody sees.
+ */
+export interface RankSignals {
+  /** The backing evidence's authority rank, when this hit came from one. */
+  readonly authority?: number | undefined;
 }
 
 /**

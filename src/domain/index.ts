@@ -117,7 +117,6 @@ export {
   evidenceLocatorSchema,
   integrityHashOf,
   isDirectObservation,
-  preferredEvidence,
   redactStatement,
   type CanonicalEvidence,
   type ConflictGroup,
@@ -246,7 +245,10 @@ export {
   AUTHORITY_BY_METHOD,
   SOURCE_AUTHORITIES,
   SourceAuthority,
+  UNASSESSED_AUTHORITY,
   authorityFor,
+  preferredEvidence,
+  effectiveAuthority,
   isUnknownAuthority,
   type AuthorityOptions,
 } from './authority.js';

@@ -6,7 +6,9 @@ import {
   SOURCE_AUTHORITIES,
   EvidenceMethod,
   SourceAuthority,
+  UNASSESSED_AUTHORITY,
   authorityFor,
+  effectiveAuthority,
   createEvidence,
   isUnknownAuthority,
   preferredEvidence,
@@ -187,5 +189,132 @@ describe('emission applies the policy — AC-12', () => {
       emitter.observed({ subjectId: '01J00000000000000000000000', statement: 'x', authority: 42 })
         .authority,
     ).toBe(42);
+  });
+});
+
+/**
+ * Freshness in the authority ordering — EPIC-057 §8.4.
+ *
+ * EPIC-045's validation recorded this as the limitation it was leaving behind:
+ * "`preferredEvidence` breaks an authority tie with confidence and then recency,
+ * and a highly authoritative stale record still beats a fresh weak one. That is
+ * EPIC-057."
+ */
+describe('one source speaking twice is not two sources disagreeing — EPIC-057', () => {
+  it('prefers the later of two records from the same system and field — AC-11', () => {
+    // The sharp case: one system's own January observation outranking its own
+    // September observation of the same field, because authority was consulted
+    // first and both carry the same rank.
+    const january = {
+      ...evidence({ statement: 'in January' }),
+      authority: SourceAuthority.SYSTEM_OF_RECORD,
+      observedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const september = {
+      ...evidence({ statement: 'in September' }),
+      authority: SourceAuthority.SYSTEM_OF_RECORD,
+      observedAt: '2026-09-01T00:00:00.000Z',
+    };
+
+    expect(preferredEvidence([january, september])?.statement).toBe('in September');
+  });
+
+  it('prefers the later one even when the earlier is more authoritative — AC-11', () => {
+    // Supersession is decided before authority, which is the whole change. The
+    // same source having said something more carefully in January does not make
+    // January its current position.
+    const january = {
+      ...evidence({ statement: 'in January' }),
+      authority: SourceAuthority.SYSTEM_OF_RECORD,
+      observedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const september = {
+      ...evidence({ statement: 'in September' }),
+      authority: SourceAuthority.ASSERTED,
+      observedAt: '2026-09-01T00:00:00.000Z',
+    };
+
+    expect(preferredEvidence([january, september])?.statement).toBe('in September');
+  });
+
+  it('leaves two different systems to authority — AC-12', () => {
+    // Narrow on purpose. This is not conflict resolution (EPIC-047): two
+    // systems disagreeing still tie on authority and still surface as a
+    // conflict.
+    const jira = {
+      ...evidence({ statement: 'from jira', sourceSystem: 'jira' }),
+      authority: SourceAuthority.SYSTEM_OF_RECORD,
+      observedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const git = {
+      ...evidence({ statement: 'from git', sourceSystem: 'git' }),
+      authority: SourceAuthority.PARSED,
+      observedAt: '2026-09-01T00:00:00.000Z',
+    };
+
+    expect(preferredEvidence([jira, git])?.statement).toBe('from jira');
+  });
+
+  it('leaves two different fields alone — AC-12', () => {
+    const name = {
+      ...evidence({ statement: 'a name', field: 'attributes.name' }),
+      authority: SourceAuthority.SYSTEM_OF_RECORD,
+      observedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const path = {
+      ...evidence({ statement: 'a path', field: 'attributes.path' }),
+      authority: SourceAuthority.ASSERTED,
+      observedAt: '2026-09-01T00:00:00.000Z',
+    };
+
+    expect(preferredEvidence([name, path])?.statement).toBe('a name');
+  });
+
+  it('supersedes nothing when a record has no observation time — AC-12', () => {
+    // An absent timestamp is unknown, not old. Governance §6 forbids inventing
+    // the difference, so the rule does not fire and authority decides.
+    const undated = {
+      ...evidence({ statement: 'undated' }),
+      authority: SourceAuthority.SYSTEM_OF_RECORD,
+      observedAt: undefined,
+    };
+    const dated = {
+      ...evidence({ statement: 'dated' }),
+      authority: SourceAuthority.ASSERTED,
+      observedAt: '2026-09-01T00:00:00.000Z',
+    };
+
+    expect(preferredEvidence([undated, dated])?.statement).toBe('undated');
+  });
+
+  it('still returns nothing when two records are genuinely indistinguishable — AC-12', () => {
+    // Supersession must not turn "cannot say" into an arbitrary pick. Same
+    // system, same field, same instant: neither supersedes the other.
+    const at = '2026-09-01T00:00:00.000Z';
+    const one = { ...evidence({ statement: 'one' }), authority: SourceAuthority.OBSERVED, observedAt: at };
+    const two = { ...evidence({ statement: 'two' }), authority: SourceAuthority.OBSERVED, observedAt: at };
+
+    expect(preferredEvidence([one, two])).toBeUndefined();
+  });
+
+  it('orders unassessed authority above asserted and below derived — AC-13', () => {
+    // `UNKNOWN` is the lowest number and not the lowest meaning, which this
+    // file has documented since EPIC-045 while `preferredEvidence` sorted on
+    // the raw number. EPIC-057 §8.4 records it as a defect found.
+    const unassessed = { ...evidence({ statement: 'unassessed' }), authority: SourceAuthority.UNKNOWN };
+    const asserted = { ...evidence({ statement: 'asserted' }), authority: SourceAuthority.ASSERTED };
+    const derived = { ...evidence({ statement: 'derived' }), authority: SourceAuthority.DERIVED };
+
+    expect(preferredEvidence([asserted, unassessed])?.statement).toBe('unassessed');
+    expect(preferredEvidence([unassessed, derived])?.statement).toBe('derived');
+  });
+
+  it('places the unassessed rank between the two it must sit between', () => {
+    expect(UNASSESSED_AUTHORITY).toBeGreaterThan(SourceAuthority.ASSERTED);
+    expect(UNASSESSED_AUTHORITY).toBeLessThan(SourceAuthority.DERIVED);
+    expect(effectiveAuthority(SourceAuthority.UNKNOWN)).toBe(UNASSESSED_AUTHORITY);
+    for (const rank of SOURCE_AUTHORITIES.filter((one) => one !== SourceAuthority.UNKNOWN)) {
+      expect(effectiveAuthority(rank)).toBe(rank);
+    }
   });
 });
