@@ -113,7 +113,10 @@ this line reaches an operator's terminal.
   behind it, because the caller that benefits is a long-running MCP server rather
   than a person at a terminal, and a command would need a story for which
   provider ids are safe to name. EPIC-067 (MCP provider administration) is where
-  that belongs.
+  that belongs. **Closed 2026-09-03 by EPIC-067's `ferret_provider_recover`,**
+  which is the MCP surface rather than a CLI one — the long-running server is
+  the caller that benefits, exactly as recorded here. There is still no
+  `ferret recover` command, deliberately.
 - **`RELEASED` is registry-wide, not per provider.** `shutdownAll` releases
   everything, so one flag is sufficient today. A future partial shutdown would
   need it per provider, and would find this the wrong shape.

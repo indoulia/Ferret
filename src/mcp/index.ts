@@ -38,3 +38,4 @@ export {
   type ToolGuard,
   type ToolResult,
 } from './guards.js';
+export { registerProviderTools, type ProviderAdministration, type ProviderToolDependencies } from './provider-tools.js';

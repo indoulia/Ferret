@@ -116,13 +116,21 @@ describe('destructive MCP tools', () => {
     }
   });
 
-  it('is currently all read-only, and says so rather than assuming it', () => {
+  it('names every tool that is not read-only, rather than assuming there are none', () => {
     // The measured state of `main`, pinned deliberately, so widening it is a
     // visible reviewable line in a diff rather than something that happens
-    // quietly. EPIC-066 adds the first two.
+    // quietly. EPIC-066 adds the first two; EPIC-067 adds the third.
+    //
+    // `ferret_provider_recover` is here because this test refused it as
+    // read-only-adjacent and was right to. Its first draft argued a recovery is
+    // not destructive — it re-runs an `initialize` the composition root already
+    // registered — and took the plain guard. The control's contract is *not
+    // read-only*, not "deletes something", and its value is having no
+    // exceptions: a recovery does mutate what Ferret can do.
     expect(tools.filter((tool) => !tool.readOnly).map((tool) => tool.name)).toStrictEqual([
       'ferret_config_set',
       'ferret_config_unset',
+      'ferret_provider_recover',
     ]);
   });
 

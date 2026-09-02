@@ -160,7 +160,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-064 — MCP Server** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
 - **EPIC-065 — MCP Knowledge Tools** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
 - **EPIC-066 — MCP Configuration Tools** — P0 — VALIDATED ([spec](EPIC-066-MCP-Configuration-Tools.md), [evidence](validation/EPIC-066-VALIDATION.md))
-- **EPIC-067 — MCP Provider Administration** — P1
+- **EPIC-067 — MCP Provider Administration** — P1 — VALIDATED ([spec](EPIC-067-MCP-Provider-Administration.md), [evidence](validation/EPIC-067-VALIDATION.md))
 - **EPIC-068 — AI Authorization Model** — P0 — VALIDATED ([spec](EPIC-068-AI-Authorization-Model.md), [evidence](validation/EPIC-068-VALIDATION.md))
 - **EPIC-069 — Destructive Operation Confirmation** — P0 — VALIDATED ([spec](EPIC-069-Destructive-Operation-Confirmation.md), [evidence](validation/EPIC-069-VALIDATION.md))
 - **EPIC-070 — AI Client Capability Discovery** — P1
