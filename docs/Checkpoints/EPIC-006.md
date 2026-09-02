@@ -127,7 +127,7 @@ Full table in the validation evidence. Carried forward:
 - No provenance beyond `source`/`sourceObservedAt` → **EPIC-008**
 - No identity resolution; `developer.emails` collects the evidence for it → **EPIC-036**, **EPIC-051**
 - No entity history — an update overwrites previous attributes → **EPIC-007**
-- `upsertMany` is not one transaction for the whole batch → **EPIC-080**
+- `upsertMany` is not one transaction for the whole batch → **EPIC-080** stated and tested it: validation is atomic for the batch, application is per entity, and that is sufficient because the batch is idempotent — a partial batch plus a retry equals a complete one
 - Replacing external ids resets `first_seen_at` → **EPIC-008** if needed
 - Attributes are `jsonb` with no typed columns, deliberately → **EPIC-086**
 - macOS unvalidated → **EPIC-105**
