@@ -74,7 +74,12 @@ conformance (EPIC-016, EPIC-099), and credential handling (EPIC-081).
 - **Introducing typed columns for attributes.** `Checkpoints/EPIC-006.md:132`
   parks the *decision* here; this Epic records the reasoning and does not
   reverse a choice EPIC-006 made deliberately.
-- **Query performance, indexes and plans** — EPIC-101.
+- **Query performance, indexes and plans** — EPIC-101. **Delivered
+  2026-09-03:** every index is enumerated from `pg_indexes` and eleven now have
+  a plan assertion at a scale where the index is genuinely the cheaper plan,
+  with the remaining 27 reported rather than implied. Nothing here drops an
+  index — that is a migration, and a migration written to satisfy a benchmark is
+  a schema change nobody reviewed on its merits.
 - **Backup, export, import** — EPIC-089, EPIC-090.
 - **Retention** — EPIC-088.
 - **A second storage backend.** The capability exists so one is possible; none

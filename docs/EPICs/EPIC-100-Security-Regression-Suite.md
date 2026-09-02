@@ -78,7 +78,11 @@ earlier.
 - **Authenticating a principal** — declined by EPIC-068 §4 and EPIC-083 §4.
 - **Secret scanning of Git history**, or of the working tree beyond the existing
   packaging scan.
-- **Performance of the security path** — EPIC-101.
+- **Performance of the security path** — EPIC-101. **Measured 2026-09-03 at
+  1.08×** — 1.94 ms unscoped against 1.98 ms scoped at p95 over 20 000 evidence
+  rows. Reported as a *ratio* rather than an absolute, because an absolute would
+  be a fact about the machine. The security path is not where Ferret's time
+  goes.
 - **Audit events** — EPIC-085.
 
 ## 5. Inputs

@@ -54,7 +54,11 @@ downstream of this.
   languages Ferret claims, and does not argue for more.
 - **Non-code parsers** — EPIC-026 to EPIC-029.
 - **Ranking, retrieval or embedding quality** — EPIC-098, EPIC-054.
-- **A performance budget for parsing** — EPIC-101.
+- **A performance budget for parsing** — EPIC-101. **Declined there,
+  2026-09-03:** parsing cost is dominated by grammar and file size, and this
+  Epic's corpus already varies both — so a budget in EPIC-101 would measure
+  *this corpus*, and a parse-rate figure that moved when somebody added a
+  fixture would be worse than no figure.
 - **Shipping the fixtures in the package.** The golden corpus ships because a
   provider author's conformance run needs it; these are Ferret's own
   measurement.

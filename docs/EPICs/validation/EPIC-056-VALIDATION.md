@@ -145,7 +145,9 @@ otherwise, the addendum and the registry line are the only two places to revert.
 - **Eight labels over eleven files is a small corpus.** Every figure here moved
   in the direction the mechanism predicts and the per-query table shows where,
   but a 0.0972 gain on six scored labels is not a claim about a large
-  repository. EPIC-101 owns scale.
+  repository. EPIC-101 owns scale. **Measured 2026-09-03** at 20 000 rows per
+  table: every read this Epic depends on is under 3 ms at p95, two orders of
+  magnitude inside its ceiling.
 - **`fuse` still combines strategy lists by rank.** §8.1 makes lexical scores
   comparable to each other, not to a cosine distance, so RRF remains correct in
   the planner. Not claimed as changed.
