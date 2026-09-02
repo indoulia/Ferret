@@ -329,3 +329,100 @@ describeGolden(`measuring retrieval against the golden dataset (${runnable ? 're
     }
   });
 });
+
+/**
+ * Ranking, against the same index — EPIC-056.
+ *
+ * Shares this file's corpus for the reason the block above gives: the
+ * measurement needs exactly what EPIC-096's fixture produces, and indexing it
+ * twice would double the slowest part of the suite to keep two Epics in
+ * separate files.
+ *
+ * **These assertions do have figures in them, and that is not a reversal of
+ * EPIC-098 §16.** That Epic declined to invent a floor — "freezing today's 0.32
+ * precision as a floor would enshrine a number nobody argued for" — and
+ * deferred the threshold "so it could be argued from data rather than guessed
+ * in advance". EPIC-056 §9 argues them from the figures recorded on `5293434`:
+ * p@10 0.2639, MRR 0.5972, nDCG 0.6698, recall 0.9167. Every number below is
+ * one of those, and the Epic exists to move it.
+ */
+describeGolden(`ranking the same index (${runnable ? 'real PostgreSQL' : SKIP_REASON})`, () => {
+  it('beats the recorded baseline on precision, MRR and nDCG without losing recall — AC-12, AC-13, AC-14', async () => {
+    const report = await measureRetrievalQuality(
+      dataset,
+      retrieval,
+      { corpus: repositoryId },
+      { access: PUBLIC_ACCESS },
+    );
+    const { meanPrecisionAtK, meanRecall, meanReciprocalRank, meanNdcg, falsePositives } =
+      report.aggregate;
+
+    // EPIC-087 AC-11's threshold, which is the one EPIC-056 inherited: strictly
+    // greater than the 0.32 baseline, labels unchanged.
+    expect(meanPrecisionAtK).toBeGreaterThan(0.32);
+    expect(meanReciprocalRank).toBeGreaterThan(0.5972);
+    expect(meanNdcg).toBeGreaterThan(0.6698);
+    // Ranking folds and reorders; it must never lose an answer.
+    expect(meanRecall).toBeGreaterThanOrEqual(0.9166);
+    expect(falsePositives).toBe(0);
+  });
+
+  it('answers `refund` with the file itself, first — AC-15', async () => {
+    // Issue #98 in one assertion. `refund` used to return the file, a symbol
+    // declared inside it and a version of it as three competing answers, with
+    // the part above the whole.
+    const hits = (await retrieval.search({ text: 'refund', limit: 10 }, PUBLIC_ACCESS)).hits;
+
+    expect(hits[0]?.entity.kind).toBe('file');
+    expect(hits[0]?.entity.attributes['path']).toBe('src/billing/refund.ts');
+  });
+
+  it('folds a symbol and a file version into the file, and says so — AC-3, AC-4', async () => {
+    const hits = (await retrieval.search({ text: 'refund', limit: 10 }, PUBLIC_ACCESS)).hits;
+
+    expect(hits.map((hit) => hit.entity.kind)).not.toContain('code_symbol');
+    expect(hits.map((hit) => hit.entity.kind)).not.toContain('file_version');
+    // The fold is recorded on the hit rather than inferred from an absence.
+    const file = hits.find((hit) => hit.entity.attributes['path'] === 'src/billing/refund.ts');
+    expect(file?.ranking?.subsumed.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it('returns symbol hits when the caller asks for symbols — AC-6', async () => {
+    // The invariant that keeps §8.2 a ranking rule and not a filter: a pool
+    // with no files in it has nothing for a symbol to fold into.
+    const hits = (await retrieval.search(
+      { text: 'refund', kinds: ['code_symbol'], limit: 10 },
+      PUBLIC_ACCESS,
+    )).hits;
+
+    expect(hits.length).toBeGreaterThan(0);
+    for (const hit of hits) expect(hit.entity.kind).toBe('code_symbol');
+  });
+
+  it('returns each entity once, with a comparable score and a breakdown — AC-1, AC-9', async () => {
+    const hits = (await retrieval.search({ text: 'invoice', limit: 10 }, PUBLIC_ACCESS)).hits;
+    const ids = hits.map((hit) => hit.entity.id);
+
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const hit of hits) {
+      // Normalisation 32 is what puts a ranked score below 1; an unnormalised
+      // `ts_rank` has no ceiling at all.
+      expect(hit.score).toBeGreaterThan(0);
+      expect(hit.score).toBeLessThan(1);
+      expect(hit.ranking?.contributors.length ?? 0).toBeGreaterThan(0);
+    }
+  });
+
+  it('reads more candidates than it returns — AC-10', async () => {
+    // Observable from the outside: one result must be chosen from a pool wider
+    // than one, or the pool did not exist.
+    const one = (await retrieval.search({ text: 'invoice', limit: 1 }, PUBLIC_ACCESS)).hits;
+    const ten = (await retrieval.search({ text: 'invoice', limit: 10 }, PUBLIC_ACCESS)).hits;
+
+    expect(one).toHaveLength(1);
+    expect(ten.length).toBeGreaterThan(1);
+    // The single result is the best of the wider pool, not the first row of a
+    // page of one.
+    expect(one[0]?.entity.id).toBe(ten[0]?.entity.id);
+  });
+});

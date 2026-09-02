@@ -10,6 +10,8 @@ import {
   WithholdReason,
   boundedLimit,
   includedRepositories,
+  overfetchLimit,
+  rank,
   scopeDescendantPattern,
   visibleEntities,
   withholds,
@@ -69,6 +71,24 @@ interface EntityRowShape {
  * subquery or a `UNION` that erased its type. Handling both is cheaper than
  * relying on which.
  */
+/**
+ * `ts_rank`'s normalisation flag `32` — EPIC-056 §8.1.
+ *
+ * Returns `rank / (rank + 1)`, a monotone map onto `[0, 1)`. Order within one
+ * query is unchanged by construction; what changes is that the number can be
+ * compared between queries, which is the whole of what EPIC-052/053 §4 deferred
+ * here.
+ *
+ * Flag `1` — divide by the logarithm of document length — is deliberately not
+ * added. It would rank a long file below a short symbol name for the same term,
+ * and a file's body being long is not evidence that the file is less relevant.
+ *
+ * `sql.raw` because it is a literal in this file and not caller input; a bind
+ * parameter here would leave PostgreSQL inferring the type of an argument that
+ * selects a function's behaviour.
+ */
+const RANK_NORMALIZATION = sql.raw('32');
+
 function instant(value: unknown): string | undefined {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'string' && value.length > 0) return new Date(value).toISOString();
@@ -473,12 +493,27 @@ export class RetrievalStore implements RetrievalPort {
       SELECT ${ENTITY_COLUMNS},
              'entity'::text AS hit_source,
              NULL::uuid AS evidence_id,
-             ts_rank(e.search_vector, q.query) AS score,
+             ts_rank(e.search_vector, q.query, ${RANK_NORMALIZATION}) AS score,
+             -- The same text migration 0007's generated column indexes, field
+             -- for field.
+             --
+             -- DEFECT: it used to be a shorter list, so a hit could match on
+             -- text the headline never saw and come back with nothing marked.
+             -- Searching connection reached src/connection-pool.ts through
+             -- 0007's translate of the path separators, which the headline did
+             -- not apply, so it marked nothing. Found when ranking changed
+             -- which row of an entity is the one shown (EPIC-056 §8.5); the
+             -- mismatch predates it and was passing on the luck of which row
+             -- sorted first.
              ts_headline('english',
                          coalesce(e.attributes->>'name', '') || ' ' ||
+                         coalesce(e.attributes->>'description', '') || ' ' ||
                          coalesce(e.attributes->>'path', '') || ' ' ||
+                         translate(coalesce(e.attributes->>'path', ''), '/-_.', '    ') || ' ' ||
                          coalesce(e.attributes->>'message', '') || ' ' ||
-                         coalesce(e.attributes->>'shortName', '') || ' ' || e.source_id,
+                         coalesce(e.attributes->>'shortName', '') || ' ' ||
+                         coalesce(e.attributes->>'ref', '') || ' ' ||
+                         coalesce(e.attributes->>'title', '') || ' ' || e.source_id,
                          q.query,
                          'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
         FROM ferret.entity e, ${tsquery}
@@ -489,7 +524,7 @@ export class RetrievalStore implements RetrievalPort {
       SELECT ${ENTITY_COLUMNS},
              'evidence'::text AS hit_source,
              ev.id AS evidence_id,
-             ts_rank(ev.search_vector, q.query) AS score,
+             ts_rank(ev.search_vector, q.query, ${RANK_NORMALIZATION}) AS score,
              ts_headline('english', coalesce(ev.statement #>> '{}', ''), q.query,
                          'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
         FROM ferret.evidence ev
@@ -546,7 +581,7 @@ export class RetrievalStore implements RetrievalPort {
       SELECT ${ENTITY_COLUMNS},
              'content'::text AS hit_source,
              NULL::uuid AS evidence_id,
-             ts_rank(cb.search_vector, q.query) AS score,
+             ts_rank(cb.search_vector, q.query, ${RANK_NORMALIZATION}) AS score,
              ts_headline('english', coalesce(cb.text_content, ''), q.query,
                          'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
         FROM ferret.content_blob cb
@@ -598,25 +633,40 @@ export class RetrievalStore implements RetrievalPort {
            ORDER BY id, evidence_id, score DESC
         ) deduped
          ORDER BY score DESC, kind, source_id
-         LIMIT ${limit}`);
+         -- More candidates than the caller asked for — EPIC-056 §8.7. Ranking
+         -- can only change an answer if the pool is larger than the answer;
+         -- with exactly limit rows the best a reranker could do is reorder a
+         -- page this ORDER BY had already chosen. Bounded by MAX_LIMIT.
+         LIMIT ${overfetchLimit(limit)}`);
 
       const tally = new WithheldTally();
-      const hits: SearchHit[] = [];
-      for (const row of rows.rows) {
-        const evidence =
-          row.evidence_id === null ? undefined : await this.#readEvidence(row.evidence_id);
-        hits.push({
-          source: hitSourceOf(row.hit_source),
-          entity: toEntity(row),
-          evidence,
-          score: Number(row.score),
-          highlight: row.highlight ?? undefined,
-        });
-      }
+      // Evidence is *not* read here. Overfetching multiplied this loop, and the
+      // rows that do not survive ranking would have been a round trip each for
+      // an object nobody sees. The id is carried instead and resolved below for
+      // the hits that are actually returned.
+      const candidates = rows.rows.map((row) => ({
+        source: hitSourceOf(row.hit_source),
+        entity: toEntity(row),
+        evidence: undefined,
+        score: Number(row.score),
+        highlight: row.highlight ?? undefined,
+        evidenceId: row.evidence_id,
+      }));
 
       // The scope and exclusion dimensions SQL cannot express — worktree,
       // session, and glob path exclusion — plus the count of what went.
-      const visible = visibleEntities(hits, (hit) => hit.entity, access, tally);
+      //
+      // Before ranking, and that order matters: a hit withheld here must not
+      // occupy one of the `limit` places, and a constituent must not be folded
+      // into a container the caller cannot see.
+      const permitted = visibleEntities(candidates, (hit) => hit.entity, access, tally);
+      const visible: SearchHit[] = [];
+      for (const { evidenceId, ...hit } of rank(permitted, limit)) {
+        visible.push({
+          ...hit,
+          evidence: evidenceId === null ? undefined : await this.#readEvidence(evidenceId),
+        });
+      }
       tally.add(WithholdReason.PERMISSION, await this.#countProtected(query, access));
       return { hits: visible, withheld: tally.report };
     } catch (error) {

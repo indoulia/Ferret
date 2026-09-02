@@ -14,6 +14,7 @@ export {
   boundedLimit,
   type EntityQuery,
   type Neighbour,
+  type RankBreakdown,
   type RetrievalPort,
   type SearchHit,
   type SearchQuery,
@@ -42,6 +43,10 @@ export {
 
 export { QueryShape, classify, type Classification } from './classify.js';
 export { RRF_K, fuse, type FusedHit, type RankedList } from './fuse.js';
+
+// EPIC-056. Ranking is core and pure: it reorders, folds and truncates a pool
+// authorization already allowed through, and never queries.
+export { OVERFETCH, overfetchLimit, rank } from './rank.js';
 export {
   QueryPlanner,
   type ExactStrategy,

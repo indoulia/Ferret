@@ -143,7 +143,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-053 — Full-Text Retrieval** — P0 — VALIDATED ([spec](EPIC-052-053-Retrieval.md), [evidence](validation/EPIC-052-053-VALIDATION.md))
 - **EPIC-054 — Semantic Retrieval** — P1 — VALIDATED ([spec](EPIC-054-055-Semantic-And-Planner.md), [evidence](validation/EPIC-054-055-VALIDATION.md))
 - **EPIC-055 — Hybrid Query Planner** — P0 — VALIDATED ([spec](EPIC-054-055-Semantic-And-Planner.md), [evidence](validation/EPIC-054-055-VALIDATION.md))
-- **EPIC-056 — Ranking & Reranking** — P1
+- **EPIC-056 — Ranking & Reranking** — P1 — VALIDATED ([spec](EPIC-056-Ranking-And-Reranking.md), [evidence](validation/EPIC-056-VALIDATION.md))
 - **EPIC-057 — Freshness & Authority Ranking** — P1
 - **EPIC-058 — Permission-Aware Retrieval** — P0 — VALIDATED ([spec](EPIC-058-Permission-Aware-Retrieval.md), [evidence](validation/EPIC-058-VALIDATION.md))
 
@@ -192,7 +192,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 ### Storage & Data Lifecycle
 
 - **EPIC-086 — PostgreSQL Storage Layer** — P0 — VALIDATED ([spec](EPIC-086-PostgreSQL-Storage-Layer.md), [evidence](validation/EPIC-086-VALIDATION.md))
-- **EPIC-087 — Deduplicated Content Storage** — P0 — IMPLEMENTED ([spec](EPIC-087-Deduplicated-Content-Storage.md), [evidence](validation/EPIC-087-VALIDATION.md))
+- **EPIC-087 — Deduplicated Content Storage** — P0 — VALIDATED ([spec](EPIC-087-Deduplicated-Content-Storage.md), [evidence](validation/EPIC-087-VALIDATION.md))
 - **EPIC-088 — Retention & Exclusion Policies** — P1
 - **EPIC-089 — Backup & Export** — P1
 - **EPIC-090 — Data Import & Recovery** — P1
@@ -333,6 +333,35 @@ governance position this pass does not take. The options remain the three
 EPIC-087 itself put on the table — leave EPIC-087 `IMPLEMENTED`, promote
 EPIC-056 to P0, or restate AC-11 — with the difference that promoting is now a
 decision about one named Epic rather than an open question.
+
+### Addendum — EPIC-087 AC-11 is closed, and by the option this pass named third
+
+**2026-09-02, after EPIC-056 — Ranking & Reranking.** The pass above is left as
+written; this records what happened next rather than revising it.
+
+The closure pass left one criterion open and said the choice was between three
+options: leave EPIC-087 `IMPLEMENTED`, promote EPIC-056 to P0, or restate AC-11.
+None was taken. EPIC-056 was specified and implemented at **P1**, on the priority
+the registry has always given it, and AC-11 closed on its own terms:
+
+| | mean p@10 | mean recall | mean RR | mean nDCG |
+| --- | --- | --- | --- | --- |
+| `5293434` | 0.2639 | 0.9167 | 0.5972 | 0.6698 |
+| with EPIC-056 | **0.3611** | **0.9167** | **0.6806** | **0.7313** |
+
+Labels unchanged, `falsePositives` still 0, `text-authentication` recall 1.00. So
+AC-11 is **MET** with no restatement, EPIC-087 moves to **VALIDATED**, and the
+governance position this pass declined to take was not needed. Issue
+[#98](https://github.com/indoulia/Ferret/issues/98) is closed by the same
+measurement, and its ownership — settled in
+`docs/Architecture/EPIC-087-DECISIONS.md` §D1 — held.
+
+**76 P0 Epics: 76 VALIDATED or DONE.**
+
+The general lesson is the one EPIC-076 and this pass had already found twice: a
+P0 criterion blocked on P1 work is not necessarily a priority problem. Here it
+was one Epic of scoped work whose absence three other Epics had each written down
+and named.
 
 ### Registry hygiene
 
