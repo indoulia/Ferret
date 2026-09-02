@@ -291,8 +291,21 @@ describe('accounting for what is not cited', () => {
   it('reports a disputed fact and excludes nothing for being in one — AC-9', () => {
     // EPIC-047 owns resolution; Governance §15 forbids discarding a conflicting
     // record. Both sides stay cited, and the disagreement is named.
-    const one = stated(EvidenceState.CURRENT, { field: 'author', statement: 'alice' });
-    const other = stated(EvidenceState.CURRENT, { field: 'author', statement: 'bob' });
+    //
+    // Two *source systems*, because EPIC-047 §8.1 decided that is what a dispute
+    // is: one source restating a field is supersession, not disagreement. The
+    // fixture used to use one system, which no longer expresses what this
+    // criterion is about.
+    const one = stated(EvidenceState.CURRENT, {
+      field: 'author',
+      statement: 'alice',
+      sourceSystem: 'git',
+    });
+    const other = stated(EvidenceState.CURRENT, {
+      field: 'author',
+      statement: 'bob',
+      sourceSystem: 'jira',
+    });
 
     const selection = selectEvidence([one, other], { limit: 5 });
 

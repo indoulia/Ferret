@@ -384,8 +384,10 @@ describe('the claims an answer states', () => {
     const pack = await builder(
       [COMMIT],
       [
-        stated(EvidenceState.CURRENT, { field: 'author', statement: 'alice' }),
-        stated(EvidenceState.CURRENT, { field: 'author', statement: 'bob' }),
+        // Two *source systems*: EPIC-047 §8.1 decided a dispute is disagreement
+        // between sources, and one source restating a field is supersession.
+        stated(EvidenceState.CURRENT, { field: 'author', statement: 'alice', sourceSystem: 'git' }),
+        stated(EvidenceState.CURRENT, { field: 'author', statement: 'bob', sourceSystem: 'jira' }),
       ],
       planner({ exact: [COMMIT] }),
     ).answer({ question: 'b9559ab' });
@@ -572,8 +574,10 @@ describe('rendering an answer', () => {
     const pack = await builder(
       [COMMIT],
       [
-        stated(EvidenceState.CURRENT, { field: 'author', statement: 'alice' }),
-        stated(EvidenceState.CURRENT, { field: 'author', statement: 'bob' }),
+        // Two *source systems*: EPIC-047 §8.1 decided a dispute is disagreement
+        // between sources, and one source restating a field is supersession.
+        stated(EvidenceState.CURRENT, { field: 'author', statement: 'alice', sourceSystem: 'git' }),
+        stated(EvidenceState.CURRENT, { field: 'author', statement: 'bob', sourceSystem: 'jira' }),
       ],
       planner({ exact: [COMMIT] }),
     ).answer({ question: 'b9559ab' });

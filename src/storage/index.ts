@@ -101,6 +101,7 @@ export {
   EvidenceStore,
   UNRESTRICTED_READ,
   type EvidenceQuery,
+  type ConflictReconciliation,
   type RecordedEvidence,
   type ScopedRead,
 } from './evidence.js';

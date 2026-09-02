@@ -322,3 +322,83 @@ describe('validation', () => {
     expect(JSON.stringify(thrown)).not.toContain('super-secret-value');
   });
 });
+
+describe('a conflict is disagreement between sources — EPIC-047', () => {
+  it('does not report one source restating a field — AC-2', () => {
+    // Measured on Ferret's own index before this rule existed: two groups, both
+    // `branch.attributes.headCommit`, one with **twenty** current records —
+    // because a branch's head moves with every commit and nothing had ever
+    // superseded the earlier readings. `ferret_why` on `main` reported a
+    // twenty-way conflict about where `main` points. It is not a disagreement;
+    // it is one source reporting a value that changed.
+    const first = createEvidence(
+      observed({ field: 'attributes.headCommit', statement: 'aaa', sourceSystem: 'git', sourceId: 'r1' }),
+    );
+    const second = createEvidence(
+      observed({ field: 'attributes.headCommit', statement: 'bbb', sourceSystem: 'git', sourceId: 'r2' }),
+    );
+
+    expect(detectConflicts([first, second])).toStrictEqual([]);
+  });
+
+  it('does not report twenty restatements from one source — AC-2, AC-8', () => {
+    const readings = Array.from({ length: 20 }, (_unused, index) =>
+      createEvidence(
+        observed({
+          field: 'attributes.headCommit',
+          statement: `commit-${String(index)}`,
+          sourceSystem: 'git',
+          sourceId: `read-${String(index)}`,
+        }),
+      ),
+    );
+
+    expect(detectConflicts(readings)).toStrictEqual([]);
+  });
+
+  it('still reports two different sources disagreeing — AC-1', () => {
+    const fromGit = createEvidence(
+      observed({ field: 'attributes.title', statement: 'from git', sourceSystem: 'git' }),
+    );
+    const fromJira = createEvidence(
+      observed({ field: 'attributes.title', statement: 'from jira', sourceSystem: 'jira' }),
+    );
+    const conflicts = detectConflicts([fromGit, fromJira]);
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.evidence).toHaveLength(2);
+  });
+
+  it('reports a group where two sources agree and a third differs — AC-1', () => {
+    // The group carries every member, not only the odd one out: Governance §15
+    // forbids resolving a conflict by discarding a side, and which side is
+    // "wrong" is exactly what detection must not decide.
+    const agreeing = createEvidence(
+      observed({ field: 'attributes.title', statement: 'agreed', sourceSystem: 'git' }),
+    );
+    const alsoAgreeing = createEvidence(
+      observed({ field: 'attributes.title', statement: 'agreed', sourceSystem: 'jira' }),
+    );
+    const dissenting = createEvidence(
+      observed({ field: 'attributes.title', statement: 'different', sourceSystem: 'github' }),
+    );
+    const conflicts = detectConflicts([agreeing, alsoAgreeing, dissenting]);
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.evidence).toHaveLength(3);
+    expect(conflicts[0]?.statements).toHaveLength(2);
+  });
+
+  it('groups a subject-level disagreement, where the field is absent', () => {
+    const fromGit = createEvidence(
+      observed({ field: undefined, statement: 'one', sourceSystem: 'git' }),
+    );
+    const fromJira = createEvidence(
+      observed({ field: undefined, statement: 'two', sourceSystem: 'jira' }),
+    );
+    const conflicts = detectConflicts([fromGit, fromJira]);
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.field).toBeUndefined();
+  });
+});

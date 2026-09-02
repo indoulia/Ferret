@@ -80,6 +80,16 @@ export interface EvidenceWriteResult {
 
 export interface EvidenceWriter {
   record(input: EvidenceInput, now?: Date): Promise<EvidenceWriteResult>;
+  /**
+   * Writes and clears the `conflicting` state for one subject — EPIC-047.
+   *
+   * Optional so a caller with a narrower writer keeps working, and so the report
+   * can say the reconciliation did not run rather than implying it found
+   * nothing. `EvidenceState.CONFLICTING` was unreachable for five Epics because
+   * it depended on somebody remembering to ask; maintaining it here is what
+   * EPIC-047 §8.4 asks for.
+   */
+  reconcileConflicts?(subjectId: string, now?: Date): Promise<{ readonly groups: number }>;
 }
 
 /**
