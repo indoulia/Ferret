@@ -45,7 +45,9 @@ out, which is worse than one that says nothing.
   mean *the npm package works on those platforms*, which macOS now demonstrates.
   No new package format exists, and none was needed.
 - Upgrade and migration UX (EPIC-106).
-- Docker images (EPIC-107).
+- Docker images (EPIC-107). **Delivered 2026-09-03**, image built and exercised
+  but not published — §16 there records why a published image nobody signed is
+  worse than none.
 - Registry publication itself, which is a release action rather than a build
   artefact.
 

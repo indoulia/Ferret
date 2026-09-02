@@ -103,6 +103,34 @@ reporting an approved-but-unbuilt command — exit code `5` with
 `E_NOT_IMPLEMENTED` and the owning Epic — remains, because the honest answer to
 "is this coming" is worth more than an unknown-command error.
 
+## Getting a database
+
+Ferret needs PostgreSQL 17 with pgvector. If you do not have one:
+
+```bash
+docker compose up -d --wait
+FERRET_DATABASE_HOST=localhost FERRET_DATABASE_PORT=5432 FERRET_DATABASE_NAME=ferret FERRET_DATABASE_USER=ferret FERRET_DATABASE_PASSWORD=ferret ferret init
+```
+
+Two commands from nothing to a schema. The compose file pins the same image
+Ferret's own tests run against, so the database you get is the one Ferret is
+tested on rather than a similar one, and the data lives in a named volume — so
+`docker compose down` keeps your index and `down -v` discards it.
+
+If port 5432 is already taken, which it often is:
+`FERRET_POSTGRES_PORT=5433 docker compose up -d --wait`, and set
+`database.port` to match.
+
+**That compose file is a development database, not a deployment.** No backups,
+no replication, no resource limits, and a password anyone can read. It says so
+in the file.
+
+There is also a `Dockerfile` for Ferret itself, built on Alpine. It is not
+published anywhere — build it yourself with `docker build -t ferret .`. One
+thing to know before indexing inside it: Ferret records a repository by its
+local path, so a bind-mounted repository is recorded at its **container** path
+and an index built that way reports paths the host does not have.
+
 ## Index a repository
 
 ```bash

@@ -189,5 +189,5 @@ $ ferret --version
 | No signed provenance or SLSA attestation. | `npm publish --provenance` needs a trusted CI publisher. | **EPIC-102** at release |
 | ~~macOS is unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | CI covers Ubuntu and Windows. | **EPIC-105** |
 | No upgrade path documented for a database migrated by an older Ferret. | The migrator handles it; the *documentation* does not describe it. | **EPIC-106** |
-| No Docker image. | | **EPIC-107** |
-| Onboarding assumes PostgreSQL already exists. | The README says how to point Ferret at one, not how to get one. | **EPIC-107** |
+| ~~No Docker image.~~ **Closed 2026-09-03 by EPIC-107:** a two-stage Alpine `Dockerfile`, built and exercised — `--version`, all four WASM grammars, the migrations, `ferret mcp` answering a real protocol handshake, and no source or tests in the image. Not *published*: a registry, a signing story and a version policy are a release decision no Epic owns, and a published image nobody signed is worse than none. | publishing remains unassigned |
+| ~~Onboarding assumes PostgreSQL already exists.~~ **Closed 2026-09-03 by EPIC-107:** `docker compose up -d --wait` gives PostgreSQL 17 with pgvector on the image the test suite pins, and `ferret init` against it applied all 12 migrations. Two commands from nothing to a schema. | closed |

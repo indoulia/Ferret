@@ -221,7 +221,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-104 — AI Client Onboarding** — P0 — VALIDATED ([spec](EPIC-102-103-104-Distribution.md), [evidence](validation/EPIC-102-103-104-VALIDATION.md))
 - **EPIC-105 — Cross-Platform Packaging** — P1 — VALIDATED ([spec](EPIC-105-Cross-Platform-Packaging.md), [evidence](validation/EPIC-105-VALIDATION.md))
 - **EPIC-106 — Upgrade & Migration UX** — P1
-- **EPIC-107 — Docker Distribution** — P2
+- **EPIC-107 — Docker Distribution** — P2 — VALIDATED ([spec](EPIC-107-Docker-Distribution.md), [evidence](validation/EPIC-107-VALIDATION.md))
 
 ## Dependency baseline
 
