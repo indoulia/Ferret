@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Windows runs here rather than on every pull request — see the matrix below.
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -23,7 +27,24 @@ jobs:
         # macOS is deliberately absent: no macOS host was available to validate
         # against, and EPIC-005 recorded closing that gap as EPIC-105's work.
         # Claiming macOS support here without measuring it would be false.
-        os: [ubuntu-latest, windows-latest]
+        #
+        # **Windows does not run on a pull request.** Measured over one working
+        # session: Ubuntu verify took 1m52s-2m55s and Windows 6m41s-11m54s, so
+        # Windows was the whole of the wait on every one of six PRs.
+        #
+        # It is *not* dropped, because this repository has real Windows-only
+        # history: a digest that failed only there, and a CRLF regression test
+        # that failed on the one platform it existed for. Both would have
+        # shipped if Windows were merely deleted. So it runs on every push to
+        # `main` — after a merge rather than before it — plus nightly and on
+        # demand. The signal is kept; what changes is that it no longer blocks
+        # the author of every pull request.
+        #
+        # The trade, stated: a Windows-only break is now found minutes *after*
+        # a merge instead of minutes before. On a repository where every merge
+        # is a squash onto `main` with a green Ubuntu run behind it, that is a
+        # revert rather than an outage.
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "windows-latest"]') }}
         node: ['22']
 
     steps:
