@@ -153,7 +153,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-060 — Answer Packs** — P0 — VALIDATED ([spec](EPIC-060-Answer-Packs.md), [evidence](validation/EPIC-060-VALIDATION.md))
 - **EPIC-061 — Token Budgeting** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
 - **EPIC-062 — Evidence Selection** — P0 — VALIDATED ([spec](EPIC-062-Evidence-Selection.md), [evidence](validation/EPIC-062-VALIDATION.md))
-- **EPIC-063 — Query Explanation** — P1
+- **EPIC-063 — Query Explanation** — P1 — VALIDATED ([spec](EPIC-063-Query-Explanation.md), [evidence](validation/EPIC-063-VALIDATION.md))
 
 ### AI Control Plane & MCP
 

@@ -30,6 +30,8 @@ import type { Logger } from '../logging/index.js';
 import {
   MAX_LIMIT,
   PUBLIC_ACCESS,
+  explainQuery,
+  renderExplanation,
   type AccessContext,
   type QueryPlanner,
   type RetrievalPort,
@@ -288,6 +290,55 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         };
       }),
   );
+
+  // EPIC-063. Registered only when a planner is wired, for the reason
+  // `ferret_why` is registered only with an evidence reader: an explanation with
+  // no plan behind it could describe the ranking and nothing about how the
+  // question was read, and a tool that answers half the question is
+  // indistinguishable, to a client, from one that answered all of it.
+  if (planner !== undefined) {
+    server.registerTool(
+      'ferret_explain',
+      {
+        title: 'Why did this query return this',
+        description:
+          'Explain a search: how the question was read, which strategies ran ' +
+          'and which could not and why, why each result ranks where it does, ' +
+          'and how much was withheld. Every sentence comes from a field Ferret ' +
+          'recorded — nothing is guessed, and no indexed content appears in an ' +
+          'explanation, so this response carries no repository text. Ask this ' +
+          'when a result order is surprising or an answer looks short. For why ' +
+          'Ferret believes a fact about one entity, use ferret_why instead.',
+        inputSchema: z.strictObject({
+          query: z.string().min(1).max(1024).describe('The search to explain, exactly as it would be searched.'),
+          kinds: z.array(z.string().min(1)).max(20).optional(),
+          limit: z.number().int().min(1).max(TOOL_RESULT_LIMIT).optional(),
+          format: z.enum(['json', 'text']).optional(),
+        }),
+        annotations: { readOnlyHint: true, openWorldHint: false },
+      },
+      async ({ query, kinds, limit, format }) =>
+        guard('explain', Permission.READ, async () => {
+          // Re-run rather than accept a result set — EPIC-063 §8.5. A handed
+          // result set is unverifiable input, and explaining it would mean
+          // describing rows this caller may not be allowed to see.
+          const { plan, hits, withheld } = await planner.search(
+            {
+              question: query,
+              ...(kinds === undefined ? {} : { kinds }),
+              limit: Math.min(limit ?? 20, TOOL_RESULT_LIMIT),
+            },
+            access,
+          );
+          const explanation = explainQuery(query, plan, hits, withheld);
+          // No content notice on either branch. An explanation contains no
+          // repository text, so there is nothing for a notice to govern, and a
+          // notice on a document that needs none teaches a reader to ignore
+          // notices.
+          return format === 'text' ? { rendered: renderExplanation(explanation) } : explanation;
+        }),
+    );
+  }
 
   server.registerTool(
     'ferret_get_entity',
@@ -667,6 +718,20 @@ function describeHit(hit: SearchHit, safety: ContentSafety): Record<string, unkn
     matchedIn: hit.source,
     highlight: hit.highlight === undefined ? undefined : safety.contain(hit.highlight),
     score: hit.score,
+    // EPIC-063 AC-16. The breakdown EPIC-056 and EPIC-057 record was emitted
+    // nowhere, so a client had an opaque score and no way to ask why one hit
+    // beat another. Structural throughout — a count, a band, and Ferret's own
+    // field names — so it is not contained, because none of it is content.
+    ranking:
+      hit.ranking === undefined
+        ? undefined
+        : {
+            relevance: hit.ranking.relevance,
+            builtFrom: hit.ranking.contributors,
+            folded: hit.ranking.subsumed.length,
+            standing: hit.ranking.standing,
+            ...(hit.ranking.why === undefined ? {} : { why: hit.ranking.why }),
+          },
   };
 }
 

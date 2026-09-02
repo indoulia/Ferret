@@ -51,6 +51,17 @@ export { OVERFETCH, overfetchLimit, rank } from './rank.js';
 
 // EPIC-057. Freshness is an ordering over recorded lifecycle, not a decay curve.
 export { LIVE_STANDING, describeStanding, recencyKey, standing } from './freshness.js';
+
+// EPIC-063. Every sentence comes from a recorded field; nothing is generated,
+// and no sentence is composed about source content.
+export {
+  explainQuery,
+  renderExplanation,
+  type ExplainableHit,
+  type HitNote,
+  type QueryExplanation,
+  type StrategyNote,
+} from './explain.js';
 export {
   QueryPlanner,
   type ExactStrategy,

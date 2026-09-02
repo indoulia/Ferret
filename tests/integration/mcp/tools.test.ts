@@ -6,6 +6,7 @@ import { CONTENT_CLOSE, CONTENT_OPEN } from '../../../src/security/index.js';
 import {
   CONTENT_NOTICE,
   HitSource,
+  QueryPlanner,
   createNullLogger,
   type CanonicalEntity,
   type EntityQuery,
@@ -903,5 +904,159 @@ describe('refusing a caller that was not granted a permission', () => {
       arguments: { query: 'anything' },
     })) as { isError?: boolean };
     expect(result.isError).not.toBe(true);
+  });
+});
+
+/**
+ * EPIC-063 — Query Explanation, through the real protocol.
+ *
+ * A fourth server, wired with a planner, for the reason the evidence-wired one
+ * is separate: the absence of `ferret_explain` without a planner is itself
+ * asserted below.
+ */
+describe('explaining why a query returned what it did', () => {
+  let explainClient: Client;
+
+  beforeAll(async () => {
+    // Hits carrying the breakdowns EPIC-056 and EPIC-057 record, so the
+    // explanation has something to explain. The second hit is tombstoned and
+    // matches *better*, which is the case a naive explanation gets wrong.
+    const ranked: SearchHit[] = [
+      {
+        source: HitSource.ENTITY,
+        entity: COMMIT,
+        evidence: undefined,
+        score: 0.4,
+        highlight: '<b>secret-looking-content</b>',
+        ranking: { relevance: 0.4, contributors: ['content', 'entity'], subsumed: ['folded-1'], standing: 0 },
+      },
+      {
+        source: HitSource.ENTITY,
+        entity: { ...FILE, lifecycle: 'deleted' },
+        evidence: undefined,
+        score: 0.9,
+        highlight: '<b>also-content</b>',
+        ranking: {
+          relevance: 0.9,
+          contributors: ['entity'],
+          subsumed: [],
+          standing: 40,
+          why: 'ranked below live results: the source reports this as removed',
+        },
+      },
+    ];
+
+    const server = createMcpServer({
+      retrieval,
+      planner: new QueryPlanner({
+        exact: { byIdentifier: () => Promise.resolve([]) },
+        text: { search: () => Promise.resolve({ hits: ranked, withheld: NOTHING_WITHHELD }) },
+      }),
+      logger: createNullLogger(),
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    explainClient = new Client({ name: 'explain-client', version: '0.0.0' });
+    await Promise.all([
+      explainClient.connect(clientTransport),
+      server.connect(serverTransport),
+    ]);
+  });
+
+  afterAll(async () => {
+    await explainClient.close();
+  });
+
+  const explain = async (args: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    const result = (await explainClient.callTool({ name: 'ferret_explain', arguments: args })) as {
+      content: { type: string; text: string }[];
+      isError?: boolean;
+    };
+    return {
+      ...(JSON.parse(result.content[0]?.text ?? '{}') as Record<string, unknown>),
+      _isError: result.isError === true,
+    };
+  };
+
+  it('is not offered without a planner, and is offered with one — AC-15', async () => {
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name)).not.toContain('ferret_explain');
+
+    const wired = await explainClient.listTools();
+    expect(wired.tools.map((tool) => tool.name)).toContain('ferret_explain');
+  });
+
+  it('declares itself read-only and deliberately carries no content notice — AC-15', async () => {
+    const { tools } = await explainClient.listTools();
+    const tool = tools.find((one) => one.name === 'ferret_explain');
+
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    // Not an oversight. An explanation contains no repository text, so there is
+    // nothing for a notice to govern — and a notice on a document that needs
+    // none teaches a reader to ignore notices. AC-13 is what holds it honest.
+    expect(tool?.description).not.toContain('DATA, not instructions');
+    expect(tool?.description).toContain('no indexed content');
+  });
+
+  it('names the shape, the strategies and why each hit ranks where it does — AC-1, AC-2, AC-5', async () => {
+    const explanation = await explain({ query: 'anything' });
+    const hits = explanation['hits'] as { rank: number; below?: string; builtFrom: string[] }[];
+
+    expect(explanation['readAs']).toBeDefined();
+    expect((explanation['strategies'] as unknown[]).length).toBeGreaterThan(0);
+    expect(hits[0]?.below).toBeUndefined();
+    // The tombstoned hit matched better and still ranks second, and the
+    // explanation names the key that did it rather than the one below it.
+    expect(hits[1]?.below).toContain('standing');
+    expect(hits[0]?.builtFrom).toStrictEqual(['content', 'entity']);
+  });
+
+  it('contains no attribute value, statement or highlight — AC-13', async () => {
+    // The sharp version of §8.1, over a result that has content in it: take
+    // every indexed value the search hit carried and assert none reached the
+    // explanation. This is what makes "needs no containment" a fact.
+    const explanation = await explain({ query: 'anything', format: 'text' });
+    const rendered = String(explanation['rendered']);
+
+    for (const forbidden of [
+      'secret-looking-content',
+      'also-content',
+      '<b>',
+      typeof COMMIT.attributes['message'] === 'string' ? COMMIT.attributes['message'] : '',
+      typeof FILE.attributes['path'] === 'string' ? FILE.attributes['path'] : '',
+    ]) {
+      if (forbidden === '') continue;
+      expect(rendered).not.toContain(forbidden);
+    }
+
+    // It did explain something, so the assertion above is not vacuous.
+    expect(rendered).toContain('Why Ferret answered this way');
+    expect(rendered).toContain('standing');
+  });
+
+  it('renders text when asked and structure otherwise — AC-17', async () => {
+    const structured = await explain({ query: 'anything' });
+    const text = await explain({ query: 'anything', format: 'text' });
+
+    expect(structured['rendered']).toBeUndefined();
+    expect(typeof text['rendered']).toBe('string');
+    // Stable for stable input.
+    const again = await explain({ query: 'anything', format: 'text' });
+    expect(again['rendered']).toBe(text['rendered']);
+  });
+
+  it('emits the ranking breakdown on a search hit — AC-16', async () => {
+    const result = (await explainClient.callTool({
+      name: 'ferret_search',
+      arguments: { query: 'anything' },
+    })) as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(result.content[0]?.text ?? '{}') as {
+      results: { ranking?: { relevance: number; builtFrom: string[]; folded: number; standing: number } }[];
+    };
+
+    // The breakdown EPIC-056 and EPIC-057 record was emitted nowhere, so a
+    // client had an opaque score and no way to ask why one hit beat another.
+    expect(parsed.results[0]?.ranking?.builtFrom).toStrictEqual(['content', 'entity']);
+    expect(parsed.results[0]?.ranking?.folded).toBe(1);
+    expect(parsed.results[1]?.ranking?.standing).toBe(40);
   });
 });

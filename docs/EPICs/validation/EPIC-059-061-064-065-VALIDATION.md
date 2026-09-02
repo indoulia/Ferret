@@ -158,3 +158,26 @@ should name a cause.
 | Evidence is dropped rather than trimmed on an oversized item. | A half-quoted observation is a misquotation. The entity's own attributes carry the same content. | — |
 | No authorization: every indexed thing is reachable by any client that can spawn the process. | stdio limits the blast radius to whoever can already run commands as that user, but it is not an authorization model. | **EPIC-068**, **EPIC-058** |
 | No configuration or administration tools. | An AI client cannot index, configure or manage providers — only read. That is the safe default until EPIC-069 exists. | **EPIC-066**, **EPIC-067**, **EPIC-069** |
+
+## Addendum — 2026-09-02, after EPIC-060 and EPIC-063
+
+**The recorded gap "No answer packs, and no explanation of why a result was
+chosen" is now closed on both halves.** The limitations table above is left as
+written, for the reason EPIC-048's addendum gave: a record that edited itself
+whenever a later Epic closed something would stop being evidence of anything.
+
+The row read: "A pack says *that* an item matched, not how the query was planned.
+— **EPIC-060**, **EPIC-063**". EPIC-060 shipped answer packs. EPIC-063 shipped
+the explanation: `ferret_explain` narrates how the question was read, which
+strategies ran and which could not and why, why each result ranks where it does —
+by naming the first ordering key on which an adjacent pair differ — and how much
+was withheld, by reason.
+
+The neighbouring row, "Pack selection is search relevance alone. No freshness, no
+authority, no evidence-quality weighting. — **EPIC-057**, **EPIC-062**", is also
+closed: EPIC-062 delivered evidence selection and EPIC-057 delivered freshness
+and authority ranking, so search relevance is no longer the only input to an
+order.
+
+Evidence: `validation/EPIC-060-VALIDATION.md`,
+`validation/EPIC-063-VALIDATION.md`, `validation/EPIC-057-VALIDATION.md`.
