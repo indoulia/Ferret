@@ -74,7 +74,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-011 — Provider Contracts** — P0 — VALIDATED ([spec](EPIC-011-Provider-Contracts.md), [evidence](validation/EPIC-011-VALIDATION.md))
 - **EPIC-012 — Provider SDK** — P0 — VALIDATED ([spec](EPIC-012-Provider-SDK.md), [evidence](validation/EPIC-012-VALIDATION.md))
 - **EPIC-013 — Provider Registry & Discovery** — P0 — VALIDATED ([evidence](validation/EPIC-013-VALIDATION.md))
-- **EPIC-014 — Provider Lifecycle & Health** — P1
+- **EPIC-014 — Provider Lifecycle & Health** — P1 — VALIDATED ([spec](EPIC-014-Provider-Lifecycle-And-Health.md), [evidence](validation/EPIC-014-VALIDATION.md))
 - **EPIC-015 — Provider Configuration & Secrets** — P0 — VALIDATED ([spec](EPIC-015-Provider-Configuration-And-Secrets.md), [evidence](validation/EPIC-015-VALIDATION.md))
 - **EPIC-016 — Provider Conformance Testing** — P0 — VALIDATED ([spec](EPIC-016-Provider-Conformance-Testing.md), [evidence](validation/EPIC-016-VALIDATION.md))
 

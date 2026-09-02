@@ -93,3 +93,12 @@ export {
   type EmbeddingResult,
   type EmbeddingSource,
 } from './contracts/embedding.js';
+export {
+  MAX_RECOVERY_ATTEMPTS,
+  ProviderLifecycleState,
+  RecoveryBudget,
+  RecoveryRefusal,
+  describeRefusal,
+  type ProviderLifecycle,
+  type RecoveryResult,
+} from './lifecycle.js';

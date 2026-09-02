@@ -34,7 +34,9 @@ loaded.
 ## 4. Non-scope
 
 - provider credentials or secrets — EPIC-015;
-- provider initialization, health, shutdown, or failure isolation — EPIC-014;
+- provider initialization, health, shutdown, or failure isolation — EPIC-014
+  (lifecycle state and recovery, **delivered 2026-09-03**) and EPIC-093
+  (isolation at the initialize boundary);
 - provider conformance suites — EPIC-016;
 - repository-controlled provider activation;
 - scanning arbitrary `node_modules` directories or repository files for code;

@@ -40,7 +40,8 @@ the name `pat`.
 
 ## 4. Non-scope
 
-- provider health, restart or failure isolation — EPIC-014, EPIC-093;
+- provider health, restart or failure isolation — EPIC-014 (**delivered
+  2026-09-03**), EPIC-093;
 - provider conformance suites — EPIC-016;
 - OS keychain, vault or any credential store beyond the existing environment and
   file secret references — EPIC-081;

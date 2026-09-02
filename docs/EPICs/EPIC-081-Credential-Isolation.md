@@ -172,7 +172,8 @@ Named so it is not quietly adopted.
   untestable and therefore false. Recorded under AI Development Rule §10.
 - **macOS validation** — EPIC-105, inherited
   (`docs/EPICs/validation/EPIC-003-VALIDATION.md:157`).
-- **Provider health, restart or failure isolation** — EPIC-014, EPIC-093.
+- **Provider health, restart or failure isolation** — EPIC-014 (**delivered
+  2026-09-03**), EPIC-093.
 
 ## 5. Inputs
 
