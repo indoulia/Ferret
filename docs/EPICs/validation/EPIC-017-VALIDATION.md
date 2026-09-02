@@ -181,7 +181,48 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | Only `origin` (or the first remote) decides identity. A repository whose `origin` points at a personal fork will not unify with one pointing at upstream. | Correct today — they *are* different repositories to Git — and resolving them is a deliberate judgement, not a discovery one. | **EPIC-051** (Cross-Source Entity Resolution) |
 | Submodules are found only when `includeNested` is set. | A submodule is reachable from its parent's configuration, which EPIC-018/019 will read directly. Descending through every repository looking for a stray nested one turns a one-second walk into a minute. | **EPIC-018** |
 | No `defaultBranch` is reported, although the canonical model has the attribute. | Refs are EPIC-018's subject, and reading one here would be a second invocation for a fact the next Epic is about to read properly. | **EPIC-018** |
-| No incremental discovery: Ferret cannot say which repositories appeared since a given moment. | Not claimed — `supportsIncremental` is deliberately absent from the declared limits. It needs a filesystem watcher. | **EPIC-032** |
+| No incremental discovery: Ferret cannot say which repositories appeared since a given moment. | Not claimed — `supportsIncremental` is deliberately absent from the declared limits. It needs a filesystem watcher. | ~~EPIC-032~~ **EPIC-077** — see Owner correction |
 | Discovery is not wired to a CLI command. | The provider is composable and tested through the registry; a `ferret index` command belongs with the Epic that has something to index *into*. | **EPIC-031** |
 | The `safe.directory` refusal surfaces as a generic "not a repository" skip rather than naming ownership as the cause. | The reason reaches the skip's `detail` from Git's own stderr, so the information is present but not classified. | **EPIC-018** |
 | macOS unvalidated. | Inherited from EPIC-001/EPIC-005. Symlink tests self-report when the platform refuses link creation. | **EPIC-105** |
+
+---
+
+## Owner correction — 2026-09-02
+
+**Rows above whose Owner read `EPIC-032` have had that owner struck.** The
+limitations themselves are unchanged and still true; only the assignment was
+wrong, and it is struck rather than overwritten so the original claim stays
+readable.
+
+EPIC-032 — Index Lifecycle & Tombstones — is VALIDATED, and its scope never
+covered any of this. Its §4 (Non-scope) says so directly: "**Scheduled or
+unattended indexing.** Not this Epic and not this registry entry; EPIC-075/076
+own synchronization." Nine rows across four validation documents were parked on
+it anyway, and EPIC-076 added one more while assigning the file tree back to
+EPIC-032 — two closed Epics pointing at each other over live work.
+
+This is the class of defect EPIC-076 named and did not have scope to fix:
+"Nothing sweeps limitation tables for records the code has outgrown, so the next
+stale one will also wait for an Epic to be pointed at it."
+
+**Nothing was absorbed into EPIC-032.** Each row was re-read and given the owner
+its own recorded reasoning implies, and where that reasoning does not determine
+one, it says `unassigned` rather than guessing:
+
+| row | new owner | why |
+| --- | --- | --- |
+| rate limiter is per-process | **EPIC-078** | the row's own parenthetical read "EPIC-032 *(scheduling)*" — it was naming the scheduling Epic by the wrong number, and Periodic Reconciliation is that Epic |
+| no circuit breaker | **EPIC-078** | "Suppressing work across operations is a scheduling decision, not a provider one" — which also rules out EPIC-014 |
+| no incremental repository discovery | **EPIC-077** | "It needs a filesystem watcher", and Event & Webhook Ingestion is where event-driven sources belong |
+| indexing is sequential, no back-pressure | **EPIC-078** | "Parallelism across repositories is a scheduling decision" |
+| offset paging is O(offset) | *none — accepted* | the row's own Impact settles it: "The read that matters for a running Ferret is the incremental one (`since`)." An accepted cost, not parked work |
+| a failed run repeats rather than resumes | *none — accepted* | "Deliberate: resuming from a position never reached would leave a permanent gap." A design decision, recorded as one |
+| a merge commit's changes are absent | **unassigned** | "choosing which is a modelling decision" — commit modelling is EPIC-020, which is closed, so this is a new criterion and needs governance |
+| the file tree is read in full every run | **unassigned** | EPIC-076 assigned it here; EPIC-032's non-scope assigns synchronization to EPIC-075/076. Both are closed and neither claims it |
+| no untracked working-directory state | **unassigned** | "'What am I working on right now' is a different read." No Epic in the registry covers it |
+
+The three `unassigned` rows are tracked in
+[#117](https://github.com/indoulia/Ferret/issues/117). They are **not** new P0
+scope: no P0 acceptance criterion depends on any of them, which is why they were
+parked rather than built.

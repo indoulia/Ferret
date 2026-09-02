@@ -62,7 +62,45 @@ export interface SweepOptions {
   readonly after?: SweepCursor;
   /** Restrict entity and evidence checks to one repository scope. */
   readonly repositoryId?: string;
+  /**
+   * What the caller's composition would build an artefact as, today — AC-7.
+   *
+   * A port rather than a parser, and that is forced rather than stylistic:
+   * `boundaries.test.ts` asserts `src/storage/`'s external package set exactly,
+   * so importing `ParserFramework` here would drag `web-tree-sitter` into the
+   * storage graph and fail that check. The caller has a parser; the sweep asks
+   * it a question.
+   *
+   * Absent, every non-`ferret.indexer` artefact stays `unassessable` — the
+   * behaviour before this existed, and still the honest answer when nothing can
+   * judge them.
+   */
+  readonly producerIdentity?: ProducerIdentityResolver;
   readonly logger?: Logger;
+}
+
+/**
+ * What a producer would stamp on an artefact if it rebuilt it now.
+ *
+ * The seam AC-7 needed. `ferret.indexer` records a Ferret version and the sweep
+ * can compare that itself; `ferret.indexer.content` records a *parser* identity
+ * — `ferret.parser.code@1.0.0+wts0.25.10+typescript@14/8515…`, or the literal
+ * `none` — which depends on the file and on what the caller composed. Only the
+ * caller can answer it.
+ */
+export interface ProducerIdentityResolver {
+  /**
+   * The current version for one artefact, or `undefined` when it cannot say.
+   *
+   * `undefined` is not "stale". A resolver that cannot judge an artefact leaves
+   * it `unassessable`, because reporting an artefact stale on the strength of
+   * not knowing is how 540 healthy rows got reported corrupt once already.
+   */
+  versionFor(artifact: {
+    readonly kind: string;
+    readonly producer: string;
+    readonly metadata: Readonly<Record<string, unknown>>;
+  }): Promise<string | undefined>;
 }
 
 export interface SweepCounts {
@@ -183,7 +221,7 @@ export class IntegrityService {
       findings.push(...observations.findings);
       if (observations.truncated) truncated.push('evidence');
 
-      const artifacts = await this.#sweepArtifacts();
+      const artifacts = await this.#sweepArtifacts(options.producerIdentity);
       findings.push(...artifacts.findings);
 
       const runs = await this.#sweepRuns();
@@ -352,7 +390,9 @@ export class IntegrityService {
    * `kind = 'index'`, so a `content-index` artefact built by a superseded parser
    * has been invisible to it since EPIC-108 shipped.
    */
-  async #sweepArtifacts(): Promise<{ examined: number; unassessable: number; findings: IntegrityFinding[] }> {
+  async #sweepArtifacts(
+    resolver: ProducerIdentityResolver | undefined,
+  ): Promise<{ examined: number; unassessable: number; findings: IntegrityFinding[] }> {
     const rows = await this.#db
       .select({
         id: derivedArtifact.id,
@@ -361,6 +401,7 @@ export class IntegrityService {
         producer: derivedArtifact.producer,
         producerVersion: derivedArtifact.producerVersion,
         schemaVersion: derivedArtifact.schemaVersion,
+        metadata: derivedArtifact.metadata,
       })
       .from(derivedArtifact);
 
@@ -390,7 +431,24 @@ export class IntegrityService {
       // `unknown` and never `ok`. EPIC-108's re-parse gate already validates
       // them on the path that has a parser in hand.
       if (row.producer !== INDEXER_PRODUCER) {
-        unassessable += 1;
+        // AC-7 — "a derived artefact of **any** kind". A caller that composed
+        // the producer can say what it would stamp today; one that did not
+        // leaves the row unassessable, which is what this branch did for every
+        // artefact before the seam existed.
+        const current =
+          resolver === undefined
+            ? undefined
+            : await resolver.versionFor({
+                kind: row.kind,
+                producer: row.producer,
+                metadata: (row.metadata ?? {}) as Readonly<Record<string, unknown>>,
+              });
+        if (current === undefined) {
+          unassessable += 1;
+          continue;
+        }
+        if (row.producerVersion === current) continue;
+        findings.push(staleFinding(row, `built by ${row.producer}@${row.producerVersion}; this composition builds ${current}`));
         continue;
       }
       if (row.producerVersion === VERSION) continue;

@@ -4,7 +4,7 @@ import { Permission, assertPermitted, localOperatorFrom } from '../../authorizat
 import { registerCodeSymbolKind } from '../../code/index.js';
 import { IntegrityFindingKind, type IntegrityFinding } from '../../domain/index.js';
 import { createGitSourceProvider } from '../../git/index.js';
-import { RepositoryIndexer } from '../../indexing/index.js';
+import { RepositoryIndexer, contentProducerIdentity } from '../../indexing/index.js';
 import type { LogLevel } from '../../logging/index.js';
 import { ParserFramework } from '../../parsing/index.js';
 import { Capability, assertSupported, discoverProviders } from '../../providers/index.js';
@@ -87,7 +87,13 @@ export function verifyCommand(
         // once initialized, so a parser composed inside `runtime.run` never
         // registers and the content stage silently reads nothing. The same
         // ordering `ferret index` depends on, and the same reason.
-        const discovery = options.repair && options.content
+        // `options.content` alone, not `repair && content`. Detection needs the
+        // parser as much as repair does: EPIC-094 AC-7 asks that a
+        // `content-index` artefact built by a superseded parser be *reported*,
+        // and only a composed parser can say what this build would stamp on one.
+        // Without it those rows stay `unassessable`, which is honest and is
+        // what a run without `--content` still gets.
+        const discovery = options.content
           ? await discoverProviders(runtime.providers, [FERRET_PARSERS_MODULE], loadFerretParsers)
           : undefined;
 
@@ -117,10 +123,23 @@ export function verifyCommand(
           registerCodeSymbolKind();
 
           const integrity = new IntegrityService(storage.db);
-          const sweep = await integrity.sweep({
+          // AC-7 — present only when a parser was composed, so the sweep either
+          // judges a content artefact or reports it unassessable, and never
+          // guesses. The resolver lives in `indexing/` because that is where the
+          // producer it speaks for lives; `src/storage/` may not import a parser
+          // at all, which `boundaries.test.ts` asserts.
+          const producerIdentity =
+            discovery === undefined
+              ? undefined
+              : contentProducerIdentity(new ParserFramework({ registry: runtime.providers }));
+          const sweepOptions = {
             ...(options.scope === undefined ? {} : { repositoryId: options.scope }),
-            ...(options.limit === undefined || Number.isNaN(options.limit) ? {} : { limit: options.limit }),
+            ...(producerIdentity === undefined ? {} : { producerIdentity }),
             logger: context.logger,
+          };
+          const sweep = await integrity.sweep({
+            ...sweepOptions,
+            ...(options.limit === undefined || Number.isNaN(options.limit) ? {} : { limit: options.limit }),
           });
 
           if (!options.repair) return { sweep, repaired: [] as string[], confirmed: true };
@@ -214,7 +233,16 @@ export function verifyCommand(
             // says, and the human output below says so when they did not.
             await indexer.index(
               described,
-              { full: true, withHistory: true, withFiles: true, withContent: options.content },
+              {
+                full: true,
+                withHistory: true,
+                withFiles: true,
+                withContent: options.content,
+                // AC-11's effect half — issue #101. A repair exists because a
+                // stored row is wrong, so it must not take that row's own hash
+                // as evidence that it is right.
+                rederive: true,
+              },
               operation,
             );
             repaired.push(scopeId);
@@ -222,10 +250,10 @@ export function verifyCommand(
 
           // AC-16 — detection re-run, so the report says whether the repair
           // worked rather than that it was attempted.
-          const after = await integrity.sweep({
-            ...(options.scope === undefined ? {} : { repositoryId: options.scope }),
-            logger: context.logger,
-          });
+          // The same options as the sweep above, resolver included: a
+          // re-detection that judged fewer rows than the first pass would report
+          // a repair as successful because it stopped looking.
+          const after = await integrity.sweep(sweepOptions);
           return {
             sweep: after,
             repaired,

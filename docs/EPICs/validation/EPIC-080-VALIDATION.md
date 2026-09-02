@@ -104,3 +104,39 @@ trade to make deliberately rather than one to fall into here.
 - **The exemption list is an escape hatch.** It requires a reason and the reason
   is length-checked, which stops a bare name but not a bad one. The real control
   is that adding to it is visible in a diff.
+
+---
+
+## Addendum — 2026-09-02
+
+**AC-5 is now MET. The row above is not rewritten** — it was true when written,
+and Governance §12 and the project's rule on historical evidence both forbid
+tidying a record to match today.
+
+What was missing was named precisely: "a single test that indexes a repository
+twice and counts every table." EPIC-076 built it two merges later, in
+`tests/integration/indexing/incremental-sync.test.ts` — *"writes no new row on a
+second run over an unchanged repository"*. It indexes an unchanged repository
+twice and counts `entity`, `relationship` and `evidence` before and after, which
+is AC-5 as written:
+
+> **AC-5** A second `ferret index` over an unchanged repository writes no new
+> entity, relationship or evidence row — proved by counting, not by reading a
+> report.
+
+Checked rather than assumed on two points. The test composes the indexer with
+content **off**, which is `ferret index`'s default (`--content` is opt-in,
+`index-command.ts`), so the three tables the criterion names are the three a
+default run touches. And the counts are taken from `SELECT count(*)`, not from
+`IndexReport` — the distinction AC-5 insists on.
+
+One residue, stated rather than glossed: the test drives `RepositoryIndexer`
+directly rather than spawning the CLI. The composition is the same one
+`index-command.ts` builds, and EPIC-080 §10 asked for this to extend an existing
+suite rather than add a fixture, which is what happened.
+
+Also new since this document: `lifecycle.ts:retireBranch`, added by EPIC-032
+AC-7, is enumerated by AC-1's write-surface scan and proved idempotent in
+`tests/integration/indexing/index-lifecycle.test.ts` — *"changes nothing on the
+run after the retirement"*. The enumeration caught it on the commit that added
+it, which is what AC-1 exists to do.

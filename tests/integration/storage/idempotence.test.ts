@@ -150,6 +150,12 @@ describeDb(`idempotent ingestion (${databaseAvailable() ? 'real PostgreSQL' : SK
         'runs.ts:finish',
         'lifecycle.ts:retire',
         'lifecycle.ts:reinstate',
+        // Proved where its sibling is, in
+        // `tests/integration/indexing/index-lifecycle.test.ts` — "changes
+        // nothing on the run after the retirement": a second complete
+        // enumeration retires 0, because a retired branch with a closed
+        // interval is no longer live. EPIC-032 AC-7.
+        'lifecycle.ts:retireBranch',
         'embeddings.ts:record',
         'store.ts:set',
         'store.ts:setMany',

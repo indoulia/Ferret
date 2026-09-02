@@ -157,6 +157,60 @@ async function believed(
 }
 
 /**
+ * What Ferret believes about one branch: its lifecycle and its containment.
+ *
+ * Keyed on the ref rather than the entity id, because a test that computed the
+ * id would be asserting against its own derivation of identity rather than
+ * against the one the emitter used — EPIC-032 AC-7.
+ */
+async function believedBranch(
+  repositoryId: string,
+  ref: string,
+): Promise<{ lifecycle: string; open: number }> {
+  const entity = await database.pool.query(
+    `SELECT id, lifecycle FROM ferret.entity
+      WHERE kind = 'branch' AND source_scope = $1 AND attributes->>'ref' = $2`,
+    [repositoryId, ref],
+  );
+  const row = entity.rows[0] as { id: string; lifecycle: string } | undefined;
+  if (row === undefined) return { lifecycle: 'absent', open: 0 };
+
+  const edges = await database.pool.query(
+    `SELECT valid_to FROM ferret.relationship
+      WHERE from_id = $1 AND to_id = $2 AND type = 'repository_contains_branch'`,
+    [repositoryId, row.id],
+  );
+  return {
+    lifecycle: row.lifecycle,
+    open: (edges.rows as { valid_to: Date | null }[]).filter((edge) => edge.valid_to === null).length,
+  };
+}
+
+/**
+ * The provider, with the branch enumeration reported as cut short.
+ *
+ * Mirrors the truncated-tree fake below it: every method forwarded on the
+ * instance, only the one listing changed, and changed only to say it was
+ * bounded. Wrapping rather than subclassing because the provider holds private
+ * fields a prototype-derived object is not an instance of.
+ */
+function boundedBranches(): IndexableSource {
+  return {
+    listWorktrees: (repo, ctx) => provider.listWorktrees(repo, ctx),
+    listBranches: async (repo, request, ctx) => {
+      const page = await provider.listBranches(repo, { ...request, limit: 1 }, ctx);
+      return { items: page.items, cursor: 'more' };
+    },
+    readHistory: (repo, request, ctx) => provider.readHistory(repo, request, ctx),
+    listFiles: (repo, request, ctx) => provider.listFiles(repo, request, ctx),
+    emit: (repo) => provider.emit(repo),
+    emitGraph: (repo, parts) => provider.emitGraph(repo, parts),
+    emitHistory: (repo, commits, options) => provider.emitHistory(repo, commits, options),
+    emitFiles: (repo, entries, options) => provider.emitFiles(repo, entries, options),
+  };
+}
+
+/**
  * Several cases below index the same repository two or three times, against a
  * real PostgreSQL and a real `git`. Each run spawns a good number of
  * subprocesses — heavily so on Windows — so they carry explicit timeouts. The
@@ -289,8 +343,17 @@ describeLifecycle('a file that stops existing', () => {
     const second = await indexer().index(fixture.discovered, {}, context);
     const third = await indexer().index(fixture.discovered, {}, context);
 
-    expect(second.lifecycle).toStrictEqual({ retired: 0, reinstated: 0, skippedReason: undefined });
-    expect(third.lifecycle).toStrictEqual({ retired: 0, reinstated: 0, skippedReason: undefined });
+    // Still a whole-shape assertion, so a new lifecycle count cannot be added
+    // without deciding whether it is idempotent too. `branches` is now part of
+    // that shape and reconciles to zero here — EPIC-032 AC-7 alongside AC-9.
+    const quiet = {
+      retired: 0,
+      reinstated: 0,
+      skippedReason: undefined,
+      branches: { retired: 0, skippedReason: undefined },
+    };
+    expect(second.lifecycle).toStrictEqual(quiet);
+    expect(third.lifecycle).toStrictEqual(quiet);
   }, 120_000);
 
   it('survives a full re-read, which re-observes the commit that added it', async () => {
@@ -383,6 +446,122 @@ describeLifecycle('a partial observation retires nothing', () => {
 
     expect(report.lifecycle.skippedReason).toContain('no lifecycle store');
   });
+});
+
+/**
+ * EPIC-032 AC-7 — the reference lifecycle the Epic declared in scope and did not
+ * ship. Its validation record classified AC-7 `NOT APPLICABLE` and said so
+ * plainly: "Not converted to PASS." This is the criterion, unchanged, proved.
+ *
+ * Refs are the one place Ferret treats absence as evidence, because Git records
+ * no deletion event for one and a complete enumeration is therefore the only
+ * observation there will ever be. Everything rests on the enumeration actually
+ * being complete, so both halves of the criterion are asserted: retirement when
+ * it is, and nothing at all when it is not.
+ */
+describeLifecycle('a branch that stops existing — AC-7', () => {
+  it('is retired when a complete enumeration no longer holds it', async () => {
+    const fixture = await repository('branch-gone');
+    await add(fixture, 'seed.txt');
+    await git(fixture.path, ['branch', 'doomed']);
+
+    const first = await indexer().index(fixture.discovered, {}, context);
+    // Present and contained, before anything is deleted — otherwise a later
+    // "retired" assertion could pass on a branch that was never indexed.
+    const before = await believedBranch(first.repositoryId, 'refs/heads/doomed');
+    expect(before.lifecycle).toBe('active');
+    expect(before.open).toBe(1);
+
+    await git(fixture.path, ['branch', '-D', 'doomed']);
+    const second = await indexer().index(fixture.discovered, {}, context);
+
+    expect(second.lifecycle.branches.retired).toBe(1);
+    expect(second.lifecycle.branches.skippedReason).toBeUndefined();
+
+    // A tombstone, not an erasure: the row survives and its containment closes.
+    const after = await believedBranch(second.repositoryId, 'refs/heads/doomed');
+    expect(after.lifecycle).toBe('deleted');
+    expect(after.open).toBe(0);
+  }, 180_000);
+
+  it('leaves the branches the enumeration did hold alone', async () => {
+    const fixture = await repository('branch-kept');
+    await add(fixture, 'seed.txt');
+    await git(fixture.path, ['branch', 'keep']);
+    await git(fixture.path, ['branch', 'drop']);
+
+    await indexer().index(fixture.discovered, {}, context);
+    await git(fixture.path, ['branch', '-D', 'drop']);
+    const report = await indexer().index(fixture.discovered, {}, context);
+
+    expect(report.lifecycle.branches.retired).toBe(1);
+    const kept = await believedBranch(report.repositoryId, 'refs/heads/keep');
+    expect(kept.lifecycle).toBe('active');
+    expect(kept.open).toBe(1);
+  }, 180_000);
+
+  it('retires nothing when the enumeration was bounded', async () => {
+    // The safety half of AC-7, and proved by violating the gate rather than by
+    // asserting a flag: the provider is wrapped so its enumeration reports a
+    // cursor, which is the only signal that refs were cut short. Without this
+    // gate the run would retire every branch past the first page and look
+    // exactly like a successful one.
+    const fixture = await repository('branch-bounded');
+    await add(fixture, 'seed.txt');
+    await git(fixture.path, ['branch', 'alpha']);
+    await git(fixture.path, ['branch', 'beta']);
+
+    await indexer().index(fixture.discovered, {}, context);
+    const report = await indexer(boundedBranches()).index(fixture.discovered, {}, context);
+
+    expect(report.lifecycle.branches.retired).toBe(0);
+    expect(report.lifecycle.branches.skippedReason).toContain('bounded');
+
+    // Both survive — including the one the bounded page could not reach, which
+    // is the branch a gate-less sweep would have condemned.
+    for (const ref of ['refs/heads/alpha', 'refs/heads/beta']) {
+      expect((await believedBranch(report.repositoryId, ref)).lifecycle).toBe('active');
+    }
+  }, 180_000);
+
+  it('changes nothing on the run after the retirement', async () => {
+    const fixture = await repository('branch-idempotent');
+    await add(fixture, 'seed.txt');
+    await git(fixture.path, ['branch', 'transient']);
+
+    await indexer().index(fixture.discovered, {}, context);
+    await git(fixture.path, ['branch', '-D', 'transient']);
+
+    const swept = await indexer().index(fixture.discovered, {}, context);
+    expect(swept.lifecycle.branches.retired).toBe(1);
+
+    // A retired branch with a closed interval is no longer live, so the second
+    // sweep has nothing to find. A count that kept climbing would mean the
+    // sweep re-retires for ever — EPIC-032 AC-9 for refs.
+    const again = await indexer().index(fixture.discovered, {}, context);
+    expect(again.lifecycle.branches.retired).toBe(0);
+  }, 240_000);
+
+  it('never retires another repository’s branches', async () => {
+    // `source_scope` is set by Ferret from the repository being indexed, never
+    // from repository content. Same ref name, different repository, untouched.
+    const victim = await repository('branch-bystander');
+    await add(victim, 'seed.txt');
+    await git(victim.path, ['branch', 'shared']);
+    const victimReport = await indexer().index(victim.discovered, {}, context);
+
+    const attacker = await repository('branch-sweeper');
+    await add(attacker, 'seed.txt');
+    await git(attacker.path, ['branch', 'shared']);
+    await indexer().index(attacker.discovered, {}, context);
+    await git(attacker.path, ['branch', '-D', 'shared']);
+    const attackerReport = await indexer().index(attacker.discovered, {}, context);
+
+    expect(attackerReport.lifecycle.branches.retired).toBe(1);
+    const safe = await believedBranch(victimReport.repositoryId, 'refs/heads/shared');
+    expect(safe.lifecycle).toBe('active');
+    expect(safe.open).toBe(1);
+  }, 240_000);
 });
 
 describeLifecycle('the sweep stays inside the repository it was given', () => {

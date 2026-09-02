@@ -129,11 +129,11 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-045 — Source Authority** — P0 — VALIDATED ([spec](EPIC-044-045-Evidence-Store-And-Source-Authority.md), [evidence](validation/EPIC-044-045-VALIDATION.md))
 - **EPIC-046 — Confidence & Completeness** — P1
 - **EPIC-047 — Conflict Detection** — P1
-- **EPIC-048 — Answer Traceability** — P0 — IMPLEMENTED ([spec](EPIC-048-Answer-Traceability.md), [evidence](validation/EPIC-048-VALIDATION.md))
+- **EPIC-048 — Answer Traceability** — P0 — VALIDATED ([spec](EPIC-048-Answer-Traceability.md), [evidence](validation/EPIC-048-VALIDATION.md))
 
 ### Knowledge Graph & Relationships
 
-- **EPIC-049 — Relationship Storage** — P0 — IMPLEMENTED ([spec](EPIC-049-Relationship-Storage.md), [evidence](validation/EPIC-049-VALIDATION.md))
+- **EPIC-049 — Relationship Storage** — P0 — VALIDATED ([spec](EPIC-049-Relationship-Storage.md), [evidence](validation/EPIC-049-VALIDATION.md))
 - **EPIC-050 — Relationship Traversal** — P1
 - **EPIC-051 — Cross-Source Entity Resolution** — P1
 
@@ -145,24 +145,24 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-055 — Hybrid Query Planner** — P0 — VALIDATED ([spec](EPIC-054-055-Semantic-And-Planner.md), [evidence](validation/EPIC-054-055-VALIDATION.md))
 - **EPIC-056 — Ranking & Reranking** — P1
 - **EPIC-057 — Freshness & Authority Ranking** — P1
-- **EPIC-058 — Permission-Aware Retrieval** — P0 — IMPLEMENTED ([spec](EPIC-058-Permission-Aware-Retrieval.md), [evidence](validation/EPIC-058-VALIDATION.md))
+- **EPIC-058 — Permission-Aware Retrieval** — P0 — VALIDATED ([spec](EPIC-058-Permission-Aware-Retrieval.md), [evidence](validation/EPIC-058-VALIDATION.md))
 
 ### Context Compilation
 
 - **EPIC-059 — Context Packs** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
-- **EPIC-060 — Answer Packs** — P0 — IMPLEMENTED ([spec](EPIC-060-Answer-Packs.md), [evidence](validation/EPIC-060-VALIDATION.md))
+- **EPIC-060 — Answer Packs** — P0 — VALIDATED ([spec](EPIC-060-Answer-Packs.md), [evidence](validation/EPIC-060-VALIDATION.md))
 - **EPIC-061 — Token Budgeting** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
-- **EPIC-062 — Evidence Selection** — P0 — IMPLEMENTED ([spec](EPIC-062-Evidence-Selection.md), [evidence](validation/EPIC-062-VALIDATION.md))
+- **EPIC-062 — Evidence Selection** — P0 — VALIDATED ([spec](EPIC-062-Evidence-Selection.md), [evidence](validation/EPIC-062-VALIDATION.md))
 - **EPIC-063 — Query Explanation** — P1
 
 ### AI Control Plane & MCP
 
 - **EPIC-064 — MCP Server** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
 - **EPIC-065 — MCP Knowledge Tools** — P0 — VALIDATED ([spec](EPIC-059-061-064-065-Context-And-MCP.md), [evidence](validation/EPIC-059-061-064-065-VALIDATION.md))
-- **EPIC-066 — MCP Configuration Tools** — P0 — IMPLEMENTED ([spec](EPIC-066-MCP-Configuration-Tools.md), [evidence](validation/EPIC-066-VALIDATION.md))
+- **EPIC-066 — MCP Configuration Tools** — P0 — VALIDATED ([spec](EPIC-066-MCP-Configuration-Tools.md), [evidence](validation/EPIC-066-VALIDATION.md))
 - **EPIC-067 — MCP Provider Administration** — P1
-- **EPIC-068 — AI Authorization Model** — P0 — IMPLEMENTED ([spec](EPIC-068-AI-Authorization-Model.md), [evidence](validation/EPIC-068-VALIDATION.md))
-- **EPIC-069 — Destructive Operation Confirmation** — P0 — IMPLEMENTED ([spec](EPIC-069-Destructive-Operation-Confirmation.md), [evidence](validation/EPIC-069-VALIDATION.md))
+- **EPIC-068 — AI Authorization Model** — P0 — VALIDATED ([spec](EPIC-068-AI-Authorization-Model.md), [evidence](validation/EPIC-068-VALIDATION.md))
+- **EPIC-069 — Destructive Operation Confirmation** — P0 — VALIDATED ([spec](EPIC-069-Destructive-Operation-Confirmation.md), [evidence](validation/EPIC-069-VALIDATION.md))
 - **EPIC-070 — AI Client Capability Discovery** — P1
 
 ### External Project Knowledge
@@ -174,24 +174,24 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Synchronization & Reconciliation
 
-- **EPIC-075 — Sync Cursor Management** — P0 — IMPLEMENTED ([spec](EPIC-075-Sync-Cursor-Management.md), [evidence](validation/EPIC-075-VALIDATION.md))
-- **EPIC-076 — Incremental Source Synchronization** — P0 — IMPLEMENTED ([spec](EPIC-076-Incremental-Source-Synchronization.md), [evidence](validation/EPIC-076-VALIDATION.md))
+- **EPIC-075 — Sync Cursor Management** — P0 — VALIDATED ([spec](EPIC-075-Sync-Cursor-Management.md), [evidence](validation/EPIC-075-VALIDATION.md))
+- **EPIC-076 — Incremental Source Synchronization** — P0 — VALIDATED ([spec](EPIC-076-Incremental-Source-Synchronization.md), [evidence](validation/EPIC-076-VALIDATION.md))
 - **EPIC-077 — Event & Webhook Ingestion** — P1
 - **EPIC-078 — Periodic Reconciliation** — P1
 - **EPIC-079 — Retry & Backoff** — P0 — VALIDATED ([spec](EPIC-079-Retry-And-Backoff.md), [evidence](validation/EPIC-079-VALIDATION.md))
-- **EPIC-080 — Idempotent Ingestion** — P0 — IMPLEMENTED ([spec](EPIC-080-Idempotent-Ingestion.md), [evidence](validation/EPIC-080-VALIDATION.md))
+- **EPIC-080 — Idempotent Ingestion** — P0 — VALIDATED ([spec](EPIC-080-Idempotent-Ingestion.md), [evidence](validation/EPIC-080-VALIDATION.md))
 
 ### Security & Authorization
 
-- **EPIC-081 — Credential Isolation** — P0 — IMPLEMENTED ([spec](EPIC-081-Credential-Isolation.md), [evidence](validation/EPIC-081-VALIDATION.md))
+- **EPIC-081 — Credential Isolation** — P0 — VALIDATED ([spec](EPIC-081-Credential-Isolation.md), [evidence](validation/EPIC-081-VALIDATION.md))
 - **EPIC-082 — Secret Detection & Exclusion** — P0 — VALIDATED ([spec](EPIC-082-Secret-Detection.md), [evidence](validation/EPIC-082-VALIDATION.md))
-- **EPIC-083 — Authorization Enforcement** — P0 — IMPLEMENTED ([spec](EPIC-083-Authorization-Enforcement.md), [evidence](validation/EPIC-083-VALIDATION.md))
+- **EPIC-083 — Authorization Enforcement** — P0 — VALIDATED ([spec](EPIC-083-Authorization-Enforcement.md), [evidence](validation/EPIC-083-VALIDATION.md))
 - **EPIC-084 — Prompt-Injection Resistance** — P0 — VALIDATED ([spec](EPIC-084-Prompt-Injection-Resistance.md), [evidence](validation/EPIC-084-VALIDATION.md))
 - **EPIC-085 — Audit Events** — P1
 
 ### Storage & Data Lifecycle
 
-- **EPIC-086 — PostgreSQL Storage Layer** — P0 — IMPLEMENTED ([spec](EPIC-086-PostgreSQL-Storage-Layer.md), [evidence](validation/EPIC-086-VALIDATION.md))
+- **EPIC-086 — PostgreSQL Storage Layer** — P0 — VALIDATED ([spec](EPIC-086-PostgreSQL-Storage-Layer.md), [evidence](validation/EPIC-086-VALIDATION.md))
 - **EPIC-087 — Deduplicated Content Storage** — P0 — IMPLEMENTED ([spec](EPIC-087-Deduplicated-Content-Storage.md), [evidence](validation/EPIC-087-VALIDATION.md))
 - **EPIC-088 — Retention & Exclusion Policies** — P1
 - **EPIC-089 — Backup & Export** — P1
@@ -199,19 +199,19 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### Reliability & Operations
 
-- **EPIC-091 — Structured Logging** — P0 — IMPLEMENTED ([spec](EPIC-091-Structured-Logging.md), [evidence](validation/EPIC-091-VALIDATION.md))
+- **EPIC-091 — Structured Logging** — P0 — VALIDATED ([spec](EPIC-091-Structured-Logging.md), [evidence](validation/EPIC-091-VALIDATION.md))
 - **EPIC-092 — Metrics & Tracing** — P1
-- **EPIC-093 — Provider Failure Isolation** — P0 — IMPLEMENTED ([spec](EPIC-093-Provider-Failure-Isolation.md), [evidence](validation/EPIC-093-VALIDATION.md))
-- **EPIC-094 — Index Integrity & Recovery** — P0 — IMPLEMENTED ([spec](EPIC-094-Index-Integrity-And-Recovery.md), [evidence](validation/EPIC-094-VALIDATION.md))
-- **EPIC-095 — Operational Diagnostics** — P0 — IMPLEMENTED ([spec](EPIC-095-Operational-Diagnostics.md), [evidence](validation/EPIC-095-VALIDATION.md))
+- **EPIC-093 — Provider Failure Isolation** — P0 — VALIDATED ([spec](EPIC-093-Provider-Failure-Isolation.md), [evidence](validation/EPIC-093-VALIDATION.md))
+- **EPIC-094 — Index Integrity & Recovery** — P0 — VALIDATED ([spec](EPIC-094-Index-Integrity-And-Recovery.md), [evidence](validation/EPIC-094-VALIDATION.md))
+- **EPIC-095 — Operational Diagnostics** — P0 — VALIDATED ([spec](EPIC-095-Operational-Diagnostics.md), [evidence](validation/EPIC-095-VALIDATION.md))
 
 ### Evaluation & Quality
 
-- **EPIC-096 — Golden Evaluation Dataset** — P0 — IMPLEMENTED ([spec](EPIC-096-Golden-Evaluation-Dataset.md), [evidence](validation/EPIC-096-VALIDATION.md))
-- **EPIC-097 — Parser Quality Harness** — P0 — IMPLEMENTED ([spec](EPIC-097-Parser-Quality-Harness.md), [evidence](validation/EPIC-097-VALIDATION.md))
-- **EPIC-098 — Retrieval Quality Harness** — P0 — IMPLEMENTED ([spec](EPIC-098-Retrieval-Quality-Harness.md), [evidence](validation/EPIC-098-VALIDATION.md))
-- **EPIC-099 — Provider Conformance Harness** — P0 — IMPLEMENTED ([spec](EPIC-099-Provider-Conformance-Harness.md), [evidence](validation/EPIC-099-VALIDATION.md))
-- **EPIC-100 — Security Regression Suite** — P0 — IMPLEMENTED ([spec](EPIC-100-Security-Regression-Suite.md), [evidence](validation/EPIC-100-VALIDATION.md))
+- **EPIC-096 — Golden Evaluation Dataset** — P0 — VALIDATED ([spec](EPIC-096-Golden-Evaluation-Dataset.md), [evidence](validation/EPIC-096-VALIDATION.md))
+- **EPIC-097 — Parser Quality Harness** — P0 — VALIDATED ([spec](EPIC-097-Parser-Quality-Harness.md), [evidence](validation/EPIC-097-VALIDATION.md))
+- **EPIC-098 — Retrieval Quality Harness** — P0 — VALIDATED ([spec](EPIC-098-Retrieval-Quality-Harness.md), [evidence](validation/EPIC-098-VALIDATION.md))
+- **EPIC-099 — Provider Conformance Harness** — P0 — VALIDATED ([spec](EPIC-099-Provider-Conformance-Harness.md), [evidence](validation/EPIC-099-VALIDATION.md))
+- **EPIC-100 — Security Regression Suite** — P0 — VALIDATED ([spec](EPIC-100-Security-Regression-Suite.md), [evidence](validation/EPIC-100-VALIDATION.md))
 - **EPIC-101 — Performance & Scale Benchmarks** — P1
 
 ### Distribution & Developer Experience
@@ -262,6 +262,86 @@ An Epic is `DONE` only when:
 - dependencies are validated;
 - no known blocker remains;
 - validation evidence is recorded.
+
+## P0 closure pass — 2026-09-02
+
+Assessed against `5293434`, then closed. Every P0 Epic was classified from its
+own acceptance-criteria table rather than from its registry status line, by
+sweeping every AC row in all 66 validation documents. Where the two disagreed,
+the AC table won.
+
+**76 P0 Epics: 75 VALIDATED or DONE, 1 IMPLEMENTED.**
+
+Eight acceptance criteria were open. Six were closed by implementation or by
+evidence already on record; one criterion remains, and it is blocked on a P1
+Epic rather than on work anybody has declined to do.
+
+| Epic | AC | was | now |
+| --- | --- | --- | --- |
+| EPIC-032 | AC-7 reference lifecycle | NOT APPLICABLE — a declared scope item that did not ship, in a row reading `VALIDATED` | **MET** — branches retired from a complete enumeration; a bounded one retires nothing |
+| EPIC-048 | AC-11 permitted scopes | PARTIAL | **MET** — closed by EPIC-058 §6; dated addendum, original row intact |
+| EPIC-080 | AC-5 a second index writes no row | PARTIAL | **MET** — closed by EPIC-076 AC-1; dated addendum, original row intact |
+| EPIC-094 | AC-7 stale artefact of any kind | PARTIAL | **MET** — `SweepOptions.producerIdentity`, a port because `src/storage/` may not import a parser |
+| EPIC-094 | AC-11 repair supersedes | PARTIAL (effect) | **MET** — issue #101's recorded cause was wrong; the real one is `upsert`'s hash short-circuit |
+| EPIC-094 | AC-13 interrupted repair | PENDING | **MET** — the watermark half did inherit from EPIC-031 AC-6; the `markStale` residue did not |
+| EPIC-100 | AC-8 no unreachable control | NOT MET | **MET** — transitive reachability over the declared control surface; found one on its first run |
+| EPIC-087 | AC-11 p@10 above 0.32 | NOT MET | **NOT MET** — re-measured unchanged at 0.2639; see below |
+
+**No acceptance criterion was changed, reinterpreted or restated.** Two were
+closed by evidence a later Epic had already produced and nobody had gone back to
+record — the mirror of EPIC-076's finding, one document further on.
+
+### Where the earlier records were wrong, and it matters
+
+- **EPIC-094 AC-11 / issue #101.** The filed cause blamed the `ifAbsent`
+  placeholder mechanism. It is innocent. `EntityStore.upsert` returns
+  `unchanged` when the recomputed hash equals the stored one, and an alteration
+  made outside Ferret leaves `content_hash` intact — so re-derivation never
+  reached the placeholder decision. The repository case #101 called "the one row
+  a re-index will never rewrite" now repairs, with `ifAbsent` untouched.
+- **EPIC-032 AC-7.** Deferred on the reasoning that retiring a ref by absence
+  would apply a weaker standard than files get. The criterion's own wording
+  resolves it — absence is not evidence *in a partial read*, and for a ref a
+  complete enumeration is the only observation Git will ever produce, which the
+  specification's §3.4 already said. What was actually missing was a completeness
+  signal: the provider returned one and `IndexableSource.listBranches` discarded
+  it.
+- **Issue #109.** The flaky query-plan test passed only while PostgreSQL lacked
+  statistics — on 74 rows a sequential scan is genuinely cheaper. A false
+  negative, so no `npm run verify` cited by any P0 record was green *because* of
+  it. Now deterministic, and it fails if the index is dropped, which it did not
+  before.
+
+### EPIC-087 AC-11 — the one criterion still open
+
+Re-measured on `5293434` against real PostgreSQL: mean p@10 **0.2639** against a
+0.32 baseline, recall 0.9167, RR 0.5972, nDCG 0.6698, falsePositives 0.
+`text-authentication` recall is 1.00, so the criterion's first half holds and its
+second does not. Unmoved from what EPIC-087 recorded.
+
+The cause is [#98](https://github.com/indoulia/Ferret/issues/98), whose owner is
+now settled: **EPIC-056 — Ranking & Reranking**, on the written non-scope of both
+candidates. EPIC-034 §4 — "ranking. This Epic returns matches in a defined order;
+EPIC-056 ranks." EPIC-052/053 §4 — "Ranking that is comparable across queries —
+EPIC-056." The measurement agrees: recall is identical either side of the
+regression while RR nearly halves, and a defect that moves ordering without
+moving recall is a ranking defect. Recorded with its evidence in
+`docs/Architecture/EPIC-087-DECISIONS.md` §D1.
+
+EPIC-056 is **P1**. So a P0 criterion is blocked on P1 work, which is a
+governance position this pass does not take. The options remain the three
+EPIC-087 itself put on the table — leave EPIC-087 `IMPLEMENTED`, promote
+EPIC-056 to P0, or restate AC-11 — with the difference that promoting is now a
+decision about one named Epic rather than an open question.
+
+### Registry hygiene
+
+Nine limitation rows across four documents parked live work on EPIC-032, which is
+closed and never had that scope; EPIC-076 added a tenth. Owners were struck
+rather than overwritten and corrected from each row's own reasoning — four to a
+determinable owner, two to none as accepted design decisions, three left
+`unassigned` because the registry does not determine one. None is P0.
+Tracked in [#117](https://github.com/indoulia/Ferret/issues/117).
 
 ## Approval
 

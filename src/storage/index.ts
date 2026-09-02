@@ -156,6 +156,7 @@ export {
   UNFINISHED_RUN_AFTER_MS,
   type SweepCounts,
   type SweepCursor,
+  type ProducerIdentityResolver,
   type SweepOptions,
   type SweepReport,
 } from './integrity.js';

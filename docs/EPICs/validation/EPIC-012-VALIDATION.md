@@ -162,9 +162,50 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | Limitation | Impact | Owner |
 | --- | --- | --- |
 | **Per-capability method signatures are still not pinned.** EPIC-011's checkpoint expected this Epic to do it; the specification §8 explains why it does not. Four of the eight capabilities have no consumer closer than EPIC-024, and the other four belong to the Epics that must live with the shape. | A provider author knows the operation protocol — context, page, cursor, emission, retry — but writes their capability's own interface. That is the smaller commitment and the one that can be made honestly today. | **EPIC-017/018/019/022** and each consuming Epic |
-| The rate limiter is per-provider and in-process. Two Ferret processes against the same rate-limited API will each honour the limit, and together exceed it. | Correct for the single-process case Ferret is today. A shared budget needs coordination the storage layer could provide but nothing yet asks for. | **EPIC-032** (scheduling) if it becomes a requirement |
-| No circuit breaker. Retry backs off within one operation; a dependency that is down stays hammered by every *new* operation. | Retry alone is the right primitive for one operation. Suppressing work across operations is a scheduling decision, not a provider one. | **EPIC-032** |
+| The rate limiter is per-provider and in-process. Two Ferret processes against the same rate-limited API will each honour the limit, and together exceed it. | Correct for the single-process case Ferret is today. A shared budget needs coordination the storage layer could provide but nothing yet asks for. | ~~EPIC-032~~ **EPIC-078** — see Owner correction |
+| No circuit breaker. Retry backs off within one operation; a dependency that is down stays hammered by every *new* operation. | Retry alone is the right primitive for one operation. Suppressing work across operations is a scheduling decision, not a provider one. | ~~EPIC-032~~ **EPIC-078** — see Owner correction |
 | `paginate` holds every cursor it has seen to detect a provider that does not advance. | Bounded by page count, not by item count, so an enumeration of a million items across a thousand pages holds a thousand short strings. Acceptable; worth revisiting only if a provider paginates at item granularity. | — |
 | Emission is synchronous and in-memory; a `BatchEmitter` grows without bound. | A provider that walks a million files and never flushes will exhaust memory. Flush policy is the indexing pipeline's decision, not the emitter's. | **EPIC-031** |
 | The deadline in `ProviderOperationContext` is advisory: nothing forces a provider to consult it. | It is carried so a provider *can* plan. Enforcement is the `AbortSignal`, which is not advisory. | **EPIC-016** (conformance) |
 | macOS unvalidated. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
+
+---
+
+## Owner correction — 2026-09-02
+
+**Rows above whose Owner read `EPIC-032` have had that owner struck.** The
+limitations themselves are unchanged and still true; only the assignment was
+wrong, and it is struck rather than overwritten so the original claim stays
+readable.
+
+EPIC-032 — Index Lifecycle & Tombstones — is VALIDATED, and its scope never
+covered any of this. Its §4 (Non-scope) says so directly: "**Scheduled or
+unattended indexing.** Not this Epic and not this registry entry; EPIC-075/076
+own synchronization." Nine rows across four validation documents were parked on
+it anyway, and EPIC-076 added one more while assigning the file tree back to
+EPIC-032 — two closed Epics pointing at each other over live work.
+
+This is the class of defect EPIC-076 named and did not have scope to fix:
+"Nothing sweeps limitation tables for records the code has outgrown, so the next
+stale one will also wait for an Epic to be pointed at it."
+
+**Nothing was absorbed into EPIC-032.** Each row was re-read and given the owner
+its own recorded reasoning implies, and where that reasoning does not determine
+one, it says `unassigned` rather than guessing:
+
+| row | new owner | why |
+| --- | --- | --- |
+| rate limiter is per-process | **EPIC-078** | the row's own parenthetical read "EPIC-032 *(scheduling)*" — it was naming the scheduling Epic by the wrong number, and Periodic Reconciliation is that Epic |
+| no circuit breaker | **EPIC-078** | "Suppressing work across operations is a scheduling decision, not a provider one" — which also rules out EPIC-014 |
+| no incremental repository discovery | **EPIC-077** | "It needs a filesystem watcher", and Event & Webhook Ingestion is where event-driven sources belong |
+| indexing is sequential, no back-pressure | **EPIC-078** | "Parallelism across repositories is a scheduling decision" |
+| offset paging is O(offset) | *none — accepted* | the row's own Impact settles it: "The read that matters for a running Ferret is the incremental one (`since`)." An accepted cost, not parked work |
+| a failed run repeats rather than resumes | *none — accepted* | "Deliberate: resuming from a position never reached would leave a permanent gap." A design decision, recorded as one |
+| a merge commit's changes are absent | **unassigned** | "choosing which is a modelling decision" — commit modelling is EPIC-020, which is closed, so this is a new criterion and needs governance |
+| the file tree is read in full every run | **unassigned** | EPIC-076 assigned it here; EPIC-032's non-scope assigns synchronization to EPIC-075/076. Both are closed and neither claims it |
+| no untracked working-directory state | **unassigned** | "'What am I working on right now' is a different read." No Epic in the registry covers it |
+
+The three `unassigned` rows are tracked in
+[#117](https://github.com/indoulia/Ferret/issues/117). They are **not** new P0
+scope: no P0 acceptance criterion depends on any of them, which is why they were
+parked rather than built.

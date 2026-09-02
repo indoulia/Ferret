@@ -414,6 +414,7 @@ export {
 
 export {
   CONTENT_ARTIFACT_KIND,
+  contentProducerIdentity,
   CONTENT_PRODUCER,
   ContentStageSkip,
   contentScopeId,

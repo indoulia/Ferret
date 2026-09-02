@@ -116,7 +116,7 @@ export class EntityStore {
   async upsert(
     input: EntityInput,
     now: Date = new Date(),
-    options: { readonly ifAbsent?: boolean } = {},
+    options: { readonly ifAbsent?: boolean; readonly rederive?: boolean } = {},
   ): Promise<UpsertResult> {
     const canonical = createEntity(input);
 
@@ -137,12 +137,12 @@ export class EntityStore {
     // them back. That is the database working correctly; treating it as a
     // failure made an indexing run depend on how many writers happened to touch
     // the same file at once. Issues #21 and #55.
-    return withConflictRetry(() => this.#upsertOnce(canonical, now), {
+    return withConflictRetry(() => this.#upsertOnce(canonical, now, options.rederive === true), {
       label: 'storage.entity.upsert',
     });
   }
 
-  async #upsertOnce(canonical: CanonicalEntity, now: Date): Promise<UpsertResult> {
+  async #upsertOnce(canonical: CanonicalEntity, now: Date, rederive: boolean): Promise<UpsertResult> {
     try {
       return await this.#db.transaction(async (tx) => {
         const [existing] = await tx.select().from(entity).where(eq(entity.id, canonical.id)).limit(1);
@@ -150,7 +150,20 @@ export class EntityStore {
         if (existing !== undefined) {
           assertReadable(existing);
 
-          if (existing.contentHash === canonical.contentHash) {
+          // **The stored hash is only trustworthy if the row is.** Issue #101,
+          // and the cause it records is not the one that was measured: the
+          // placeholder mechanism is innocent here. An alteration made outside
+          // Ferret changes `attributes` and leaves `content_hash` alone, so the
+          // recomputed hash equals the stored one and this branch declares the
+          // row unchanged — for ever. Re-derivation cannot fix an in-place
+          // alteration because it never gets past this comparison.
+          //
+          // `rederive` is a repair saying "do not take the stored hash's word
+          // for it". It is not an `UPDATE` against `content_hash`, which AC-11
+          // forbids and which would be editing a row to make it verify: the row
+          // is rewritten in full from what the source says, hash included,
+          // which is what derivation means.
+          if (existing.contentHash === canonical.contentHash && !rederive) {
             // Nothing changed. Recording that Ferret looked is still useful —
             // it is how staleness is measured — but rewriting the row would
             // destroy the record of when the content actually last changed.

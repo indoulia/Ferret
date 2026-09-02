@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 
-import { LifecycleState, RelationshipType } from '../domain/index.js';
+import { EntityKind, LifecycleState, RelationshipType } from '../domain/index.js';
 
 import { classifyDatabaseError } from './connection.js';
 import type { FerretDatabase } from './entities.js';
@@ -45,6 +45,21 @@ export interface LifecycleChange {
    * and index time apart precisely so that both questions stay answerable.
    */
   readonly at: Date;
+}
+
+/**
+ * One branch Ferret still believes this repository contains.
+ *
+ * Refs are reconciled the other way round from files. A file is retired from a
+ * *positive observation of deletion* — a commit that says `change: deleted` —
+ * because Git records one. Git records nothing when a ref goes, so for refs the
+ * complete enumeration **is** the positive observation, which is EPIC-032 §3.4
+ * and the reason AC-7 is worded around completeness rather than around an event.
+ */
+export interface LiveBranch {
+  readonly entityId: string;
+  /** The ref, for logging and for reporting to a person. */
+  readonly ref: string;
 }
 
 export class IndexLifecycleStore {
@@ -150,13 +165,85 @@ export class IndexLifecycleStore {
    * one wrong answer into two.
    */
   async retire(entityId: string, repositoryId: string, at: Date, now: Date = new Date()): Promise<boolean> {
+    return this.#retireContained(entityId, repositoryId, RelationshipType.REPOSITORY_CONTAINS_FILE, at, now);
+  }
+
+  /**
+   * Branches this repository is still believed to contain.
+   *
+   * Returned in full rather than diffed in SQL against the observed set. The
+   * caller already holds that set, a repository's ref count is small, and an
+   * `IN` list built from provider output is a query whose shape depends on
+   * repository content.
+   *
+   * A branch already tombstoned but still holding an **open** containment edge
+   * counts as live, for the reason the file query records at length: keying only
+   * off the entity state let a re-index reopen the edge while the sweep saw
+   * nothing to do.
+   */
+  async liveBranches(repositoryId: string): Promise<readonly LiveBranch[]> {
+    try {
+      const rows = await this.#db.execute<{ entity_id: string; ref: string | null }>(sql`
+        SELECT e.id AS entity_id, e.attributes->>'ref' AS ref
+          FROM ferret.entity e
+         WHERE e.kind = ${EntityKind.BRANCH}
+           -- Set by Ferret from the repository being indexed, never from
+           -- repository content, so no repository can reach another's refs.
+           AND e.source_scope = ${repositoryId}
+           AND (e.lifecycle <> ${LifecycleState.DELETED}
+                OR EXISTS (SELECT 1 FROM ferret.relationship c
+                            WHERE c.to_id = e.id
+                              AND c.from_id = ${repositoryId}
+                              AND c.type = ${RelationshipType.REPOSITORY_CONTAINS_BRANCH}
+                              AND c.valid_to IS NULL))
+         ORDER BY e.id
+      `);
+      return rows.rows.map((row) => ({ entityId: row.entity_id, ref: row.ref ?? row.entity_id }));
+    } catch (error) {
+      throw classifyDatabaseError(error, 'storage.lifecycle.branches');
+    }
+  }
+
+  /**
+   * Records that a branch stopped existing, and when.
+   *
+   * `at` is the observation instant, not a valid time Ferret knows. Git cannot
+   * say when a ref was deleted — the same reason `emitGraph` opens containment
+   * at Ferret's observation time rather than inventing one. Governance §6: the
+   * distinction is recorded rather than smoothed over.
+   */
+  async retireBranch(
+    entityId: string,
+    repositoryId: string,
+    at: Date,
+    now: Date = new Date(),
+  ): Promise<boolean> {
+    return this.#retireContained(entityId, repositoryId, RelationshipType.REPOSITORY_CONTAINS_BRANCH, at, now);
+  }
+
+  /**
+   * The tombstone write, shared by files and refs.
+   *
+   * One body because the invariant is one invariant: the entity and its
+   * containment edge move together, in one transaction, under the same
+   * advisory key the relationship store uses. Only the containment type
+   * differs, and letting the two drift is how a fix lands on files and misses
+   * refs.
+   */
+  async #retireContained(
+    entityId: string,
+    repositoryId: string,
+    containment: RelationshipType,
+    at: Date,
+    now: Date,
+  ): Promise<boolean> {
     try {
       return await this.#db.transaction(async (tx) => {
         // The same key the relationship store locks on, so a sweep and a
         // concurrent assertion of the same edge serialize rather than racing
         // into one open interval and one closed one.
         await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${repositoryId}:${RelationshipType.REPOSITORY_CONTAINS_FILE}:${entityId}`}, 0))`,
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${repositoryId}:${containment}:${entityId}`}, 0))`,
         );
 
         const updated = await tx.execute<{ id: string }>(sql`
@@ -174,7 +261,7 @@ export class IndexLifecycleStore {
              SET valid_to = GREATEST(valid_from, ${at}), last_indexed_at = ${now}
            WHERE from_id = ${repositoryId}
              AND to_id = ${entityId}
-             AND type = ${RelationshipType.REPOSITORY_CONTAINS_FILE}
+             AND type = ${containment}
              AND valid_to IS NULL
           RETURNING id
         `);

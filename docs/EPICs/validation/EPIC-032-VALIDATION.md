@@ -182,3 +182,90 @@ One pre-existing flake was fixed while here: `identifies repositories at a
 bounded cost per repository` asserts a 60-second ceiling under Vitest's default
 30-second timeout, so it could never reach its own budget — it died of the
 timeout intermittently and read as a failure of what it measures.
+
+---
+
+## Addendum — 2026-09-02
+
+**AC-7 is now MET. §2's row and §5's paragraph are left as written.** They
+recorded a deliberate deferral and the reasoning was sound at the time; the
+record of that judgement is worth more than a tidy table.
+
+What §5 said:
+
+> **AC-7, reference lifecycle — NOT APPLICABLE.** A branch or worktree absent
+> from a complete enumeration would be retired by inference from absence, which
+> is the one thing this Epic's design refuses to do for files. … **Not converted
+> to PASS.**
+
+The concern was real and the conclusion was wrong, and the criterion itself
+contains the distinction that resolves it:
+
+> **AC-7** A branch absent from a **complete** enumeration is retired; a bounded
+> enumeration retires nothing.
+
+Absence is not evidence *in a partial read* — which is what the file rules
+guard, and what this Epic got right. For a ref, Git records no deletion event, so
+a complete enumeration **is** the positive observation. §3.4 of the
+specification already said so in as many words. Applying the file standard to
+refs was not consistency; it was requiring evidence Git does not produce, and the
+effect was that a deleted branch stayed `active` for ever.
+
+**What was missing was a completeness signal, not a design.** `listBranches`
+returned `truncated` from `src/git/refs.ts` and the provider turned it into a
+`cursor` — and `IndexableSource.listBranches` declared its return type as
+`{ items }` and threw the cursor away. That is why ref retirement could not be
+built: nothing downstream could tell a repository with two branches from the
+first page of a repository with two thousand.
+
+**Scope taken, and no more.** AC-7 says *branch*, so branches are what this
+implements. Worktrees are untouched: §5's wider sentence said "a branch or
+worktree", the criterion did not, and retiring worktrees is not required to
+satisfy it.
+
+| what changed | where |
+| --- | --- |
+| the enumeration's completeness reaches the indexer | `IndexableSource.listBranches` now declares `cursor`, which the Git provider already returned |
+| refs are reconciled against a complete enumeration | `RepositoryIndexer.#reconcileBranches` |
+| the tombstone write is shared with files | `IndexLifecycleStore.retireBranch`, over the same transaction, advisory key and interval-closing rule as `retire` |
+| a retirement is reported | `IndexReport.lifecycle.branches`, and a `branches` line in `ferret index` |
+
+`branches` is counted **separately** from `retired` rather than added into it.
+That number is asserted by AC-11's tests as the count of *files* whose
+containment closed at a deleting commit's instant; folding a ref retirement into
+it would quietly change what an existing measurement means.
+
+### Evidence
+
+`tests/integration/indexing/index-lifecycle.test.ts`, five cases against real
+PostgreSQL and real `git`:
+
+| case | asserts |
+| --- | --- |
+| *is retired when a complete enumeration no longer holds it* | `active` with one open interval before; `deleted` with none after; `branches.retired === 1` |
+| *leaves the branches the enumeration did hold alone* | two branches, one deleted, the survivor still `active` and contained |
+| *retires nothing when the enumeration was bounded* | the provider wrapped to report a cursor; `branches.retired === 0`, reason contains "bounded", **both** branches still `active` — including the one the bounded page could not reach |
+| *changes nothing on the run after the retirement* | a second sweep retires 0, so the sweep does not re-retire for ever — AC-9 for refs |
+| *never retires another repository's branches* | same ref name in two repositories; `source_scope` holds the boundary |
+
+All five were confirmed to **fail** before the implementation, by disabling the
+reconciliation and re-running — the criterion is proved by a test that detects
+its absence, not by a test that happens to pass.
+
+`npm run verify` green. AC-9's whole-shape assertion was updated to include
+`branches`, so a new lifecycle count cannot be added without deciding whether it
+is idempotent too.
+
+### Raised, not absorbed
+
+- **A retirement instant is Ferret's observation time.** Git cannot say when a
+  ref was deleted, so `retireBranch` closes the interval at `now`. This is the
+  same honesty `emitGraph` already applies when it opens ref containment at
+  observation time rather than inventing a valid time — recorded rather than
+  smoothed over (Governance §6).
+- **Worktree lifecycle remains unimplemented**, deliberately and now explicitly:
+  it is outside AC-7's wording. If it is wanted it is a new criterion, not a
+  wider reading of this one.
+- **The commit-tombstone limitation is unchanged** and still correct. History is
+  read incrementally, so Ferret never holds a complete observation of the commit
+  set — the premise ref retirement depends on is exactly what commits lack.

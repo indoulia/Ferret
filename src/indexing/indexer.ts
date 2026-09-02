@@ -1,4 +1,5 @@
 import {
+  EntityKind,
   canonicalId,
   encodeKeyParts,
   type CanonicalEntity,
@@ -83,6 +84,21 @@ export interface IndexOptions {
    */
   readonly full?: boolean;
   /**
+   * Rewrite what is read even when the stored hash says it is unchanged.
+   *
+   * A **repair** option, off by default and deliberately separate from `full`.
+   * `full` says which commits to read; this says whether to trust the stored
+   * hash of what is read back — and issue #101 is what happens when Ferret
+   * always trusts it: an entity altered outside Ferret keeps its `content_hash`,
+   * so the recomputed hash matches, `upsert` reports `unchanged`, and no number
+   * of re-reads ever corrects the row.
+   *
+   * Kept off `full` so `ferret index --full` writes exactly what it always
+   * wrote. Widening an existing option's effect would change EPIC-031's measured
+   * behaviour to close EPIC-094's criterion.
+   */
+  readonly rederive?: boolean;
+  /**
    * Read file content, and derive structure and symbols from it. Default false.
    *
    * **Off unless asked for**, and it is the one option here whose default is a
@@ -116,6 +132,18 @@ export interface LifecycleCounts {
    * the answer here and in the log, rather than having to read this file.
    */
   readonly skippedReason: string | undefined;
+  /**
+   * Refs retired by absence from a complete enumeration — EPIC-032 AC-7.
+   *
+   * Counted separately rather than added into `retired`. That number is
+   * asserted by AC-11's tests as the count of *files* whose containment was
+   * closed at a deleting commit's instant; folding a ref retirement into it
+   * would quietly change what an existing measurement means.
+   */
+  readonly branches: {
+    readonly retired: number;
+    readonly skippedReason: string | undefined;
+  };
 }
 
 export interface IndexReport {
@@ -164,7 +192,19 @@ export interface IndexableSource {
     repository: DiscoveredRepository,
     request: { limit?: number },
     context: ProviderOperationContext,
-  ): Promise<{ items: readonly unknown[] }>;
+  ): Promise<{
+    items: readonly unknown[];
+    /**
+     * Present when the enumeration was cut short — EPIC-032 AC-7.
+     *
+     * The provider has always returned this and the indexer always discarded
+     * it. That is precisely why ref retirement could not be built: absence from
+     * a *bounded* enumeration proves nothing, and without this signal there is
+     * no way to tell a repository with two branches from the first page of a
+     * repository with two thousand.
+     */
+    cursor?: string | undefined;
+  }>;
   readHistory(
     repository: DiscoveredRepository,
     request: { revision?: string; limit?: number; since?: string; withChanges?: boolean },
@@ -426,7 +466,14 @@ export class RepositoryIndexer {
         const result = await this.#entities.upsert(
           toInput(entity),
           observedAt,
-          placeholders.has(entity.id) ? { ifAbsent: true } : {},
+          // `ifAbsent` still wins for a gap-filler — issue #48 — so a repair
+          // cannot regress a full record to a stub. Everything a repair reads
+          // in full is rewritten, which is what issue #101 needed.
+          placeholders.has(entity.id)
+            ? { ifAbsent: true }
+            : options.rederive === true
+              ? { rederive: true }
+              : {},
         );
         entities.record(result.outcome);
       }
@@ -476,14 +523,34 @@ export class RepositoryIndexer {
 
     // Stage 1 — the repository, its checkouts and its branches.
     const worktrees = await this.#source.listWorktrees(repository, context);
-    const branches = (await this.#source.listBranches(repository, {}, context)).items;
-    await write(
-      this.#source.emitGraph(repository, {
-        worktrees: worktrees as readonly never[],
-        branches: branches as readonly never[],
-        observedAt,
-      }),
+    const branchPage = await this.#source.listBranches(repository, {}, context);
+    const branches = branchPage.items;
+    /**
+     * Whether this run saw *every* ref — EPIC-032 AC-7.
+     *
+     * The one fact ref retirement is gated on, and the reason it is read here
+     * rather than inferred later: a cursor means the enumeration stopped
+     * early, and a sweep that treated a first page as complete would retire
+     * every branch beyond it while looking like a successful run.
+     */
+    const branchesComplete = branchPage.cursor === undefined;
+    const branchGraph = this.#source.emitGraph(repository, {
+      worktrees: worktrees as readonly never[],
+      branches: branches as readonly never[],
+      observedAt,
+    });
+    /**
+     * The branch entity ids this run observed.
+     *
+     * Taken from the emitted graph rather than recomputed from the provider's
+     * ref strings, so the ids compared against the store are minted by exactly
+     * the code that writes them. Deriving them a second way here is how a
+     * sweep ends up retiring every branch because two id derivations disagreed.
+     */
+    const observedBranches = new Set(
+      branchGraph.entities.filter((entity) => entity.kind === EntityKind.BRANCH).map((entity) => entity.id),
     );
+    await write(branchGraph);
 
     // Stage 3 — the file tree at the revision, and the content it holds.
     let filesRead = 0;
@@ -635,6 +702,12 @@ export class RepositoryIndexer {
       observedAt,
       context,
     );
+    const branchLifecycle = await this.#reconcileBranches(
+      repositoryEntity.id,
+      { complete: branchesComplete, present: observedBranches },
+      observedAt,
+      context,
+    );
 
     // The watermark moves only after everything above succeeded. A run that
     // failed halfway must be repeated, not resumed from a position it never
@@ -653,7 +726,7 @@ export class RepositoryIndexer {
       branchesRead: branches.length,
       worktreesRead: worktrees.length,
       skipped,
-      lifecycle,
+      lifecycle: { ...lifecycle, branches: branchLifecycle },
       content,
       watermark: newestCommitAt,
       durationMs: performance.now() - started,
@@ -722,9 +795,9 @@ export class RepositoryIndexer {
     options: IndexOptions,
     now: Date,
     context: ProviderOperationContext,
-  ): Promise<LifecycleCounts> {
+  ): Promise<Omit<LifecycleCounts, 'branches'>> {
     const store = this.#lifecycle;
-    const none = (reason: string): LifecycleCounts => {
+    const none = (reason: string): Omit<LifecycleCounts, 'branches'> => {
       this.#logger?.info(
         { operation: 'index.lifecycle', repository: repositoryId, skipped: reason },
         `Lifecycle reconciliation skipped: ${reason}`,
@@ -779,6 +852,64 @@ export class RepositoryIndexer {
     }
 
     return { retired, reinstated, skippedReason: undefined };
+  }
+
+  /**
+   * Retires refs this repository no longer has — EPIC-032 AC-7.
+   *
+   * **The one place in Ferret where absence is evidence, and it is deliberate.**
+   * Everywhere else, EPIC-032 refuses to infer deletion from a thing not being
+   * there: a file missing from a listing might be missing from the *listing*.
+   * Git makes refs different. It records no deletion event for one, so a
+   * complete enumeration is the only observation there will ever be, and the
+   * Epic's §3.4 says so. AC-7 is worded around completeness for that reason.
+   *
+   * Which puts the whole safety property on `complete`. A bounded enumeration
+   * retires nothing, and the gate fails closed with a reason rather than
+   * silently — the failure mode is a run that retires every branch past the
+   * first page and looks exactly like a successful one.
+   */
+  async #reconcileBranches(
+    repositoryId: string,
+    enumeration: { complete: boolean; present: ReadonlySet<string> },
+    now: Date,
+    context: ProviderOperationContext,
+  ): Promise<LifecycleCounts['branches']> {
+    const store = this.#lifecycle;
+    const none = (reason: string): LifecycleCounts['branches'] => {
+      this.#logger?.info(
+        { operation: 'index.lifecycle.branches', repository: repositoryId, skipped: reason },
+        `Branch reconciliation skipped: ${reason}`,
+      );
+      return { retired: 0, skippedReason: reason };
+    };
+
+    if (store === undefined) return none('no lifecycle store is configured');
+    if (!enumeration.complete) {
+      return none('the branch enumeration was bounded, so absence proves nothing');
+    }
+    if (context.signal?.aborted === true) return none('the run was cancelled');
+
+    const live = await store.liveBranches(repositoryId);
+    let retired = 0;
+    for (const branch of live) {
+      // Per ref rather than per batch, so a cancelled run stops where it is and
+      // every write so far is independently correct.
+      throwIfAborted(context.signal, 'index.lifecycle.branches');
+      if (enumeration.present.has(branch.entityId)) continue;
+      // `now`, not a valid time: Git cannot say when the ref went, and
+      // inventing an instant would be manufacturing certainty (Governance §6).
+      if (await store.retireBranch(branch.entityId, repositoryId, now, now)) retired += 1;
+    }
+
+    if (retired > 0) {
+      this.#logger?.info(
+        { operation: 'index.lifecycle.branches', repository: repositoryId, retired },
+        `Branches reconciled: ${String(retired)} retired`,
+      );
+    }
+
+    return { retired, skippedReason: undefined };
   }
 
   /**
