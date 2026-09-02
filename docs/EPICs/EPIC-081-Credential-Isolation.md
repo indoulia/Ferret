@@ -145,6 +145,9 @@ Named so it is not quietly adopted.
 - **Encrypting the database or its contents at rest** — EPIC-086.
 - **Retroactive scrubbing of a configuration file or an index already written** —
   EPIC-090, on the same ground EPIC-082 §4 used to defer it.
+  **Answered 2026-09-02:** EPIC-090 §8.7 names export-then-import as the
+  mechanism and ships no filter, for Governance §6's reason — an in-place
+  rewrite leaves no record that anything was removed.
 - **Backup and export of the configuration file** — EPIC-089.
   **Closed 2026-09-02 with nothing built,** and that is the finding: this Epic
   already made the file a portable document. A secret is stored as a reference

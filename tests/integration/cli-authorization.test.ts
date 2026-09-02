@@ -118,6 +118,39 @@ describeDb(`CLI authorization (${databaseAvailable() ? 'real PostgreSQL' : SKIP_
     expect(result.code).toBe(ExitCode.OK);
   });
 
+  it('refuses to import when configuration withholds index — EPIC-090 AC-13', async () => {
+    // An import writes rows, so it is an index. The document is read and
+    // verified first, which is why the fixture has to be a valid one: a
+    // refusal on the document would prove nothing about the permission.
+    const document = join(workspace, 'empty-export.ndjson');
+    const exported = await runCli(['export', '--out', document], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read']) },
+    });
+    expect(exported.code).toBe(ExitCode.OK);
+
+    const result = await runCli(['import', document, '--yes'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read']) },
+    });
+
+    expect(result.code).toBe(ExitCode.NOT_PERMITTED);
+    expect(result.stderr).toContain('E_NOT_PERMITTED');
+    expect(result.stderr).toContain('import');
+  });
+
+  it('imports when configuration grants index — EPIC-090 AC-13, the control', async () => {
+    const document = join(workspace, 'granted-export.ndjson');
+    await runCli(['export', '--out', document], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read']) },
+    });
+
+    const result = await runCli(['import', document, '--yes'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read', 'index']) },
+    });
+
+    expect(result.stderr).not.toContain('E_NOT_PERMITTED');
+    expect(result.code).toBe(ExitCode.OK);
+  });
+
   it('indexes with no authorization configured at all — AC-3, the default', async () => {
     // EPIC-083 §16. The CLI's unconfigured default is the local operator, not the
     // anonymous client: refusing a person at their own machine protects nobody,

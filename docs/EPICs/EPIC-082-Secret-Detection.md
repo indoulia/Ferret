@@ -42,6 +42,13 @@ Content arrives with EPIC-024–030 and must go through the same gate.
   destroys real content silently. High-confidence patterns only.
 - Scanning file content — nothing indexes it yet (EPIC-024–030).
 - Retroactive scrubbing of an existing index (EPIC-090, data lifecycle).
+  **Answered 2026-09-02, with nothing new built.** EPIC-090 §8.7: the mechanism
+  is `ferret export | <filter> | ferret import` into a fresh database, which is
+  auditable at every step — the document before, the document after, and the
+  filter that ran. An `UPDATE` that edited a body in place is what Governance §6
+  forbids, and it would leave no record that anything was removed. No filter is
+  shipped: *which* strings are secret in an index already written is this Epic's
+  question, and its answer is a scanner rather than a rewriter.
 - Secret *rotation* or notifying anyone. Ferret is not a scanner product.
 
 ## 5. Contracts

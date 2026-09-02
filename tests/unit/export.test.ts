@@ -35,9 +35,17 @@ interface FakeRow {
  * those are integration-tested against a real graph.
  */
 function fakeDatabase(tables: Readonly<Record<string, readonly FakeRow[]>>): FerretDatabase {
-  let call = 0;
+  let call = -1;
   const reader = {
     execute: () => {
+      // Call zero is the catalogue read that tells the export which columns
+      // PostgreSQL generates — EPIC-090 found that `search_vector` must not be
+      // exported, and the answer comes from `information_schema`. An empty
+      // answer means "none generated", which is right for hand-built rows.
+      if (call === -1) {
+        call = 0;
+        return Promise.resolve({ rows: [] });
+      }
       const spec = EXPORT_TABLES[call];
       call += 1;
       return Promise.resolve({ rows: spec === undefined ? [] : (tables[spec.table] ?? []) });
@@ -184,10 +192,15 @@ describe('the export is streamed, not assembled — AC-12', () => {
     // and fail on an index larger than memory, which is the case this Epic
     // exists for.
     const order: string[] = [];
-    let served = 0;
+    let served = -1;
 
     const reader = {
       execute: () => {
+        // The catalogue read first, as above, and not counted as a page.
+        if (served === -1) {
+          served = 0;
+          return Promise.resolve({ rows: [] });
+        }
         order.push('query');
         served += 1;
         // Two single-row pages of `entity`, then nothing.
