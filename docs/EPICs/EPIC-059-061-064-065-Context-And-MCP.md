@@ -53,7 +53,10 @@ an attacker who can write arbitrary text into a repository. So the defence is
 - Configuration and provider-administration tools (EPIC-066, EPIC-067).
 - Authorization and destructive-operation confirmation (EPIC-068, EPIC-069) —
   which is why every tool here is read-only.
-- Client capability discovery (EPIC-070).
+- Client capability discovery (EPIC-070). **Delivered 2026-09-03:**
+  `ferret_health` answers *what can this Ferret do right now*. Tool discovery
+  stays MCP's own `listTools`, which EPIC-070 §8.5 declines to reimplement — a
+  hand-maintained catalogue is a second copy that goes stale silently.
 
 ## 5. Inputs
 

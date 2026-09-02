@@ -182,6 +182,7 @@ secret out of one more file.
 | `ferret_config_unset` | Remove one configuration value — **confirmed** |
 | `ferret_providers` | "Why can't you search semantically?" — every provider, its state, and which of three things is wrong |
 | `ferret_provider_recover` | Retry a provider that failed to start — **confirmed** |
+| `ferret_health` | "Is Ferret working, and is there anything in it?" — before concluding a search found nothing |
 
 Every knowledge tool is **read-only**, and indexing is still a command a person
 runs. The three tools that write are the only ones, and they are governed rather

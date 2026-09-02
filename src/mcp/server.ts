@@ -42,6 +42,7 @@ import {
 import { VERSION } from '../version.js';
 
 import { registerConfigTools, type ConfigurationAccess } from './config-tools.js';
+import { registerHealthTools, type HealthAccess } from './health-tools.js';
 import { registerProviderTools, type ProviderAdministration } from './provider-tools.js';
 import { createToolGuard } from './guards.js';
 
@@ -180,6 +181,15 @@ export interface McpServerDependencies {
    * layer depends on the four questions it asks.
    */
   readonly providers?: ProviderAdministration;
+  /**
+   * Health and the index inventory — EPIC-070.
+   *
+   * A port because `probeHealth` lives in `src/cli/` and `boundaries.test.ts`
+   * asserts no MCP module reaches a CLI one, so the composition root supplies
+   * it. Absent means the tool is not registered, as with every other optional
+   * dependency here.
+   */
+  readonly health?: HealthAccess;
   readonly logger: Logger;
 }
 
@@ -235,6 +245,18 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       providers: dependencies.providers,
       principal,
       confirmations,
+      logger,
+      ...(dependencies.audit === undefined ? {} : { audit: dependencies.audit }),
+    });
+  }
+
+  // EPIC-070. The row `validation/EPIC-004-VALIDATION.md` has carried since
+  // EPIC-004: an AI client had to shell out to `ferret status --json`, which is
+  // exactly what an MCP client with no shell cannot do.
+  if (dependencies.health !== undefined) {
+    registerHealthTools(server, {
+      health: dependencies.health,
+      principal,
       logger,
       ...(dependencies.audit === undefined ? {} : { audit: dependencies.audit }),
     });

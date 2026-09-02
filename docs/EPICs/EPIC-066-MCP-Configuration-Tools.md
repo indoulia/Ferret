@@ -304,7 +304,8 @@ configuration a real AI client runs.
 `validation/EPIC-004-VALIDATION.md` §155 names *"EPIC-066, EPIC-070"* for it, so a
 choice was required. This Epic is configuration — what Ferret has been *told* to
 do. A health report is what Ferret can *do right now*, which is the question
-EPIC-070 (AI Client Capability Discovery) exists to answer. Putting it here would
+EPIC-070 (AI Client Capability Discovery) exists to answer — **and answered on
+2026-09-03 with `ferret_health`.** Putting it here would
 make "MCP Configuration Tools" the home for anything structured that has nowhere
 else to go. The row stays open against EPIC-070.
 

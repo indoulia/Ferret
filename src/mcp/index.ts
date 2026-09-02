@@ -39,3 +39,9 @@ export {
   type ToolResult,
 } from './guards.js';
 export { registerProviderTools, type ProviderAdministration, type ProviderToolDependencies } from './provider-tools.js';
+export {
+  registerHealthTools,
+  type HealthAccess,
+  type HealthToolDependencies,
+  type IndexCounts,
+} from './health-tools.js';
