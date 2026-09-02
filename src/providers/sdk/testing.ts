@@ -238,3 +238,9 @@ export {
   type ConformanceReport,
   type ConformanceStatus,
 } from './conformance.js';
+export {
+  runProviderConformance,
+  summarizeConformance,
+  type ConformanceAggregate,
+  type ProviderUnderTest,
+} from './conformance-harness.js';
