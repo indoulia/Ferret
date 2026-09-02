@@ -1,4 +1,14 @@
 export {
+  loadParsingDataset,
+  measureParsingQuality,
+  type ExpectedSymbol,
+  type FileParseMeasurement,
+  type ParsingDataset,
+  type ParsingLabel,
+  type ParsingQualityReport,
+} from './parsing.js';
+
+export {
   CORPUS_SCOPE,
   GOLDEN_DATASET_DIR,
   QueryShape,

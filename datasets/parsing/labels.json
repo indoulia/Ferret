@@ -1,0 +1,223 @@
+{
+  "version": "1.0.0",
+  "description": "Parser expectations. EPIC-097. Two corpora: EPIC-096's golden corpus, read and not modified, and this Epic's own fixtures, which exist to make the harness capable of failing - nested scopes, overloads, a syntax error, and a second and third language. Expectations are authored from the source files, never from what Ferret currently produces.",
+  "files": [
+    {
+      "path": "src/auth/login.ts",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "authenticateUser",
+          "kind": "function"
+        }
+      ],
+      "corpus": "golden"
+    },
+    {
+      "path": "src/auth/session.ts",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "SessionStore",
+          "kind": "class"
+        },
+        {
+          "name": "open",
+          "kind": "method",
+          "qualifiedName": "SessionStore.open"
+        }
+      ],
+      "corpus": "golden"
+    },
+    {
+      "path": "src/auth/password-reset.ts",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "requestPasswordReset",
+          "kind": "function"
+        }
+      ],
+      "corpus": "golden"
+    },
+    {
+      "path": "src/billing/invoice.ts",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "Invoice",
+          "kind": "interface"
+        },
+        {
+          "name": "createInvoice",
+          "kind": "function"
+        }
+      ],
+      "corpus": "golden"
+    },
+    {
+      "path": "src/billing/tax.ts",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "calculateTax",
+          "kind": "function"
+        }
+      ],
+      "corpus": "golden"
+    },
+    {
+      "path": "src/billing/refund.ts",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "refund",
+          "kind": "function"
+        }
+      ],
+      "corpus": "golden"
+    },
+    {
+      "path": "src/reporting/monthly.ts",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "monthlyTotal",
+          "kind": "function"
+        }
+      ],
+      "corpus": "golden"
+    },
+    {
+      "path": "README.md",
+      "language": null,
+      "unparsedReason": "no-parser",
+      "expected": [],
+      "corpus": "golden"
+    },
+    {
+      "path": "docs/architecture.md",
+      "language": null,
+      "unparsedReason": "no-parser",
+      "expected": [],
+      "corpus": "golden"
+    },
+    {
+      "path": "docs/onboarding.md",
+      "language": null,
+      "unparsedReason": "no-parser",
+      "expected": [],
+      "corpus": "golden"
+    },
+    {
+      "path": "docs/decisions/0001-currency-in-minor-units.md",
+      "language": null,
+      "unparsedReason": "no-parser",
+      "expected": [],
+      "corpus": "golden"
+    },
+    {
+      "path": "nested.ts",
+      "corpus": "parsing",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "Outer",
+          "kind": "class"
+        },
+        {
+          "name": "inner",
+          "kind": "method",
+          "qualifiedName": "Outer.inner"
+        },
+        {
+          "name": "make",
+          "kind": "method",
+          "qualifiedName": "Outer.make"
+        },
+        {
+          "name": "helper",
+          "kind": "function"
+        },
+        {
+          "name": "Shapes",
+          "kind": "module"
+        },
+        {
+          "name": "Box",
+          "kind": "interface"
+        }
+      ]
+    },
+    {
+      "path": "overloads.ts",
+      "corpus": "parsing",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "format",
+          "kind": "function"
+        },
+        {
+          "name": "arrow",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "path": "broken.ts",
+      "corpus": "parsing",
+      "language": "typescript",
+      "expected": [
+        {
+          "name": "beforeTheError",
+          "kind": "function"
+        },
+        {
+          "name": "afterTheError",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "path": "module.py",
+      "corpus": "parsing",
+      "language": "python",
+      "expected": [
+        {
+          "name": "Ledger",
+          "kind": "class"
+        },
+        {
+          "name": "add",
+          "kind": "method",
+          "qualifiedName": "Ledger.add"
+        },
+        {
+          "name": "total",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "path": "helpers.js",
+      "corpus": "parsing",
+      "language": "javascript",
+      "expected": [
+        {
+          "name": "slugify",
+          "kind": "function"
+        },
+        {
+          "name": "Cache",
+          "kind": "class"
+        },
+        {
+          "name": "get",
+          "kind": "method",
+          "qualifiedName": "Cache.get"
+        }
+      ]
+    }
+  ]
+}
