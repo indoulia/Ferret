@@ -121,6 +121,10 @@ integrity. The DBA §13 forbids is exactly who the current answer requires.
 
 - **Backup, snapshot and export** — **EPIC-089**, named as the real recovery path
   for a downgrade in `Architecture/COMPATIBILITY.md:157`.
+  **Export closed 2026-09-02:** `ferret export` exists, and EPIC-089 §8.1 split
+  the word this Epic used as one — a *backup* is `pg_dump` and Ferret does not
+  wrap it; an *export* is a document a different schema version can read, which
+  is the recovery path this Epic pointed at. Restore remains EPIC-090's.
 - **Restoring or importing data produced elsewhere** — **EPIC-090**. Recovery
   here means re-deriving from a source Ferret can still read; recovery from a
   source that is gone is EPIC-090's.

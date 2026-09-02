@@ -146,6 +146,14 @@ Named so it is not quietly adopted.
 - **Retroactive scrubbing of a configuration file or an index already written** —
   EPIC-090, on the same ground EPIC-082 §4 used to defer it.
 - **Backup and export of the configuration file** — EPIC-089.
+  **Closed 2026-09-02 with nothing built,** and that is the finding: this Epic
+  already made the file a portable document. A secret is stored as a reference
+  (`{"$secret": {"env": "..."}}`) and resolved once at configuration
+  resolution, and the file carries its own `version` envelope, so a document
+  Ferret wrote could contain nothing the file does not. Copying it *is* the
+  export. `ferret export --backup-command` names the path beside the `pg_dump`
+  command so an operator takes both halves. See
+  [EPIC-089](EPIC-089-Backup-And-Export.md) §8.4.
 - **Credential rotation, expiry, or notifying anyone.** EPIC-082 §4 already
   declined this for Ferret as a product, and no record assigns it to any Epic.
 - **Removing the cleartext-file option.** D-011's reason stands: Governance §3

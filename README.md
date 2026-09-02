@@ -93,6 +93,7 @@ if the body throws — so a started runtime cannot leak.
 | `ferret index` | Implemented | EPIC-031 |
 | `ferret verify` | Implemented | EPIC-094 |
 | `ferret prune` | Implemented | EPIC-088 |
+| `ferret export` | Implemented | EPIC-089 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
 
 Every approved command in this release is implemented. The mechanism for
@@ -210,6 +211,24 @@ ferret verify --repair --yes   # re-read the affected repositories from source
 ferret status          # is the database reachable, is the schema current
 ferret doctor          # ...and what to do about it if not
 ```
+
+### Get the data out
+
+```bash
+ferret export --out index.ndjson   # a document a different Ferret version can read
+ferret export --scope <repositoryId> --out one-repo.ndjson
+ferret export --backup-command     # ...and what a real backup is
+```
+
+An **export** is not a **backup**, and conflating them is what makes a backup
+strategy fail when it is needed. A backup is a point-in-time copy restorable
+into the *same* schema version: that is `pg_dump`, and Ferret prints the command
+rather than wrapping it. An export is a document a *different* version can read,
+which a dump cannot be — restoring schema 12 into schema 11 fails, and that
+downgrade is the case with no other answer.
+
+The configuration file needs no exporter: it already stores secret
+*references* rather than secrets, so copying it is the whole job.
 
 ### Reclaim space
 

@@ -199,3 +199,18 @@ export {
   type RetentionPlan,
   type RetentionRequest,
 } from './retention.js';
+export {
+  EXPORT_BATCH_ROWS,
+  EXPORT_TABLES,
+  ExportService,
+  backupCommandFor,
+  isExportManifest,
+  isExportTrailer,
+  readExportDocument,
+  type ExportManifest,
+  type ExportOptions,
+  type ExportResult,
+  type ExportRow,
+  type ExportSink,
+  type ExportTrailer,
+} from './export.js';
