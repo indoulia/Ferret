@@ -142,13 +142,45 @@ export class EntityStore {
     });
   }
 
-  async #upsertOnce(canonical: CanonicalEntity, now: Date, rederive: boolean): Promise<UpsertResult> {
+  async #upsertOnce(input: CanonicalEntity, now: Date, rederive: boolean): Promise<UpsertResult> {
     try {
       return await this.#db.transaction(async (tx) => {
-        const [existing] = await tx.select().from(entity).where(eq(entity.id, canonical.id)).limit(1);
+        const [existing] = await tx.select().from(entity).where(eq(entity.id, input.id)).limit(1);
+        let canonical = input;
 
         if (existing !== undefined) {
           assertReadable(existing);
+
+          // **An upsert never changes a stored row's lifecycle.** That belongs
+          // to `tombstone` and `reinstate`, because EPIC-032 decided deletion
+          // is *observed, never inferred* — and a source read that finds a file
+          // says nothing about a file it did not look for.
+          //
+          // Issue #118 made this explicit, having found it was true only by
+          // accident. `createEntity` defaults `lifecycle` to `active`, and
+          // `onConflictDoUpdate` wrote that value — so re-indexing a
+          // tombstoned file *would* have revived it. It did not, because the
+          // stored hash was stale for exactly the reason #118 was filed: the
+          // hash still described the `active` row, the comparison below
+          // declared it unchanged, and this branch was never reached.
+          //
+          // Recomputing the hash correctly removed that accident, and the
+          // lifecycle test caught it — a tombstone revived and re-retired on
+          // every run. EPIC-034's "an unchanged upsert cannot lift a
+          // tombstone" is now a rule rather than a coincidence.
+          if (existing.lifecycle !== canonical.lifecycle) {
+            canonical = createEntity({
+              kind: canonical.kind,
+              source: { ...canonical.source },
+              lifecycle: existing.lifecycle as LifecycleState,
+              attributes: { ...canonical.attributes },
+              unknownFields: { ...canonical.unknownFields },
+              externalIds: [...canonical.externalIds],
+              ...(canonical.sourceObservedAt === undefined
+                ? {}
+                : { sourceObservedAt: canonical.sourceObservedAt }),
+            });
+          }
 
           // **The stored hash is only trustworthy if the row is.** Issue #101,
           // and the cause it records is not the one that was measured: the
@@ -346,7 +378,35 @@ export class EntityStore {
           remediation: 'Index the source object before marking it deleted.',
         });
       }
-      return toCanonical(row, await this.#readExternalIds(this.#db, id));
+
+      // Issue #118 — EPIC-006's content hash covers `lifecycle`, so writing the
+      // tombstone without recomputing it left every retired row disagreeing
+      // with its own hash: 17 of 17 reported `content-hash-mismatch` by
+      // `ferret verify` on Ferret's own index.
+      //
+      // Recomputed rather than `lifecycle` being dropped from the hash, because
+      // `deleted` means *observed to have been removed at the source* — the
+      // derived content did change. What EPIC-006 excludes on the
+      // "re-indexing an unchanged object must not look like a change" principle
+      // is the ingestion timestamps, which are Ferret's own bookkeeping.
+      const externalIds = await this.#readExternalIds(this.#db, id);
+      const rederived = toCanonical(row, externalIds);
+      const contentHash = createEntity({
+        kind: rederived.kind,
+        source: { ...rederived.source },
+        lifecycle: rederived.lifecycle,
+        attributes: { ...rederived.attributes },
+        unknownFields: { ...rederived.unknownFields },
+        externalIds: [...rederived.externalIds],
+        ...(rederived.sourceObservedAt === undefined
+          ? {}
+          : { sourceObservedAt: rederived.sourceObservedAt }),
+      }).contentHash;
+
+      if (contentHash !== row.contentHash) {
+        await this.#db.update(entity).set({ contentHash }).where(eq(entity.id, id));
+      }
+      return toCanonical({ ...row, contentHash }, externalIds);
     } catch (error) {
       throw classifyDatabaseError(error, 'storage.entity.tombstone');
     }
@@ -399,3 +459,81 @@ export class EntityStore {
 
 /** The subset of the Drizzle surface these helpers need, so a transaction fits. */
 type ExecutorLike = Pick<FerretDatabase, 'select' | 'insert' | 'delete' | 'update'>;
+
+/**
+ * A timestamp column as an ISO instant.
+ *
+ * `db.execute` is a raw query, so a `timestamptz` arrives as whatever the
+ * driver produced — a `Date` through Drizzle's mapping, a bare string without
+ * it. Assuming either is how `row.valid_from.toISOString is not a function`
+ * reached a test.
+ */
+function instantOf(value: Date | string): string {
+  return (value instanceof Date ? value : new Date(value)).toISOString();
+}
+
+/**
+ * The content hash an entity row should carry once its lifecycle changes.
+ *
+ * Issue #118: EPIC-006's entity hash covers `lifecycle`, so a raw
+ * `UPDATE ... SET lifecycle` left every retired row disagreeing with its own
+ * hash — measured as 17 of 17 tombstones reported `content-hash-mismatch` by
+ * `ferret verify` on Ferret's own index.
+ *
+ * The hash is recomputed rather than `lifecycle` being dropped from it, and
+ * that is the modelling call: `deleted` means *observed to have been removed
+ * at the source* (`LifecycleState`), so the derived content genuinely
+ * changed. What EPIC-006 excludes on the "re-indexing an unchanged object
+ * must not look like a change" principle is the ingestion timestamps, which
+ * are Ferret's bookkeeping. A lifecycle is an observation.
+ *
+ * Recomputing also keeps `EntityStore.upsert`'s `unchanged` short-circuit
+ * able to see a lifecycle change, which the alternative fix would have
+ * silently removed.
+ */
+export async function recomputeEntityHash(
+tx: Pick<FerretDatabase, 'execute'>,
+entityId: string,
+lifecycle: LifecycleState,
+): Promise<string | undefined> {
+  const rows = await tx.execute<{
+    [column: string]: unknown;
+    kind: string;
+    source_system: string;
+    source_id: string;
+    source_url: string | null;
+    source_scope: string | null;
+    attributes: Record<string, unknown>;
+    unknown_fields: Record<string, unknown>;
+    source_observed_at: Date | string | null;
+  }>(sql`
+    SELECT kind, source_system, source_id, source_url, source_scope,
+           attributes, unknown_fields, source_observed_at
+      FROM ferret.entity
+     WHERE id = ${entityId}
+  `);
+  const row = rows.rows[0];
+  if (row === undefined) return undefined;
+
+  // External ids are part of the hash, so they have to come with the row.
+  const aliases = await tx.execute<{ [column: string]: unknown; system: string; external_id: string }>(sql`
+    SELECT system, external_id FROM ferret.entity_external_id WHERE entity_id = ${entityId}
+  `);
+
+  return createEntity({
+    kind: row.kind,
+    source: {
+      system: row.source_system,
+      id: row.source_id,
+      ...(row.source_url === null ? {} : { url: row.source_url }),
+      ...(row.source_scope === null ? {} : { scope: row.source_scope }),
+    },
+    lifecycle,
+    attributes: { ...row.attributes },
+    unknownFields: { ...row.unknown_fields },
+    externalIds: aliases.rows.map((alias) => ({ system: alias.system, id: alias.external_id })),
+    ...(row.source_observed_at === null
+      ? {}
+      : { sourceObservedAt: instantOf(row.source_observed_at) }),
+  }).contentHash;
+}

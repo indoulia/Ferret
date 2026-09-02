@@ -126,6 +126,86 @@ auditing every read would produce a log rather than an audit trail. A bulk read
 of everything Ferret knows is the deliberate exception, and the test asserts the
 exception is actually taken rather than assumed.
 
+## Issues fixed in the same change set
+
+**#118 — every tombstoned entity reported `content-hash-mismatch`.** EPIC-006's
+entity hash covers `lifecycle` and EPIC-007's relationship hash covers
+`validTo`, and EPIC-032's lifecycle writes changed both by raw SQL without
+re-deriving either — so on Ferret's own index **17 of 17** retired entities and
+22 closed containment edges read as corrupt to `ferret verify`. That is the
+failure mode EPIC-094 itself named: "exactly how a real finding gets trained out
+of an operator."
+
+The issue offered two fixes and declined to choose. **Option 1 — recompute the
+hash on a lifecycle transition — is taken**, and the issue's objection to it
+("a tombstone changes a row's content hash even though the *source* content did
+not change") is backwards: `deleted` means *observed to have been removed at the
+source*, so the derived content did change. What EPIC-006 excludes on the
+"re-indexing an unchanged object must not look like a change" principle is the
+ingestion timestamps, which are Ferret's bookkeeping; a lifecycle is an
+observation. Option 2 would also have silently removed `EntityStore.upsert`'s
+ability to notice a lifecycle change, which the issue notes is load-bearing.
+
+**Five** write paths, all corrected — the issue named three:
+`EntityStore.tombstone`, `IndexLifecycleStore.#retireContained` (which `retire`
+and `retireBranch` share, so files and refs are fixed in one place),
+`IndexLifecycleStore.reinstate`, and **both halves of EPIC-034's symbol
+reconciliation**, which the issue's measurement did not cover and which is by
+far the largest population: roughly 1 800 `code_symbol` rows on Ferret's own
+index against 17 files and branches. Found by EPIC-034's own idempotence test,
+not by re-reading the issue. One shared `recomputeEntityHash` helper on
+`entities.ts` rather than a third copy of the derivation.
+The relationship rehash happens *after* the close rather than before, because
+`GREATEST(valid_from, $at)` is PostgreSQL's answer and not one the caller can
+predict — the hash has to cover the interval that was actually written.
+
+Found while fixing: `db.execute` is a raw query, so a `timestamptz` arrives as a
+**string** rather than a `Date`, and `row.valid_from.toISOString is not a
+function` reached a test. `instantOf` normalises either, which is what keeps the
+hash recomputable from the row — the property EPIC-006's own comment relies on.
+
+**Two other mechanisms turned out to be resting on the stale hash**, and only
+fixing it revealed them. Both are now rules rather than accidents:
+
+1. **`EntityStore.upsert` would have revived a tombstone.** `createEntity`
+   defaults `lifecycle` to `active` and `onConflictDoUpdate` wrote that value,
+   so re-indexing a tombstoned file should have set it back to `active`. It did
+   not, because the stale hash made the unchanged short-circuit fire before the
+   update was reached. EPIC-034's "an unchanged upsert cannot lift a tombstone"
+   was therefore true by coincidence. Now explicit: **an upsert never changes a
+   stored row's lifecycle** — that belongs to `tombstone` and `reinstate`,
+   because EPIC-032 decided deletion is *observed, never inferred*, and a source
+   read that finds a file says nothing about a file it did not look for. No
+   production caller passes `lifecycle` to an upsert.
+2. **`RelationshipStore.assert` would have reopened a closed interval on every
+   run.** Relationship identity covers `validFrom` and not `validTo`, so a
+   closed interval keeps the id it was opened with — and a full re-index
+   re-asserts containment as open from the commit that first added the file.
+   The stale hash matched, so `assert` returned `UNCHANGED` and the case never
+   arose. Now handled on its own terms: re-asserting an interval that has since
+   ended records the sighting and does **not** reopen it, because reopening
+   would quietly claim the edge never ended — erasing the gap
+   `IndexLifecycleStore.reinstate` is explicitly careful to preserve. A genuine
+   re-add is a later commit, carries a later `validFrom`, derives a different
+   id, and still opens a new interval through the normal path.
+
+EPIC-032 AC-9's idempotence test caught the second within minutes of the fix
+landing — a containment edge reopened and re-closed on every run. It is the
+reason the fix is three changes rather than one, and the reason the issue was
+right to say the choice was a modelling decision rather than a defect fix.
+
+Regression: `tests/integration/storage/lifecycle-hash.test.ts`, against a real
+database because only a real column round trip proves the hash is recomputable
+from what was stored. Five cases, including a sweep over an index with several
+retired rows asserting **zero** `content-hash-mismatch` findings. EPIC-032's own
+suite (18 cases, idempotence included) and EPIC-007's are unchanged and green.
+
+**#130 — the reproducible-tarball gate's message was a bare hex string.** The
+uncompressed tar is now compared before the whole file, so a recurrence says
+which layer differed — the archived bytes, or the gzip framing. That is the
+diagnostic the single occurrence lacked. The flakiness itself is not fixed and
+the issue stays open for it; this makes the next occurrence answerable.
+
 ## Limitations, recorded
 
 - **Import is EPIC-090's, so this format is not yet validated by a reader

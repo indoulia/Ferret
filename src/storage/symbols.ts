@@ -15,7 +15,7 @@ import { LifecycleState } from '../domain/index.js';
 import { boundedLimit } from '../retrieval/index.js';
 
 import { classifyDatabaseError } from './connection.js';
-import { EntityStore, UpsertOutcome, type FerretDatabase } from './entities.js';
+import { EntityStore, UpsertOutcome, recomputeEntityHash, type FerretDatabase } from './entities.js';
 
 /**
  * Storing and finding the symbols a file declares — EPIC-034.
@@ -178,9 +178,32 @@ export class SymbolStore implements SymbolIndexPort {
         RETURNING id
       `);
 
+      // Issue #118 — EPIC-006's entity hash covers `lifecycle`, so a raw
+      // lifecycle UPDATE leaves the row disagreeing with its own hash and
+      // `ferret verify` reports a healthy tombstone as corruption. Symbols are
+      // the largest population of these: ~1,800 on Ferret's own index against
+      // 17 files and branches.
+      //
+      // Per returned id rather than in the UPDATE, because the hash is a
+      // JavaScript function over the row's canonical form and SQL cannot
+      // compute it. `RETURNING id` already names exactly the affected rows.
+      await this.#rehash(retired.rows, LifecycleState.DELETED);
+      await this.#rehash(revived.rows, LifecycleState.ACTIVE);
+
       return { tombstoned: retired.rows.length, reinstated: revived.rows.length };
     } catch (error) {
       throw classifyDatabaseError(error, 'storage.symbol.reconcile');
+    }
+  }
+
+  /** Rewrites the content hash for rows whose lifecycle just changed. */
+  async #rehash(rows: readonly { id: string }[], lifecycle: LifecycleState): Promise<void> {
+    for (const row of rows) {
+      const hash = await recomputeEntityHash(this.#db, row.id, lifecycle);
+      if (hash === undefined) continue;
+      await this.#db.execute(
+        sql`UPDATE "ferret"."entity" SET content_hash = ${hash} WHERE id = ${row.id}`,
+      );
     }
   }
 
