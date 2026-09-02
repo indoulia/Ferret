@@ -9,8 +9,10 @@ import { sql } from 'drizzle-orm';
 import {
   Confidence,
   ContentUnavailable,
+  createMetricsRegistry,
   Direction,
   ErrorCode,
+  FerretError,
   EvidenceMethod,
   FILE_DECLARES_SYMBOL,
   PUBLIC_ACCESS,
@@ -36,6 +38,7 @@ import {
   EntityStore,
   EvidenceStore,
   IndexLifecycleStore,
+  IndexRunStore,
   MigrationPolicy,
   RelationshipStore,
   RetrievalStore,
@@ -945,5 +948,133 @@ describeContent('documents — EPIC-029', () => {
     expect(files.rows[0]?.attributes['classification']).toBe('documentation');
     expect(report.content?.filesParsed).toBeGreaterThan(0);
     expect(report.content?.filesUnparsed).toBe(0);
+  });
+});
+
+/**
+ * Metrics through a real run — EPIC-092.
+ *
+ * EPIC-004's validation parked "was it healthy an hour ago" here, and §8.4's
+ * answer is that history comes from EPIC-094's run journal rather than a new
+ * table: migration 0012 made `summary` free-shaped on purpose, and it already
+ * carries `started_at`, `ferret_version` and `invocation`.
+ */
+describeContent('metrics and tracing — EPIC-092', () => {
+  it('records a snapshot into the run journal — AC-12', async () => {
+    const fixture = await repository('metrics-journal');
+    await commit(fixture, 'src/box.ts', SOURCE);
+
+    const metrics = createMetricsRegistry();
+    const report = await new RepositoryIndexer({
+      ...dependencies(),
+      metrics,
+      runs: new IndexRunStore(handle),
+    }).index(fixture.discovered, { withContent: true }, context);
+
+    const runs = await handle.execute<{ summary: Record<string, unknown>; ferretVersion: string }>(sql`
+      SELECT summary, ferret_version AS "ferretVersion"
+        FROM "ferret"."index_run"
+       WHERE repository_key = ${report.repositoryKey}
+       ORDER BY started_at DESC LIMIT 1
+    `);
+
+    const summary = runs.rows[0]?.summary;
+    expect(summary).toBeDefined();
+    const recorded = summary?.['metrics'] as
+      | { histograms: Record<string, { count: number }>; counters: Record<string, { total: number }> }
+      | undefined;
+
+    expect(recorded).toBeDefined();
+    // A stage was timed and a file was parsed, so both instruments have seen
+    // something — which is what makes the snapshot worth storing.
+    expect(recorded?.histograms['ferret.index.stage_ms']?.count).toBeGreaterThan(0);
+    expect(recorded?.counters['ferret.content.parsed']?.total).toBeGreaterThan(0);
+  });
+
+  it('keeps the version beside the number, so two runs are comparable — AC-13', async () => {
+    const fixture = await repository('metrics-comparable');
+    await commit(fixture, 'src/box.ts', SOURCE);
+    const deps = { ...dependencies(), runs: new IndexRunStore(handle) };
+
+    const first = await new RepositoryIndexer({ ...deps, metrics: createMetricsRegistry() }).index(
+      fixture.discovered,
+      { withContent: true },
+      context,
+    );
+    await commit(fixture, 'src/second.ts', 'export function second(): void {}\n');
+    await new RepositoryIndexer({ ...deps, metrics: createMetricsRegistry() }).index(
+      fixture.discovered,
+      { withContent: true },
+      context,
+    );
+
+    const runs = await handle.execute<{ summary: Record<string, unknown>; ferretVersion: string }>(sql`
+      SELECT summary, ferret_version AS "ferretVersion"
+        FROM "ferret"."index_run"
+       WHERE repository_key = ${first.repositoryKey}
+       ORDER BY started_at
+    `);
+
+    expect(runs.rows.length).toBeGreaterThanOrEqual(2);
+    for (const row of runs.rows) {
+      // The version is what makes a comparison across two runs meaningful
+      // rather than misleading — a slower run on a newer build is a different
+      // fact from a slower run on the same one.
+      expect(row.ferretVersion).toBeDefined();
+      expect(row.summary['metrics']).toBeDefined();
+    }
+  });
+
+  it('reports a duration per stage over a real run — AC-16', async () => {
+    const fixture = await repository('metrics-stage');
+    await commit(fixture, 'src/box.ts', SOURCE);
+
+    const metrics = createMetricsRegistry();
+    await new RepositoryIndexer({ ...dependencies(), metrics }).index(
+      fixture.discovered,
+      { withContent: true },
+      context,
+    );
+
+    const stage = metrics.snapshot().histograms['ferret.index.stage_ms'];
+    expect(stage?.count).toBeGreaterThan(0);
+    expect(stage?.sum).toBeGreaterThan(0);
+    expect(stage?.unit).toBe('ms');
+
+    // And per file, which is the question a 300-second run raises.
+    const perFile = metrics.snapshot().histograms['ferret.content.file_ms'];
+    expect(perFile?.count).toBeGreaterThan(0);
+  });
+
+  it('records what it measured even when the run fails — EPIC-092 §10', async () => {
+    // "Which stage was slow before it died" is exactly the question a failure
+    // raises, so a failed run's summary must still carry its numbers.
+    const fixture = await repository('metrics-failed');
+    await commit(fixture, 'src/box.ts', SOURCE);
+
+    const metrics = createMetricsRegistry();
+    const failing: IndexableSource = {
+      ...provider,
+      readHistory: () => {
+        throw new FerretError(ErrorCode.PROVIDER_INIT_FAILED, 'the source went away', { details: {} });
+      },
+    } as unknown as IndexableSource;
+
+    await expect(
+      new RepositoryIndexer({
+        ...dependencies(),
+        source: failing,
+        metrics,
+        runs: new IndexRunStore(handle),
+      }).index(fixture.discovered, { withContent: true }, context),
+    ).rejects.toThrow();
+
+    const runs = await handle.execute<{ summary: Record<string, unknown>; outcome: string }>(sql`
+      SELECT summary, outcome FROM "ferret"."index_run"
+       WHERE outcome = 'failed' ORDER BY started_at DESC LIMIT 1
+    `);
+
+    expect(runs.rows[0]?.outcome).toBe('failed');
+    expect(runs.rows[0]?.summary['metrics']).toBeDefined();
   });
 });

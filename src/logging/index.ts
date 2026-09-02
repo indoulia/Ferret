@@ -4,6 +4,7 @@ export {
   createNullLogger,
   isLogLevel,
   newInvocationId,
+  processInvocationId,
   type LogFields,
   type LogLevel,
   type Logger,

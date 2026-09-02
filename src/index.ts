@@ -738,3 +738,21 @@ export {
   type QueryMeasurement,
   type RetrievalQualityReport,
 } from './evaluation/index.js';
+
+// EPIC-092. Metrics and tracing, without a dependency: the W3C format is
+// adopted and the SDK is not.
+export {
+  Metric,
+  MetricUnit,
+  MetricsRegistry,
+  SPAN_DURATION_UNIT,
+  Tracer,
+  createMetricsRegistry,
+  defaultMetrics,
+  isTraceparent,
+  traceparentOf,
+  type CounterValue,
+  type HistogramValue,
+  type MetricsSnapshot,
+  type SpanRecord,
+} from './observability/index.js';

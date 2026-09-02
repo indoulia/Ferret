@@ -154,3 +154,25 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | No metrics, tracing or history — health is point-in-time. | "Was it healthy an hour ago" cannot be answered. | **EPIC-092** — Metrics & Tracing |
 | Health is not yet exposed over MCP. | An AI client must shell out to `ferret status --json`. The report is already structured for it. | **EPIC-066**, **EPIC-070** |
 | macOS unvalidated. | Inherited from EPIC-001/EPIC-005; no macOS host available. | **EPIC-105** |
+
+## Addendum — 2026-09-02, after EPIC-092
+
+**The metrics and tracing limitation recorded above is closed.** The original
+text stands.
+
+Counters and histograms with declared units, spans with parent/child and a
+duration, and W3C `traceparent` — EPIC-091 invited exactly this ("If EPIC-092
+adopts W3C trace context, this field is renamed or subsumed, and this paragraph
+is why that is cheap"), and the invocation id is now the high half of the trace
+id so a log line and a span stay greppable against each other.
+
+**"Was it healthy an hour ago" is answerable without a new table.** Migration
+0012 made `index_run.summary` free-shaped on purpose, so a run records its metric
+snapshot there beside the `started_at`, `ferret_version` and `invocation` the
+journal already carries — which is what makes comparing two runs meaningful
+rather than misleading. A failed run records what it measured before failing.
+
+No dependency: the *format* is adopted and the SDK is not, which is EPIC-091's
+own decision one layer up — it ships NDJSON to stderr rather than a log shipper.
+
+Evidence: `docs/EPICs/validation/EPIC-092-VALIDATION.md`.

@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks';
 import {
   FILE_DECLARES_SYMBOL,
   FILE_REFERENCES_SYMBOL,
@@ -35,6 +36,7 @@ import type {
 } from '../providers/index.js';
 import { throwIfAborted } from '../providers/index.js';
 import { VERSION } from '../version.js';
+import { Metric, defaultMetrics, type MetricsRegistry } from '../observability/index.js';
 
 import type {
   ContentArtifactStore,
@@ -206,6 +208,8 @@ export interface ContentStageDependencies {
    * so evidence about one has a subject to attach to.
    */
   readonly evidence?: EvidenceWriter;
+  /** Where per-file timings go — EPIC-092 §8.6. Optional; defaults to the process registry. */
+  readonly metrics?: MetricsRegistry;
   readonly logger?: Logger;
 }
 
@@ -248,6 +252,7 @@ export async function runContentStage(
   context: ProviderOperationContext,
 ): Promise<ContentStageResult> {
   const { content, symbols, parser, artifacts, blobs, evidence, logger } = dependencies;
+  const metrics = dependencies.metrics ?? defaultMetrics();
   const facts = fileVersionFacts(request.emitted.entities);
   // EPIC-035. A reference outside any declaration is the *file's*, and a file
   // declares the symbols it contains, so both edge types need the file entity's
@@ -279,6 +284,7 @@ export async function runContentStage(
   const textOmitted: Record<string, number> = {};
 
   for (const raw of request.entries) {
+    const fileStartedAt = performance.now();
     // Between files rather than between stages. A repository with forty
     // thousand files must stop when it is told to, not when it finishes.
     throwIfAborted(context.signal, 'index.content');
@@ -403,6 +409,10 @@ export async function runContentStage(
     }
 
     filesParsed += 1;
+    // EPIC-092 §8.6. EPIC-108 reports parsed and unparsed, not how long parsing
+    // took — and "which file was slow" is the question a 300-second run raises.
+    metrics?.observe(Metric.CONTENT_FILE_MS, performance.now() - fileStartedAt);
+    metrics?.add(Metric.CONTENT_PARSED);
 
     // The one path from a parse to a stored symbol. `buildCodeSymbols` owns
     // identity and `indexFileSymbols` owns storage; the scope is the repository
