@@ -83,6 +83,25 @@ export function mcpCommand(): Command {
             resolve: () => resolveConfig(defaultConfigSources().sources),
             store: new ConfigStore(),
           },
+          // EPIC-067. Provider state was CLI-only, which inverts Governance
+          // §3 — and a client that got results without embeddings had no way
+          // to learn *why*. `known` is the whole vocabulary rather than the
+          // registry's offered set, because the interesting answer is about the
+          // capabilities that are **missing**.
+          providers: {
+            describe: () => runtime.providers.describe(),
+            states: () => runtime.providers.states(),
+            capabilities: () => runtime.providers.capabilities(),
+            known: () => Object.values(Capability),
+            supports: (capability) => runtime.providers.supports(capability),
+            recover: async (providerId) =>
+              runtime.providers.recover(providerId, {
+                config: context.config,
+                environment: context.environment,
+                logger: context.logger,
+                signal: context.signal,
+              }),
+          },
           // EPIC-048. Without this the traceability tool is not registered at
           // all, and the 556 evidence rows a single index run records stay
           // unreachable from the only surface an AI client has.

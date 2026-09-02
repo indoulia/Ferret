@@ -180,10 +180,12 @@ secret out of one more file.
 | `ferret_config_exclusions` | "Why can't Ferret see this file?" |
 | `ferret_config_set` | Change one configuration value — **confirmed** |
 | `ferret_config_unset` | Remove one configuration value — **confirmed** |
+| `ferret_providers` | "Why can't you search semantically?" — every provider, its state, and which of three things is wrong |
+| `ferret_provider_recover` | Retry a provider that failed to start — **confirmed** |
 
 Every knowledge tool is **read-only**, and indexing is still a command a person
-runs. The two configuration tools that write are the only ones, and they are
-governed rather than trusted:
+runs. The three tools that write are the only ones, and they are governed rather
+than trusted:
 
 - They require a granted permission (`config.write`), which no installation has by
   default. So does *reading* configuration (`config.read`) — the subtree holds

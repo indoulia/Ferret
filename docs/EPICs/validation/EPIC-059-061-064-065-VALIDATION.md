@@ -157,7 +157,7 @@ should name a cause.
 | Trimming cuts the tail of a long value. | The first paragraph of a commit message is usually the useful part, so this is right more often than not — but it is a heuristic, not a summary. | **EPIC-062** |
 | Evidence is dropped rather than trimmed on an oversized item. | A half-quoted observation is a misquotation. The entity's own attributes carry the same content. | — |
 | No authorization: every indexed thing is reachable by any client that can spawn the process. | stdio limits the blast radius to whoever can already run commands as that user, but it is not an authorization model. | **EPIC-068**, **EPIC-058** |
-| No configuration or administration tools. | An AI client cannot index, configure or manage providers — only read. That is the safe default until EPIC-069 exists. | **EPIC-066**, **EPIC-067**, **EPIC-069** |
+| ~~No configuration or administration tools.~~ **Closed 2026-09-03.** EPIC-069 supplied the confirmation, EPIC-066 took *configure*, EPIC-067 took *providers*. An AI client still cannot **index**: no MCP tool starts an index run, and no Epic has claimed one. | *index* remains unassigned |
 
 ## Addendum — 2026-09-02, after EPIC-060 and EPIC-063
 

@@ -42,6 +42,7 @@ import {
 import { VERSION } from '../version.js';
 
 import { registerConfigTools, type ConfigurationAccess } from './config-tools.js';
+import { registerProviderTools, type ProviderAdministration } from './provider-tools.js';
 import { createToolGuard } from './guards.js';
 
 /**
@@ -169,6 +170,16 @@ export interface McpServerDependencies {
    * Absent means decisions are logged and not journalled.
    */
   readonly audit?: AuditWriter;
+  /**
+   * Provider state and recovery — EPIC-067.
+   *
+   * Optional for the reason `configuration` and `evidence` are: absent means
+   * the tools are **not registered** rather than registered and failing, so a
+   * consumer embedding Ferret with only a `RetrievalPort` still gets a working
+   * knowledge server. A narrow port rather than the registry itself, so this
+   * layer depends on the four questions it asks.
+   */
+  readonly providers?: ProviderAdministration;
   readonly logger: Logger;
 }
 
@@ -214,6 +225,18 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       confirmations,
       configuration: dependencies.configuration,
       logger,
+    });
+  }
+
+  // EPIC-067, and absent for the same reason: a tool that is honestly not there
+  // is better than one a client cannot distinguish from a broken one.
+  if (dependencies.providers !== undefined) {
+    registerProviderTools(server, {
+      providers: dependencies.providers,
+      principal,
+      confirmations,
+      logger,
+      ...(dependencies.audit === undefined ? {} : { audit: dependencies.audit }),
     });
   }
 

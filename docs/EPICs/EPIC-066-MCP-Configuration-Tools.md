@@ -96,6 +96,11 @@ Named here so it is not quietly adopted:
   *providers*; **no approved Epic takes indexing**. §16 raises the ownership gap
   rather than absorbing it.
 - **Provider administration** — EPIC-067, which the same row names.
+  **Delivered 2026-09-03:** `ferret_providers` and `ferret_provider_recover`.
+  Enabling and disabling a provider stays *here* — a second path to
+  `providers.<id>.enabled` would be a second set of durability bugs — and
+  EPIC-067's remediation for a disabled provider points at `ferret_config_set`
+  rather than duplicating it.
 - **Interpreting what a permission scope means** — EPIC-083, as EPIC-058 and
   EPIC-068 both already record. This Epic can *store* a scope selector; it does
   not decide what one grants.
