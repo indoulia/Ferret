@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 
 import { ErrorCode, FerretError } from '../errors/index.js';
+import { describeLockHolder, findLockHolder, remediationForHolder } from './diagnostics.js';
 import type { Logger } from '../logging/index.js';
 import { PACKAGE_NAME, VERSION } from '../version.js';
 
@@ -206,13 +207,35 @@ async function acquireLock(
       });
     }
     if (Date.now() >= deadline) {
+      // EPIC-095 AC-1. This used to end with "inspect pg_locks for a stale
+      // session holding the advisory lock" — the exact DBA instruction
+      // Governance §13 exists to prevent, in Ferret's own remediation string,
+      // and avoidable because the database can simply be asked.
+      //
+      // The holder may be unidentifiable: a restricted role sees limited
+      // columns for other sessions in `pg_stat_activity`. That case says so
+      // rather than claiming a pid it did not read (AC-2).
+      const holder = await findLockHolder(client, ADVISORY_LOCK_CLASS, ADVISORY_LOCK_MIGRATIONS);
+      const who = describeLockHolder(holder);
       throw new FerretError(
         ErrorCode.MIGRATION_LOCKED,
-        `Another process has held the Ferret migration lock for more than ${String(timeoutMs)} ms`,
+        who === undefined
+          ? `The Ferret migration lock has been held by another session for more than ${String(timeoutMs)} ms`
+          : `The Ferret migration lock is held: ${who}`,
         {
-          details: { timeoutMs, lockClass: ADVISORY_LOCK_CLASS, lockObject: ADVISORY_LOCK_MIGRATIONS },
-          remediation:
-            'Wait for the other Ferret process to finish starting. If none is running, inspect pg_locks for a stale session holding the advisory lock.',
+          details: {
+            timeoutMs,
+            lockClass: ADVISORY_LOCK_CLASS,
+            lockObject: ADVISORY_LOCK_MIGRATIONS,
+            ...(holder === undefined
+              ? {}
+              : {
+                  holderPid: holder.pid,
+                  holderState: holder.state,
+                  holderHeldForSeconds: holder.heldForSeconds,
+                }),
+          },
+          remediation: remediationForHolder(holder),
           retryable: true,
         },
       );

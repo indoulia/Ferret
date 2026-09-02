@@ -16,8 +16,15 @@ import {
   type HealthComponent,
   type HealthReport,
 } from '../index.js';
-import { MigrationPolicy, createStorageProvider } from '../storage/index.js';
+import {
+  MigrationPolicy,
+  createStorageProvider,
+  readInventory,
+  type IndexInventory,
+} from '../storage/index.js';
 import { createNullLogger, type Logger } from '../logging/index.js';
+import { ProviderRegistry } from '../providers/index.js';
+import { createGitSourceProvider } from '../git/index.js';
 
 import { ExitCode } from './exit-codes.js';
 
@@ -200,6 +207,103 @@ export async function probeHealth(options: HealthProbeOptions = {}): Promise<Hea
   );
 
   return report;
+}
+
+/**
+ * What Ferret holds, for `ferret doctor` — EPIC-095 §3.2.
+ *
+ * Here rather than in `src/diagnostics` for the reason this whole file is here:
+ * it is where the storage provider is *chosen*, and only the CLI layer decides
+ * that PostgreSQL is the thing to ask. That keeps `pg` out of the core import
+ * graph, which `tests/unit/boundaries.test.ts` enforces.
+ *
+ * Returns `undefined` when there is no database to ask, when configuration is
+ * incomplete, or when the query fails — absent, never zero (AC-7). A
+ * diagnostic that invented a count would be worse than one that admits it could
+ * not read one, and `ferret doctor` is precisely the command run when the
+ * database is the thing that is broken (AC-9).
+ */
+export async function readIndexInventory(logger?: Logger): Promise<IndexInventory | undefined> {
+  const core = await probeCore();
+  if (core.config === undefined || !isDatabaseConfigured(core.config)) return undefined;
+
+  const provider = createStorageProvider({ policy: MigrationPolicy.OFF });
+  try {
+    await provider.initialize({
+      logger: logger ?? createNullLogger(),
+      config: withoutCredentialFields(core.config),
+      credentials: credentialsFor(core.config, provider.credentials ?? []),
+      environment: {} as never,
+      signal: new AbortController().signal,
+      settings: providerSettings(provider, core.config),
+    });
+    return await readInventory(provider.pool);
+  } catch {
+    return undefined;
+  } finally {
+    await provider.shutdown().catch(() => undefined);
+  }
+}
+
+/** Which capabilities this installation offers, and why one is missing. */
+export interface CapabilityAvailability {
+  readonly capability: string;
+  readonly available: boolean;
+  /** `unregistered`, `disabled` or `failed`. Absent when available. */
+  readonly reason?: string;
+  readonly providerId?: string;
+}
+
+/**
+ * What Ferret can do here, and why it cannot do the rest — EPIC-095 §3.3.
+ *
+ * **Every provider is registered optional**, which is what makes this safe to
+ * run inside `ferret doctor`: EPIC-093 turned an unstartable provider from a
+ * thrown error into a recorded fact, and `doctor` is exactly the caller that
+ * wants that. A diagnostic that could not run because the thing it diagnoses is
+ * broken is the failure mode §8 names.
+ *
+ * The whole function is best-effort. It reports what it could determine and
+ * nothing about what it could not.
+ */
+export async function readCapabilityAvailability(logger?: Logger): Promise<readonly CapabilityAvailability[]> {
+  const core = await probeCore();
+  if (core.config === undefined) return [];
+
+  const registry = new ProviderRegistry();
+  const providers = [createStorageProvider({ policy: MigrationPolicy.OFF }), createGitSourceProvider()];
+  for (const provider of providers) registry.register(provider, { optional: true });
+
+  const declared = new Map<string, string>();
+  for (const descriptor of registry.describe()) {
+    for (const capability of descriptor.capabilities) declared.set(capability, descriptor.id);
+  }
+
+  try {
+    await registry.initializeAll({
+      logger: logger ?? createNullLogger(),
+      config: core.config,
+      environment: {} as never,
+      signal: new AbortController().signal,
+    });
+  } catch {
+    // Every provider is optional, so this should not throw — and if a future
+    // change makes it possible, the report degrades rather than the command.
+  }
+
+  const usable = new Set<string>(registry.capabilities());
+  const failed = new Set(registry.failures().map((entry) => entry.providerId));
+  const described = new Map(registry.describe().map((entry) => [entry.id, entry]));
+
+  const availability = [...declared.entries()].map(([capability, providerId]) => {
+    if (usable.has(capability)) return { capability, available: true, providerId };
+    const descriptor = described.get(providerId);
+    const reason = failed.has(providerId) ? 'failed' : descriptor?.enabled === false ? 'disabled' : 'unregistered';
+    return { capability, available: false, reason, providerId };
+  });
+
+  await registry.shutdownAll();
+  return availability;
 }
 
 /**

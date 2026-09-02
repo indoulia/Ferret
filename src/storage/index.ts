@@ -160,6 +160,14 @@ export {
   type SweepReport,
 } from './integrity.js';
 export { IndexRunStore, RunOutcome, type StartedRun, type UnfinishedRun } from './runs.js';
+export {
+  describeLockHolder,
+  findLockHolder,
+  readInventory,
+  remediationForHolder,
+  type IndexInventory,
+  type LockHolder,
+} from './diagnostics.js';
 export { indexRun, type IndexRunRow } from './schema/runs.js';
 export {
   ContentStore,
