@@ -68,5 +68,6 @@ literal text is not met, and accepting that deviation is a product decision
 rather than one the implementation can make for itself. It is recorded as
 decision D-001 and owned by EPIC-102 (NPM Distribution).
 
-macOS remains unvalidated and is carried to EPIC-105, as already established by
+macOS was unvalidated and was carried to EPIC-105 — **measured there on
+2026-09-03 and passing**, signal tests included. Originally established by
 EPIC-005 §11.

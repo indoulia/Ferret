@@ -170,7 +170,9 @@ Named so it is not quietly adopted.
 - **Zeroing a credential in process memory.** Declined rather than deferred: V8
   strings are immutable and copied by the collector, so the claim would be
   untestable and therefore false. Recorded under AI Development Rule §10.
-- **macOS validation** — EPIC-105, inherited
+- **macOS validation** — EPIC-105, inherited. **Delivered 2026-09-03:** the
+  security suites run on `macos-latest` and pass, so this Epic's controls are
+  validated on a second platform for the first time.
   (`docs/EPICs/validation/EPIC-003-VALIDATION.md:157`).
 - **Provider health, restart or failure isolation** — EPIC-014 (**delivered
   2026-09-03**), EPIC-093.

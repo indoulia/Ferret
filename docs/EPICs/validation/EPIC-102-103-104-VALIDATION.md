@@ -187,7 +187,7 @@ $ ferret --version
 | --- | --- | --- |
 | **Not published to the registry.** Everything is verified against a locally packed tarball. | Publication is a release action requiring credentials this work does not hold, and `publishConfig.tag` is `next` so a first publish cannot land on `latest` by accident. | Release |
 | No signed provenance or SLSA attestation. | `npm publish --provenance` needs a trusted CI publisher. | **EPIC-102** at release |
-| macOS is unvalidated. | CI covers Ubuntu and Windows. | **EPIC-105** |
+| ~~macOS is unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | CI covers Ubuntu and Windows. | **EPIC-105** |
 | No upgrade path documented for a database migrated by an older Ferret. | The migrator handles it; the *documentation* does not describe it. | **EPIC-106** |
 | No Docker image. | | **EPIC-107** |
 | Onboarding assumes PostgreSQL already exists. | The README says how to point Ferret at one, not how to get one. | **EPIC-107** |

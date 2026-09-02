@@ -167,7 +167,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | `paginate` holds every cursor it has seen to detect a provider that does not advance. | Bounded by page count, not by item count, so an enumeration of a million items across a thousand pages holds a thousand short strings. Acceptable; worth revisiting only if a provider paginates at item granularity. | — |
 | Emission is synchronous and in-memory; a `BatchEmitter` grows without bound. | A provider that walks a million files and never flushes will exhaust memory. Flush policy is the indexing pipeline's decision, not the emitter's. | **EPIC-031** |
 | The deadline in `ProviderOperationContext` is advisory: nothing forces a provider to consult it. | It is carried so a provider *can* plan. Enforcement is the `AbortSignal`, which is not advisory. | **EPIC-016** (conformance) |
-| macOS unvalidated. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
 
 ---
 

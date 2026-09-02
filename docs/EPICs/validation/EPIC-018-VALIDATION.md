@@ -170,4 +170,4 @@ repositories a caller explicitly asks about, not for every one discovered.
 | Ferret cannot say *when* a checkout moved to a branch, only that it has. | The reflog knows, and reading it is EPIC-019's subject. Until then `validFrom` is Ferret's observation time, which is stated rather than dressed up. | **EPIC-019** |
 | A worktree's path is taken from Git's own metadata and is not checked for containment. | Ferret records it; it does not traverse it, so a path outside any scan root is a reported fact rather than an action. Traversal of worktree paths would need EPIC-017's containment check applied. | **EPIC-022** |
 | Submodules are still not modelled. | `.gitmodules` is the right source and is EPIC-019's to read. | **EPIC-019** |
-| macOS unvalidated. | Inherited. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | Inherited. | **EPIC-105** |

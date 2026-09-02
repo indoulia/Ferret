@@ -184,7 +184,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | No incremental discovery: Ferret cannot say which repositories appeared since a given moment. | Not claimed — `supportsIncremental` is deliberately absent from the declared limits. It needs a filesystem watcher. | ~~EPIC-032~~ **EPIC-077** — see Owner correction |
 | Discovery is not wired to a CLI command. | The provider is composable and tested through the registry; a `ferret index` command belongs with the Epic that has something to index *into*. | **EPIC-031** |
 | The `safe.directory` refusal surfaces as a generic "not a repository" skip rather than naming ownership as the cause. | The reason reaches the skip's `detail` from Git's own stderr, so the information is present but not classified. | **EPIC-018** |
-| macOS unvalidated. | Inherited from EPIC-001/EPIC-005. Symlink tests self-report when the platform refuses link creation. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | Inherited from EPIC-001/EPIC-005. Symlink tests self-report when the platform refuses link creation. | **EPIC-105** |
 
 ---
 

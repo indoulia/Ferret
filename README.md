@@ -302,6 +302,22 @@ indexes history to answer, so a blob a deleted file version still names counts
 as referenced and stays. See
 [EPIC-088](docs/EPICs/EPIC-088-Retention-And-Exclusion-Policies.md).
 
+## Platforms
+
+| platform | verified | how |
+| --- | --- | --- |
+| Linux | everything, database suites included | `ubuntu-latest` on every pull request |
+| macOS | everything except the database suites | `macos-latest` on every pull request |
+| Windows | everything except the database suites | `windows-latest` on every push to `main` |
+
+The database suites need a Linux container, so PostgreSQL behaviour is verified
+on Linux only. That is stated rather than implied: a platform 80% measured and
+reported as "supported" is worse than one honestly unmeasured.
+
+One macOS version and one architecture — whatever `macos-latest` currently
+pins, on Apple silicon. Intel macOS, older macOS, Alpine and musl are
+unmeasured.
+
 ## Global options
 
 | Option | Effect |

@@ -66,7 +66,7 @@ as a claim that relationship storage is complete in every sense.
 | No confidence on an inferred relationship. | **EPIC-046** |
 | No `permission_scope` on the table, so reads cannot be scope-filtered. | **EPIC-058** |
 | No bulk assertion; the indexer asserts one edge at a time. | See below. |
-| macOS unvalidated. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | **EPIC-105** |
 
 **On bulk assertion**, since it is the one item without an existing owner: there
 is no `assertMany`. It is recorded as an observation rather than a gap, because

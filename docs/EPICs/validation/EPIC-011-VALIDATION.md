@@ -137,4 +137,4 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | Cancellation and error-classification invariants are stated but unverified. | See §4. | **EPIC-016** |
 | Capabilities are not yet reported by `ferret status` / `ferret doctor`. | `describe()` carries them; the diagnostics do not yet surface them. Small, and belongs with the Epic that gives providers health. | **EPIC-014** |
 | No provider can be *deregistered*. | The registry seals at initialization, which suits a process-lifetime composition. Hot-swapping a provider is not a requirement anything has yet. | **EPIC-014** if it becomes one |
-| macOS unvalidated. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
+| ~~macOS unvalidated.~~ **Measured 2026-09-03 by EPIC-105:** macOS passes — 112 test files and 2 463 tests on `macos-latest`, including the packaging suite and all seven signal tests. The database suites skip there (no Linux containers), so PostgreSQL behaviour stays validated on Linux only. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |

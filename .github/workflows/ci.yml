@@ -35,9 +35,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS is deliberately absent: no macOS host was available to validate
-        # against, and EPIC-005 recorded closing that gap as EPIC-105's work.
-        # Claiming macOS support here without measuring it would be false.
+        # **macOS is measured here for the first time — EPIC-105.**
+        #
+        # It was deliberately absent, and the reason was correct: "no macOS host
+        # was available to validate against… claiming macOS support here without
+        # measuring it would be false." Nineteen validation records carried that
+        # gap. A hosted macOS runner exists, so the reason has expired, and
+        # EPIC-105 §8.1 records that this workflow *is* that Epic's validation
+        # environment — there is no local macOS host, which was the premise.
+        #
+        # It runs on the pull request that introduces it (§8.2), because
+        # deciding where it belongs before measuring its cost would be the same
+        # guess this Epic exists to end. Windows was moved off the PR gate on
+        # measured evidence; macOS gets the same treatment on its own.
         #
         # **Windows does not run on a pull request.** Measured over one working
         # session: Ubuntu verify took 1m52s-2m55s and Windows 6m41s-11m54s, so
@@ -55,7 +65,7 @@ jobs:
         # a merge instead of minutes before. On a repository where every merge
         # is a squash onto `main` with a green Ubuntu run behind it, that is a
         # revert rather than an outage.
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "windows-latest"]') }}
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest", "macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
         node: ['22']
 
     steps:
@@ -80,9 +90,11 @@ jobs:
 
       # Database suites are deliberately skipped here and owned by the
       # `storage` job below, which pins a PostgreSQL service container.
-      # GitHub's Windows runners cannot run Linux containers, so attempting it
-      # in this matrix would produce coverage on Linux and a silent skip on
-      # Windows — an asymmetry that is easy to mistake for a passing gate.
+      # GitHub's Windows *and macOS* runners cannot run Linux containers, so
+      # attempting it in this matrix would produce coverage on Linux and a
+      # silent skip on the other two — an asymmetry that is easy to mistake for
+      # a passing gate. EPIC-105 §8.3 records the same rule for macOS: a skip is
+      # recorded as a skip, never as a pass.
       - name: Test (unit and integration, including packaging)
         run: npm test
         env:
