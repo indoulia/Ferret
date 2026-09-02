@@ -461,6 +461,19 @@ export function detectConflicts(evidence: readonly CanonicalEvidence[]): Conflic
     for (const record of list) statements.set(stableStringify(record.statement), record.statement);
     if (statements.size <= 1) continue;
 
+    // EPIC-047 §8.1. A conflict is disagreement between *sources*; one source
+    // restating a field is supersession, which is what EPIC-057 §8.4 decided for
+    // `preferredEvidence` and this is the same rule one layer down. Keyed on
+    // `sourceSystem` and not on `producer`, exactly as that rule keys it, so the
+    // two cannot drift.
+    //
+    // Measured on Ferret's own index: both of the two groups this used to report
+    // were `branch.attributes.headCommit`, one of them with **twenty** current
+    // records, because a branch's head moves with every commit and nothing had
+    // ever superseded the earlier readings. `ferret_why` on `main` reported a
+    // twenty-way conflict about where `main` points.
+    if (new Set(list.map((record) => record.sourceSystem)).size <= 1) continue;
+
     const first = list[0];
     if (first === undefined) continue;
     conflicts.push({

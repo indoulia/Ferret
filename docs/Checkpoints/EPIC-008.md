@@ -150,3 +150,33 @@ it: an explicit persisted schema version exists in three places now (database
 schema, entity envelope, config file), each currently refusing anything newer.
 EPIC-010 must turn "refuse" into a stated compatibility matrix with tested
 upgrade paths.
+
+## Addendum — 2026-09-02, after EPIC-047
+
+**"Conflicts are detected but nothing writes the `conflicting` state" is closed.**
+The list above is left as written.
+
+`EvidenceState.CONFLICTING` is now written and, more importantly, **cleared**:
+`EvidenceStore.reconcileConflicts` marks every member of a genuine group and
+returns a record to `current` when the group it was in no longer exists. An index
+run reconciles the subjects it recorded new evidence about, so the state is
+maintained rather than left to whoever remembers to ask — which is why it was
+unreachable for five Epics.
+
+Underneath it was a sharper defect than the checkpoint recorded. **Nothing called
+`EvidenceStore.supersede`**, so a changed value left both readings `current` and
+`detectConflicts` read the pair as a disagreement. Measured on Ferret's own
+index: two groups, both `branch.attributes.headCommit`, one with twenty current
+records, and `ferret_why` on `main` reporting a twenty-way conflict about where
+`main` points. `record()` now supersedes the prior reading in the transaction
+that writes the new one, and a conflict is defined as disagreement **between
+sources** — one source restating a field is supersession, which is the rule
+EPIC-057 §8.4 had already settled for `preferredEvidence`.
+
+Measured after: **0 conflict groups**, 20 records superseded.
+
+The checkpoint's other instruction still holds and was followed: "Do not add a
+resolution policy here." Marking is not resolving — every member of a group is
+marked, no side is dropped and no winner is chosen. Governance §15.
+
+Evidence: `docs/EPICs/validation/EPIC-047-VALIDATION.md`.

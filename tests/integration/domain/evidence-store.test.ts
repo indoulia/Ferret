@@ -910,3 +910,186 @@ describeDb(`evidence and provenance (${databaseAvailable() ? 'real PostgreSQL' :
     });
   });
 });
+
+/**
+ * Supersession and conflict state against a real store — EPIC-047.
+ *
+ * A separate database from the block above so the supersession this Epic
+ * introduces cannot disturb assertions written before it existed — and so the
+ * twenty-move branch case can be built without twenty rows leaking into
+ * somebody else's count.
+ */
+describeDb(`conflict state (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REASON})`, () => {
+  let conflictDb: TestDatabase;
+  let conflictStore: EvidenceStore;
+  let branch: string;
+
+  const observation = (
+    statement: unknown,
+    overrides: { readonly sourceSystem?: string; readonly sourceId?: string; readonly field?: string } = {},
+  ) => ({
+    subjectId: branch,
+    field: overrides.field ?? 'attributes.headCommit',
+    statement,
+    method: EvidenceMethod.OBSERVED,
+    producer: 'ferret.source.git',
+    producerVersion: '1.0.0',
+    sourceSystem: overrides.sourceSystem ?? 'git',
+    ...(overrides.sourceId === undefined ? {} : { sourceId: overrides.sourceId }),
+  });
+
+  beforeAll(async () => {
+    conflictDb = await createTestDatabase('conflicts');
+    await migrate(conflictDb.pool, { logger });
+    const conflictHandle = drizzle(conflictDb.pool);
+    conflictStore = new EvidenceStore(conflictHandle);
+    branch = (
+      await new EntityStore(conflictHandle).upsert({
+        kind: EntityKind.BRANCH,
+        source: { system: 'git', id: 'refs/heads/main' },
+        attributes: { ref: 'refs/heads/main' },
+      })
+    ).entity.id;
+  });
+
+  afterAll(async () => {
+    await conflictDb.drop();
+  });
+
+  it('supersedes the prior reading when the same source restates a field — AC-3', async () => {
+    const first = await conflictStore.record(observation('commit-aaa', { sourceId: 'read-1' }));
+    const second = await conflictStore.record(observation('commit-bbb', { sourceId: 'read-2' }));
+
+    expect(await conflictStore.stateOf(first.evidence.id)).toStrictEqual({
+      state: EvidenceState.SUPERSEDED,
+      supersededBy: second.evidence.id,
+    });
+    expect((await conflictStore.stateOf(second.evidence.id))?.state).toBe(EvidenceState.CURRENT);
+  });
+
+  it('leaves the superseded record verifiable and unchanged — AC-4', async () => {
+    // Only Ferret's interpretation moved. The observation stays verifiable,
+    // which is what lets "what did Ferret believe before, and why did that
+    // change" be answered.
+    const first = await conflictStore.record(observation('v1', { field: 'attributes.upstream', sourceId: 'u1' }));
+    await conflictStore.record(observation('v2', { field: 'attributes.upstream', sourceId: 'u2' }));
+
+    const verified = await conflictStore.verify(first.evidence.id);
+    expect(verified.statement).toBe('v1');
+    expect(verified.integrityHash).toBe(first.evidence.integrityHash);
+  });
+
+  it('supersedes nothing when the statement is identical — AC-5, AC-6', async () => {
+    const input = observation('same', { field: 'attributes.identical', sourceId: 'x' });
+    const first = await conflictStore.record(input);
+    const again = await conflictStore.record(input);
+
+    expect(again.deduplicated).toBe(true);
+    expect(again.evidence.id).toBe(first.evidence.id);
+    // A record must never supersede itself.
+    expect((await conflictStore.stateOf(first.evidence.id))?.state).toBe(EvidenceState.CURRENT);
+  });
+
+  it('supersedes nothing across source systems — AC-7', async () => {
+    const fromGit = await conflictStore.record(
+      observation('git says this', { field: 'attributes.crossSource', sourceSystem: 'git' }),
+    );
+    const fromJira = await conflictStore.record(
+      observation('jira says that', { field: 'attributes.crossSource', sourceSystem: 'jira' }),
+    );
+
+    expect((await conflictStore.stateOf(fromGit.evidence.id))?.state).toBe(EvidenceState.CURRENT);
+    expect((await conflictStore.stateOf(fromJira.evidence.id))?.state).toBe(EvidenceState.CURRENT);
+  });
+
+  it('leaves one current record after a branch head moves twenty times — AC-8', async () => {
+    // The measured defect, as a test. Before this the twentieth reading left
+    // twenty current records and `ferret_why` reported a twenty-way conflict
+    // about where the branch points.
+    const recorded = [];
+    for (let move = 0; move < 20; move += 1) {
+      recorded.push(
+        await conflictStore.record(
+          observation(`head-${String(move)}`, { field: 'attributes.movingHead', sourceId: `move-${String(move)}` }),
+        ),
+      );
+    }
+
+    const states = await Promise.all(
+      recorded.map(async (one) => (await conflictStore.stateOf(one.evidence.id))?.state),
+    );
+    expect(states.filter((state) => state === EvidenceState.CURRENT)).toHaveLength(1);
+    expect(states.filter((state) => state === EvidenceState.SUPERSEDED)).toHaveLength(19);
+    // And the survivor is the last one recorded.
+    expect(states[19]).toBe(EvidenceState.CURRENT);
+
+    // AC-14, in the form this fixture can express: no conflict is reported for a
+    // field one source restated twenty times.
+    const conflicts = await conflictStore.conflictsFor(branch);
+    for (const group of conflicts) expect(group.field).not.toBe('attributes.movingHead');
+  });
+
+  it('marks every member of a genuine group conflicting, and clears it — AC-9, AC-10, AC-12', async () => {
+    const fromGit = await conflictStore.record(
+      observation('git title', { field: 'attributes.title', sourceSystem: 'git' }),
+    );
+    const fromJira = await conflictStore.record(
+      observation('jira title', { field: 'attributes.title', sourceSystem: 'jira' }),
+    );
+
+    const marked = await conflictStore.reconcileConflicts(branch);
+    // At least these two. The subject also carries the `crossSource`
+    // disagreement an earlier test left, and reconciliation is per *subject*, so
+    // asserting an exact count here would be asserting the order of the file.
+    expect(marked.groups).toBeGreaterThanOrEqual(1);
+    expect(marked.marked).toBeGreaterThanOrEqual(2);
+    expect((await conflictStore.stateOf(fromGit.evidence.id))?.state).toBe(EvidenceState.CONFLICTING);
+    expect((await conflictStore.stateOf(fromJira.evidence.id))?.state).toBe(EvidenceState.CONFLICTING);
+
+    // Jira comes to agree. The group is gone and both records return to
+    // current — the direction that matters, because a state only ever set
+    // accumulates false positives until an operator stops reading it.
+    await conflictStore.record(
+      observation('git title', { field: 'attributes.title', sourceSystem: 'jira', sourceId: 'agreed' }),
+    );
+    const cleared = await conflictStore.reconcileConflicts(branch);
+
+    expect(cleared.cleared).toBeGreaterThanOrEqual(1);
+    expect((await conflictStore.stateOf(fromGit.evidence.id))?.state).toBe(EvidenceState.CURRENT);
+    // Nothing was deleted: the disagreeing jira reading is superseded, not gone.
+    expect((await conflictStore.stateOf(fromJira.evidence.id))?.state).toBe(EvidenceState.SUPERSEDED);
+    expect(await conflictStore.get(fromJira.evidence.id)).toBeDefined();
+  });
+
+  it('never changes a superseded or stale record — AC-11', async () => {
+    const superseded = await conflictStore.record(
+      observation('old', { field: 'attributes.untouched', sourceId: 'old' }),
+    );
+    await conflictStore.record(observation('new', { field: 'attributes.untouched', sourceId: 'new' }));
+    const stale = await conflictStore.record(
+      observation('stale', { field: 'attributes.staleField', sourceId: 'stale' }),
+    );
+    await conflictStore.markStale(stale.evidence.id);
+
+    await conflictStore.reconcileConflicts(branch);
+
+    expect((await conflictStore.stateOf(superseded.evidence.id))?.state).toBe(EvidenceState.SUPERSEDED);
+    expect((await conflictStore.stateOf(stale.evidence.id))?.state).toBe(EvidenceState.STALE);
+  });
+
+  it('reconciles a subject with no evidence without failing', async () => {
+    const empty = (
+      await new EntityStore(drizzle(conflictDb.pool)).upsert({
+        kind: EntityKind.BRANCH,
+        source: { system: 'git', id: 'refs/heads/empty' },
+        attributes: { ref: 'refs/heads/empty' },
+      })
+    ).entity.id;
+
+    expect(await conflictStore.reconcileConflicts(empty)).toStrictEqual({
+      groups: 0,
+      marked: 0,
+      cleared: 0,
+    });
+  });
+});

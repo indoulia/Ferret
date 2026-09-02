@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, like, or, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, isNull, like, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import {
   EvidenceState,
@@ -40,6 +40,16 @@ export interface RecordedEvidence {
   readonly supersededBy: string | undefined;
   /** True when this observation was already on record. */
   readonly deduplicated: boolean;
+}
+
+/** What one reconciliation pass changed — EPIC-047. */
+export interface ConflictReconciliation {
+  /** Genuine cross-source groups found for this subject. */
+  readonly groups: number;
+  /** Records newly marked `conflicting`. */
+  readonly marked: number;
+  /** Records returned to `current` because their group no longer exists. */
+  readonly cleared: number;
 }
 
 /**
@@ -242,6 +252,47 @@ export class EvidenceStore {
           };
         }
 
+        // EPIC-047 §8.2. The moment a new statement lands is the moment the old
+        // one stops being current.
+        //
+        // **Nothing called `supersede` before this**, so a changed value left
+        // both readings `current` and `detectConflicts` read the pair as a
+        // disagreement. Measured on Ferret's own index: `main` had twenty
+        // current `headCommit` records and `ferret_why` reported a twenty-way
+        // conflict about where `main` points.
+        //
+        // In this transaction, not after it: a reader between the two statements
+        // would otherwise see two current records and a conflict that never
+        // existed. Only on a genuine insert — a deduplicated record is the same
+        // id, and superseding on a re-record would supersede a row with itself.
+        // Ordered by recording rather than observation because `observed_at` is
+        // optional and is absent on exactly the records this appears on, while
+        // `recorded_at` is `NOT NULL`.
+        //
+        // Content is never touched. Only the three columns migration 0004
+        // reserves for Ferret's interpretation, so the superseded observation
+        // stays verifiable and "what did Ferret believe before" stays
+        // answerable.
+        await tx
+          .update(evidence)
+          .set({ state: EvidenceState.SUPERSEDED, supersededBy: canonical.id, lastCheckedAt: now })
+          .where(
+            and(
+              eq(evidence.subjectId, canonical.subjectId),
+              canonical.field === undefined ? isNull(evidence.field) : eq(evidence.field, canonical.field),
+              eq(evidence.sourceSystem, canonical.sourceSystem),
+              // `conflicting` as well as `current`, and the distinction matters.
+              // A conflicting record is still a *current reading* — it is
+              // `current` with a flag on it — so anything acting on "the source's
+              // present position" must include it. Found by test: with only
+              // `current` here, a source that came to agree left its own
+              // disagreeing record marked conflicting for ever, and
+              // reconciliation could never clear the group.
+              inArray(evidence.state, [EvidenceState.CURRENT, EvidenceState.CONFLICTING]),
+              ne(evidence.id, canonical.id),
+            ),
+          );
+
         return {
           evidence: toCanonical(row, canonical.derivedFrom),
           state: EvidenceState.CURRENT,
@@ -439,6 +490,79 @@ export class EvidenceStore {
       ...(options.permittedScopes === undefined ? {} : { permittedScopes: options.permittedScopes }),
     });
     return detectConflicts(current);
+  }
+
+
+  /**
+   * Writes and clears the `conflicting` state for one subject — EPIC-047 §8.3.
+   *
+   * `EvidenceState.CONFLICTING` has existed since EPIC-008, EPIC-062's
+   * believability ranks it at 10, migration 0004 indexes `state` for it, and
+   * **nothing had ever written it** — so EPIC-062's `conflicting` branch was
+   * unreachable and EPIC-063 could not report a conflict it was asked to
+   * explain.
+   *
+   * **Both directions, and the reverse is the one that matters.** A state that
+   * is only ever set accumulates false positives until an operator stops reading
+   * it, which is exactly the failure EPIC-094 recorded — "584 of 585 indexed
+   * scopes were built by a different Ferret" on a completely healthy index. A
+   * conflict a later observation settles must stop being reported.
+   *
+   * `superseded` and `stale` are never overwritten: detection reads `current`
+   * and `conflicting` records only, and the writes here move a record between
+   * those two states and nowhere else. A record Ferret has already judged past
+   * cannot be resurrected into a conflict.
+   *
+   * Marking is not resolving (§8.5). Every member of a group is marked, no side
+   * is dropped and no winner is chosen — Governance §15 forbids resolving a
+   * conflict by discarding evidence, and a caller that needs one answer asks
+   * `preferredEvidence`, which says `undefined` when it cannot tell.
+   */
+  async reconcileConflicts(subjectId: string, now: Date = new Date()): Promise<ConflictReconciliation> {
+    try {
+      return await this.#db.transaction(async (tx) => {
+        const rows = await tx
+          .select()
+          .from(evidence)
+          .where(
+            and(
+              eq(evidence.subjectId, subjectId),
+              inArray(evidence.state, [EvidenceState.CURRENT, EvidenceState.CONFLICTING]),
+            ),
+          );
+
+        // `toCanonical(row, [])` rather than `#hydrate`: detection compares
+        // subject, field, statement and source system, and a derivation chain is
+        // none of those. Hydrating would be a second query for a field nothing
+        // here reads.
+        const groups = detectConflicts(rows.map((row) => toCanonical(row, [])));
+        const inConflict = new Set(groups.flatMap((group) => group.evidence.map((record) => record.id)));
+
+        const toMark = rows
+          .filter((row) => inConflict.has(row.id) && row.state !== EvidenceState.CONFLICTING)
+          .map((row) => row.id);
+        const toClear = rows
+          .filter((row) => !inConflict.has(row.id) && row.state === EvidenceState.CONFLICTING)
+          .map((row) => row.id);
+
+        if (toMark.length > 0) {
+          await tx
+            .update(evidence)
+            .set({ state: EvidenceState.CONFLICTING, lastCheckedAt: now })
+            .where(inArray(evidence.id, toMark));
+        }
+        if (toClear.length > 0) {
+          await tx
+            .update(evidence)
+            .set({ state: EvidenceState.CURRENT, lastCheckedAt: now })
+            .where(inArray(evidence.id, toClear));
+        }
+
+        return { groups: groups.length, marked: toMark.length, cleared: toClear.length };
+      });
+    } catch (error) {
+      throw classifyDatabaseError(error, 'storage.evidence.reconcileConflicts');
+    }
   }
 
   /**

@@ -154,6 +154,15 @@ export interface IndexReport {
   readonly entities: WriteCounts;
   readonly relationships: WriteCounts;
   readonly evidence: { readonly recorded: number; readonly deduplicated: number };
+  /**
+   * Conflict reconciliation over the subjects this run wrote about — EPIC-047.
+   *
+   * `undefined` when the evidence writer cannot reconcile, which is not the same
+   * as having found nothing.
+   */
+  readonly conflicts:
+    | { readonly subjects: number; readonly groups: number }
+    | undefined;
   readonly commitsRead: number;
   readonly filesRead: number;
   readonly branchesRead: number;
@@ -456,6 +465,7 @@ export class RepositoryIndexer {
     const relationships = counter();
     let recorded = 0;
     let deduplicated = 0;
+    const conflictSubjects = new Set<string>();
     const skipped: { path: string; reason: string }[] = [];
 
     const write = async (graph: Graph): Promise<void> => {
@@ -497,6 +507,11 @@ export class RepositoryIndexer {
         const result = await this.#evidence.record(toEvidenceInput(record), observedAt);
         if (result.deduplicated) deduplicated += 1;
         else recorded += 1;
+        // EPIC-047 §8.4. The subjects this run wrote about are exactly the ones
+        // whose conflict state can have changed, so reconciliation is
+        // maintained here rather than left to whoever remembers to ask —
+        // which is why `conflicting` was unreachable for five Epics.
+        if (!result.deduplicated) conflictSubjects.add(record.subjectId);
       }
     };
 
@@ -709,6 +724,16 @@ export class RepositoryIndexer {
       context,
     );
 
+    // EPIC-047 §8.4. After every write, before the watermark: the subjects this
+    // run recorded new evidence about are the ones whose conflict state can have
+    // changed, and reconciliation both marks and clears — a state that is only
+    // ever set accumulates false positives until an operator stops reading it.
+    //
+    // A writer without the method leaves the count `undefined` rather than `0`,
+    // so the report distinguishes "reconciled nothing" from "could not
+    // reconcile" — the same distinction the lifecycle stage already makes.
+    const conflicts = await this.#reconcileConflicts(conflictSubjects, observedAt);
+
     // The watermark moves only after everything above succeeded. A run that
     // failed halfway must be repeated, not resumed from a position it never
     // reached — Governance §6, never claim to know something you did not.
@@ -721,6 +746,7 @@ export class RepositoryIndexer {
       entities: entities.counts,
       relationships: relationships.counts,
       evidence: { recorded, deduplicated },
+      conflicts,
       commitsRead,
       filesRead,
       branchesRead: branches.length,
@@ -932,6 +958,41 @@ export class RepositoryIndexer {
     if (artifact === undefined) return undefined;
     if (artifact.producerVersion !== VERSION) return undefined;
     return artifact.metadata;
+  }
+
+  /**
+   * Reconciles the conflict state of every subject this run wrote about.
+   *
+   * One subject at a time and each in its own transaction, so a failure on one
+   * subject does not roll back the reconciliation of the others — the same
+   * failure-isolation shape EPIC-093 asks for and EPIC-108 applies per file.
+   * A reconciliation that throws is reported by the run rather than failing it:
+   * conflict state is Ferret's interpretation, and losing an interpretation is
+   * not worth losing an index run over.
+   */
+  async #reconcileConflicts(
+    subjects: ReadonlySet<string>,
+    now: Date,
+  ): Promise<{ subjects: number; groups: number } | undefined> {
+    const reconcile = this.#evidence.reconcileConflicts?.bind(this.#evidence);
+    if (reconcile === undefined) return undefined;
+
+    let groups = 0;
+    for (const subjectId of subjects) {
+      try {
+        groups += (await reconcile(subjectId, now)).groups;
+      } catch (error) {
+        this.#logger?.warn(
+          {
+            operation: 'index.conflicts',
+            subject: subjectId,
+            reason: error instanceof Error ? error.message : 'the reconciliation failed',
+          },
+          'Could not reconcile conflict state for one subject; the run continues',
+        );
+      }
+    }
+    return { subjects: subjects.size, groups };
   }
 
   async #writeWatermark(
