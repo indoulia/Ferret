@@ -2,6 +2,7 @@ import { Command, Option } from 'commander';
 
 import { DependencyStatus, type HealthComponent } from '../../index.js';
 import { createLogger, type LogLevel } from '../../logging/index.js';
+import { defaultMetrics } from '../../observability/index.js';
 import { effectiveLogLevel } from '../log-level.js';
 import { exitCodeForHealth, probeHealth } from '../health.js';
 import { emitResult, type OutputOptions } from '../output.js';
@@ -55,8 +56,12 @@ export function statusCommand(
           : createLogger({ level, base: { component: 'status' } });
 
       const report = await probeHealth(logger === undefined ? {} : { logger });
+      // EPIC-092 AC-14. The in-process snapshot, on the path that does not
+      // depend on the log stream: an operator who ran `--log-level silent`
+      // asked for silence, not for the numbers to be unavailable.
+      const reported = { ...report, metrics: defaultMetrics().snapshot() };
 
-      emitResult(output(json), report, () =>
+      emitResult(output(json), reported, () =>
         [
           `ferret ${report.ferret.version} on node ${report.ferret.node} (${report.ferret.platform})`,
           '',

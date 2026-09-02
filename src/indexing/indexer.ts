@@ -1,3 +1,5 @@
+import { Metric, Tracer, defaultMetrics, type MetricsRegistry } from '../observability/index.js';
+import { processInvocationId } from '../logging/index.js';
 import {
   EntityKind,
   canonicalId,
@@ -290,6 +292,13 @@ export interface IndexerDependencies {
   readonly evidence: EvidenceWriter;
   readonly watermarks: WatermarkStore;
   /**
+   * Where this run's measurements go — EPIC-092.
+   *
+   * Optional, so every existing caller keeps working and gets the process
+   * registry. A test supplies its own to assert on totals in isolation.
+   */
+  readonly metrics?: MetricsRegistry;
+  /**
    * Optional so that every existing caller keeps working, and so a source that
    * cannot observe deletion is not forced to pretend it can. When absent the
    * report says why the reconciliation did not run.
@@ -373,6 +382,14 @@ export class RepositoryIndexer {
   readonly #runs: RunJournal | undefined;
   readonly #cursors: SyncCursors | undefined;
   readonly #logger: Logger | undefined;
+  /**
+   * Metrics for this run — EPIC-092.
+   *
+   * The process registry unless a caller supplies one, which is what lets a
+   * test hold its own totals without two runtimes in one process sharing them.
+   */
+  readonly #metrics: MetricsRegistry;
+  readonly #tracer: Tracer;
 
   constructor(dependencies: IndexerDependencies) {
     this.#source = dependencies.source;
@@ -389,6 +406,13 @@ export class RepositoryIndexer {
     this.#runs = dependencies.runs;
     this.#cursors = dependencies.cursors;
     this.#logger = dependencies.logger;
+    // EPIC-092. The process registry unless a caller supplies one.
+    this.#metrics = dependencies.metrics ?? defaultMetrics();
+    this.#tracer = new Tracer({
+      invocation: processInvocationId(),
+      ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
+      metrics: this.#metrics,
+    });
   }
 
   /**
@@ -425,6 +449,12 @@ export class RepositoryIndexer {
             commitsRead: report.commitsRead,
             filesRead: report.filesRead,
             durationMs: Math.round(report.durationMs),
+            // EPIC-092 §8.4. History comes from this journal rather than a new
+            // table: migration 0012 made `summary` free-shaped on purpose, and
+            // it already carries `started_at`, `ferret_version` and
+            // `invocation` — which is what makes comparing two runs meaningful
+            // rather than misleading.
+            metrics: this.#metrics.snapshot(),
           },
           report.repositoryId,
         );
@@ -437,6 +467,10 @@ export class RepositoryIndexer {
       if (run !== undefined) {
         await this.#runs?.finish(run.id, 'failed', {
           code: error instanceof FerretError ? error.code : 'E_UNKNOWN',
+          // A failed run still records what it measured before failing —
+          // EPIC-092 §10. "Which stage was slow before it died" is exactly the
+          // question a failure raises.
+          metrics: this.#metrics.snapshot(),
         });
       }
       throw error;
@@ -629,6 +663,10 @@ export class RepositoryIndexer {
             // about one has a subject. The *edges* come back from the stage and
             // are written below, once the entities they point from exist.
             evidence: this.#evidence,
+            // EPIC-092. This run's registry, not the process default — or a
+            // caller holding its own would see stage timings and not per-file
+            // ones, which is how a snapshot ends up half true.
+            metrics: this.#metrics,
             ...(this.#logger === undefined ? {} : { logger: this.#logger }),
           },
           {
@@ -693,7 +731,9 @@ export class RepositoryIndexer {
     // them as relationship targets, which is what lets the history graph drop
     // its poorer copies below. A metadata-only run keeps the original order
     // exactly, so nothing about it changes (AC-1).
-    if (contentStage.run) await runFileStage();
+    if (contentStage.run) {
+      await this.#tracer.span('index.files', runFileStage, { metric: Metric.INDEX_STAGE_MS });
+    }
 
     // Stage 2 — history, bounded by the watermark unless a full run was asked
     // for.
@@ -723,7 +763,9 @@ export class RepositoryIndexer {
       await write(withoutRewrittenFiles(graph, writtenFiles));
     }
 
-    if (!contentStage.run) await runFileStage();
+    if (!contentStage.run) {
+      await this.#tracer.span('index.files', runFileStage, { metric: Metric.INDEX_STAGE_MS });
+    }
 
     // Stage 4 — reconcile what Ferret believes exists with what it observed.
     const lifecycle = await this.#reconcile(

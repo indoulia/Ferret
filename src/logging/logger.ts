@@ -63,6 +63,18 @@ export function newInvocationId(): string {
 const PROCESS_INVOCATION = newInvocationId();
 
 /**
+ * The process's invocation id, for a caller that needs to line up with it.
+ *
+ * EPIC-092 needs it because a trace id is derived from it: a log line's
+ * `invocation` and a span's `traceparent` must be greppable against each other,
+ * which is the whole reason that Epic subsumed the field rather than adding a
+ * second one. Read-only, and still never accepted from outside the process.
+ */
+export function processInvocationId(): string {
+  return PROCESS_INVOCATION;
+}
+
+/**
  * Ferret's logging surface.
  *
  * Deliberately narrower than Pino's so the implementation stays replaceable and

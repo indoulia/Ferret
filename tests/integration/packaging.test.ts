@@ -235,10 +235,33 @@ describe('package contents', () => {
     // The guard's purpose is unchanged — catch something *large* slipping in,
     // a bundled dependency or a stray asset. The headroom is 12%, not a round
     // figure, so the next crossing is also a decision rather than a formality.
+    //
+    // **Raised from 2 250 000 on 2026-09-02, and it was the next crossing the
+    // paragraph above anticipated.** The non-grammar output reached 2 258 135 —
+    // 0.36% over — after eight Epics: ranking and reranking, freshness and
+    // authority, query explanation, confidence, conflict detection, the
+    // reference index, relationship traversal, the Markdown parser and metrics.
+    //
+    // Measured before the number moved, as last time. The nine new modules
+    // account for ~101 kB of it and nothing else grew:
+    //
+    //     24 088  dist/observability        (EPIC-092)
+    //     20 904  dist/parsers/text         (EPIC-029)
+    //     12 183  dist/code/references      (EPIC-035)
+    //     11 622  dist/retrieval/explain    (EPIC-063)
+    //     11 065  dist/retrieval/rank       (EPIC-056)
+    //      9 778  dist/domain/confidence    (EPIC-046)
+    //      5 726  dist/retrieval/freshness  (EPIC-057)
+    //      5 549  dist/retrieval/traverse   (EPIC-050)
+    //
+    // Nothing improper ships: no source maps, no tests, no fixtures — asserted
+    // by the checks around this one, and re-measured rather than assumed. The
+    // headroom is 12% again, on the same reasoning: a round figure leaves room
+    // to hide in.
     const grammarBytes = pack.files
       .filter((file) => file.path.startsWith('dist/parsers/code/grammars/'))
       .reduce((total, file) => total + file.size, 0);
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_250_000);
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_530_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {

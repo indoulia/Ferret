@@ -1,4 +1,8 @@
+import { performance } from 'node:perf_hooks';
+
 import { sql, type SQL } from 'drizzle-orm';
+
+import { Metric, defaultMetrics, type MetricsRegistry } from '../observability/index.js';
 
 import type { CanonicalEntity, CanonicalEvidence } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
@@ -212,9 +216,18 @@ function abbreviatedObjectId(text: string): string | undefined {
 
 export class RetrievalStore implements RetrievalPort {
   readonly #db: FerretDatabase;
+  /**
+   * Where reads are measured — EPIC-092 §8.6.
+   *
+   * Optional and defaulted, so every existing caller keeps working. Retrieval is
+   * instrumented because EPIC-050 §13 makes a claim about query counts that
+   * nothing measured.
+   */
+  readonly #metrics: MetricsRegistry | undefined;
 
-  constructor(db: FerretDatabase) {
+  constructor(db: FerretDatabase, metrics: MetricsRegistry = defaultMetrics()) {
     this.#db = db;
+    this.#metrics = metrics;
   }
 
   /**
@@ -472,6 +485,10 @@ export class RetrievalStore implements RetrievalPort {
    * precondition of this Epic existing.
    */
   async traverse(query: TraversalQuery, access: AccessContext): Promise<TraversalResult> {
+    // EPIC-092 §8.6. EPIC-050 §13 claims "one indexed lookup per frontier node"
+    // and nothing measured it; `traverse_hops` is that claim as a number.
+    const startedAt = performance.now();
+    let hops = 0;
     // The walk itself is core and pure — `retrieval/traverse.ts` — and it takes
     // the one-hop read as a function. That is the security property rather than
     // a testing convenience: every hop is filtered by `#neighbours`, which
@@ -479,13 +496,18 @@ export class RetrievalStore implements RetrievalPort {
     // reachable transitively that is not reachable directly. EPIC-050 §8.3.
     const tally = new WithheldTally();
     const result = await traverseFrom(
-      async (from, limit) => this.#neighbours({ ...query, from, limit }, access, tally),
+      async (from, limit) => {
+        hops += 1;
+        return this.#neighbours({ ...query, from, limit }, access, tally);
+      },
       {
         from: query.from,
         ...(query.depth === undefined ? {} : { depth: query.depth }),
         ...(query.limit === undefined ? {} : { limit: query.limit }),
       },
     );
+    this.#metrics?.observe(Metric.RETRIEVAL_TRAVERSE_MS, performance.now() - startedAt);
+    this.#metrics?.observe(Metric.RETRIEVAL_TRAVERSE_HOPS, hops);
     // The tally is filled by the hops above, so it can only be read once they
     // have run — which is why it is attached here rather than passed in.
     return { ...result, withheld: tally.report };
@@ -506,6 +528,7 @@ export class RetrievalStore implements RetrievalPort {
    * commit, but a sentence extracted from a document exists only as evidence.
    */
   async search(query: SearchQuery, access: AccessContext): Promise<SearchResult> {
+    const startedAt = performance.now();
     const limit = boundedLimit(query.limit);
     const text = query.text.trim();
     if (text.length === 0) {
@@ -746,6 +769,7 @@ export class RetrievalStore implements RetrievalPort {
         });
       }
       tally.add(WithholdReason.PERMISSION, await this.#countProtected(query, access));
+      this.#metrics?.observe(Metric.RETRIEVAL_SEARCH_MS, performance.now() - startedAt);
       return { hits: visible, withheld: tally.report };
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.search');

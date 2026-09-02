@@ -1,3 +1,6 @@
+import { performance } from 'node:perf_hooks';
+
+import { Metric, defaultMetrics } from '../../observability/index.js';
 import { Command, Option } from 'commander';
 
 import { Permission, assertPermitted, localOperatorFrom } from '../../authorization/index.js';
@@ -137,10 +140,16 @@ export function verifyCommand(
             ...(producerIdentity === undefined ? {} : { producerIdentity }),
             logger: context.logger,
           };
+          // EPIC-092 §8.6. EPIC-094 §16 asked for repair timing by name, and a
+          // sweep that takes minutes on a large index is exactly the thing an
+          // operator wants a number for.
+          const sweepStartedAt = performance.now();
           const sweep = await integrity.sweep({
             ...sweepOptions,
             ...(options.limit === undefined || Number.isNaN(options.limit) ? {} : { limit: options.limit }),
           });
+
+          defaultMetrics().observe(Metric.VERIFY_MS, performance.now() - sweepStartedAt);
 
           if (!options.repair) return { sweep, repaired: [] as string[], confirmed: true };
 
