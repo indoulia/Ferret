@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { ErrorCode, FerretError } from '../errors/index.js';
 
+import { Confidence } from './confidence.js';
 import { canonicalId, contentHash, encodeKeyParts } from './identity.js';
 
 /**
@@ -54,8 +55,8 @@ export type MemoryOrigin = (typeof MemoryOrigin)[keyof typeof MemoryOrigin];
 
 /** Confidence by origin. Stated once so the ordering is one decision. */
 export const ORIGIN_CONFIDENCE: Readonly<Record<MemoryOrigin, number>> = Object.freeze({
-  [MemoryOrigin.EXPLICIT]: 0.95,
-  [MemoryOrigin.EXTRACTED]: 0.6,
+  [MemoryOrigin.EXPLICIT]: Confidence.STRONG,
+  [MemoryOrigin.EXTRACTED]: Confidence.PLAUSIBLE,
 });
 
 /** Longest statement retained. A pasted essay is not a memory. */

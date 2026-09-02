@@ -496,6 +496,12 @@ export {
   authorityFor,
   effectiveAuthority,
   isUnknownAuthority,
+  // EPIC-046. Confidence comes from the rule, never from the method.
+  CONFIDENCE_BANDS,
+  Confidence,
+  completenessOf,
+  derivedConfidence,
+  isUnassessedConfidence,
   type AuthorityOptions,
   SessionCaptureKind,
   SessionStatus,

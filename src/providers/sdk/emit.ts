@@ -4,6 +4,7 @@ import {
   createEvidence,
   createRelationship,
   EvidenceMethod,
+  derivedConfidence,
   type CanonicalEntity,
   type CanonicalEvidence,
   type CanonicalRelationship,
@@ -232,11 +233,11 @@ export class BatchEmitter extends Emitter {
   }
 
   override inferred(input: EmittedEvidenceInput & { readonly derivedFrom: readonly string[] }): CanonicalEvidence {
-    return this.#recordEvidence(super.inferred(input));
+    return this.#recordEvidence(super.inferred(this.#inherit(input)));
   }
 
   override generated(input: EmittedEvidenceInput & { readonly derivedFrom: readonly string[] }): CanonicalEvidence {
-    return this.#recordEvidence(super.generated(input));
+    return this.#recordEvidence(super.generated(this.#inherit(input)));
   }
 
   get entities(): readonly CanonicalEntity[] {
@@ -269,6 +270,31 @@ export class BatchEmitter extends Emitter {
     this.#relationships.clear();
     this.#evidence.clear();
     this.#duplicates = 0;
+  }
+
+  /**
+   * The confidence a conclusion inherits from its chain — EPIC-046 §8.3.
+   *
+   * **Before `createEvidence`, not after.** A record's id and content hash are
+   * derived from its fields, so setting confidence on the returned object would
+   * produce a record whose id no longer matches its content — the one mistake
+   * this seam cannot make.
+   *
+   * Here rather than on the base emitter because this is the emitter that holds
+   * the chain: `derivedFrom` carries ids, and the base has no way to resolve one
+   * to a record. An id this batch has not seen leaves the conclusion unassessed
+   * rather than throwing — a chain Ferret cannot follow is a chain it cannot
+   * bound.
+   *
+   * A caller that supplied its own confidence keeps it. Propagation fills a gap;
+   * it does not overrule a producer that assessed its own output.
+   */
+  #inherit<T extends EmittedEvidenceInput & { readonly derivedFrom: readonly string[] }>(input: T): T {
+    if (input.confidence !== undefined) return input;
+    const inherited = derivedConfidence(
+      input.derivedFrom.map((id) => this.#evidence.get(id)?.confidence),
+    );
+    return inherited === undefined ? input : { ...input, confidence: inherited };
   }
 
   #recordEvidence(value: CanonicalEvidence): CanonicalEvidence {

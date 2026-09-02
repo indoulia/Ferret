@@ -191,3 +191,29 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | `retire` closes the most recent open interval for an edge, not an arbitrary one. | An event retiring a specific historical interval cannot be expressed. | EPIC-007 follow-up if a provider needs it |
 | No traversal depth or cycle protection, because traversal is one hop. | Must be addressed before multi-hop traversal exists. | **EPIC-050** |
 | macOS unvalidated. | Inherited from EPIC-001/EPIC-005. | **EPIC-105** |
+
+## Addendum — 2026-09-02, after EPIC-046
+
+**The confidence limitation recorded above is closed in the part EPIC-046 owns.**
+The table is left as written, for the reason EPIC-048's addendum gave: a record
+that edited itself whenever a later Epic closed something would stop being
+evidence of anything.
+
+`confidence` now has a named scale, a propagation rule through `derivedFrom` — a
+conclusion is no more certain than what it rests on — and one real producer: the
+Git provider emits `RULE_CONFIDENCE[MAILMAP]` on the evidence it records when
+`.mailmap` rewrote an address.
+
+The decision worth knowing is a negative one. **Confidence is not derived from
+`method`**, because EPIC-045's authority table already is, and a second number
+keyed on the same input would restate it on a different scale. Confidence comes
+from the specific rule that produced a statement — a distinction already
+load-bearing, since `SAME_ADDRESS` and `SAME_NAME_AND_LOCAL_PART` are both
+`inferred` and 0.45 apart.
+
+So **most evidence remains unassessed, and that is the correct outcome** rather
+than a shortfall: Git observation has no rule and needs none. The Epics that will
+populate the field are the inferring ones — EPIC-035, EPIC-047, EPIC-051 — and
+all three are unbuilt.
+
+Evidence: `validation/EPIC-046-VALIDATION.md`.

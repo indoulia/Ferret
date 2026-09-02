@@ -1,3 +1,4 @@
+import { Confidence } from '../domain/confidence.js';
 import { encodeKeyParts } from '../domain/identity.js';
 
 import type { NormalizedIdentity } from './git-identity.js';
@@ -42,10 +43,10 @@ export type LinkRule = (typeof LinkRule)[keyof typeof LinkRule];
  * people.
  */
 export const RULE_CONFIDENCE: Readonly<Record<LinkRule, number>> = Object.freeze({
-  [LinkRule.MAILMAP]: 1,
-  [LinkRule.SAME_ADDRESS]: 0.95,
-  [LinkRule.GITHUB_NOREPLY_LOGIN]: 0.8,
-  [LinkRule.SAME_NAME_AND_LOCAL_PART]: 0.5,
+  [LinkRule.MAILMAP]: Confidence.CERTAIN,
+  [LinkRule.SAME_ADDRESS]: Confidence.STRONG,
+  [LinkRule.GITHUB_NOREPLY_LOGIN]: Confidence.PROBABLE,
+  [LinkRule.SAME_NAME_AND_LOCAL_PART]: Confidence.EVEN,
 });
 
 export interface IdentityLinkProposal {
