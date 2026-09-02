@@ -49,7 +49,10 @@ that was deleted upstream is what Ferret was indexing history for.
   not wrap it."
 - **Import.** EPIC-090, deliberately a separate Epic: a format that is written
   and read by the same code is a format nobody has validated.
-- **Scheduling an export.** EPIC-078 owns periodic work.
+- **Scheduling an export.** EPIC-078 owns periodic work. **Declined there,
+  2026-09-03:** this Epic's document is everything Ferret knows, in cleartext,
+  in one file, so writing one on a timer decides where that file lives and who
+  can read it — a data-exposure decision an operator makes deliberately.
 - **A configuration exporter.** §8.4 — the file already is one.
 - **Encryption of the export.** §16 — a document Ferret writes in cleartext is
   the same exposure the database already has, and inventing a key-management

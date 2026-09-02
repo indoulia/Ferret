@@ -62,6 +62,10 @@ against a stale cursor looks identical to one that caught up.
   that one decides when to read again.
 - **Scheduling, timers, unattended runs** — EPIC-078, and EPIC-108 §4 already
   assigns them there.
+  **Answered 2026-09-03 by [EPIC-078](EPIC-078-Periodic-Reconciliation.md):**
+  `ferret reconcile` is the pass a scheduler runs, and Ferret still owns no
+  timer — cron, a systemd timer and Task Scheduler each already survive a
+  reboot and log when they ran.
 - **Webhooks and event ingestion** — EPIC-077.
 - **Changing what a Git run resumes from.** The position stays the newest
   commit timestamp; only where it lives and who can read it changes.

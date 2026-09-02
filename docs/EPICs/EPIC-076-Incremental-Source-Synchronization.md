@@ -77,6 +77,10 @@ every run. EPIC-031's table assigns that to EPIC-032, and it stays there.
   already assigns it. A tree-hash comparison against the cursor is the shape,
   and it is not this Epic's.
 - **Scheduling, timers, unattended runs** — EPIC-078.
+  **Answered 2026-09-03 by [EPIC-078](EPIC-078-Periodic-Reconciliation.md):**
+  `ferret reconcile` is the pass a scheduler runs, and Ferret still owns no
+  timer — cron, a systemd timer and Task Scheduler each already survive a
+  reboot and log when they ran.
 - **Webhooks and event ingestion** — EPIC-077.
 - **The cursor mechanism** — EPIC-075, delivered.
 - **Parallelism across repositories** — EPIC-032.

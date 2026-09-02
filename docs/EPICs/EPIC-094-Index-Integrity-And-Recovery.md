@@ -133,7 +133,10 @@ integrity. The DBA §13 forbids is exactly who the current answer requires.
   source that is gone is EPIC-090's.
 - **Scheduling.** Nothing here runs on a timer. Cadence, drift between scheduled
   passes and unattended operation are **EPIC-078**, with cursors in
-  **EPIC-075/076**.
+  **EPIC-075/076**. **Delivered 2026-09-03:** cadence is a *threshold*
+  (`--stale-after`) rather than a timer, and drift is reported as each
+  repository's age since it was last indexed — because the failure mode a
+  schedule has is silence. `ferret verify` is still never scheduled.
 - **Deleting or editing rows to make them verify.** Governance §6 forbids
   rewriting an observation, and `src/storage/evidence.ts:485` already prints the
   only correct remedy: *"Re-index the source to produce a fresh observation; do

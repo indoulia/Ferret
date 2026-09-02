@@ -70,7 +70,9 @@ that view for retrieval quality; providers have none.
 - **Provider health, restart or failure isolation** — EPIC-014, EPIC-093.
 - **A CLI command.** Nothing on record asks for `ferret conformance`, and the
   audience for this is a test run, not an operator.
-- **Scheduling or trend history** — EPIC-092, EPIC-078.
+- **Scheduling or trend history** — EPIC-092, EPIC-078. **EPIC-078 schedules
+  nothing but an index pass** (2026-09-03), so the harness stays something a
+  person or CI runs.
 
 ## 5. Inputs
 

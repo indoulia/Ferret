@@ -45,6 +45,9 @@ answers.
 
 - **Automatic or scheduled pruning.** §8.1. EPIC-078 owns periodic work, and a
   schedule that deletes is a schedule that deletes something somebody needed.
+  **EPIC-078 declined it, 2026-09-03,** and quoted this Epic's own reason back:
+  "a scheduled delete is the silent version of this Epic." `ferret prune` stays
+  explicit and confirmed, and `ferret reconcile` cannot reach it.
 - **Deleting a tombstoned entity.** §8.4 — this is the sharp one, and the answer
   is no.
 - **Deleting *excluded* content.** EPIC-058 and EPIC-083 both say exclusion

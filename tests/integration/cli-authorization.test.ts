@@ -151,6 +151,27 @@ describeDb(`CLI authorization (${databaseAvailable() ? 'real PostgreSQL' : SKIP_
     expect(result.code).toBe(ExitCode.OK);
   });
 
+  it('refuses to reconcile when configuration withholds index — EPIC-078 AC-6', async () => {
+    // A pass indexes, so it is checked as an index — the same grant `index`
+    // needs, because an unattended pass must not be a way around one.
+    const result = await runCli(['reconcile'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read']) },
+    });
+
+    expect(result.code).toBe(ExitCode.NOT_PERMITTED);
+    expect(result.stderr).toContain('E_NOT_PERMITTED');
+    expect(result.stderr).toContain('reconcile');
+  });
+
+  it('reconciles when configuration grants index — EPIC-078, the control', async () => {
+    const result = await runCli(['reconcile', '--dry-run'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read', 'index']) },
+    });
+
+    expect(result.stderr).not.toContain('E_NOT_PERMITTED');
+    expect(result.code).toBe(ExitCode.OK);
+  });
+
   it('indexes with no authorization configured at all — AC-3, the default', async () => {
     // EPIC-083 §16. The CLI's unconfigured default is the local operator, not the
     // anonymous client: refusing a person at their own machine protects nobody,
