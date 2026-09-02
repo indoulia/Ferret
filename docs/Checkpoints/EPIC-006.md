@@ -129,7 +129,7 @@ Full table in the validation evidence. Carried forward:
 - No entity history — an update overwrites previous attributes → **EPIC-007**
 - `upsertMany` is not one transaction for the whole batch → **EPIC-080** stated and tested it: validation is atomic for the batch, application is per entity, and that is sufficient because the batch is idempotent — a partial batch plus a retry equals a complete one
 - Replacing external ids resets `first_seen_at` → **EPIC-008** if needed
-- Attributes are `jsonb` with no typed columns, deliberately → **EPIC-086**
+- Attributes are `jsonb` with no typed columns, deliberately → **EPIC-086** recorded the reasoning and did not reverse it: kinds are extensible, so a typed column per attribute would make every new kind a migration, and the cost is paid in the generated and partial indexes instead
 - macOS unvalidated → **EPIC-105**
 
 ## Next step
