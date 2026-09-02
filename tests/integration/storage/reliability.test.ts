@@ -121,7 +121,24 @@ describeDb(`storage reliability (${databaseAvailable() ? 'real PostgreSQL' : SKI
         const waited = Date.now() - started;
 
         expect(failure).toMatchObject({ code: 'E_MIGRATION_LOCKED', retryable: true });
-        expect((failure as { remediation?: string }).remediation).toContain('pg_locks');
+
+        // **The remediation names the holder, not a catalogue** — EPIC-095.
+        //
+        // This assertion used to require the string `pg_locks`, which pinned in
+        // place the one instruction Governance §13 exists to prevent: "inspect
+        // pg_locks for a stale session holding the advisory lock", asking an
+        // operator to do DBA work Ferret can do itself.
+        //
+        // The property replacing it is strictly stronger: the error must
+        // identify the session that actually holds the lock and name a Ferret
+        // command, and `tests/security/no-dba-remediations.test.ts` asserts
+        // across all 130 remediation strings that none names a catalogue.
+        const remediation = (failure as { remediation?: string }).remediation ?? '';
+        expect(remediation).not.toContain('pg_locks');
+        expect(remediation).toContain('ferret init');
+        expect(remediation).toMatch(/process \d+/);
+        // And the diagnosis reached the message, not only the remediation.
+        expect((failure as { message?: string }).message).toContain('held');
         // It really waited rather than failing instantly.
         expect(waited).toBeGreaterThanOrEqual(700);
 

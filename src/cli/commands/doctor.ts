@@ -10,7 +10,7 @@ import {
 } from '../../index.js';
 import { createLogger, type LogLevel } from '../../logging/index.js';
 import { effectiveLogLevel } from '../log-level.js';
-import { exitCodeForHealth, probeHealth } from '../health.js';
+import { exitCodeForHealth, probeHealth, readCapabilityAvailability, readIndexInventory } from '../health.js';
 import { emitResult, type OutputOptions } from '../output.js';
 
 /**
@@ -81,10 +81,26 @@ export function doctorCommand(
       // that" are both facts an operator needs, and only one is a warning.
       const protection = describeConfigProtection();
 
+      // EPIC-095 §3.2. "Is anything wrong" is answered above; this answers the
+      // question every operator asks immediately after a clean bill of health —
+      // what does Ferret actually know. Every number already existed and
+      // nothing assembled them: `content_blob` since EPIC-087, the run journal
+      // since EPIC-094, the entity counts since EPIC-006.
+      //
+      // Absent, never zero, when there is no database to ask (AC-7), and it
+      // changes no verdict and no exit code (AC-8): a count is not a status,
+      // and turning one into a status would invent a threshold nobody argued
+      // for.
+      const inventory = await readIndexInventory(logger);
+      // EPIC-095 AC-6 — what Ferret can do here, and why it cannot do the rest.
+      const capabilities = await readCapabilityAvailability(logger);
+
       const payload = {
         ...report,
         ...(options.showConfig ? { configuration: configuration ?? null } : {}),
         configFile: protection,
+        inventory: inventory ?? null,
+        capabilities,
         counts,
       };
 
@@ -101,6 +117,32 @@ export function doctorCommand(
           lines.push(
             `${String(counts.error)} error(s), ${String(counts.warning)} warning(s), ${String(counts.unknown)} undetermined.`,
           );
+        }
+        if (inventory !== undefined) {
+          lines.push('', 'index');
+          for (const entry of inventory.entities.slice(0, 8)) {
+            lines.push(`  ${entry.kind.padEnd(18)}${String(entry.count)}`);
+          }
+          lines.push(`  ${'relationships'.padEnd(18)}${String(inventory.relationships)}`);
+          lines.push(`  ${'evidence'.padEnd(18)}${String(inventory.evidence)}`);
+          lines.push(
+            `  ${'content'.padEnd(18)}${String(inventory.contentBlobs)} blob(s), ${String(inventory.contentBytes)} byte(s) of text`,
+          );
+          lines.push(
+            `  ${'last run'.padEnd(18)}${
+              inventory.lastRun === undefined
+                ? 'no completed run on record'
+                : `${inventory.lastRun.outcome} for ${inventory.lastRun.repository}, ${String(inventory.lastRun.ageSeconds)}s ago`
+            }`,
+          );
+        }
+        if (capabilities.length > 0) {
+          lines.push('', 'capabilities');
+          for (const entry of capabilities) {
+            lines.push(
+              `  ${entry.capability.padEnd(20)}${entry.available ? 'available' : `unavailable (${entry.reason ?? 'unknown'})`}`,
+            );
+          }
         }
         lines.push('', `configuration at rest: ${protection.detail}`);
         lines.push('', report.summary);

@@ -150,7 +150,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | --- | --- | --- |
 | No index or synchronization health, because neither exists. Reported as `unknown`. | An operator cannot yet learn whether indexing is behind. | **EPIC-031**, **EPIC-094**, **EPIC-075/076** |
 | No provider health beyond storage, because storage is the only provider. | The `providers` area is defined but unpopulated. | **EPIC-014** — Provider Lifecycle & Health |
-| A long migration lock wait is not surfaced as a distinct finding. | EPIC-002 recorded that `client_connection_check_interval` is a no-op on a Windows-hosted *server*, so a crashed process there can hold the lock until the statement ends. `doctor` reports the resulting symptom, not the cause. | **EPIC-095** — Operational Diagnostics |
+| A long migration lock wait is not surfaced as a distinct finding. | EPIC-002 recorded that `client_connection_check_interval` is a no-op on a Windows-hosted *server*, so a crashed process there can hold the lock until the statement ends. `doctor` reports the resulting symptom, not the cause. | **EPIC-095** — resolved: the error now names the holding session's pid, state and duration, and its remediation names a Ferret command rather than `pg_locks`. |
 | No metrics, tracing or history — health is point-in-time. | "Was it healthy an hour ago" cannot be answered. | **EPIC-092** — Metrics & Tracing |
 | Health is not yet exposed over MCP. | An AI client must shell out to `ferret status --json`. The report is already structured for it. | **EPIC-066**, **EPIC-070** |
 | macOS unvalidated. | Inherited from EPIC-001/EPIC-005; no macOS host available. | **EPIC-105** |

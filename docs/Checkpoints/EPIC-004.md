@@ -109,7 +109,7 @@ Full table in the validation evidence. Carried forward:
 
 - No index or synchronization health, because neither exists → **EPIC-031**, **EPIC-094**, **EPIC-075/076**
 - No provider health beyond storage, because storage is the only provider → **EPIC-014**
-- A long migration lock wait is not a distinct finding; `doctor` reports the symptom → **EPIC-095**
+- A long migration lock wait is not a distinct finding; `doctor` reports the symptom → **EPIC-095** resolved it: the error names the holding session and what to do about it
 - Health is point-in-time; no metrics, tracing or history → **EPIC-092**
 - Health is not yet exposed over MCP; the report is already structured for it → **EPIC-066**, **EPIC-070**
 - macOS unvalidated → **EPIC-105**
