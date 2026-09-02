@@ -11,6 +11,8 @@ import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/ind
 import { ActorClass } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import {
+  LinkRule,
+  RULE_CONFIDENCE,
   applyMailmap,
   classifyIdentity,
   normalizeGitIdentity,
@@ -672,6 +674,14 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
                 field: 'attributes.emails',
                 statement: emails,
                 sourceId: raw.comparable,
+                // EPIC-046. The first real confidence Ferret emits, and it comes
+                // from the *rule* rather than from the method — which is §8.1's
+                // whole point, since `parsed` already sets the authority rank.
+                // The rule is `.mailmap`: the project's own maintained answer
+                // about who an address belongs to, which `RULE_CONFIDENCE` has
+                // rated `CERTAIN` since EPIC-009 and which is the one rule that
+                // is almost never wrong.
+                confidence: RULE_CONFIDENCE[LinkRule.MAILMAP],
               })
             : emitter.about(actor, 'attributes.emails', emails),
         );

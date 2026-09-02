@@ -252,3 +252,14 @@ export {
   isUnknownAuthority,
   type AuthorityOptions,
 } from './authority.js';
+
+// EPIC-046. Confidence comes from the rule that produced a statement, never
+// from its method — `authority.js` already encodes method, and a second number
+// keyed on the same input would say the same thing twice.
+export {
+  CONFIDENCE_BANDS,
+  Confidence,
+  completenessOf,
+  derivedConfidence,
+  isUnassessedConfidence,
+} from './confidence.js';
