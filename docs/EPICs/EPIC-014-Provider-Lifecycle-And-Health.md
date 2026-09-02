@@ -47,7 +47,11 @@ that was down for ten seconds at start-up costs the whole session.
   restart mechanism for one would be pretending a fatal condition is transient.
 - **Health *polling*.** §8.6 — nothing here runs on a timer. EPIC-078 owns
   periodic work, and a poll that restarts a provider unattended is a decision
-  that Epic has to take.
+  that Epic has to take. **It took it on 2026-09-03 and declined:** recovery
+  re-runs an `initialize` that already failed, and doing that on a timer turns a
+  misconfiguration into a log full of identical warnings — which is why the
+  circuit in §8.3 exists. `ferret reconcile` cannot reach `recover`, and a test
+  asserts it.
 - **Per-operation retry.** EPIC-079 owns retry policy and EPIC-093 owns
   isolation at the initialize boundary. This Epic adds the *state* a circuit
   needs, not a retry wrapper around every call.

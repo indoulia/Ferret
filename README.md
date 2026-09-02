@@ -95,6 +95,7 @@ if the body throws — so a started runtime cannot leak.
 | `ferret prune` | Implemented | EPIC-088 |
 | `ferret export` | Implemented | EPIC-089 |
 | `ferret import` | Implemented | EPIC-090 |
+| `ferret reconcile` | Implemented | EPIC-078 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
 
 Every approved command in this release is implemented. The mechanism for
@@ -212,6 +213,32 @@ ferret verify --repair --yes   # re-read the affected repositories from source
 ferret status          # is the database reachable, is the schema current
 ferret doctor          # ...and what to do about it if not
 ```
+
+### Keep it up to date, unattended
+
+```bash
+ferret reconcile                      # every repository Ferret already knows
+ferret reconcile --stale-after 6h     # ...skipping what was indexed recently
+ferret reconcile --dry-run            # what a pass would do
+```
+
+**Ferret runs no timer.** Schedule this with cron, a systemd timer, or Task
+Scheduler — each already survives a reboot, avoids overlapping with itself, logs
+when it ran, and is visible to an operator who did not write it. An hourly cron
+line pointed at `--stale-after 6h` is safe: the schedule can be more frequent
+than the work.
+
+```cron
+0 * * * * ferret reconcile --stale-after 6h --json >> /var/log/ferret.log 2>&1
+```
+
+The exit code means something. `0` when everything attempted succeeded —
+**including** a pass that skipped everything as fresh, because that is the pass
+working — and non-zero only when a repository failed.
+
+A pass **reads and re-derives**. It never prunes, never exports, and never
+restarts a provider: an unattended run is the one nobody is watching, and each of
+those three is available as an explicit command instead.
 
 ### Get the data out
 

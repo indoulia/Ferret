@@ -11,6 +11,7 @@ import { initCommand } from './commands/init.js';
 import { mcpCommand } from './commands/mcp.js';
 import { statusCommand } from './commands/status.js';
 import { pruneCommand } from './commands/prune.js';
+import { reconcileCommand } from './commands/reconcile.js';
 import { exportCommand } from './commands/export.js';
 import { importCommand } from './commands/import.js';
 import { verifyCommand } from './commands/verify.js';
@@ -89,6 +90,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program.addCommand(pruneCommand(output));
   program.addCommand(exportCommand(output));
   program.addCommand(importCommand(output));
+  program.addCommand(reconcileCommand(output, reportExitCode));
   for (const spec of PLANNED_COMMANDS) program.addCommand(plannedCommand(spec));
 
   // Commander's `addCommand` does not propagate `exitOverride` or the output

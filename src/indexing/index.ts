@@ -50,3 +50,14 @@ export type {
   WatermarkRecord,
   WatermarkStore,
 } from './ports.js';
+export {
+  ReconcileOutcome,
+  byStaleness,
+  isFresh,
+  parseDuration,
+  passFailed,
+  summarizePass,
+  type ReconcileCandidate,
+  type ReconcileEntry,
+  type ReconcileReport,
+} from './reconcile.js';
