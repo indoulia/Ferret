@@ -16,6 +16,12 @@ export default tseslint.config(
       // dataset answerable to this repository's style rules rather than to what
       // it is meant to represent.
       'datasets/golden/corpus/**',
+      // EPIC-097's parser fixtures, for the same reason and one more: one of
+      // them contains a deliberate syntax error, because a parser harness whose
+      // corpus is all well-formed cannot measure error recovery. Linting it
+      // would fail permanently, correctly, about a file whose brokenness is the
+      // point.
+      'datasets/parsing/corpus/**',
     ],
   },
   js.configs.recommended,

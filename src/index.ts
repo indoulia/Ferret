@@ -681,6 +681,7 @@ export {
   Relevance,
   computeGoldenChecksum,
   loadGoldenDataset,
+  loadParsingDataset,
   resolveIdentity,
   type GoldenDataset,
   type GoldenEvidenceExpectation,
@@ -692,7 +693,10 @@ export {
 
 export {
   DEFAULT_K,
+  measureParsingQuality,
   measureRetrievalQuality,
+  type ParsingDataset,
+  type ParsingQualityReport,
   ndcgAtK,
   precisionAtK,
   recallOf,

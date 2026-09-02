@@ -219,10 +219,26 @@ describe('package contents', () => {
     expect(pack.unpackedSize).toBeLessThan(9_000_000);
     // And the grammars must stay the bulk of it: if the non-grammar output ever
     // approaches this, something is leaking.
+    //
+    // **Raised from 2 000 000 on 2026-09-02, deliberately.** The non-grammar
+    // output reached 2 003 280 — 0.16% over — after a session that added ten
+    // product modules: content storage, the integrity sweep and run journal,
+    // `ferret verify`, credential isolation, the logging additions, and two
+    // quality harnesses.
+    //
+    // The package was measured before the number was moved, because raising a
+    // limit you have just crossed is the wrong instinct unless you know what
+    // crossed it. Nothing improper ships: no tests, no source maps, and the
+    // parsing fixtures are correctly absent. The 7 KB of golden dataset under
+    // `dist/datasets` is intentional and is asserted elsewhere in this file.
+    //
+    // The guard's purpose is unchanged — catch something *large* slipping in,
+    // a bundled dependency or a stray asset. The headroom is 12%, not a round
+    // figure, so the next crossing is also a decision rather than a formality.
     const grammarBytes = pack.files
       .filter((file) => file.path.startsWith('dist/parsers/code/grammars/'))
       .reduce((total, file) => total + file.size, 0);
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_000_000);
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_250_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {
