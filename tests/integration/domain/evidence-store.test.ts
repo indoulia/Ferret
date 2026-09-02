@@ -825,12 +825,56 @@ describeDb(`evidence and provenance (${databaseAvailable() ? 'real PostgreSQL' :
     }, 60_000);
 
     it('uses the subject index rather than scanning', async () => {
+      /**
+       * **This test used to pass only while the planner was ignorant** — issue
+       * [#109](https://github.com/indoulia/Ferret/issues/109).
+       *
+       * The fixture holds 74 evidence rows. Measured on that table:
+       *
+       * ```
+       * no statistics : Index Scan using evidence_subject_idx  (cost=0.14..8.16)
+       * after ANALYZE : Seq Scan on evidence                   (cost=0.00..4.11)
+       * ```
+       *
+       * PostgreSQL is right both times. On 74 rows a sequential scan *is*
+       * cheaper, so the assertion held only until autoanalyze happened to run —
+       * which a loaded full-suite run makes likely and a single-file run does
+       * not. The flake was never a race in Ferret; it was a test measuring the
+       * absence of statistics.
+       *
+       * So the fixture is given a table the index is genuinely the right plan
+       * for, and then statistics are made current rather than left to chance.
+       * Both halves are needed: the rows make the index cheaper, and the
+       * `ANALYZE` makes the decision reproducible. If `evidence_subject_idx`
+       * were dropped, this now fails — which it did not before.
+       */
+      const filler = 4_000;
+      await db.pool.query(
+        `INSERT INTO ferret.evidence (
+           id, subject_id, field, statement, method, producer, producer_version,
+           source_system, state, completeness, integrity_hash, observed_at, recorded_at
+         )
+         SELECT gen_random_uuid(), $1, 'attributes.filler-' || g, to_jsonb('planner fixture'::text),
+                'observed', 'ferret.test', '1.0.0', 'git', 'current', 'complete',
+                encode(sha256(g::text::bytea), 'hex'), now(), now()
+           FROM generate_series(1, $2) AS g`,
+        [file, filler],
+      );
+      // Not left to autoanalyze. The whole defect was a plan that depended on
+      // whether a background worker had run yet.
+      await db.pool.query('ANALYZE ferret.evidence');
+
       const plan = await db.pool.query<{ 'QUERY PLAN': string }>(
         `EXPLAIN SELECT * FROM ferret.evidence WHERE subject_id = $1 AND field = $2`,
         [file, 'attributes.language'],
       );
-      expect(plan.rows.map((row) => row['QUERY PLAN']).join('\n')).toContain('evidence_subject_idx');
-    });
+      expect(plan.rows.map((row) => row['QUERY PLAN']).join(' ')).toContain('evidence_subject_idx');
+
+      // Cleaned up, because this block runs inside the performance describe and
+      // a table left 4 000 rows heavier would change what the budgets measure.
+      await db.pool.query(`DELETE FROM ferret.evidence WHERE producer = 'ferret.test'`);
+      await db.pool.query('ANALYZE ferret.evidence');
+    }, 60_000);
   });
 
   describe('durability', () => {

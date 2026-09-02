@@ -116,3 +116,90 @@ regression suite is worth having.
   The property — "a stored row's hash is recomputable from the row" — is now
   asserted by EPIC-094's own sweep, which is the right owner; naming it here as
   well would be this suite absorbing another Epic's evidence.
+
+---
+
+## Addendum — 2026-09-02
+
+**AC-8 is now MET. §Raised's paragraph is left as written**, including its
+judgement that the narrower form was "the hand-written list §8 rejects" — that
+was the right thing to refuse, and refusing it is what made the workable shape
+findable later.
+
+### What the criterion needed, and what it got
+
+> **AC-8** No security control Ferret declares is unreachable from a production
+> path; a control whose only callers are tests fails the suite.
+
+Two questions, and the first was the hard one. **What does Ferret *declare* as a
+security control?** Read from the source, not listed: every value export of
+`src/security/index.ts` and `src/authorization/index.ts`. Those two barrels are
+where Ferret declares its controls and they say so themselves —
+`src/authorization/index.ts` opens by drawing the line between them:
+"`security/` holds *content* controls … This holds a *caller* control." Adding an
+export to either is what declaring a control means, so the invariant covers the
+next one on the commit that adds it. Types are excluded, being shapes rather than
+controls; constants are not, because a `CREDENTIAL_ENV` nothing reads means
+nothing scrubs, which is the `detectGit` defect's exact shape.
+
+**Reachability is transitive, and the first implementation of this was wrong.** A
+direct-reference check reported thirteen controls dead and every one was a false
+positive: `classifyInstructionShape` is called by `contain`, `CREDENTIAL_ENV` is
+read by `withoutCredentials`, `authorize` is called by `assertPermitted`.
+Production reaches them *through* a sibling. Shipping that would have trained the
+next reader to ignore this suite — the failure mode EPIC-094 named when it
+excluded content artefacts from its staleness check. So the invariant walks the
+reference graph: a control is reachable when production names it, or when
+something already reachable names it, and only a control no chain ends at is
+dead.
+
+`tests/security/control-reachability.test.ts`, eight cases. Four are about the
+detector rather than the property, which is deliberate — an enumerated invariant
+whose enumeration silently stops matching is worse than no invariant:
+
+| case | asserts |
+| --- | --- |
+| *finds %s's control surface* | more than five controls per module, **and** the declaration parser located every one of them, so a file it cannot parse fails the suite instead of contributing no edges |
+| *excludes barrels* | `src/index.ts` re-exports the whole package; if it counted as a caller every control would be trivially reachable |
+| *every control %s declares is reached from src/* | the criterion |
+| *reports a control of %s's that nothing calls — AC-11* | a planted name, through the same function the assertion uses |
+| *does not reach a control through a dead sibling* | being named by an *unreachable* declaration is not reachability — pins the closure's direction, which is where an over-permissive graph walk would hide |
+
+### AC-8's first catch, on its first run
+
+`containsSecret` was exported from `src/security/index.ts` and its only caller
+was `tests/unit/secrets.test.ts`. That is the sentence of the criterion,
+verbatim, and the same shape as the defect §Raised cited: "`EvidenceStore.verify`
+was correct, tested and reachable from nothing for three Epics."
+
+Resolved by removing it from the barrel, not from the codebase. It is a one-line
+predicate over `redactSecrets` and a useful one *for a test*, so the function
+stays in `secrets.ts` and that test imports it directly — EPIC-082 AC-9's
+assertion is unchanged. The alternative, giving it a production caller, was
+rejected as inventing a use to satisfy a check; no EPIC-082 or EPIC-087
+criterion asks for a boolean predicate on a production path, both being written
+around `redactSecrets`. Filed as
+[#116](https://github.com/indoulia/Ferret/issues/116) so the finding has a record
+independent of this document.
+
+### The residue, named rather than papered over
+
+The invariant covers the modules that declare themselves to be controls. It does
+**not** cover a control declared as a method on a port — which is
+`EvidenceStore.verify`'s own shape, since that is declared on
+`src/context/evidence-port.ts`.
+
+The generalisation was tried and discarded, and the reason is concrete rather
+than aesthetic: a "every port method needs a non-test caller" sweep **fails
+today** on a gap this Epic's sibling recorded and accepted —
+`EPIC-094-VALIDATION.md`, "`staleArtifacts` still has no production caller." The
+only ways to green it are to widen this Epic's scope into EPIC-094's, or to add
+the exemption list §8 rejects. It would also stop being a security invariant and
+become a dead-code detector, which is a different tool with a different failure
+budget.
+
+So the honest statement is that AC-8 holds for the controls Ferret declares as
+controls, and that a port-method control is reached by EPIC-094's sweep and by
+this one's absence. A workable form of the wider property is still worth a
+follow-up, and it is a smaller follow-up than it was: the graph walk here is the
+part that was missing.

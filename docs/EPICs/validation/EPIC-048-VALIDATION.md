@@ -98,3 +98,37 @@ enforcement to have something to enforce.
 recomputing the hash in process instead, which is cheaper and equally sound. The
 port method is kept because a caller that wants the store's own verdict should
 not have to reach past the port for it.
+
+---
+
+## Addendum — 2026-09-02
+
+**AC-11 is now MET. §2's row and §4's paragraph are left as written**, for the
+reason §5 of this same document gave when it declined to rewrite EPIC-008's
+`PARTIAL` row: a record that edited itself whenever a later Epic closed
+something would stop being evidence of anything.
+
+The criterion was partial in a specific way — "the parameter exists and the store
+filters on it, but every current caller omits it" — and §4 predicted exactly what
+would close it: "the seam exists and is correct, and exercising it needs
+EPIC-058's enforcement to have something to enforce."
+
+EPIC-058 delivered that, and says so in its own §6 ("What this closes"):
+
+> **EPIC-048's AC-11**, recorded as `PARTIAL`: "`permittedScopes` is on the port
+> and `EvidenceStore.forSubject` already filters on it, but no caller supplies it
+> and no test exercises the filter through this surface." Both now do.
+
+Its Definition of Done records 20 new unit tests plus 18 integration tests
+against real PostgreSQL, with the withheld-content path asserted end to end over
+stdio.
+
+EPIC-058 §9.1 is worth reading alongside this, because it is the sharper version
+of what AC-11 was pointing at. `ferret_why` — this Epic's own tool — called
+`EvidenceStore.forSubject` **without** `permittedScopes`, and an omitted scope set
+means unrestricted, so a permission-scoped statement withheld from
+`ferret_search` came back in full through traceability. Filed as
+[#85](https://github.com/indoulia/Ferret/issues/85) and fixed. AC-11 recorded
+that no caller supplied the context; the defect was that one caller which should
+have, did not, and nothing asserted it. The seam being present and unexercised
+was not a cosmetic gap.

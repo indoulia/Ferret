@@ -126,11 +126,52 @@ in this budget — which is how the budget was chosen.
 
 | Limitation | Impact | Owner |
 | --- | --- | --- |
-| **Offset paging is O(offset).** `git log --skip` walks the history to reach the offset. | Fine for the first pages, wrong for the ten-thousandth. The read that matters for a running Ferret is the incremental one (`since`), which walks only what is new. | **EPIC-032** |
+| **Offset paging is O(offset).** `git log --skip` walks the history to reach the offset. | Fine for the first pages, wrong for the ten-thousandth. The read that matters for a running Ferret is the incremental one (`since`), which walks only what is new. | ~~EPIC-032~~ — accepted, see Owner correction |
 | **A SHA-1 collision would merge two commits.** Commit identity is the object id. | Git's own SHA-1 carries collision detection and rejects known-colliding inputs, and repositories are migrating to SHA-256 — but a deliberate collision against a repository Ferret indexes is a real threat model, not a theoretical one. | **EPIC-082** |
-| A merge commit's changes are absent. | Git reports none, because the answer depends which parent you compare against. `-m` or `--first-parent` would produce *an* answer; choosing which is a modelling decision, not a parsing one. | **EPIC-032** |
+| A merge commit's changes are absent. | Git reports none, because the answer depends which parent you compare against. `-m` or `--first-parent` would produce *an* answer; choosing which is a modelling decision, not a parsing one. | ~~EPIC-032~~ **unassigned** — see Owner correction |
 | A rename produces two file entities linked by a relationship, not one entity. | Matches what Git recorded — a similarity score, not an identity claim. Following a file across renames is a traversal, which is what the graph is for. | **EPIC-049** |
 | Two addresses are two developers. | Deliberate. Resolution is a decision with evidence behind it. | **EPIC-036** |
 | Tags, remote-tracking refs and `branch_points_to_commit` still absent. | Commit entities now exist, so the last of these is finally *possible* — it was blocked on exactly that. | **EPIC-020's successors / EPIC-031** |
 | File entities carry only a path and extension. | No content, no media type, no language, no version. Those are the next Epics' subject, and this Epic's file identity is what they must agree with. | **EPIC-022, EPIC-023** |
 | macOS unvalidated. | Inherited. | **EPIC-105** |
+
+---
+
+## Owner correction — 2026-09-02
+
+**Rows above whose Owner read `EPIC-032` have had that owner struck.** The
+limitations themselves are unchanged and still true; only the assignment was
+wrong, and it is struck rather than overwritten so the original claim stays
+readable.
+
+EPIC-032 — Index Lifecycle & Tombstones — is VALIDATED, and its scope never
+covered any of this. Its §4 (Non-scope) says so directly: "**Scheduled or
+unattended indexing.** Not this Epic and not this registry entry; EPIC-075/076
+own synchronization." Nine rows across four validation documents were parked on
+it anyway, and EPIC-076 added one more while assigning the file tree back to
+EPIC-032 — two closed Epics pointing at each other over live work.
+
+This is the class of defect EPIC-076 named and did not have scope to fix:
+"Nothing sweeps limitation tables for records the code has outgrown, so the next
+stale one will also wait for an Epic to be pointed at it."
+
+**Nothing was absorbed into EPIC-032.** Each row was re-read and given the owner
+its own recorded reasoning implies, and where that reasoning does not determine
+one, it says `unassigned` rather than guessing:
+
+| row | new owner | why |
+| --- | --- | --- |
+| rate limiter is per-process | **EPIC-078** | the row's own parenthetical read "EPIC-032 *(scheduling)*" — it was naming the scheduling Epic by the wrong number, and Periodic Reconciliation is that Epic |
+| no circuit breaker | **EPIC-078** | "Suppressing work across operations is a scheduling decision, not a provider one" — which also rules out EPIC-014 |
+| no incremental repository discovery | **EPIC-077** | "It needs a filesystem watcher", and Event & Webhook Ingestion is where event-driven sources belong |
+| indexing is sequential, no back-pressure | **EPIC-078** | "Parallelism across repositories is a scheduling decision" |
+| offset paging is O(offset) | *none — accepted* | the row's own Impact settles it: "The read that matters for a running Ferret is the incremental one (`since`)." An accepted cost, not parked work |
+| a failed run repeats rather than resumes | *none — accepted* | "Deliberate: resuming from a position never reached would leave a permanent gap." A design decision, recorded as one |
+| a merge commit's changes are absent | **unassigned** | "choosing which is a modelling decision" — commit modelling is EPIC-020, which is closed, so this is a new criterion and needs governance |
+| the file tree is read in full every run | **unassigned** | EPIC-076 assigned it here; EPIC-032's non-scope assigns synchronization to EPIC-075/076. Both are closed and neither claims it |
+| no untracked working-directory state | **unassigned** | "'What am I working on right now' is a different read." No Epic in the registry covers it |
+
+The three `unassigned` rows are tracked in
+[#117](https://github.com/indoulia/Ferret/issues/117). They are **not** new P0
+scope: no P0 acceptance criterion depends on any of them, which is why they were
+parked rather than built.

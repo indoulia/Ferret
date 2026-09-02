@@ -50,6 +50,16 @@ export interface EntityWriteOptions {
    * read in full, and the commit loses its message and its author.
    */
   readonly ifAbsent?: boolean;
+  /**
+   * Rewrite the row from source even when the stored hash says it is unchanged.
+   *
+   * What a repair needs and an ordinary run must not have. Issue #101: an
+   * alteration made outside Ferret leaves `content_hash` intact, so the
+   * recomputed hash matches and `upsert` reports `unchanged` — which is why
+   * re-derivation could not fix one. `ifAbsent` still wins, so a placeholder
+   * cannot use this to clobber a record read in full (issue #48).
+   */
+  readonly rederive?: boolean;
 }
 
 export interface RelationshipWriteResult {
@@ -111,6 +121,24 @@ export interface LifecycleStore {
   pendingChanges(repositoryId: string, limit?: number): Promise<readonly PendingLifecycleChange[]>;
   retire(entityId: string, repositoryId: string, at: Date, now?: Date): Promise<boolean>;
   reinstate(entityId: string, now?: Date): Promise<boolean>;
+  /**
+   * Branches Ferret still believes the repository contains — EPIC-032 AC-7.
+   *
+   * Refs reconcile the other way round from files. A file is retired from a
+   * positive observation of deletion, because Git records one; Git records
+   * nothing when a ref goes, so a *complete enumeration* is the positive
+   * observation. That asymmetry is why this is a separate pair of methods
+   * rather than another `action` on `pendingChanges`: absence never condemns a
+   * file, and for a ref it is the only evidence there is.
+   */
+  liveBranches(repositoryId: string): Promise<readonly PendingBranch[]>;
+  retireBranch(entityId: string, repositoryId: string, at: Date, now?: Date): Promise<boolean>;
+}
+
+/** One branch on record, as the indexer sees it. */
+export interface PendingBranch {
+  readonly entityId: string;
+  readonly ref: string;
 }
 
 /**

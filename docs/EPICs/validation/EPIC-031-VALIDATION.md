@@ -196,10 +196,51 @@ that were correct. It took reading real output.
 
 | Limitation | Impact | Owner |
 | --- | --- | --- |
-| **The file tree is read in full on every run.** Only history is incremental. | The second run is cheaper but not cheap: 9.3 s against 17.3 s on this repository. A tree hash comparison against the watermark would make an unchanged revision nearly free. | **EPIC-032** |
+| **The file tree is read in full on every run.** Only history is incremental. | The second run is cheaper but not cheap: 9.3 s against 17.3 s on this repository. A tree hash comparison against the watermark would make an unchanged revision nearly free. | ~~EPIC-032~~ **unassigned** — see Owner correction |
 | ~~**An out-of-order observation does not move an interval's start backwards.**~~ | **No longer true — verified by EPIC-076.** `relationships.ts:204` deletes and replaces the row when an earlier observation arrives, so the start *does* move backwards and exactly one interval stays open. Proved by `tests/integration/indexing/incremental-sync.test.ts` — "moves an interval start backwards for an earlier observation". The fix landed with the noon-query defect and nobody struck this row. | **Resolved** |
-| Indexing is one repository at a time, sequentially, with no back-pressure. | Correct and slow. Parallelism across repositories is a scheduling decision. | **EPIC-032** |
-| No untracked working-directory state. | Everything indexed is committed state. "What am I working on right now" is a different read. | **EPIC-032** |
+| Indexing is one repository at a time, sequentially, with no back-pressure. | Correct and slow. Parallelism across repositories is a scheduling decision. | ~~EPIC-032~~ **EPIC-078** — see Owner correction |
+| No untracked working-directory state. | Everything indexed is committed state. "What am I working on right now" is a different read. | ~~EPIC-032~~ **unassigned** — see Owner correction |
 | ~~The watermark is per repository, not per branch.~~ | **No longer true — verified by EPIC-076.** `watermarkScopeId` derives the scope from the repository *and* the revision (issue #19), so `HEAD` and a feature branch hold separate cursors. Proved by `incremental-sync.test.ts` — "keeps one cursor per revision, so neither skips the other". The row announced a real correctness gap that had already been closed. | **Resolved** |
-| A failed run repeats rather than resumes. | Deliberate: resuming from a position never reached would leave a permanent gap. Costly for a very large first index. | **EPIC-032** |
+| A failed run repeats rather than resumes. | Deliberate: resuming from a position never reached would leave a permanent gap. Costly for a very large first index. | ~~EPIC-032~~ — accepted, see Owner correction |
 | `--since` re-reads the boundary second. | Documented; the alternative risks losing history. On a fast runner an entire small history can be created inside one second, in which case an "incremental" run legitimately re-reads all of it — which is why the test asserts that the second run *writes* nothing rather than that it *reads* less. | — |
+
+---
+
+## Owner correction — 2026-09-02
+
+**Rows above whose Owner read `EPIC-032` have had that owner struck.** The
+limitations themselves are unchanged and still true; only the assignment was
+wrong, and it is struck rather than overwritten so the original claim stays
+readable.
+
+EPIC-032 — Index Lifecycle & Tombstones — is VALIDATED, and its scope never
+covered any of this. Its §4 (Non-scope) says so directly: "**Scheduled or
+unattended indexing.** Not this Epic and not this registry entry; EPIC-075/076
+own synchronization." Nine rows across four validation documents were parked on
+it anyway, and EPIC-076 added one more while assigning the file tree back to
+EPIC-032 — two closed Epics pointing at each other over live work.
+
+This is the class of defect EPIC-076 named and did not have scope to fix:
+"Nothing sweeps limitation tables for records the code has outgrown, so the next
+stale one will also wait for an Epic to be pointed at it."
+
+**Nothing was absorbed into EPIC-032.** Each row was re-read and given the owner
+its own recorded reasoning implies, and where that reasoning does not determine
+one, it says `unassigned` rather than guessing:
+
+| row | new owner | why |
+| --- | --- | --- |
+| rate limiter is per-process | **EPIC-078** | the row's own parenthetical read "EPIC-032 *(scheduling)*" — it was naming the scheduling Epic by the wrong number, and Periodic Reconciliation is that Epic |
+| no circuit breaker | **EPIC-078** | "Suppressing work across operations is a scheduling decision, not a provider one" — which also rules out EPIC-014 |
+| no incremental repository discovery | **EPIC-077** | "It needs a filesystem watcher", and Event & Webhook Ingestion is where event-driven sources belong |
+| indexing is sequential, no back-pressure | **EPIC-078** | "Parallelism across repositories is a scheduling decision" |
+| offset paging is O(offset) | *none — accepted* | the row's own Impact settles it: "The read that matters for a running Ferret is the incremental one (`since`)." An accepted cost, not parked work |
+| a failed run repeats rather than resumes | *none — accepted* | "Deliberate: resuming from a position never reached would leave a permanent gap." A design decision, recorded as one |
+| a merge commit's changes are absent | **unassigned** | "choosing which is a modelling decision" — commit modelling is EPIC-020, which is closed, so this is a new criterion and needs governance |
+| the file tree is read in full every run | **unassigned** | EPIC-076 assigned it here; EPIC-032's non-scope assigns synchronization to EPIC-075/076. Both are closed and neither claims it |
+| no untracked working-directory state | **unassigned** | "'What am I working on right now' is a different read." No Epic in the registry covers it |
+
+The three `unassigned` rows are tracked in
+[#117](https://github.com/indoulia/Ferret/issues/117). They are **not** new P0
+scope: no P0 acceptance criterion depends on any of them, which is why they were
+parked rather than built.

@@ -3,7 +3,11 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { containsSecret, isSecretPath, redactSecrets } from '../../src/security/index.js';
+import { isSecretPath, redactSecrets } from '../../src/security/index.js';
+// Direct, not through the barrel: `containsSecret` is a predicate this suite
+// uses and not a control Ferret declares, so EPIC-100 AC-8 took it off the
+// control surface. The assertion below is unchanged — EPIC-082 AC-9.
+import { containsSecret } from '../../src/security/secrets.js';
 
 /**
  * EPIC-082. Fixtures use documented example credentials and syntactically valid

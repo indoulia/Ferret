@@ -308,7 +308,7 @@ function summarize(report: IndexReport): string {
   // Reported even when zero, and reported when it did not run. A run that
   // quietly tombstoned four per cent of a repository should not look like one
   // that did nothing, and neither should a run that skipped the check.
-  const { retired, reinstated, skippedReason } = report.lifecycle;
+  const { retired, reinstated, skippedReason, branches } = report.lifecycle;
   if (skippedReason !== undefined) {
     lines.push(`lifecycle         not reconciled — ${skippedReason}`);
   } else {
@@ -316,6 +316,14 @@ function summarize(report: IndexReport): string {
       `lifecycle         ${String(retired)} deleted, ${String(reinstated)} restored`,
     );
   }
+  // Reported on its own line, and reported when it did not run. A bounded
+  // enumeration retiring nothing is the safe outcome, not the same outcome as a
+  // complete one finding nothing to retire — EPIC-032 AC-7.
+  lines.push(
+    branches.skippedReason === undefined
+      ? `branches          ${String(branches.retired)} retired`
+      : `branches          not reconciled — ${branches.skippedReason}`,
+  );
   if (report.skipped.length > 0) {
     const reasons = new Map<string, number>();
     for (const skip of report.skipped) reasons.set(skip.reason, (reasons.get(skip.reason) ?? 0) + 1);

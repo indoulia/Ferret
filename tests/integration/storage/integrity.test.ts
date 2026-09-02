@@ -10,6 +10,7 @@ import {
   createNullLogger,
 } from '../../../src/index.js';
 import {
+  CompatibilityService,
   EntityStore,
   EvidenceStore,
   IndexRunStore,
@@ -18,7 +19,9 @@ import {
   RunOutcome,
   migrate,
   type FerretDatabase,
+  type ProducerIdentityResolver,
 } from '../../../src/storage/index.js';
+import { CONTENT_ARTIFACT_KIND, contentProducerIdentity } from '../../../src/indexing/index.js';
 import { SKIP_REASON, createTestDatabase, databaseAvailable, type TestDatabase } from '../../support/postgres.js';
 
 /**
@@ -312,6 +315,108 @@ describeDb(`index integrity (${databaseAvailable() ? 'real PostgreSQL' : SKIP_RE
               VALUES (gen_random_uuid(), '/repo', '0.0.0', 1, now())`,
         ),
       ).rejects.toThrow();
+    });
+  });
+
+  /**
+   * AC-7 — "a derived artefact of **any** kind … `content-index` included".
+   *
+   * Recorded PARTIAL because the sweep judged only `ferret.indexer`: a
+   * `content-index` artefact records the *parser's* identity, and comparing
+   * that to `VERSION` reported all 540 of them stale on a freshly built index.
+   * The fix is a seam, not a looser comparison — the caller, which has the
+   * parser, says what it would stamp today.
+   *
+   * Both directions are asserted, because the failure that prompted the
+   * `unassessable` bucket was over-reporting: a resolver that cannot judge a
+   * row must leave it unjudged rather than call it stale.
+   */
+  describe('a stale artefact of any kind — AC-7', () => {
+    /** A parser-shaped producer version, as measured on Ferret's own index. */
+    const OLD_PARSER = 'ferret.parser.code@1.0.0+wts0.25.10+typescript@14/8515aa';
+    const NEW_PARSER = 'ferret.parser.code@1.0.0+wts0.26.0+typescript@15/99beef';
+    const CONTENT_PRODUCER = 'ferret.indexer.content';
+
+    async function recordContentArtifact(producerVersion: string): Promise<void> {
+      await new CompatibilityService(handle, db.pool).recordArtifact({
+        kind: CONTENT_ARTIFACT_KIND,
+        scopeId: repositoryId,
+        producer: CONTENT_PRODUCER,
+        producerVersion,
+        sourceContentHash: 'abc123',
+        metadata: { structure: { path: 'src/a.ts', mediaType: 'text/x-typescript', binary: false, sizeBytes: 20 } },
+      });
+    }
+
+    /** A resolver that answers with one fixed version, or refuses to answer. */
+    function resolver(version: string | undefined): ProducerIdentityResolver {
+      return { versionFor: (artifact) => Promise.resolve(artifact.producer === CONTENT_PRODUCER ? version : undefined) };
+    }
+
+    it('counts a content artefact unassessable when nothing can judge it', async () => {
+      await recordContentArtifact(OLD_PARSER);
+      const report = await integrity.sweep({ logger });
+
+      // The behaviour before the seam existed, and still the right answer when
+      // no parser was composed: §8 — a check that cannot run says `unknown`.
+      expect(report.unassessable).toBeGreaterThan(0);
+      expect(report.findings.filter((one) => one.kind === IntegrityFindingKind.STALE_ARTIFACT)).toStrictEqual([]);
+    });
+
+    it('reports a content artefact built by a superseded parser', async () => {
+      await recordContentArtifact(OLD_PARSER);
+      const report = await integrity.sweep({ logger, producerIdentity: resolver(NEW_PARSER) });
+
+      const stale = report.findings.filter((one) => one.kind === IntegrityFindingKind.STALE_ARTIFACT);
+      expect(stale).toHaveLength(1);
+      // Named, so an operator can tell which parser moved — and the stored
+      // value is a producer identity, not repository content, so quoting it
+      // does not breach §11.
+      expect(stale[0]?.detail).toContain(OLD_PARSER);
+      expect(report.unassessable).toBe(0);
+    });
+
+    it('leaves a current content artefact alone', async () => {
+      await recordContentArtifact(NEW_PARSER);
+      const report = await integrity.sweep({ logger, producerIdentity: resolver(NEW_PARSER) });
+
+      expect(report.findings.filter((one) => one.kind === IntegrityFindingKind.STALE_ARTIFACT)).toStrictEqual([]);
+      expect(report.unassessable).toBe(0);
+    });
+
+    it('does not report stale on the strength of not knowing', async () => {
+      // The guard. A resolver that returns `undefined` has said "I cannot
+      // judge this", which is not "this is stale". Getting this backwards is
+      // how 540 healthy rows were reported corrupt on a freshly built index.
+      await recordContentArtifact(OLD_PARSER);
+      const report = await integrity.sweep({ logger, producerIdentity: resolver(undefined) });
+
+      expect(report.findings.filter((one) => one.kind === IntegrityFindingKind.STALE_ARTIFACT)).toStrictEqual([]);
+      expect(report.unassessable).toBeGreaterThan(0);
+    });
+
+    it('agrees with what the content stage writes for an unparsed file', async () => {
+      // `record` writes the literal `none` when no parser claims the path, so
+      // the resolver must answer `none` too. If the two disagreed, every
+      // unparsed file would report stale for ever — the exact over-reporting
+      // this criterion was held back to avoid.
+      const identity = contentProducerIdentity({ producerVersion: () => Promise.resolve(undefined) });
+      await expect(
+        identity.versionFor({
+          kind: CONTENT_ARTIFACT_KIND,
+          producer: CONTENT_PRODUCER,
+          metadata: { structure: { path: 'LICENSE', mediaType: 'text/plain', binary: false, sizeBytes: 10 } },
+        }),
+      ).resolves.toBe('none');
+    });
+
+    it('says nothing about an artefact whose metadata carries no structure', async () => {
+      // Fails closed: a row this cannot build a target from is unassessable,
+      // not stale.
+      const identity = contentProducerIdentity({ producerVersion: () => Promise.resolve(NEW_PARSER) });
+      await expect(
+        identity.versionFor({ kind: CONTENT_ARTIFACT_KIND, producer: CONTENT_PRODUCER, metadata: {} }),
+      ).resolves.toBeUndefined();
     });
   });
 });

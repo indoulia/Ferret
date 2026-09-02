@@ -428,6 +428,61 @@ function preReadTarget(path: string): ParseTarget {
  * reinstated. It also bounds the table by distinct paths rather than by distinct
  * file versions, which is strictly smaller than the cost §8.7 accepted.
  */
+/**
+ * What this composition would stamp on a `content-index` artefact today.
+ *
+ * EPIC-094 AC-7's other half. The sweep can compare a `ferret.indexer`
+ * artefact's version to `VERSION` on its own; it cannot judge a content
+ * artefact, whose `producer_version` is the *parser's* identity and therefore
+ * depends both on the file and on what the caller composed. So the caller
+ * answers, through `SweepOptions.producerIdentity`.
+ *
+ * The target is rebuilt from the artefact's own `metadata.structure`, which
+ * already carries `path`, `mediaType`, `binary` and `sizeBytes` — the record
+ * the gate writes is exactly the record needed to re-ask the question. No join
+ * back to the file is required, which matters because `contentScopeId` is a
+ * hash of the path rather than a reference to an entity.
+ *
+ * `undefined` whenever it cannot say — a producer it does not own, or metadata
+ * without a usable structure. Never a guess: an artefact reported stale because
+ * nothing could judge it is how 540 healthy rows were once called corrupt.
+ */
+export function contentProducerIdentity(parser: {
+  producerVersion(target: {
+    readonly path: string;
+    readonly mediaType: string;
+    readonly binary: boolean;
+    readonly sizeBytes: number;
+  }): Promise<string | undefined>;
+}): {
+  versionFor(artifact: {
+    readonly kind: string;
+    readonly producer: string;
+    readonly metadata: Readonly<Record<string, unknown>>;
+  }): Promise<string | undefined>;
+} {
+  return {
+    async versionFor(artifact) {
+      if (artifact.producer !== CONTENT_PRODUCER) return undefined;
+      const structure = artifact.metadata['structure'];
+      if (typeof structure !== 'object' || structure === null) return undefined;
+      const { path, mediaType, binary, sizeBytes } = structure as Partial<FileStructure>;
+      if (typeof path !== 'string' || typeof mediaType !== 'string') return undefined;
+      // `NO_PARSER_PRODUCER` rather than `undefined` when nothing claims the
+      // path, because that is what `record` wrote — and the two must agree or
+      // every unparsed file reports stale for ever.
+      return (
+        (await parser.producerVersion({
+          path,
+          mediaType,
+          binary: binary ?? false,
+          sizeBytes: sizeBytes ?? 0,
+        })) ?? NO_PARSER_PRODUCER
+      );
+    },
+  };
+}
+
 export function contentScopeId(repositoryId: string, path: string): string {
   return canonicalId(encodeKeyParts([CONTENT_ARTIFACT_KIND, repositoryId, path]));
 }

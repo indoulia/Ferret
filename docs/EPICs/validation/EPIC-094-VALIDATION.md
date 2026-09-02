@@ -149,3 +149,159 @@ its output is the measurement table above.
   any run Ferret has been measured performing; a long-running index on a very
   large repository would be reported while still working, which is a false
   positive this Epic accepts in exchange for detecting a dead one at all.
+
+---
+
+## Addendum — 2026-09-02
+
+**AC-7, AC-11 and AC-13 are now MET. Nothing above is rewritten.** The rows and
+the §Raised paragraphs record what was demonstrated when this Epic was assessed,
+and one of them turns out to have recorded the wrong cause — which is worth
+keeping visible rather than correcting in place.
+
+### AC-7 — a stale artefact of any kind
+
+Was PARTIAL: schema-version staleness checked for every kind, producer-version
+staleness only for `ferret.indexer`, everything else counted `unassessable`
+because "judging those needs EPIC-010's `validateArtifact` with a *composed
+parser* in hand, which a read-only sweep does not have."
+
+That reasoning was right about the sweep and wrong about the options. The sweep
+does not need to compose a parser — it needs to *ask something that has one*.
+`SweepOptions.producerIdentity` is that seam, and `contentProducerIdentity` in
+`src/indexing/content.ts` is the implementation; `ferret verify --content`
+composes it.
+
+Two things made it cheaper than the original note assumed:
+
+- **The target is already stored.** A content artefact's `metadata.structure`
+  carries `path`, `mediaType`, `binary` and `sizeBytes` — everything
+  `ParserFramework.producerVersion` needs. No join back to the file is required,
+  which matters because `contentScopeId` is a hash of the path rather than a
+  reference to an entity.
+- **The seam had to be a port anyway.** `boundaries.test.ts` asserts
+  `src/storage/`'s external package set exactly, so importing `ParserFramework`
+  into the sweep would drag `web-tree-sitter` into the storage graph and fail
+  that check. Recorded as D2 in `docs/Architecture/EPIC-087-DECISIONS.md`.
+
+`unassessable` survives and now means something narrower: *nothing was composed
+that could answer*, rather than *this kind cannot be answered*. A resolver that
+returns `undefined` leaves the row unassessable and **never** stale — asserted
+directly, because the failure this area exists to avoid is over-reporting:
+comparing a parser identity to `VERSION` once reported all 540 content artefacts
+stale on a freshly built index, and an operator who sees that once stops reading
+the output.
+
+Evidence — `tests/integration/storage/integrity.test.ts`, six cases:
+
+| case | asserts |
+| --- | --- |
+| *counts a content artefact unassessable when nothing can judge it* | no resolver, so `unassessable > 0` and no stale finding |
+| *reports a content artefact built by a superseded parser* | resolver disagrees, so one `STALE_ARTIFACT` naming the stored identity, `unassessable === 0` |
+| *leaves a current content artefact alone* | resolver agrees, so no finding |
+| *does not report stale on the strength of not knowing* | resolver returns `undefined`, so unassessable and **not** stale |
+| *agrees with what the content stage writes for an unparsed file* | resolver answers the literal `none`, matching `record` — otherwise every unparsed file reports stale for ever |
+| *says nothing about an artefact whose metadata carries no structure* | fails closed to `undefined` |
+
+`ferret verify` now composes the parser for **detection**, not only for a repair.
+Previously `discovery` was gated on `options.repair && options.content`; AC-7 is a
+detection criterion, so `--content` alone is enough. A run without `--content`
+still reports content artefacts unassessable, which is the honest degradation.
+
+### AC-11 — the effect half, and issue #101's cause was wrong
+
+Was MET for writes and PARTIAL for effect: "Repair fixes a stale hash and does
+not fix an entity altered in place." Issue #101 traced the repository case to the
+placeholder mechanism — every stage emits the repository entity as a
+relationship endpoint, placeholders are written `{ ifAbsent: true }` (issue #48),
+"making it the one row a re-index will never rewrite."
+
+**That cause is wrong, and the placeholder mechanism is innocent.** The real one
+is in `EntityStore.upsert`:
+
+```ts
+if (existing.contentHash === canonical.contentHash) { /* unchanged */ }
+```
+
+An alteration made outside Ferret changes `attributes` and leaves `content_hash`
+alone. So the recomputed hash equals the stored one, the short-circuit returns
+before anything is written, and the row is declared unchanged for ever.
+Re-derivation never reached the placeholder decision at all — it never got past
+this comparison. Which is why `--full` did not help, and why the `commit` case
+issue #101 left untraced has the identical cause.
+
+The fix is the shape issue #101 itself proposed: an explicit "this is a
+re-derivation, overwrite what you find" flag. `EntityStore.upsert` takes
+`{ rederive: true }`, `IndexOptions.rederive` threads it, and `verify --repair`
+sets it.
+
+Three things it deliberately is not:
+
+- **Not an `UPDATE` against `content_hash`.** The row is rewritten in full from
+  what the source says, hash included, which is what derivation means. AC-11's
+  structural assertions over the source still forbid a hash edit and still pass.
+- **Not `full`.** `full` says which commits to read. Widening its effect would
+  change what `ferret index --full` writes, which is EPIC-031's measured
+  behaviour, in order to close EPIC-094's criterion.
+- **Not a way past `ifAbsent`.** The placeholder branch returns first, so a
+  gap-filler still cannot regress a record read in full. Issue #48's protection
+  is asserted intact — *"still lets a placeholder decline to overwrite"* in
+  `tests/integration/domain/entity-store.test.ts`.
+
+Evidence: the two tests in `tests/integration/storage/verify-cli.test.ts` that
+asserted the limitation now assert the repair, **including the repository case** —
+*"repairs a corrupted repository entity"* takes findings to 0. Both were
+rewritten rather than deleted, so the record of what changed is in the diff.
+Three unit cases in `entity-store.test.ts` cover the option itself: it rewrites a
+tampered row, it loses to `ifAbsent`, and a second re-derivation writes nothing
+new (AC-12).
+
+### AC-13 — an interrupted repair
+
+Was PENDING: "not exercised; a repair is an ordinary index run and inherits
+EPIC-031 AC-6." Half true, and the half that is not is why this needed a test.
+
+The watermark half does inherit, and it is now confirmed in source rather than
+argued: `#writeWatermark` runs only after every stage succeeds, so a run that
+dies part way advances nothing. But a repair does something an ordinary run does
+not — `verify.ts` calls `markStale` **before** re-deriving, so an interruption
+between the two leaves artefacts marked stale and not rebuilt. EPIC-031 AC-6 says
+nothing about that residue.
+
+`tests/integration/storage/repair-interrupt.test.ts` composes the repair sequence
+as `verify.ts` composes it and interrupts it at a known stage boundary — the
+provider aborts once history has been read, so stage 1's writes have landed and
+the watermark has not. A timer would have made the outcome depend on machine
+speed, which is the defect EPIC-076 fixed in its own AC-2 test.
+
+| case | asserts |
+| --- | --- |
+| *leaves the index no worse … advances no watermark* | findings after are no more than before; every watermark row identical, metadata included |
+| *leaves the stale marking truthful rather than misleading* | `markStale` touched no current artefact; it sets `state` and `last_checked_at` only, and the sweep judges from `producer_version` and `schema_version`, never `state` — so the residue can neither manufacture a finding nor hide one |
+| *completes when it is run again* | the next run earns its watermark and the index is still repairable — an index left "no worse" that could not then be repaired would satisfy the letter of AC-13 and leave an operator with no way out |
+
+"No worse", not "unchanged", and that is deliberate: a partial re-derivation may
+legitimately fix rows on its way past, and forbidding that would forbid the
+repair from making progress at all.
+
+### Raised, not absorbed
+
+- **Issue #101's recorded cause should be corrected where it is filed.** The
+  diagnosis sent a reader to `ifAbsent` and to EPIC-031's placeholder decision,
+  neither of which was involved. A wrong cause in a filed issue is the same class
+  of defect as EPIC-076's stale limitation rows, one step earlier.
+- **`rederive` is a sharp tool on the hottest write path.** It is off by default,
+  reachable only from `verify --repair`, and its cost when off is a boolean
+  check. The alternative considered — having `upsert` recompute the stored row's
+  hash to detect internal inconsistency — would make every ordinary write pay
+  for a repair-time property.
+- **The repair path still composes the indexer without `cursors`**, so it writes
+  its watermark through EPIC-075's fallback while `ferret index` writes through
+  `SyncCursorStore`. Traced and **not** a defect: `CURSOR_ARTIFACT_KIND` and
+  `INDEX_ARTIFACT_KIND` are both `'index'` and the metadata matches, so the paths
+  are equivalent in effect. It is the "two paths to keep in step" EPIC-075 warned
+  about, now with a real second caller, and worth tidying when something else
+  touches that composition.
+- **`staleArtifacts` still has no production caller.** Unchanged by this work,
+  and it is the reason EPIC-100 AC-8's invariant covers declared control modules
+  rather than every port method: a general port sweep fails on this row today.

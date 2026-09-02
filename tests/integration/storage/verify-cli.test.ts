@@ -125,26 +125,42 @@ describeCli(`ferret verify (${runnable ? 'real PostgreSQL and git' : SKIP_REASON
     expect(body.before).toBeGreaterThan(0);
   }, 120_000);
 
-  it('does not re-derive an entity whose content was altered in place', async () => {
-    // **A limitation, measured and asserted so it cannot regress unnoticed.**
+  it('re-derives an entity whose content was altered in place — AC-11, issue #101', async () => {
+    // **This asserted the opposite until issue #101 was traced.** The record
+    // said a repair could not fix an in-place alteration, and blamed the
+    // placeholder mechanism: the repository entity is emitted as a relationship
+    // endpoint, placeholders are written `ifAbsent`, so the row is never
+    // rewritten.
     //
-    // Repair is re-derivation, and re-derivation fixes a row whose *hash* is
-    // stale — proved on Ferret's own index, where a repair took 299 findings to
-    // 166 by rewriting 133 commits. It does not fix a row whose stored content
-    // was edited: `commit` and `repository` entities survive a `--full`
-    // re-index with the edit intact.
+    // That cause was wrong, and the placeholder mechanism is innocent. The real
+    // one is in `EntityStore.upsert`: an alteration made outside Ferret changes
+    // `attributes` and leaves `content_hash` alone, so the recomputed hash
+    // equals the stored one and the `unchanged` short-circuit returns before
+    // anything is written. Re-derivation never got past that comparison, which
+    // is why no number of `--full` re-reads corrected the row.
     //
-    // Detection is correct either way, which is what Governance §13 asks for
-    // first. Recovery is not complete, and saying so is better than a test that
-    // asserts a repair Ferret does not perform. Filed against the indexer's
-    // write path, where the cause lives.
+    // A repair now says `rederive`, meaning "do not take the stored hash's word
+    // for it". Not an `UPDATE` against `content_hash` — the structural
+    // assertions below still forbid that, and still pass. The row is rewritten
+    // in full from what the source says, hash included, which is what
+    // derivation means.
+    // Its own corruption, rather than whatever an earlier test left behind:
+    // this used to lean on residue from the repair test above, which is fine
+    // while the assertion is "findings survive" and useless once it is
+    // "findings are gone".
+    await db.pool.query(
+      `UPDATE ferret.entity
+          SET attributes = jsonb_set(attributes, '{message}', '"altered outside ferret"')
+        WHERE kind = 'commit'`,
+    );
+
     const before = await verify();
-    expect(before.body.sweep.findings.length).toBeGreaterThan(0);
+    expect(before.body.sweep.findings.some((one) => one.kind === 'content-hash-mismatch')).toBe(true);
 
     await verify(['--repair', '--yes']);
     const after = await verify();
 
-    expect(after.body.sweep.findings.length).toBeGreaterThan(0);
+    expect(after.body.sweep.findings.length).toBe(0);
   }, 120_000);
 
   it('is idempotent: repairing twice changes nothing the second time — AC-12', async () => {
@@ -171,17 +187,13 @@ describeCli(`ferret verify (${runnable ? 'real PostgreSQL and git' : SKIP_REASON
     expect(body.sweep.complete).toBe(false);
   });
 
-  it('cannot repair a corrupted repository entity, and this records why', async () => {
-    // **A limitation, asserted so it cannot regress unnoticed.**
-    //
-    // Every stage that emits the repository entity emits it as a *placeholder* —
-    // a relationship endpoint — and the indexer writes placeholders `ifAbsent`
-    // so a gap-filler cannot overwrite a record an earlier run read in full
-    // (issue #48). The consequence, which nothing had noticed: a corrupted
-    // repository row is the one row a re-index will never rewrite.
-    //
-    // Detection works; recovery does not. Filed rather than fixed here — the fix
-    // belongs where the placeholder decision lives, not in the integrity sweep.
+  it('repairs a corrupted repository entity — AC-11, issue #101', async () => {
+    // The case issue #101 traced to `ifAbsent` and called "the one row a
+    // re-index will never rewrite". It is repaired now, and **`ifAbsent` was
+    // not touched** — which is the evidence that the placeholder mechanism was
+    // never the cause. Issue #48's protection is intact: a placeholder still
+    // cannot regress a record read in full, asserted by the `rederive` unit
+    // tests in `tests/integration/domain/entity-store.test.ts`.
     await db.pool.query(
       `UPDATE ferret.entity
           SET attributes = jsonb_set(attributes, '{name}', '"not-what-was-indexed"')
@@ -193,8 +205,7 @@ describeCli(`ferret verify (${runnable ? 'real PostgreSQL and git' : SKIP_REASON
 
     const repaired = await verify(['--repair', '--yes']);
     expect(repaired.body.repaired.length).toBeGreaterThan(0);
-    // The repair ran, re-read the repository, and the finding survives it.
-    expect(repaired.body.sweep.findings.length).toBeGreaterThan(0);
+    expect(repaired.body.sweep.findings.length).toBe(0);
   }, 120_000);
 });
 

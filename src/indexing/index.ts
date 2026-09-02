@@ -23,6 +23,7 @@ export {
 } from './indexer.js';
 export {
   CONTENT_ARTIFACT_KIND,
+  contentProducerIdentity,
   CONTENT_PRODUCER,
   contentScopeId,
   runContentStage,

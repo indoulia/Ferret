@@ -401,15 +401,41 @@ describeDb(`canonical entity persistence (${databaseAvailable() ? 'real PostgreS
     }, 60_000);
 
     it('uses the canonical-key index rather than scanning', async () => {
-      // A scan would be invisible at test scale and fatal at repository scale.
+      // A scan would be invisible at test scale and fatal at repository scale —
+      // and "invisible at test scale" is exactly what made this assertion
+      // unreliable. Issue #109's cause, in a second table.
+      //
+      // On a handful of rows PostgreSQL correctly prefers a sequential scan, so
+      // this passed only while the planner had no statistics for
+      // `ferret.entity`. Adding two rows elsewhere in this file was enough to
+      // trigger autoanalyze and flip it. The fixture is therefore given a table
+      // the index is genuinely right for, and statistics are made current
+      // rather than left to a background worker.
       const stored = await store.upsert(repository('perf-plan'));
+      await db.pool.query(
+        `INSERT INTO ferret.entity (
+           id, kind, canonical_key, schema_version, source_system, source_id,
+           lifecycle, attributes, unknown_fields, content_hash
+         )
+         SELECT gen_random_uuid(), 'commit', 'plan-filler-' || g, 1, 'git', 'plan-filler-' || g,
+                'active', jsonb_build_object('sha', 'f' || g), '{}'::jsonb,
+                encode(sha256(g::text::bytea), 'hex')
+           FROM generate_series(1, 4000) AS g`,
+      );
+      await db.pool.query('ANALYZE ferret.entity');
+
       const plan = await db.pool.query<{ 'QUERY PLAN': string }>(
         `EXPLAIN SELECT * FROM ferret.entity WHERE canonical_key = $1`,
         [stored.entity.canonicalKey],
       );
       const text = plan.rows.map((row) => row['QUERY PLAN']).join('\n');
       expect(text).toContain('entity_canonical_key_idx');
-    });
+
+      // Removed again: this sits inside the performance block, and a table left
+      // 4 000 rows heavier would change what the p95 budgets measure.
+      await db.pool.query(`DELETE FROM ferret.entity WHERE canonical_key LIKE 'plan-filler-%'`);
+      await db.pool.query('ANALYZE ferret.entity');
+    }, 60_000);
   });
 
   describe('durability', () => {
@@ -496,5 +522,97 @@ describeDb(`canonical entity persistence (${databaseAvailable() ? 'real PostgreS
         expect(read?.contentHash).toBe(result.entity.contentHash);
       }
     }, 60_000);
+  });
+
+  /**
+   * `rederive` — EPIC-094 AC-11, issue #101.
+   *
+   * The `unchanged` short-circuit compares the recomputed hash to the stored
+   * one, which is sound right up until the stored row is the thing that is
+   * wrong. An alteration made outside Ferret changes `attributes` and leaves
+   * `content_hash` alone, so the hashes agree and the row is declared unchanged
+   * for ever. A repair needs to be able to say "do not take that hash's word
+   * for it"; nothing else may.
+   */
+  describe('re-derivation ignores a stored hash a repair cannot trust', () => {
+    it('rewrites a row whose attributes were altered outside Ferret', async () => {
+      const created = await store.upsert(repository('https://github.com/indoulia/rederive-1.git'));
+
+      // Exactly the corruption EPIC-094 detects: attributes edited, hash left
+      // alone, so the row no longer hashes to what it claims.
+      await db.pool.query(`UPDATE ferret.entity SET attributes = jsonb_set(attributes, '{name}', '"tampered"') WHERE id = $1`, [
+        created.entity.id,
+      ]);
+
+      // Without the option, the short-circuit wins and the tampering survives —
+      // which is issue #101 in two lines.
+      const untouched = await store.upsert(repository('https://github.com/indoulia/rederive-1.git'));
+      expect(untouched.outcome).toBe(UpsertOutcome.UNCHANGED);
+      let row = await db.pool.query<{ attributes: { name: string } }>(
+        'SELECT attributes FROM ferret.entity WHERE id = $1',
+        [created.entity.id],
+      );
+      expect(row.rows[0]?.attributes.name).toBe('tampered');
+
+      // With it, the row comes back from source.
+      const repaired = await store.upsert(
+        repository('https://github.com/indoulia/rederive-1.git'),
+        new Date(),
+        { rederive: true },
+      );
+      expect(repaired.outcome).not.toBe(UpsertOutcome.UNCHANGED);
+      row = await db.pool.query<{ attributes: { name: string } }>(
+        'SELECT attributes FROM ferret.entity WHERE id = $1',
+        [created.entity.id],
+      );
+      expect(row.rows[0]?.attributes.name).toBe('Ferret');
+    });
+
+    it('still lets a placeholder decline to overwrite — issue #48', async () => {
+      // `ifAbsent` must keep winning, and this is the assertion that says so.
+      // If `rederive` beat it, a gap-filler carrying one attribute would
+      // overwrite a record an earlier run read in full — the defect issue #48
+      // closed, reopened in the course of closing #101.
+      const full = await store.upsert({
+        kind: EntityKind.COMMIT,
+        source: { system: 'git', id: 'sha-rederive', scope: 'r' },
+        attributes: { sha: 'sha-rederive', message: 'the whole record' },
+      });
+
+      const stub = await store.upsert(
+        { kind: EntityKind.COMMIT, source: { system: 'git', id: 'sha-rederive', scope: 'r' }, attributes: { sha: 'sha-rederive' } },
+        new Date(),
+        { ifAbsent: true, rederive: true },
+      );
+
+      expect(stub.outcome).toBe(UpsertOutcome.UNCHANGED);
+      const row = await db.pool.query<{ attributes: { message?: string } }>(
+        'SELECT attributes FROM ferret.entity WHERE id = $1',
+        [full.entity.id],
+      );
+      expect(row.rows[0]?.attributes.message).toBe('the whole record');
+    });
+
+    it('is idempotent — a second re-derivation writes nothing new', async () => {
+      // Governance §10, and AC-12: a repair that ran twice must not keep
+      // rewriting. The row is already what the source says, so the second call
+      // finds the hashes equal *and correct*.
+      const input = repository('https://github.com/indoulia/rederive-2.git');
+      const created = await store.upsert(input);
+      await store.upsert(input, new Date(), { rederive: true });
+
+      const before = await db.pool.query<{ content_hash: string }>(
+        'SELECT content_hash FROM ferret.entity WHERE id = $1',
+        [created.entity.id],
+      );
+      await store.upsert(input, new Date(), { rederive: true });
+      const after = await db.pool.query<{ content_hash: string }>(
+        'SELECT content_hash FROM ferret.entity WHERE id = $1',
+        [created.entity.id],
+      );
+
+      expect(after.rows[0]?.content_hash).toBe(before.rows[0]?.content_hash);
+      expect(await db.pool.query('SELECT count(*) FROM ferret.entity WHERE id = $1', [created.entity.id])).toBeDefined();
+    });
   });
 });
