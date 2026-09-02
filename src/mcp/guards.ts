@@ -5,6 +5,7 @@ import {
   type Permission,
   type Principal,
 } from '../authorization/index.js';
+import { AuditCategory, AuditOutcome, type AuditWriter } from '../audit/index.js';
 import { ErrorCode, FerretError, serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 
@@ -54,6 +55,15 @@ export type DestructiveToolGuard = (
 export interface GuardDependencies {
   readonly principal: Principal;
   readonly logger: Logger;
+  /**
+   * The durable trail — EPIC-085.
+   *
+   * Optional, so a caller composing a server without a configuration directory
+   * still gets a working one; absent means the log line is the only record,
+   * which is exactly the state EPIC-085 exists to end and is still better than
+   * refusing to serve.
+   */
+  readonly audit?: AuditWriter;
 }
 
 /**
@@ -66,7 +76,24 @@ export interface GuardDependencies {
  * tool names its permission at its call site, so a new tool cannot be added
  * without naming one.
  */
-export function createToolGuard({ principal, logger }: GuardDependencies): ToolGuard {
+export function createToolGuard({ principal, logger, audit }: GuardDependencies): ToolGuard {
+  /** A failed audit write is a diagnostic, never a refusal — EPIC-085 §8.1. */
+  const trail = (outcome: AuditOutcome, operation: string, permission: Permission): void => {
+    const failure = audit?.record({
+      category: AuditCategory.AUTHORIZATION,
+      action: `mcp.${operation}`,
+      outcome,
+      actor: principal.id,
+      permission,
+    });
+    if (failure !== undefined) {
+      logger.warn(
+        { operation: 'audit.write', reason: failure.message },
+        'Could not record an audit event; the operation continues',
+      );
+    }
+  };
+
   return async (operation, permission, run) => {
     try {
       assertPermitted(principal, permission, `mcp.${operation}`);
@@ -78,6 +105,10 @@ export function createToolGuard({ principal, logger }: GuardDependencies): ToolG
         { operation: `mcp.${operation}`, principal: principal.id, permission, decision: 'permitted' },
         `Permitted ${principal.id} to ${permission}`,
       );
+      // EPIC-085 AC-5. A permitted decision is recorded too: a trail of only
+      // failures cannot answer "who read this", which is the question an audit
+      // is for.
+      trail(AuditOutcome.PERMITTED, operation, permission);
       const result = await run();
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
@@ -91,6 +122,10 @@ export function createToolGuard({ principal, logger }: GuardDependencies): ToolG
           { operation: `mcp.${operation}`, principal: principal.id, permission, decision: 'denied' },
           `Denied ${principal.id}: ${permission} is not granted`,
         );
+        // EPIC-085 AC-4 — the durable half of the line above. The permission is
+        // a capability name and the operation is Ferret's own, so nothing
+        // protected is written.
+        trail(AuditOutcome.DENIED, operation, permission);
       }
       // Serialized, therefore redacted: an error crossing to an AI client is
       // exactly the path a credential must not take, and EPIC-009's serializer
@@ -146,6 +181,24 @@ export function createDestructiveToolGuard(
           ? `Confirmation requested for ${operation}`
           : `Confirmation consumed for ${operation}`,
       );
+      // EPIC-085 AC-6. The durable record of a confirmation: the operation and
+      // *whether* a token was presented, never the token — it is the thing that
+      // authorises the change, and an audit journal is exactly where it must
+      // not be written.
+      const failure = dependencies.audit?.record({
+        category: AuditCategory.CONFIRMATION,
+        action: `mcp.${operation}`,
+        outcome: AuditOutcome.PERMITTED,
+        actor: dependencies.principal.id,
+        permission,
+        reason: confirm === undefined ? 'requested' : 'consumed',
+      });
+      if (failure !== undefined) {
+        dependencies.logger.warn(
+          { operation: 'audit.write', reason: failure.message },
+          'Could not record an audit event; the operation continues',
+        );
+      }
       dependencies.confirmations.consume(built, confirm);
       return run();
     });

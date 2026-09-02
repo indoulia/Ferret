@@ -159,3 +159,20 @@ Both commands must be machine-readable and must not mutate — EPIC-002's
 
 After EPIC-004, **EPIC-006 — Canonical Entity Model** is the critical path toward
 a usable vertical slice, and the point at which `drizzle-kit` should be added.
+
+## Addendum — 2026-09-02, after EPIC-085
+
+**"The audit journal is never rotated" is closed.** The list above stands.
+
+EPIC-085's journal rotates by size with a bounded number kept, and rotation is
+best-effort: a journal that cannot be rotated keeps being appended to, because
+refusing to append in order to protect a file size would discard the event.
+
+This journal's own format is **unchanged**. Its entry shape was written
+"deliberately close to an event so that becoming one of its sources does not
+require a format change", and EPIC-085 took that literally — a configuration
+change now writes its EPIC-003 entry *and* an event, in two files. Migrating a
+format already on disk in installs, for a duplicate line in a diagnostic trail,
+is the more expensive mistake.
+
+Evidence: `docs/EPICs/validation/EPIC-085-VALIDATION.md`.

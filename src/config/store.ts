@@ -1,3 +1,4 @@
+import { AuditCategory, AuditOutcome, type AuditWriter } from '../audit/index.js';
 import { closeSync, fsyncSync, mkdirSync, openSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -311,6 +312,14 @@ export function unsetAt(
 export interface ConfigStoreOptions {
   readonly path?: string;
   readonly auditPath?: string;
+  /**
+   * The durable event trail — EPIC-085.
+   *
+   * Optional: absent, the configuration journal is the only record, which is
+   * exactly what it has always been. This Epic adds a second reader, not a
+   * requirement.
+   */
+  readonly audit?: AuditWriter;
   readonly env?: NodeJS.ProcessEnv;
   readonly lock?: LockOptions;
 }
@@ -356,12 +365,14 @@ export class ConfigStore {
   readonly auditPath: string;
   readonly #env: NodeJS.ProcessEnv;
   readonly #lock: LockOptions;
+  readonly #audit: AuditWriter | undefined;
 
   constructor(options: ConfigStoreOptions = {}) {
     this.#env = options.env ?? process.env;
     this.path = options.path ?? userConfigPath(this.#env);
     this.auditPath = options.auditPath ?? auditLogPath(this.#env);
     this.#lock = options.lock ?? {};
+    this.#audit = options.audit;
   }
 
   /** The stored document, or an empty one when no file exists yet. */
@@ -394,6 +405,22 @@ export class ConfigStore {
             ...entries,
           ];
       const auditError = appendAudit(journal, this.auditPath);
+      // EPIC-085 §8.4. This journal's format does not change — its entry shape
+      // was written "deliberately close to an event so that becoming one of its
+      // sources does not require a format change", and a format already on
+      // disk in installs is not rewritten for a duplicate line. So it emits an
+      // event *as well*: two files rather than one migration of somebody's
+      // journal, and §16 records why that is the cheaper mistake.
+      for (const entry of journal) {
+        this.#audit?.record({
+          category: AuditCategory.CONFIGURATION,
+          action: `config.${entry.action}`,
+          outcome: AuditOutcome.PERMITTED,
+          actor: entry.actor,
+          subject: entry.path,
+          reason: entry.hadPreviousValue ? 'replaced' : 'first-value',
+        });
+      }
 
       return { config: next, path: this.path, entries: journal, auditError };
     } finally {

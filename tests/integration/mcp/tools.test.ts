@@ -1,11 +1,18 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { CONTENT_CLOSE, CONTENT_OPEN } from '../../../src/security/index.js';
 import {
+  AuditWriter,
   CONTENT_NOTICE,
   HitSource,
+  auditEventsPath,
+  readAuditEvents,
   QueryPlanner,
   createNullLogger,
   type CanonicalEntity,
@@ -1128,5 +1135,64 @@ describe('following relationships more than one hop', () => {
 
     expect(schema?.properties?.['depth']).toBeDefined();
     expect(tool?.description).toContain('depth');
+  });
+});
+
+/**
+ * The durable trail, through the real protocol — EPIC-085 AC-15.
+ *
+ * EPIC-083 logged a denial and explicitly refused to build this Epic's event
+ * shape. The log line is level-gated and discardable; the event is not.
+ */
+describe('audit events for a decision', () => {
+  let auditClient: Client;
+  let journal: AuditWriter;
+  let auditDirectory: string;
+
+  beforeAll(async () => {
+    auditDirectory = mkdtempSync(join(tmpdir(), 'ferret-audit-mcp-'));
+    journal = new AuditWriter({
+      path: auditEventsPath(auditDirectory),
+      invocation: 'a1b2c3d4e5f60718',
+      agent: 'ferret/test',
+    });
+    const server = createMcpServer({ retrieval, audit: journal, logger: createNullLogger() });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    auditClient = new Client({ name: 'audit-client', version: '0.0.0' });
+    await Promise.all([auditClient.connect(clientTransport), server.connect(serverTransport)]);
+  });
+
+  afterAll(async () => {
+    await auditClient.close();
+    rmSync(auditDirectory, { recursive: true, force: true });
+  });
+
+  it('records a permitted decision durably — AC-5, AC-15', async () => {
+    await auditClient.callTool({ name: 'ferret_search', arguments: { query: 'anything' } });
+
+    const events = readAuditEvents(journal.path);
+    const permitted = events.find((one) => one.action === 'mcp.search');
+
+    expect(permitted?.category).toBe('authorization');
+    expect(permitted?.outcome).toBe('permitted');
+    // The capability name, not an argument: nothing protected is written.
+    expect(permitted?.permission).toBe('read');
+  });
+
+  it('records no query text — AC-8', async () => {
+    await auditClient.callTool({
+      name: 'ferret_search',
+      arguments: { query: 'zarquon embargo disclosure' },
+    });
+
+    expect(readFileSync(journal.path, 'utf8')).not.toContain('zarquon');
+  });
+
+  it('serves normally with no writer wired', async () => {
+    // Absent, the log line is the only record — the state EPIC-085 exists to
+    // end, and still better than refusing to serve.
+    const result = await call('ferret_search', { query: 'anything' });
+
+    expect(result['count']).toBe(1);
   });
 });
