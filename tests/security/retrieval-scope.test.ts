@@ -144,4 +144,22 @@ describe('ranking runs after authorization, and can only ever narrow — EPIC-05
     expect(freshness).not.toMatch(/\bsql`/);
     expect(freshness).not.toMatch(/\bawait\b/);
   });
+
+  it('gives the explanation nothing to read either, and no content to quote — EPIC-063', () => {
+    // An explanation is composed of Ferret's own structural fields. If it could
+    // read, it could describe a row authorization never saw; if it quoted
+    // content, it would need EPIC-084 containment and could carry an injected
+    // instruction. Neither is possible, and this is the structural half of
+    // saying so — AC-13 is the behavioural half.
+    const explain = readFileSync(resolve(SRC, 'retrieval/explain.ts'), 'utf8');
+
+    expect(explain).not.toMatch(/from '\.\.\/storage/);
+    expect(explain).not.toMatch(/\bsql`/);
+    expect(explain).not.toMatch(/\bawait\b/);
+    // The three fields that are content. An explanation names them; it never
+    // reads their values.
+    expect(explain).not.toMatch(/\.highlight\b/);
+    expect(explain).not.toMatch(/\.attributes\b/);
+    expect(explain).not.toMatch(/\.statement\b/);
+  });
 });
