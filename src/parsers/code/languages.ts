@@ -1,3 +1,5 @@
+import { ReferenceKind } from '../../providers/contracts/parser.js';
+
 /**
  * What Ferret knows about each language it parses, as data.
  *
@@ -41,6 +43,18 @@ export interface LanguageSpec {
   /** Node types that bring something into scope. */
   readonly imports: readonly string[];
   /**
+   * Node types that *use* a name, and what kind of use each is — EPIC-035 §8.1.
+   *
+   * The same shape as `declarations`, for the same reason: the walk already
+   * visits every node, and a tree-sitter query language here would be a second
+   * place for language support to drift.
+   *
+   * Calls and constructions only. Every identifier occurrence is not a
+   * reference to a declaration in any sense a name-based resolver can honour,
+   * and indexing all of them would bury the ones that mean something.
+   */
+  readonly references: Readonly<Record<string, ReferenceKind>>;
+  /**
    * Node types that wrap a declaration without being one.
    *
    * `export function add()` is an `export_statement` containing a
@@ -82,12 +96,32 @@ const PYTHON_DECLARATIONS: Readonly<Record<string, DeclarationKind>> = Object.fr
   function_definition: DeclarationKind.FUNCTION,
 });
 
+/**
+ * `new_expression` is a construction and `call_expression` is a call. TypeScript
+ * and JavaScript share both node types, as they share every other.
+ */
+const ECMASCRIPT_REFERENCES: Readonly<Record<string, ReferenceKind>> = Object.freeze({
+  call_expression: ReferenceKind.CALL,
+  new_expression: ReferenceKind.CONSTRUCTION,
+});
+
+/**
+ * Python has one node for both: `Invoice()` is a `call` whether `Invoice` is a
+ * class or a function, and the grammar cannot tell which without resolving the
+ * name. Reporting it as a call is the honest reading — EPIC-035 §8.1 keeps the
+ * vocabulary coarse for exactly this reason.
+ */
+const PYTHON_REFERENCES: Readonly<Record<string, ReferenceKind>> = Object.freeze({
+  call: ReferenceKind.CALL,
+});
+
 export const CODE_LANGUAGES: readonly LanguageSpec[] = Object.freeze([
   Object.freeze({
     language: 'typescript',
     grammar: 'typescript',
     mediaTypes: ['text/x-typescript'],
     declarations: TYPESCRIPT_DECLARATIONS,
+    references: ECMASCRIPT_REFERENCES,
     comments: ['comment'],
     imports: ['import_statement', 'export_statement'],
     wrappers: ['export_statement'],
@@ -99,6 +133,7 @@ export const CODE_LANGUAGES: readonly LanguageSpec[] = Object.freeze([
     // media type, and the two grammars disagree about `<T>`. See `provider.ts`.
     mediaTypes: [],
     declarations: TYPESCRIPT_DECLARATIONS,
+    references: ECMASCRIPT_REFERENCES,
     comments: ['comment'],
     imports: ['import_statement', 'export_statement'],
     wrappers: ['export_statement'],
@@ -108,6 +143,7 @@ export const CODE_LANGUAGES: readonly LanguageSpec[] = Object.freeze([
     grammar: 'javascript',
     mediaTypes: ['text/javascript'],
     declarations: JAVASCRIPT_DECLARATIONS,
+    references: ECMASCRIPT_REFERENCES,
     comments: ['comment'],
     imports: ['import_statement', 'export_statement'],
     wrappers: ['export_statement'],
@@ -117,6 +153,7 @@ export const CODE_LANGUAGES: readonly LanguageSpec[] = Object.freeze([
     grammar: 'python',
     mediaTypes: ['text/x-python'],
     declarations: PYTHON_DECLARATIONS,
+    references: PYTHON_REFERENCES,
     comments: ['comment'],
     imports: ['import_statement', 'import_from_statement', 'future_import_statement'],
     wrappers: ['decorated_definition'],

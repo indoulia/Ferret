@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
+import { EntityKind } from '../domain/kinds.js';
 import { entityKindDefinition, registerEntityKind } from '../domain/entity.js';
+import { registerRelationshipType } from '../domain/relationship.js';
 
 import {
   CODE_SYMBOL_KIND,
@@ -62,7 +64,63 @@ export const codeSymbolAttributes = z
 export function registerCodeSymbolKind(): void {
   if (entityKindDefinition(CODE_SYMBOL_KIND) !== undefined) return;
   registerEntityKind(CODE_SYMBOL_KIND, codeSymbolAttributes);
+  registerCodeSymbolRelationships();
 }
+
+/**
+ * A file declares a symbol; a symbol references a symbol — EPIC-035 §8.5.
+ *
+ * **Registered here rather than added to `domain/relationship.ts`'s built-in
+ * table.** `code_symbol` is a registered kind, not one the core ships, so a
+ * built-in type naming it would put `domain/` in the position of naming a kind
+ * it does not have — the boundary EPIC-006 drew when it made kinds registrable.
+ * EPIC-108 recorded that no approved criterion had yet given these edges an
+ * owner; EPIC-035 is the owner, and this is where they belong.
+ *
+ * Neither is `exclusiveFrom`: a file declares many symbols, and a symbol
+ * references many.
+ *
+ * Registered beside the kind rather than in a separate call, so a composition
+ * that has symbols always has the edges they need — the two cannot be wired
+ * half-way.
+ */
+function registerCodeSymbolRelationships(): void {
+  registerRelationshipType(FILE_DECLARES_SYMBOL, {
+    fromKinds: [EntityKind.FILE],
+    toKinds: [CODE_SYMBOL_KIND],
+  });
+  registerRelationshipType(SYMBOL_REFERENCES_SYMBOL, {
+    fromKinds: [CODE_SYMBOL_KIND],
+    toKinds: [CODE_SYMBOL_KIND],
+  });
+  registerRelationshipType(FILE_REFERENCES_SYMBOL, {
+    fromKinds: [EntityKind.FILE],
+    toKinds: [CODE_SYMBOL_KIND],
+  });
+}
+
+/** A file declares this symbol — EPIC-035. */
+export const FILE_DECLARES_SYMBOL = 'file_declares_symbol';
+
+/**
+ * This symbol uses that one — EPIC-035.
+ *
+ * The edge that answers "where is this used", by inbound traversal. A top-level
+ * reference has no declaring symbol to be the source, so §8.2 attributes it to
+ * the file through {@link FILE_REFERENCES_SYMBOL} instead of dropping it.
+ */
+export const SYMBOL_REFERENCES_SYMBOL = 'symbol_references_symbol';
+
+/**
+ * A file's top-level code uses this symbol — EPIC-035 §8.2.
+ *
+ * Separate from {@link SYMBOL_REFERENCES_SYMBOL} rather than reusing it with a
+ * file at the source end: the endpoint kinds are what make an edge type mean
+ * something, and one type accepting either kind would make "which symbol calls
+ * this" unanswerable at exactly the point it matters. A top-level call is still
+ * a use, so it gets an edge rather than being dropped.
+ */
+export const FILE_REFERENCES_SYMBOL = 'file_references_symbol';
 
 /** The attributes a symbol contributes to its entity. */
 export function codeSymbolAttributesFrom(

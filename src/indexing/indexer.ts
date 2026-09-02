@@ -5,6 +5,7 @@ import {
   type CanonicalEntity,
   type CanonicalEvidence,
   type CanonicalRelationship,
+  type RelationshipInput,
 } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
@@ -522,6 +523,7 @@ export class RepositoryIndexer {
     const contentStage = this.#contentStage(options);
     let content: ContentCounts | undefined;
     let contentStructure: ReadonlyMap<string, FileStructure> | undefined;
+    let contentEdges: readonly RelationshipInput[] = [];
     if (!contentStage.run) {
       this.#logger?.info(
         {
@@ -623,6 +625,10 @@ export class RepositoryIndexer {
             parser: this.#parser,
             artifacts: this.#artifacts,
             ...(this.#blobs === undefined ? {} : { blobs: this.#blobs }),
+            // EPIC-035. Evidence only: a symbol exists by now, so evidence
+            // about one has a subject. The *edges* come back from the stage and
+            // are written below, once the entities they point from exist.
+            evidence: this.#evidence,
             ...(this.#logger === undefined ? {} : { logger: this.#logger }),
           },
           {
@@ -637,6 +643,7 @@ export class RepositoryIndexer {
         );
         content = stage.counts;
         contentStructure = stage.structure;
+        contentEdges = stage.edges;
       }
 
       // Re-emitted with structure when there is any, and emitted once when
@@ -658,6 +665,15 @@ export class RepositoryIndexer {
         if (contentStage.run) writtenFiles.add(entity.id);
       }
       await write(graph);
+
+      // EPIC-035. After the write, and that is the whole reason the stage
+      // returns these rather than asserting them: a `file_declares_symbol` edge
+      // points from a `file` entity that did not exist a moment ago, and the
+      // relationship table's foreign key is not a suggestion. Found by test on
+      // the first end-to-end run.
+      for (const edge of contentEdges) {
+        await this.#relationships.assert(edge, observedAt);
+      }
     };
 
     // On a content run the file tree is read and written **before** history.

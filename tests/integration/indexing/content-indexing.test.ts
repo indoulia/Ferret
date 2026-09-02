@@ -7,11 +7,20 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
 
 import {
+  Confidence,
   ContentUnavailable,
+  Direction,
   ErrorCode,
+  EvidenceMethod,
+  FILE_DECLARES_SYMBOL,
+  PUBLIC_ACCESS,
   ParserFramework,
   ProviderRegistry,
   RepositoryIndexer,
+  ResolutionRule,
+  SYMBOL_REFERENCES_SYMBOL,
+  SourceAuthority,
+  UnresolvedReason,
   createNullLogger,
   type ContentReader,
   type DiscoveredRepository,
@@ -29,7 +38,9 @@ import {
   IndexLifecycleStore,
   MigrationPolicy,
   RelationshipStore,
+  RetrievalStore,
   SymbolStore,
+  UNRESTRICTED_READ,
   migrate,
   type FerretDatabase,
 } from '../../../src/storage/index.js';
@@ -162,6 +173,27 @@ async function symbolsOf(repositoryId: string, path: string): Promise<readonly {
      ORDER BY attributes->>'qualifiedName'
   `);
   return rows.rows.map((row) => ({ name: row.name, lifecycle: row.lifecycle }));
+}
+
+/**
+ * The same rows with their ids — EPIC-035 needs the entity an edge points at.
+ *
+ * A second helper rather than widening `symbolsOf`, whose callers compare its
+ * rows with `toStrictEqual` and would fail on an extra key. A test helper that
+ * breaks its siblings to suit a new test is the wrong shape.
+ */
+async function symbolIdsOf(
+  repositoryId: string,
+  path: string,
+): Promise<readonly { id: string; name: string }[]> {
+  const rows = await handle.execute<{ id: string; name: string }>(sql`
+    SELECT id, attributes->>'name' AS name
+      FROM "ferret"."entity"
+     WHERE kind = 'code_symbol'
+       AND source_scope = ${`${repositoryId}:${path}`}
+     ORDER BY attributes->>'qualifiedName'
+  `);
+  return rows.rows.map((row) => ({ id: row.id, name: row.name }));
 }
 
 /**
@@ -532,5 +564,297 @@ describeContent('failure, cancellation and the guarantees they must not break �
     expect(await symbolsOf(report.repositoryId, 'src/box.ts')).toStrictEqual([]);
     // The run succeeded: the watermark moved and the report is a report.
     expect(report.watermark).toBeDefined();
+  });
+});
+
+/**
+ * References, edges and symbol evidence end to end — EPIC-035.
+ *
+ * Shares this file's fixture machinery because the capability needs exactly what
+ * it already builds: a real repository, real `git`, the real parser and a real
+ * database. The resolver's rules are unit-tested on paper; what needs a live run
+ * is that the edges reach storage and that "where is this used" is answerable by
+ * traversal.
+ */
+describeContent('the reference index end to end — EPIC-035', () => {
+  const CALLER = [
+    'export function applyTax(total: number): number {',
+    '  return total * 1.2;',
+    '}',
+    '',
+    'export function refundInvoice(total: number): number {',
+    '  return applyTax(total);',
+    '}',
+    '',
+  ].join('\n');
+
+  it('writes a same-file reference edge and records the rule — AC-1, AC-3', async () => {
+    const fixture = await repository('references');
+    await commit(fixture, 'src/refund.ts', CALLER);
+
+    const report = await index(fixture);
+
+    const symbols = await symbolIdsOf(report.repositoryId, 'src/refund.ts');
+    const applyTax = symbols.find((row) => row.name === 'applyTax');
+    const refundInvoice = symbols.find((row) => row.name === 'refundInvoice');
+    expect(applyTax).toBeDefined();
+    expect(refundInvoice).toBeDefined();
+    if (applyTax === undefined || refundInvoice === undefined) return;
+
+    // "Where is this used", by inbound traversal — AC-14. No new read surface:
+    // the port that already traverses relationships answers it.
+    const retrieval = new RetrievalStore(handle);
+    const inbound = await retrieval.neighbours(
+      { from: applyTax.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
+      PUBLIC_ACCESS,
+    );
+
+    expect(inbound).toHaveLength(1);
+    expect(inbound[0]?.entity.id).toBe(refundInvoice.id);
+    expect(inbound[0]?.metadata['rule']).toBe(ResolutionRule.SAME_FILE);
+    expect(inbound[0]?.metadata['name']).toBe('applyTax');
+  });
+
+  it('writes a file_declares_symbol edge for every symbol', async () => {
+    const fixture = await repository('declares');
+    await commit(fixture, 'src/refund.ts', CALLER);
+    const report = await index(fixture);
+
+    const files = await handle.execute<{ id: string }>(sql`
+      SELECT id FROM "ferret"."entity"
+       WHERE kind = 'file' AND attributes->>'path' = 'src/refund.ts'
+         AND source_scope = ${report.repositoryId}
+       LIMIT 1
+    `);
+    const file = files.rows[0];
+    expect(file).toBeDefined();
+    if (file === undefined) return;
+
+    const retrieval = new RetrievalStore(handle);
+    const declared = await retrieval.neighbours(
+      { from: file.id, direction: Direction.OUT, types: [FILE_DECLARES_SYMBOL] },
+      PUBLIC_ACCESS,
+    );
+
+    expect(declared.length).toBeGreaterThanOrEqual(2);
+    expect(declared.map((one) => one.entity.kind)).toStrictEqual(
+      declared.map(() => 'code_symbol'),
+    );
+    expect(report.content?.references?.edges).toBeGreaterThan(0);
+  });
+
+  it('gives every symbol parsed evidence — AC-8, issue #49', async () => {
+    const fixture = await repository('symbol-evidence');
+    await commit(fixture, 'src/refund.ts', CALLER);
+    const report = await index(fixture);
+
+    const symbols = await symbolIdsOf(report.repositoryId, 'src/refund.ts');
+    const applyTax = symbols.find((row) => row.name === 'applyTax');
+    expect(applyTax).toBeDefined();
+    if (applyTax === undefined) return;
+
+    const store = new EvidenceStore(handle);
+    const held = await store.forSubject(applyTax.id, UNRESTRICTED_READ);
+
+    // The gap issue #49 recorded: a symbol had identity, attributes and
+    // lifecycle and no evidence row stating how Ferret came to believe it.
+    const parsed = held.filter((one) => one.method === EvidenceMethod.PARSED);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.statement).toBe('applyTax');
+    // And the authority ranking issue #49 called inert now has something to
+    // apply: `parsed` is 60 through EPIC-045.
+    expect(parsed[0]?.authority).toBe(SourceAuthority.PARSED);
+  });
+
+  it('gives a resolution inferred evidence, derived from the declaration — AC-9', async () => {
+    const fixture = await repository('resolution-evidence');
+    await commit(fixture, 'src/refund.ts', CALLER);
+    const report = await index(fixture);
+
+    const symbols = await symbolIdsOf(report.repositoryId, 'src/refund.ts');
+    const applyTax = symbols.find((row) => row.name === 'applyTax');
+    expect(applyTax).toBeDefined();
+    if (applyTax === undefined) return;
+
+    const store = new EvidenceStore(handle);
+    const held = await store.forSubject(applyTax.id, UNRESTRICTED_READ);
+    const inferred = held.find((one) => one.method === EvidenceMethod.INFERRED);
+
+    expect(inferred).toBeDefined();
+    // The first shipping producer of `inferred` evidence, which is what makes
+    // EPIC-046's chain live rather than latent.
+    expect(inferred?.derivedFrom).toHaveLength(1);
+    expect(inferred?.confidence).toBe(Confidence.STRONG);
+  });
+
+  it('resolves across files by unique name, at a lower confidence — AC-4', async () => {
+    const fixture = await repository('cross-file');
+    await commit(fixture, 'src/tax.ts', 'export function applyTax(n: number): number {\n  return n;\n}\n');
+    await commit(
+      fixture,
+      'src/refund.ts',
+      'export function refundInvoice(n: number): number {\n  return applyTax(n);\n}\n',
+    );
+
+    const report = await index(fixture);
+
+    const tax = (await symbolIdsOf(report.repositoryId, 'src/tax.ts')).find(
+      (row) => row.name === 'applyTax',
+    );
+    expect(tax).toBeDefined();
+    if (tax === undefined) return;
+
+    const retrieval = new RetrievalStore(handle);
+    const inbound = await retrieval.neighbours(
+      { from: tax.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
+      PUBLIC_ACCESS,
+    );
+
+    expect(inbound).toHaveLength(1);
+    expect(inbound[0]?.metadata['rule']).toBe(ResolutionRule.UNIQUE_IN_REPOSITORY);
+    expect(report.content?.references?.byRule[ResolutionRule.UNIQUE_IN_REPOSITORY]).toBeGreaterThan(0);
+  });
+
+  it('writes no edge for an ambiguous name, and reports it — AC-5', async () => {
+    // Two declarations of one name in two files. An edge asserting one of them
+    // is manufacturing certainty, and a wrong call graph reads as knowledge.
+    const fixture = await repository('ambiguous');
+    await commit(fixture, 'src/a.ts', 'export function save(): void {}\n');
+    await commit(fixture, 'src/b.ts', 'export function save(): void {}\n');
+    await commit(fixture, 'src/use.ts', 'export function run(): void {\n  save();\n}\n');
+
+    const report = await index(fixture);
+
+    const a = (await symbolIdsOf(report.repositoryId, 'src/a.ts')).find((row) => row.name === 'save');
+    const b = (await symbolIdsOf(report.repositoryId, 'src/b.ts')).find((row) => row.name === 'save');
+    expect(a).toBeDefined();
+    expect(b).toBeDefined();
+    if (a === undefined || b === undefined) return;
+
+    const retrieval = new RetrievalStore(handle);
+    for (const target of [a, b]) {
+      const inbound = await retrieval.neighbours(
+        { from: target.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
+        PUBLIC_ACCESS,
+      );
+      expect(inbound).toStrictEqual([]);
+    }
+
+    // Reported rather than silent — §12's number that matters.
+    expect(report.content?.references?.unresolved[UnresolvedReason.AMBIGUOUS]).toBeGreaterThan(0);
+  });
+
+  it('reports an unknown name unresolved rather than inventing an edge — AC-6', async () => {
+    const fixture = await repository('unknown-name');
+    // A *bare* unknown name. `console.log(1)` is a member call and would be
+    // `receiver-unknown` instead — the other refusal, with its own test.
+    await commit(
+      fixture,
+      'src/use.ts',
+      ['export function run(): void {', '  structuredClone(1);', '}', ''].join('\n'),
+    );
+
+    const report = await index(fixture);
+
+    expect(report.content?.references?.unresolved[UnresolvedReason.NOT_FOUND]).toBeGreaterThan(0);
+    expect(report.content?.references?.resolved).toBe(0);
+  });
+
+  it('writes nothing new when the file is unchanged — AC-13', async () => {
+    const fixture = await repository('unchanged-references');
+    await commit(fixture, 'src/refund.ts', CALLER);
+
+    const first = await index(fixture);
+    const second = await index(fixture);
+
+    expect(first.content?.references?.edges).toBeGreaterThan(0);
+    // The gate skips an unchanged file before the stage is reached, which is
+    // what makes this structural rather than a deduplication that happens to
+    // work: no parse, no symbols, no references, no writes.
+    expect(second.content?.references?.extracted ?? 0).toBe(0);
+    expect(second.content?.references?.edges ?? 0).toBe(0);
+  });
+
+  it('reports references as undefined when content indexing does not run', async () => {
+    const fixture = await repository('no-content-references');
+    await commit(fixture, 'src/refund.ts', CALLER);
+
+    const report = await index(fixture, false);
+
+    expect(report.content).toBeUndefined();
+  });
+
+  it('refuses a member call the repository rule may not answer — AC-6a', async () => {
+    // The dogfooding finding, as a test: one `has` declared in the repository
+    // and a `map.has(...)` call that must not resolve to it.
+    const fixture = await repository('member-call');
+    await commit(
+      fixture,
+      'src/registry.ts',
+      ['export class Registry {', '  has(): boolean {', '    return true;', '  }', '}', ''].join('\n'),
+    );
+    await commit(
+      fixture,
+      'src/use.ts',
+      [
+        'export function run(seen: Map<string, number>): boolean {',
+        '  return seen.has("x");',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    const report = await index(fixture);
+
+    const declared = (await symbolIdsOf(report.repositoryId, 'src/registry.ts')).find(
+      (row) => row.name === 'has',
+    );
+    expect(declared).toBeDefined();
+    if (declared === undefined) return;
+
+    const retrieval = new RetrievalStore(handle);
+    const inbound = await retrieval.neighbours(
+      { from: declared.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
+      PUBLIC_ACCESS,
+    );
+
+    expect(inbound).toStrictEqual([]);
+    expect(report.content?.references?.unresolved['receiver-unknown']).toBeGreaterThan(0);
+  });
+
+  it('resolves a recursive call and writes no self-edge — AC-6b', async () => {
+    // EPIC-007 forbids a relationship connecting an entity to itself, and it is
+    // right to: a symbol calling itself is a property of the symbol. Found on
+    // Ferret's own code, where `connect` calls `connect`.
+    const fixture = await repository('recursive');
+    await commit(
+      fixture,
+      'src/walk.ts',
+      [
+        'export function walk(n: number): number {',
+        '  if (n <= 0) return 0;',
+        '  return walk(n - 1);',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    const report = await index(fixture);
+
+    const walk = (await symbolIdsOf(report.repositoryId, 'src/walk.ts')).find(
+      (row) => row.name === 'walk',
+    );
+    expect(walk).toBeDefined();
+    if (walk === undefined) return;
+
+    const retrieval = new RetrievalStore(handle);
+    const inbound = await retrieval.neighbours(
+      { from: walk.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
+      PUBLIC_ACCESS,
+    );
+
+    expect(inbound).toStrictEqual([]);
+    // Counted, so it does not look like a resolution that went missing.
+    expect(report.content?.references?.recursive).toBeGreaterThan(0);
   });
 });

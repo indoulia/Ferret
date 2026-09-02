@@ -6,6 +6,7 @@ import {
   ParserSupport,
   SegmentKind,
   type ContentParser,
+  type CodeReference,
   type ContentSegment,
   type ContentSpan,
   type OutlineNode,
@@ -200,6 +201,9 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
     };
 
     const imports: Node[] = [];
+    // EPIC-035. Collected during the walk that already happens; no second parse.
+    const references: CodeReference[] = [];
+    const importedNames = new Set<string>();
 
     /**
      * Walks the tree, emitting a segment per declaration and an outline node
@@ -210,7 +214,12 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
      * recognises and what a retrieval hit should quote, so the segment spans
      * the wrapper and is labelled from the declaration inside it.
      */
-    const visit = (node: Node, depth: number, wrapper?: Node): readonly OutlineNode[] => {
+    const visit = (
+      node: Node,
+      depth: number,
+      wrapper?: Node,
+      enclosing: readonly string[] = [],
+    ): readonly OutlineNode[] => {
       const children: OutlineNode[] = [];
       for (let index = 0; index < node.namedChildCount; index += 1) {
         const child = node.namedChild(index);
@@ -222,7 +231,28 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
         }
         if (spec.imports.includes(child.type) && isImport(child)) {
           imports.push(child);
+          for (const name of identifiersIn(child)) importedNames.add(name);
           continue;
+        }
+
+        // EPIC-035 §8.1. A use of a name, attributed to the declaration it sits
+        // inside — `enclosing` is the same outline title path `buildCodeSymbols`
+        // joins into a qualified name, so the two match by construction rather
+        // than by a second convention.
+        const reference = spec.references[child.type];
+        if (reference !== undefined) {
+          const callee = calleeOf(child);
+          if (callee !== undefined) {
+            references.push({
+              kind: reference,
+              name: callee.name,
+              qualified: callee.qualified,
+              enclosing,
+              span: spanOf(child),
+            });
+          }
+          // Fall through: a call may contain another call, and the arguments of
+          // `save(build(x))` are references too.
         }
 
         const declaration = spec.declarations[child.type];
@@ -231,14 +261,14 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
           // exported class, a decorated function, a namespace body. Walking
           // through is what makes the outline a tree rather than a flat list of
           // whatever happens to sit at the top level.
-          children.push(...visit(child, depth, spec.wrappers.includes(child.type) ? child : undefined));
+          children.push(...visit(child, depth, spec.wrappers.includes(child.type) ? child : undefined, enclosing));
           continue;
         }
 
-        const label = nameOf(child);
         // The wrapper only applies to the declaration directly inside it, so it
         // is not passed down: a method in an exported class is its own segment,
         // not another copy of the class.
+        const label = nameOf(child);
         const quoted = wrapper ?? child;
         const span = spanOf(quoted);
         push({
@@ -247,7 +277,10 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
           span,
           ...(label === undefined ? {} : { label }),
         });
-        const nested = depth < MAX_OUTLINE_DEPTH ? visit(child, depth + 1) : [];
+        const nested =
+          depth < MAX_OUTLINE_DEPTH
+            ? visit(child, depth + 1, undefined, [...enclosing, label ?? child.type])
+            : [];
         children.push({
           title: label ?? child.type,
           kind: declaration,
@@ -309,12 +342,15 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
     return {
       segments,
       outline,
+      references,
+      imports: [...importedNames].sort(),
       attributes: {
         language: spec.language,
         grammar: identity.grammar,
         grammarAbiVersion: identity.abiVersion,
         grammarBinaryHash: identity.binaryHash,
         declarationCount: outline.length,
+        referenceCount: references.length,
         hasSyntaxErrors: tree.rootNode.hasError,
       },
       warnings,
@@ -388,6 +424,56 @@ export const CODE_PARSER_LANGUAGES: readonly string[] = Object.freeze(
  * `name` is the field tree-sitter uses for it in every grammar here. Python's
  * decorated definitions wrap the real declaration, so the name is one level in.
  */
+/**
+ * Every identifier inside an import statement — EPIC-035 §8.3.
+ *
+ * The whole subtree rather than a per-grammar field walk: an import's shape
+ * differs across three grammars (`import_clause`, `named_imports`,
+ * `dotted_name`, aliases) and the question here is only *which names does this
+ * statement bring into scope*. A module path is a string literal and not an
+ * identifier, so it is not collected; an alias collects both sides, which is
+ * correct — both are names that came from elsewhere.
+ */
+function identifiersIn(node: Node): readonly string[] {
+  const found: string[] = [];
+  const walk = (current: Node): void => {
+    if (current.type === 'identifier' || current.type === 'property_identifier') {
+      found.push(current.text);
+      return;
+    }
+    for (let index = 0; index < current.namedChildCount; index += 1) {
+      const child = current.namedChild(index);
+      if (child !== null) walk(child);
+    }
+  };
+  walk(node);
+  return found;
+}
+
+/**
+ * The name a reference names — EPIC-035 §8.1.
+ *
+ * The **last identifier** of the callee, so `a.b.save()` reports `save` and
+ * `applyTax()` reports `applyTax`. Name-based by construction: resolving
+ * `a.save` to the right `save` needs the type of `a`, which no grammar carries
+ * and Ferret has no type checker for. §8.3 records what that costs and why the
+ * resolution band is `PROBABLE` rather than `STRONG`.
+ *
+ * A callee that is not ultimately an identifier — an immediately-invoked
+ * function, a call on a call's result — yields nothing rather than a guess.
+ */
+function calleeOf(node: Node): { readonly name: string; readonly qualified: boolean } | undefined {
+  const callee = node.childForFieldName('function') ?? node.childForFieldName('constructor');
+  if (callee === null || callee === undefined) return undefined;
+  if (callee.type === 'identifier' || callee.type === 'property_identifier') {
+    return { name: callee.text, qualified: false };
+  }
+
+  const property = callee.childForFieldName('property') ?? callee.childForFieldName('attribute');
+  if (property !== null && property !== undefined) return { name: property.text, qualified: true };
+  return undefined;
+}
+
 function nameOf(node: Node): string | undefined {
   const direct = node.childForFieldName('name');
   if (direct !== null) return direct.text;
