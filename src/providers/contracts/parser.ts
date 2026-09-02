@@ -101,9 +101,76 @@ export interface ParseRequest {
   readonly bytes: Uint8Array;
 }
 
+/**
+ * What kind of use a reference is — EPIC-035 §8.1.
+ *
+ * Deliberately coarse. A parser reports what its grammar can see without a type
+ * checker, and a vocabulary finer than this would be claiming knowledge no
+ * grammar has.
+ */
+export const ReferenceKind = {
+  /** A call: `applyTax(total)`, `self.save()`. */
+  CALL: 'call',
+  /** A construction: `new Invoice()`. */
+  CONSTRUCTION: 'construction',
+} as const;
+
+export type ReferenceKind = (typeof ReferenceKind)[keyof typeof ReferenceKind];
+
+/**
+ * One use of a name, as the grammar found it — EPIC-035.
+ *
+ * `name` is the last identifier of the callee, so `a.save()` reports `save`.
+ * That is name-based by construction and EPIC-035 §8.3 records what it costs;
+ * resolving it needs a type checker Ferret does not have.
+ *
+ * `enclosing` is the outline title path the reference sits inside, which is how
+ * an edge becomes answerable: "`refundInvoice` calls `applyTax`" is a fact, and
+ * "line 42 calls `applyTax`" is not a graph. Empty means top-level, which
+ * EPIC-035 §8.2 attributes to the file.
+ */
+export interface CodeReference {
+  readonly kind: ReferenceKind;
+  readonly name: string;
+  /**
+   * The callee was a member access — `a.save()` rather than `save()`.
+   *
+   * Load-bearing, and found by dogfooding rather than reasoning. A bare
+   * identifier is resolved by the language's own scoping to something in scope;
+   * a member name is scoped by the *receiver's type*, which Ferret does not
+   * know. Resolving `map.has(x)` to the one declared `has` in the repository
+   * gave `ProviderRegistry.has` 84 references on Ferret's own code, nearly all
+   * of them `Map.has` — a call graph that reads as knowledge and is wrong.
+   * EPIC-035 §8.3 uses this to refuse that inference.
+   */
+  readonly qualified: boolean;
+  readonly enclosing: readonly string[];
+  readonly span: ContentSpan;
+}
+
 export interface ParseOutput {
   readonly segments: readonly ContentSegment[];
   readonly outline?: readonly OutlineNode[];
+  /**
+   * Names this file uses — EPIC-035.
+   *
+   * Optional, so a parser that reports none is a parser that did not look
+   * rather than a file with no references. Four Epics deferred this and
+   * `findSymbols` could answer "where is this defined" while nothing could
+   * answer "where is it used".
+   */
+  readonly references?: readonly CodeReference[];
+  /**
+   * Names this file brings into scope from elsewhere — EPIC-035 §8.3.
+   *
+   * An imported name is declared somewhere Ferret may not have indexed, so it
+   * must not be resolved to a repository-unique homonym. Found by dogfooding:
+   * without this, `describe(...)` in every test file resolved to
+   * `ProviderRegistry.describe` (111 references) because that is the only
+   * `describe` Ferret *declares*, and `resolve(...)` resolved to
+   * `IdentityStore.resolve` rather than `node:path`.
+   */
+  readonly imports?: readonly string[];
   /** Parser-declared facts about the file. Provider-specific by design. */
   readonly attributes?: Readonly<Record<string, unknown>>;
   readonly warnings?: readonly ParseWarning[];

@@ -123,3 +123,30 @@ repository content to turn one indexed lookup into a scan.
 `npm run lint`, `npm run typecheck` and `npm run build` clean.
 `vitest run tests/unit`: 35 files, 982 passed.
 `vitest run tests/integration/code`: 15 passed, real PostgreSQL.
+
+## Addendum — 2026-09-02, after EPIC-035
+
+**"No references" is closed.** The limitation above is left as written.
+
+It read: "**No references.** 'Where is this called' is EPIC-035. This Epic
+answers where a symbol is *defined*." That Epic has landed: references are
+extracted from the parse that already happens, resolved where the answer is
+unambiguous, and stored as `symbol_references_symbol` and
+`file_references_symbol` edges — so "where is this used" is an inbound traversal
+through the port that already traverses relationships.
+
+**Issue #49 is closed with it.** Every indexed symbol now carries one `parsed`
+evidence record naming the file, the producer and the producer version, with
+authority `PARSED` (60) — so the ranking that issue called inert has something
+to apply, and `derivedFrom` traces a resolution back to the declaration it
+rests on.
+
+What EPIC-035 refuses is worth knowing here, because it bounds what a caller
+should read into the graph: a member call (`a.save()`) is not resolved across
+files, an imported name is not resolved to a repository homonym, and an
+ambiguous name is not resolved at all. Each refusal was forced by measuring the
+alternative on Ferret's own code, where it produced confident nonsense —
+`Map.has` reported as `ProviderRegistry.has`, Vitest's `describe` as
+`ProviderRegistry.describe`.
+
+Evidence: `docs/EPICs/validation/EPIC-035-VALIDATION.md`.

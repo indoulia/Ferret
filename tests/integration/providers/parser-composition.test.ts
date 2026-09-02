@@ -8,6 +8,7 @@ import {
   isContentParser,
   ParserFramework,
   ParserSupport,
+  ReferenceKind,
   type Provider,
 } from '../../../src/index.js';
 // `discoverProviders` ships from `@indoulia/ferret/providers`, not the package
@@ -18,6 +19,7 @@ import {
   FERRET_PARSERS_MODULE,
   loadFerretParsers,
 } from '../../../src/cli/commands/parser-composition.js';
+import { createTestOperationContext } from '../../../src/providers/sdk/testing.js';
 
 /**
  * EPIC-108 AC-13 — the positive half of the boundary decision.
@@ -198,5 +200,165 @@ describe('composing through a real runtime lifecycle', () => {
     expect(lifecycle?.reason).toBe('lifecycle');
     expect(malformed?.reason).toBe('invalid');
     expect(lifecycle?.reason).not.toBe(malformed?.reason);
+  });
+});
+
+/**
+ * EPIC-035 §8.1 — references, through the real grammars.
+ *
+ * The part that cannot be unit-tested: whether the node types and field names
+ * `languages.ts` and `calleeOf` name are the ones tree-sitter actually produces.
+ * A resolver with a perfect test suite over hand-built references proves nothing
+ * if extraction finds none.
+ */
+describe('extracting references from real code', () => {
+  const parse = async (path: string, mediaType: string, text: string) => {
+    const registry = new ProviderRegistry();
+    await discoverProviders(registry, [FERRET_PARSERS_MODULE], loadFerretParsers);
+    const framework = new ParserFramework({ registry });
+    const target = { path, mediaType, binary: false, sizeBytes: text.length };
+    const parser = framework.select(target);
+    expect(parser).toBeDefined();
+    if (parser === undefined) throw new Error('no parser');
+    return parser.parse(
+      { target, text, bytes: new TextEncoder().encode(text) },
+      createTestOperationContext(),
+    );
+  };
+
+  it('finds a call and attributes it to the function it sits inside — AC-1, AC-7', async () => {
+    const output = await parse(
+      'src/billing/refund.ts',
+      'text/x-typescript',
+      [
+        'export function applyTax(total: number): number {',
+        '  return total * 1.2;',
+        '}',
+        '',
+        'export function refundInvoice(total: number): number {',
+        '  return applyTax(total);',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    const references = output.references ?? [];
+    const call = references.find((one) => one.name === 'applyTax');
+
+    expect(call).toBeDefined();
+    expect(call?.kind).toBe(ReferenceKind.CALL);
+    expect(call?.enclosing).toStrictEqual(['refundInvoice']);
+    expect(call?.span.startLine).toBe(6);
+  });
+
+  it('finds a construction — AC-2', async () => {
+    const output = await parse(
+      'src/billing/invoice.ts',
+      'text/x-typescript',
+      ['class Invoice {}', '', 'function make(): Invoice {', '  return new Invoice();', '}', ''].join('\n'),
+    );
+
+    const construction = (output.references ?? []).find((one) => one.name === 'Invoice');
+    expect(construction?.kind).toBe(ReferenceKind.CONSTRUCTION);
+    expect(construction?.enclosing).toStrictEqual(['make']);
+  });
+
+  it('reports the last identifier of a member call, and says so by name — AC-1', async () => {
+    // `a.save()` reports `save`. Name-based by construction: resolving it to the
+    // right `save` needs the type of `a`, which no grammar carries.
+    const output = await parse(
+      'src/app.ts',
+      'text/x-typescript',
+      ['function run(store: Store): void {', '  store.save();', '}', ''].join('\n'),
+    );
+
+    expect((output.references ?? []).map((one) => one.name)).toContain('save');
+  });
+
+  it('attributes a top-level call to no declaration — AC-7', async () => {
+    const output = await parse(
+      'src/main.ts',
+      'text/x-typescript',
+      ['function boot(): void {}', '', 'boot();', ''].join('\n'),
+    );
+
+    const call = (output.references ?? []).find((one) => one.name === 'boot');
+    expect(call?.enclosing).toStrictEqual([]);
+  });
+
+  it('finds a call nested inside a method — AC-7', async () => {
+    const output = await parse(
+      'src/billing/invoice.ts',
+      'text/x-typescript',
+      [
+        'function applyTax(n: number): number { return n; }',
+        '',
+        'class Invoice {',
+        '  total(): number {',
+        '    return applyTax(1);',
+        '  }',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    const call = (output.references ?? []).find((one) => one.name === 'applyTax');
+    expect(call?.enclosing).toStrictEqual(['Invoice', 'total']);
+  });
+
+  it('finds the arguments of a call as references too', async () => {
+    // `save(build(x))` — a call may contain another call, and falling through
+    // after recording one is what finds the inner.
+    const output = await parse(
+      'src/app.ts',
+      'text/x-typescript',
+      ['function run(): void {', '  save(build(1));', '}', ''].join('\n'),
+    );
+
+    const names = (output.references ?? []).map((one) => one.name);
+    expect(names).toContain('save');
+    expect(names).toContain('build');
+  });
+
+  it('finds a Python call, where the grammar cannot tell a class from a function', async () => {
+    const output = await parse(
+      'module.py',
+      'text/x-python',
+      ['def apply_tax(total):', '    return total', '', 'def refund(total):', '    return apply_tax(total)', ''].join('\n'),
+    );
+
+    const call = (output.references ?? []).find((one) => one.name === 'apply_tax');
+    expect(call?.kind).toBe(ReferenceKind.CALL);
+    expect(call?.enclosing).toStrictEqual(['refund']);
+  });
+
+  it('finds a JavaScript call', async () => {
+    const output = await parse(
+      'helpers.js',
+      'text/javascript',
+      ['function helper() {}', '', 'function main() {', '  helper();', '}', ''].join('\n'),
+    );
+
+    expect((output.references ?? []).map((one) => one.name)).toContain('helper');
+  });
+
+  it('reports the reference count as a parser attribute', async () => {
+    const output = await parse(
+      'src/app.ts',
+      'text/x-typescript',
+      ['function a() {}', 'function b() { a(); }', ''].join('\n'),
+    );
+
+    expect(output.attributes?.['referenceCount']).toBe((output.references ?? []).length);
+  });
+
+  it('yields no references and no error for a file with none — AC-16', async () => {
+    const output = await parse(
+      'src/types.ts',
+      'text/x-typescript',
+      ['export interface Empty {', '  name: string;', '}', ''].join('\n'),
+    );
+
+    expect(output.references ?? []).toStrictEqual([]);
   });
 });

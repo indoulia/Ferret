@@ -105,7 +105,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 - **EPIC-033 — AST Model** — P0 — VALIDATED ([spec](EPIC-033-AST-Model.md), [evidence](validation/EPIC-033-VALIDATION.md))
 - **EPIC-034 — Symbol Index** — P0 — VALIDATED ([spec](EPIC-034-Symbol-Index.md), [evidence](validation/EPIC-034-VALIDATION.md))
-- **EPIC-035 — Reference & Relationship Index** — P1
+- **EPIC-035 — Reference & Relationship Index** — P1 — VALIDATED ([spec](EPIC-035-Reference-And-Relationship-Index.md), [evidence](validation/EPIC-035-VALIDATION.md))
 
 ### Engineering Context
 

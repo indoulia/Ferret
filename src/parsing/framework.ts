@@ -6,6 +6,7 @@ import {
   isSegmentKind,
   type ContentParser,
   type ContentSegment,
+  type CodeReference,
   type OutlineNode,
   type ParseOutput,
   type ParseTarget,
@@ -78,6 +79,16 @@ export interface ParsedContent {
   readonly mediaType: string;
   readonly segments: readonly ContentSegment[];
   readonly outline: readonly OutlineNode[];
+  /**
+   * Names the file uses — EPIC-035.
+   *
+   * Carried through rather than re-derived: the parse already walked the tree,
+   * and a second walk here would be a second place for language support to
+   * drift. Empty for a parser that reports none.
+   */
+  readonly references: readonly CodeReference[];
+  /** Names the file brings into scope from elsewhere — EPIC-035 §8.3. */
+  readonly imports: readonly string[];
   readonly attributes: Readonly<Record<string, unknown>>;
   readonly warnings: readonly ParseWarning[];
   /** The parser stopped early. */
@@ -270,6 +281,8 @@ export class ParserFramework {
       mediaType: detection.mediaType,
       segments,
       outline: output.outline ?? [],
+      references: output.references ?? [],
+      imports: output.imports ?? [],
       attributes: output.attributes ?? {},
       warnings: output.warnings ?? [],
       truncated: output.truncated ?? false,
