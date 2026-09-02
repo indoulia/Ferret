@@ -152,7 +152,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 | No provider health beyond storage, because storage is the only provider. | The `providers` area is defined but unpopulated. | **EPIC-014** — Provider Lifecycle & Health |
 | A long migration lock wait is not surfaced as a distinct finding. | EPIC-002 recorded that `client_connection_check_interval` is a no-op on a Windows-hosted *server*, so a crashed process there can hold the lock until the statement ends. `doctor` reports the resulting symptom, not the cause. | **EPIC-095** — resolved: the error now names the holding session's pid, state and duration, and its remediation names a Ferret command rather than `pg_locks`. |
 | No metrics, tracing or history — health is point-in-time. | "Was it healthy an hour ago" cannot be answered. | **EPIC-092** — Metrics & Tracing |
-| Health is not yet exposed over MCP. | An AI client must shell out to `ferret status --json`. The report is already structured for it. | **EPIC-066**, **EPIC-070** |
+| ~~Health is not yet exposed over MCP.~~ **Closed 2026-09-03 by EPIC-070.** `ferret_health` returns this report over MCP, with the index inventory beside it. The row was right that the report was already structured for it — and that shelling out was the part that does not work, since an MCP client is often a process with no shell and no `ferret` on its path. | closed |
 | macOS unvalidated. | Inherited from EPIC-001/EPIC-005; no macOS host available. | **EPIC-105** |
 
 ## Addendum — 2026-09-02, after EPIC-092

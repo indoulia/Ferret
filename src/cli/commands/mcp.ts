@@ -4,10 +4,17 @@ import { accessContextFor, principalFrom } from '../../authorization/index.js';
 import { ConfigStore, defaultConfigSources, resolveConfig } from '../../config/index.js';
 import type { LogLevel } from '../../logging/index.js';
 import { createMcpServer, serveStdio } from '../../mcp/index.js';
+import { probeHealth } from '../health.js';
 import { Capability, assertSupported } from '../../providers/index.js';
 import { QueryPlanner, assertUsableAccess, type AccessContext } from '../../retrieval/index.js';
 import { createRuntime } from '../../runtime/index.js';
-import { EvidenceStore, MigrationPolicy, RetrievalStore, createStorageProvider } from '../../storage/index.js';
+import {
+  EvidenceStore,
+  MigrationPolicy,
+  RetrievalStore,
+  createStorageProvider,
+  readInventory,
+} from '../../storage/index.js';
 
 /**
  * `ferret mcp` — serve the AI control plane over stdio.
@@ -101,6 +108,15 @@ export function mcpCommand(): Command {
                 logger: context.logger,
                 signal: context.signal,
               }),
+          },
+          // EPIC-070. `validation/EPIC-004-VALIDATION.md` has carried this
+          // row since EPIC-004: an AI client had to shell out to `ferret status
+          // --json`, which is exactly what an MCP client with no shell cannot
+          // do. `probeHealth` opens its own connection and closes it, which is
+          // EPIC-004's behaviour and is not changed here.
+          health: {
+            probe: async () => probeHealth({ logger: context.logger }),
+            inventory: async () => readInventory(storage.pool),
           },
           // EPIC-048. Without this the traceability tool is not registered at
           // all, and the 556 evidence rows a single index run records stay
