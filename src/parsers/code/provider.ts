@@ -21,7 +21,7 @@ import { BaseProvider } from '../../providers/sdk/base.js';
 import type { ProviderOperationContext } from '../../providers/sdk/operation.js';
 
 import { loadGrammarBytes, grammarSearchPaths, type GrammarIdentity } from './grammars.js';
-import { CODE_LANGUAGES, languageFor, type LanguageSpec } from './languages.js';
+import { CODE_LANGUAGES, DeclarationKind, languageFor, type LanguageSpec } from './languages.js';
 import { ByteOffsets } from './spans.js';
 
 /**
@@ -256,13 +256,26 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
           // `save(build(x))` are references too.
         }
 
-        const declaration = spec.declarations[child.type];
+        // Issue #106 — a node whose *value* is a function. `const x = () => {}`
+        // and `const x = 1` are both `variable_declarator`, so the node type
+        // alone cannot tell them apart and the value's type decides. Without
+        // this, arrow functions produced no symbol at all — which is the
+        // dominant way functions are written in modern TypeScript and
+        // JavaScript.
+        const declaration = spec.declarations[child.type] ?? functionValuedKind(spec, child);
         if (declaration === undefined) {
           // Not a declaration itself, but a declaration may be inside it — an
           // exported class, a decorated function, a namespace body. Walking
           // through is what makes the outline a tree rather than a flat list of
           // whatever happens to sit at the top level.
-          children.push(...visit(child, depth, spec.wrappers.includes(child.type) ? child : undefined, enclosing));
+          //
+          // `wrapper ?? child` keeps the *outermost* wrapper, so
+          // `export const x = () => {}` quotes the `export` too. For a single
+          // wrapper this is what it always did: `wrapper` is undefined there,
+          // and `undefined ?? child` is `child`.
+          children.push(
+            ...visit(child, depth, spec.wrappers.includes(child.type) ? (wrapper ?? child) : undefined, enclosing),
+          );
           continue;
         }
 
@@ -478,9 +491,29 @@ function calleeOf(node: Node): { readonly name: string; readonly qualified: bool
   return undefined;
 }
 
+/**
+ * The kind a node declares by virtue of its value, or `undefined`.
+ *
+ * Issue #106. Separate from {@link LanguageSpec.declarations} because that map
+ * is keyed on node type alone, and here the node type is shared by a function
+ * binding and every other binding in the language.
+ */
+function functionValuedKind(spec: LanguageSpec, node: Node): DeclarationKind | undefined {
+  const values = spec.functionValued[node.type];
+  if (values === undefined) return undefined;
+  const value = node.childForFieldName('value');
+  if (value === null || !values.includes(value.type)) return undefined;
+  return DeclarationKind.FUNCTION;
+}
+
 function nameOf(node: Node): string | undefined {
-  const direct = node.childForFieldName('name');
-  if (direct !== null) return direct.text;
+  // `name` for a declaration, `key` for an object-literal `pair` — issue #106
+  // added the second, because `{ onClick: () => {} }` names the function in a
+  // field the grammar calls `key` and there is no `name` anywhere in the node.
+  for (const field of ['name', 'key']) {
+    const direct = node.childForFieldName(field);
+    if (direct !== null) return direct.text;
+  }
   for (let index = 0; index < node.namedChildCount; index += 1) {
     const child = node.namedChild(index);
     const nested = child?.childForFieldName('name');

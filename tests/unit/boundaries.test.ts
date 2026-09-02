@@ -213,11 +213,14 @@ describe('core public entry point', () => {
     // concrete provider, and the Epic requires the package to export it.
     // `configuration.ts` joined it with EPIC-015 on that same ground: it is how
     // the core resolves a provider's own settings, and it knows nothing about
-    // what any provider's options mean.
+    // what any provider's options mean. `lifecycle.ts` joined it with EPIC-014
+    // on exactly that ground too: it is the state vocabulary and the recovery
+    // budget the registry keeps *about* a provider, and it imports nothing but
+    // `errors/`.
     //
     // What the core still may not reach is an implementation.
     const concreteProviders = [...graph.files].filter((file) =>
-      /^providers\/(?!contract\.ts|contracts\/|configuration\.ts|registry|capabilities|index|sdk\/|discovery\.ts)/.test(
+      /^providers\/(?!contract\.ts|contracts\/|configuration\.ts|lifecycle\.ts|registry|capabilities|index|sdk\/|discovery\.ts)/.test(
         file,
       ),
     );

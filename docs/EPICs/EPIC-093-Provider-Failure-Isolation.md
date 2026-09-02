@@ -65,6 +65,9 @@ operation.
 - **Restart, retry or backoff of a provider** — EPIC-014 (P1) owns lifecycle and
   health; EPIC-079 owns retry and explicitly assigns provider-level policy here,
   but a *policy* is not a restart mechanism and this Epic builds none.
+  **Built 2026-09-03 in EPIC-014**, and this Epic's own behaviour is unchanged:
+  `initializeAll` still records and continues, and recovery is a separate call
+  nothing on the start path makes.
 - **Per-operation circuit breaking.** A provider that fails on its ninth call is
   EPIC-014's; this is the initialize boundary.
 - **Changing how a failure is classified.** The catch in `initializeAll`
@@ -209,3 +212,10 @@ here updated or left accurate.
 - **EPIC-014 is P1 and owns the rest.** Restart, health polling and circuit
   breaking are named non-scope; if a failed optional provider should ever
   recover without a restart of Ferret, that is EPIC-014's to design.
+  **Answered 2026-09-03 by [EPIC-014](EPIC-014-Provider-Lifecycle-And-Health.md):**
+  it should, and `ProviderRegistry.recover` does it — one bounded attempt, asked
+  for and never assumed, with a circuit that opens after four failures. Health
+  *polling* is still not built and is still EPIC-078's to decide, because a poll
+  that recovered a provider unattended would make a decision nobody asked for at
+  a moment nobody chose. Per-operation circuit breaking also remains out: this
+  Epic's states come from the initialize boundary, exactly as recorded here.

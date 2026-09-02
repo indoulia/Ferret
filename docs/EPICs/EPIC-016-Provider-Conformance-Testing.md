@@ -44,7 +44,8 @@ safe to install" beyond reading its source.
 - capability *behaviour* semantics — that a repository provider actually
   discovers repositories is EPIC-017's suite, not this one;
 - the cross-provider quality harness, scoring and trend reporting — EPIC-099;
-- provider health monitoring at runtime — EPIC-014, EPIC-093;
+- provider health monitoring at runtime — EPIC-014 (**state and recovery
+  delivered 2026-09-03; nothing polls**), EPIC-093;
 - certifying a provider as secure: the suite checks stated invariants, it does
   not audit provider source;
 - any test-framework dependency. The suite returns data; a caller asserts on it

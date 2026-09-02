@@ -78,7 +78,10 @@ that surface; it does not build a second one.
   not own, and no record asks for it.
 - **A new command.** `ferret doctor` and `ferret status` are the surfaces
   (EPIC-004); adding a third would split where an operator looks.
-- **Provider restart or health polling** — EPIC-014.
+- **Provider restart or health polling** — EPIC-014. **Half delivered
+  2026-09-03:** recovery of a failed optional provider exists and its state is
+  in the health report; **polling does not**, and EPIC-014 §8.6 keeps it out for
+  the reason this Epic would care about — nothing runs on a timer.
 - **Audit events** — EPIC-085. A diagnostic is best-effort and discardable.
 - **Changing the health model, statuses or exit codes** — EPIC-004, VALIDATED.
 

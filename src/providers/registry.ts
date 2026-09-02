@@ -1,5 +1,13 @@
 import { credentialsFor, withoutCredentialFields } from '../config/index.js';
 import { ErrorCode, FerretError, toFerretError } from '../errors/index.js';
+import {
+  MAX_RECOVERY_ATTEMPTS,
+  ProviderLifecycleState,
+  RecoveryBudget,
+  RecoveryRefusal,
+  type ProviderLifecycle,
+  type RecoveryResult,
+} from './lifecycle.js';
 import { DependencyStatus, type DependencyCheckResult } from '../diagnostics/index.js';
 
 import {
@@ -77,6 +85,16 @@ export class ProviderRegistry {
   readonly #failed = new Map<string, string>();
   #secretPredicate: ((path: readonly string[]) => boolean) | undefined;
   #sealed = false;
+  /**
+   * Failed initialize attempts per provider — EPIC-014 §8.3.
+   *
+   * Separate from {@link #failed}, which records *that* a provider failed and
+   * with which code. This records *how many times*, which is what the circuit
+   * needs and what a single code cannot carry.
+   */
+  readonly #budget = new RecoveryBudget();
+  /** True once {@link shutdownAll} has run, so `released` is distinguishable. */
+  #released = false;
 
   /**
    * Validates and records a provider.
@@ -271,6 +289,134 @@ export class ProviderRegistry {
   }
 
   /**
+   * Where a provider is — EPIC-014 §8.1.
+   *
+   * Derived from the sets that already hold the facts rather than stored beside
+   * them: two places recording the same thing is how they come to disagree.
+   */
+  stateOf(providerId: string): ProviderLifecycle | undefined {
+    if (!this.#providers.has(providerId)) return undefined;
+
+    const attempts = this.#budget.attemptsFor(providerId);
+    const failureCode = this.#failed.get(providerId);
+    const state = ((): ProviderLifecycleState => {
+      if (this.#initialized.has(providerId)) return ProviderLifecycleState.INITIALIZED;
+      if (this.#released) return ProviderLifecycleState.RELEASED;
+      if (this.#disabled.has(providerId)) return ProviderLifecycleState.DISABLED;
+      if (failureCode === undefined) return ProviderLifecycleState.REGISTERED;
+      // The circuit as a state rather than a flag beside one: `unrecoverable`
+      // is what an operator needs to read, and deriving it here means `recover`
+      // and the health report cannot disagree about it.
+      return this.#budget.exhausted(providerId) ? ProviderLifecycleState.UNRECOVERABLE : ProviderLifecycleState.FAILED;
+    })();
+
+    return { providerId, state, attempts, ...(failureCode === undefined ? {} : { failureCode }) };
+  }
+
+  /** Every provider's state, in registration order. */
+  states(): readonly ProviderLifecycle[] {
+    return this.list()
+      .map((provider) => this.stateOf(provider.id))
+      .filter((one): one is ProviderLifecycle => one !== undefined);
+  }
+
+  /**
+   * One bounded attempt to initialize a failed optional provider — §8.2.
+   *
+   * Not a loop, not a timer, and never called from `initializeAll`: a start-up
+   * that retried would turn a five-second start into a minute of silence, and
+   * EPIC-093's contract is that the start *continues*.
+   *
+   * Answers EPIC-093 §16's open question — "if a failed optional provider
+   * should ever recover without a restart of Ferret, that is EPIC-014's to
+   * design."
+   */
+  async recover(providerId: string, host: ProviderHostContext): Promise<RecoveryResult> {
+    const refusal = this.#refuseRecovery(providerId);
+    if (refusal !== undefined) {
+      const current = this.stateOf(providerId);
+      host.logger.debug(
+        { operation: 'provider.recover.refused', providerId, refusal },
+        `Recovery of "${providerId}" was refused: ${refusal}`,
+      );
+      return {
+        providerId,
+        state: current?.state ?? ProviderLifecycleState.REGISTERED,
+        recovered: false,
+        refused: refusal,
+        attempts: current?.attempts ?? 0,
+        ...(current?.failureCode === undefined ? {} : { failureCode: current.failureCode }),
+      };
+    }
+
+    const provider = this.#providers.get(providerId);
+    if (provider === undefined) {
+      return {
+        providerId,
+        state: ProviderLifecycleState.REGISTERED,
+        recovered: false,
+        refused: RecoveryRefusal.UNKNOWN,
+        attempts: 0,
+      };
+    }
+
+    try {
+      // §16 — a failed provider may hold a half-open resource, and refusing to
+      // retry because the cleanup of a previous failure failed would leave it
+      // stuck for the wrong reason.
+      await provider.shutdown?.();
+    } catch (error) {
+      host.logger.debug(
+        { operation: 'provider.recover.release-failed', providerId, code: toFerretError(error).code },
+        `Releasing "${providerId}" before recovery failed; continuing`,
+      );
+    }
+
+    try {
+      const settings = providerSettings(provider, host.config);
+      await provider.initialize?.(this.#contextFor(host, provider, settings));
+      this.#initialized.add(providerId);
+      this.#failed.delete(providerId);
+      // §8.3 — the count resets on success only.
+      this.#budget.clear(providerId);
+      host.logger.info(
+        { operation: 'provider.recover.succeeded', providerId, kind: provider.kind },
+        `Provider "${providerId}" recovered; the capabilities it offers are available again`,
+      );
+      return { providerId, state: ProviderLifecycleState.INITIALIZED, recovered: true, attempts: 0 };
+    } catch (error) {
+      const classified = toFerretError(error);
+      this.#failed.set(providerId, classified.code);
+      const attempts = this.#budget.record(providerId);
+      host.logger.warn(
+        // The code, never the message — EPIC-093's rule, for its reason: a
+        // message can carry a path or a value, and this reaches a terminal.
+        { operation: 'provider.recover.failed', providerId, code: classified.code, attempts },
+        `Recovery of "${providerId}" failed (attempt ${String(attempts)} of ${String(MAX_RECOVERY_ATTEMPTS)})`,
+      );
+      return {
+        providerId,
+        state: this.#budget.exhausted(providerId) ? ProviderLifecycleState.UNRECOVERABLE : ProviderLifecycleState.FAILED,
+        recovered: false,
+        failureCode: classified.code,
+        attempts,
+      };
+    }
+  }
+
+  /** Why a recovery may not proceed, or `undefined` when it may. */
+  #refuseRecovery(providerId: string): RecoveryRefusal | undefined {
+    if (!this.#providers.has(providerId)) return RecoveryRefusal.UNKNOWN;
+    if (this.#initialized.has(providerId)) return RecoveryRefusal.ALREADY_RUNNING;
+    if (this.#disabled.has(providerId)) return RecoveryRefusal.DISABLED;
+    // §8.4 — a required provider's failure already tore the process down, so
+    // there is nothing in this process to recover.
+    if (!this.#optional.has(providerId)) return RecoveryRefusal.REQUIRED;
+    if (this.#budget.exhausted(providerId)) return RecoveryRefusal.EXHAUSTED;
+    return undefined;
+  }
+
+  /**
    * Whether a configuration path holds a secret a registered provider declared.
    *
    * A bound field rather than a method so it can be handed to `describeConfig`
@@ -316,6 +462,7 @@ export class ProviderRegistry {
    */
   async initializeAll(host: ProviderHostContext): Promise<void> {
     this.#sealed = true;
+    this.#released = false;
     for (const provider of this.list()) {
       try {
         // Settings are resolved *inside* the try so a rejected schema is
@@ -344,6 +491,10 @@ export class ProviderRegistry {
         if (this.#optional.has(provider.id)) {
           const classified = toFerretError(error);
           this.#failed.set(provider.id, classified.code);
+          // EPIC-014 §8.3 — the start-up attempt counts, so a provider that
+          // has already failed four times is `unrecoverable` from the outset
+          // rather than after four more.
+          this.#budget.record(provider.id);
           host.logger.warn(
             {
               operation: 'provider.initialize.failed',
@@ -392,12 +543,22 @@ export class ProviderRegistry {
     // `required: false` — the provider was registered optional, so Ferret is
     // working as designed. Degraded, not unavailable.
     for (const { providerId, code } of this.failures()) {
+      // EPIC-014 §8.5, AC-14 — the state is named, and the two states have
+      // different advice. A `failed` provider can be recovered without
+      // restarting Ferret; an `unrecoverable` one has spent its budget and
+      // saying "try again" would be advice that cannot work.
+      const exhausted = this.#budget.exhausted(providerId);
+      const attempts = this.#budget.attemptsFor(providerId);
       results.push({
         name: `${providerId}:startup`,
         status: DependencyStatus.DEGRADED,
         required: false,
-        detail: `The provider did not start (${code}); Ferret is running without the capabilities it offers`,
-        remediation: `Run \`ferret doctor\` for the underlying failure, or disable "${providerId}" in configuration to stop attempting it.`,
+        detail: exhausted
+          ? `The provider did not start (${code}) after ${String(attempts)} attempt(s) and will not be retried; Ferret is running without the capabilities it offers`
+          : `The provider did not start (${code}); Ferret is running without the capabilities it offers`,
+        remediation: exhausted
+          ? `Fix the underlying failure — \`ferret doctor\` reports it — and start Ferret again, or disable "${providerId}" in configuration to stop attempting it.`
+          : `Run \`ferret doctor\` for the underlying failure, or disable "${providerId}" in configuration to stop attempting it.`,
       });
     }
 
@@ -450,6 +611,7 @@ export class ProviderRegistry {
         this.#initialized.delete(provider.id);
       }
     }
+    this.#released = true;
     return failures;
   }
 }

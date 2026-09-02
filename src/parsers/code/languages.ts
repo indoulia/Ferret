@@ -63,7 +63,44 @@ export interface LanguageSpec {
    * therefore spans the wrapper and is named after the declaration inside it.
    */
   readonly wrappers: readonly string[];
+  /**
+   * Node types that declare a function only when their value **is** one.
+   *
+   * `const x = () => {}` is a `variable_declarator`, and so is `const x = 1`.
+   * The node type alone cannot tell them apart, so the value's type decides —
+   * which is why this cannot live in {@link declarations}.
+   *
+   * Issue #106: without it, `const x = () => {}` produced no symbol at all, and
+   * that is the dominant way functions are written in modern TypeScript and
+   * JavaScript — React components, event handlers, most of `.tsx`. EPIC-097's
+   * harness measured it as `symbolRecall 0.96` with `missing=[arrow]`.
+   */
+  readonly functionValued: Readonly<Record<string, readonly string[]>>;
 }
+
+/**
+ * A value that makes its binding a function.
+ *
+ * `function_expression` and `generator_function` are the pre-arrow spellings and
+ * still common in JavaScript. A class expression is deliberately absent: it
+ * declares a class, and calling it a function would be a worse answer than
+ * saying nothing.
+ */
+const ECMASCRIPT_FUNCTION_VALUES: readonly string[] = Object.freeze([
+  'arrow_function',
+  'function_expression',
+  'function',
+  'generator_function',
+]);
+
+const ECMASCRIPT_FUNCTION_VALUED: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  variable_declarator: ECMASCRIPT_FUNCTION_VALUES,
+  // `obj = { handler: () => {} }` — a property whose value is a function is a
+  // function by the same reasoning, and object-literal handlers are how a
+  // large amount of JavaScript is organised.
+  pair: ECMASCRIPT_FUNCTION_VALUES,
+  public_field_definition: ECMASCRIPT_FUNCTION_VALUES,
+});
 
 /**
  * TypeScript and TSX share every node type; they are separate grammars because
@@ -124,7 +161,8 @@ export const CODE_LANGUAGES: readonly LanguageSpec[] = Object.freeze([
     references: ECMASCRIPT_REFERENCES,
     comments: ['comment'],
     imports: ['import_statement', 'export_statement'],
-    wrappers: ['export_statement'],
+    wrappers: ['export_statement', 'lexical_declaration', 'variable_declaration'],
+    functionValued: ECMASCRIPT_FUNCTION_VALUED,
   }),
   Object.freeze({
     language: 'tsx',
@@ -136,7 +174,8 @@ export const CODE_LANGUAGES: readonly LanguageSpec[] = Object.freeze([
     references: ECMASCRIPT_REFERENCES,
     comments: ['comment'],
     imports: ['import_statement', 'export_statement'],
-    wrappers: ['export_statement'],
+    wrappers: ['export_statement', 'lexical_declaration', 'variable_declaration'],
+    functionValued: ECMASCRIPT_FUNCTION_VALUED,
   }),
   Object.freeze({
     language: 'javascript',
@@ -146,7 +185,8 @@ export const CODE_LANGUAGES: readonly LanguageSpec[] = Object.freeze([
     references: ECMASCRIPT_REFERENCES,
     comments: ['comment'],
     imports: ['import_statement', 'export_statement'],
-    wrappers: ['export_statement'],
+    wrappers: ['export_statement', 'lexical_declaration', 'variable_declaration'],
+    functionValued: ECMASCRIPT_FUNCTION_VALUED,
   }),
   Object.freeze({
     language: 'python',
@@ -157,6 +197,10 @@ export const CODE_LANGUAGES: readonly LanguageSpec[] = Object.freeze([
     comments: ['comment'],
     imports: ['import_statement', 'import_from_statement', 'future_import_statement'],
     wrappers: ['decorated_definition'],
+    // Python's `f = lambda x: x` is deliberately absent — PEP 8 says use `def`,
+    // so a named lambda is rare, and treating an assignment as a declaration
+    // would cost more false symbols than it found real ones.
+    functionValued: {},
   }),
 ]);
 

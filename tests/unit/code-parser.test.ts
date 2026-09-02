@@ -314,3 +314,67 @@ describe('the provider contract', () => {
     expect(report.conformant).toBe(true);
   }, 60_000);
 });
+
+describe('a function bound to a name — issue #106', () => {
+  const source = [
+    'export const arrow = (a: number): number => a + 1;',
+    'const plain = 1;',
+    "const alias = require('x');",
+    'export const named = function namedExpr(): void {};',
+    'export const gen = function* (): Generator<number> { yield 1; };',
+    'export const asyncArrow = async (): Promise<void> => {};',
+    'export const handlers = {',
+    '  onClick: () => {},',
+    '};',
+    'export class Widget {',
+    '  render = (): string => "x";',
+    '}',
+  ].join('\n');
+
+  it('extracts an arrow function assigned to a const', async () => {
+    // The defect: `const x = () => {}` produced no symbol at all, which is the
+    // dominant way functions are written in modern TypeScript and JavaScript.
+    // EPIC-097's harness measured it as `symbolRecall 0.96 missing=[arrow]`.
+    const outcome = await parse('src/arrows.ts', source);
+
+    expect(titles(outcome.outline)).toContain('arrow');
+    expect(outcome.outline.find((node) => node.title === 'arrow')?.kind).toBe('function');
+  });
+
+  it('extracts a function expression, an async arrow and a generator', async () => {
+    const found = titles((await parse('src/arrows.ts', source)).outline);
+
+    expect(found).toContain('named');
+    expect(found).toContain('asyncArrow');
+    expect(found).toContain('gen');
+  });
+
+  it('extracts a function-valued property and a class field', async () => {
+    const outcome = await parse('src/arrows.ts', source);
+    const flat = [...titles(outcome.outline), ...outcome.outline.flatMap((n) => titles(n.children))];
+
+    // Object-literal handlers are how a large amount of JavaScript is
+    // organised, and a class field arrow is how a bound React method is.
+    expect(flat).toContain('onClick');
+    expect(flat).toContain('render');
+  });
+
+  it('does not turn every const into a function', async () => {
+    // The reason this cannot live in the node-type map: `const x = 1` and
+    // `const x = () => {}` are both `variable_declarator`, so a blanket rule
+    // would name every binding in the language a function.
+    const found = titles((await parse('src/arrows.ts', source)).outline);
+
+    expect(found).not.toContain('plain');
+    expect(found).not.toContain('alias');
+  });
+
+  it('quotes the export keyword, not just the declarator', async () => {
+    // `wrapper ?? child` keeps the outermost wrapper, so a retrieval hit shows
+    // `export const arrow = ...` rather than starting mid-statement.
+    const outcome = await parse('src/arrows.ts', source);
+    const segment = outcome.segments.find((one) => one.text.includes('arrow'));
+
+    expect(segment?.text.startsWith('export const arrow')).toBe(true);
+  });
+});
