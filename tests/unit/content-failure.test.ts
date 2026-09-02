@@ -122,6 +122,7 @@ function volatileParser(): ContentParser {
             label: 'ok',
           },
         ],
+        outlineKind: 'code' as const,
         outline: [
           {
             title: 'ok',

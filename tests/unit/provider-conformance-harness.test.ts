@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { createGitSourceProvider } from '../../src/git/index.js';
-import { createCodeParserProvider } from '../../src/parsers/index.js';
+import { createCodeParserProvider, createTextParserProvider } from '../../src/parsers/index.js';
 import { runProviderConformance, summarizeConformance } from '../../src/providers/sdk/testing.js';
 import { BaseProvider } from '../../src/providers/sdk/base.js';
 import { PROVIDER_CONTRACT_VERSION, ProviderKind } from '../../src/providers/index.js';
@@ -88,6 +88,10 @@ function declaresId(file: string, id: string): boolean {
 const RUNNABLE = [
   { name: 'ferret.source.git', create: () => createGitSourceProvider() },
   { name: 'ferret.parser.code', create: () => createCodeParserProvider() },
+  // EPIC-029. The gate above is what made this line necessary rather than
+  // optional: a new provider cannot reach `main` without facing the conformance
+  // suite or declaring where it is covered.
+  { name: 'ferret.parser.text', create: () => createTextParserProvider() },
 ];
 
 describe('every provider is covered — AC-1, AC-2', () => {

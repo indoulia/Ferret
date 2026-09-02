@@ -44,8 +44,11 @@ describe('composing the code parser through discovery', () => {
 
     expect(result.skipped).toStrictEqual([]);
     expect(result.modules).toStrictEqual([FERRET_PARSERS_MODULE]);
-    expect(result.providers).toHaveLength(1);
-    expect(registry.has(result.providers[0] ?? '')).toBe(true);
+    // Two, since EPIC-029: the code parser and the text parser. One module, and
+    // the framework picks per file — neither can displace the other, which is
+    // what `ParserSupport` is for.
+    expect(result.providers).toHaveLength(2);
+    for (const id of result.providers) expect(registry.has(id)).toBe(true);
   });
 
   it('makes the parser capability selectable, by capability and not by name', async () => {
@@ -96,9 +99,15 @@ describe('composing the code parser through discovery', () => {
     const first = await loadFerretParsers(FERRET_PARSERS_MODULE);
     const second = await loadFerretParsers(FERRET_PARSERS_MODULE);
 
-    expect(first.provider).toBeDefined();
-    expect(first.provider).not.toBe(second.provider);
-    expect(first.provider?.id).toBe(second.provider?.id);
+    // A fresh instance per load, which is the property under test: two runtimes
+    // must not share one provider, because `BaseProvider` refuses to initialize
+    // again once it has been shut down.
+    expect(first.providers).toHaveLength(2);
+    expect(second.providers).toHaveLength(2);
+    for (const [index, provider] of (first.providers ?? []).entries()) {
+      expect(provider).not.toBe(second.providers?.[index]);
+      expect(provider.id).toBe(second.providers?.[index]?.id);
+    }
   });
 
   it('refuses any specifier but its own, rather than importing it', async () => {

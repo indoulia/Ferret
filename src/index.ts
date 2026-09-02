@@ -288,6 +288,7 @@ export {
   type ContentSpan,
   type OptionsSchemaIssue,
   type CodeReference,
+  OutlineKind,
   ReferenceKind,
   type OutlineNode,
   type ParseOutput,

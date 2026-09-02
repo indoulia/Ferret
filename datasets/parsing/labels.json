@@ -90,29 +90,25 @@
     },
     {
       "path": "README.md",
-      "language": null,
-      "unparsedReason": "no-parser",
+      "language": "markdown",
       "expected": [],
       "corpus": "golden"
     },
     {
       "path": "docs/architecture.md",
-      "language": null,
-      "unparsedReason": "no-parser",
+      "language": "markdown",
       "expected": [],
       "corpus": "golden"
     },
     {
       "path": "docs/onboarding.md",
-      "language": null,
-      "unparsedReason": "no-parser",
+      "language": "markdown",
       "expected": [],
       "corpus": "golden"
     },
     {
       "path": "docs/decisions/0001-currency-in-minor-units.md",
-      "language": null,
-      "unparsedReason": "no-parser",
+      "language": "markdown",
       "expected": [],
       "corpus": "golden"
     },

@@ -148,9 +148,33 @@ export interface CodeReference {
   readonly span: ContentSpan;
 }
 
+/**
+ * What an outline *is* — EPIC-029 §8.4.
+ *
+ * The defect this prevents: `runContentStage` builds code symbols from every
+ * outline it is given, and `codeSymbolKindOf` maps an unrecognised kind to
+ * `UNKNOWN` — so a Markdown outline became `code_symbol` entities, a heading
+ * indexed as a declaration, and on Ferret's own repository that is 206 files of
+ * prose filling EPIC-034's symbol index.
+ *
+ * **Absent means no code symbols.** A parser that has not said its outline is a
+ * symbol table has not said it, and assuming otherwise is the inference
+ * Governance §6 forbids. Every Ferret parser sets this explicitly.
+ */
+export const OutlineKind = {
+  /** Declarations. `buildCodeSymbols` applies. */
+  CODE: 'code',
+  /** Sections of a document. It does not. */
+  DOCUMENT: 'document',
+} as const;
+
+export type OutlineKind = (typeof OutlineKind)[keyof typeof OutlineKind];
+
 export interface ParseOutput {
   readonly segments: readonly ContentSegment[];
   readonly outline?: readonly OutlineNode[];
+  /** What the outline is — EPIC-029 §8.4. Absent means no code symbols. */
+  readonly outlineKind?: OutlineKind;
   /**
    * Names this file uses — EPIC-035.
    *

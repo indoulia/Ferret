@@ -75,6 +75,9 @@ function parserWith(options: {
           label: 'alpha',
         },
       ],
+      // EPIC-029 §8.4. A fake code parser says its outline is a symbol table,
+      // as the real one does: absent means no code symbols, deliberately.
+      outlineKind: 'code' as const,
       outline:
         options.outline === false
           ? []
