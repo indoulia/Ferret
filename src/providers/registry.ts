@@ -59,6 +59,22 @@ export class ProviderRegistry {
    * provider before initialization because registration seals at that point.
    */
   readonly #disabled = new Set<string>();
+  /**
+   * Providers registered as survivable — EPIC-093 §8.1.
+   *
+   * At registration, not on the provider, because a provider cannot know
+   * whether it is essential: the same parser is optional for `ferret index` and
+   * required for `ferret index --content`. The caller composing the runtime is
+   * the only component with that context.
+   */
+  readonly #optional = new Set<string>();
+  /**
+   * Optional providers whose `initialize` threw, and the code it threw with.
+   *
+   * Separate from {@link #disabled} deliberately: `enabled: false` is a
+   * configuration decision and this is an event (§8.4).
+   */
+  readonly #failed = new Map<string, string>();
   #secretPredicate: ((path: readonly string[]) => boolean) | undefined;
   #sealed = false;
 
@@ -68,7 +84,7 @@ export class ProviderRegistry {
    * @throws {FerretError} `E_PROVIDER_INVALID` for a malformed provider,
    * `E_PROVIDER_DUPLICATE` when the identifier is already taken.
    */
-  register(provider: Provider): void {
+  register(provider: Provider, options: { readonly optional?: boolean } = {}): void {
     if (this.#sealed) {
       throw new FerretError(
         ErrorCode.LIFECYCLE_INVALID_STATE,
@@ -77,6 +93,9 @@ export class ProviderRegistry {
       );
     }
     this.#validate(provider);
+    // Required is the default — EPIC-093 §8.2. A caller that does not opt in
+    // gets exactly the behaviour it had before this Epic.
+    if (options.optional === true) this.#optional.add(provider.id);
     if (this.#providers.has(provider.id)) {
       throw new FerretError(
         ErrorCode.PROVIDER_DUPLICATE,
@@ -193,20 +212,25 @@ export class ProviderRegistry {
   }
 
   /**
-   * Capability offers from providers configuration has not switched off.
+   * Capability offers from providers that are switched on and did start.
    *
    * A disabled provider stays in the index — `describe()` still reports it, and
    * re-enabling it is a configuration change rather than a re-registration —
    * but it must not be *selected*, or turning a provider off would leave it
    * quietly serving every request (EPIC-015 AC-5).
+   *
+   * A **failed** provider is excluded for a sharper reason — EPIC-093 §8.3.
+   * Handing a caller an object whose `initialize` threw is worse than handing
+   * it nothing: the failure resurfaces later, somewhere with no context about
+   * why, and the caller has no way to fall back to another provider it could
+   * have selected instead.
    */
   #offered(
     capability: Capability,
   ): ReadonlyArray<{ providerId: string; declaration: CapabilityDeclaration }> {
     const offered = this.#byCapability.get(capability) ?? [];
-    return this.#disabled.size === 0
-      ? offered
-      : offered.filter((entry) => !this.#disabled.has(entry.providerId));
+    if (this.#disabled.size === 0 && this.#failed.size === 0) return offered;
+    return offered.filter((entry) => !this.#disabled.has(entry.providerId) && !this.#failed.has(entry.providerId));
   }
 
   /**
@@ -227,8 +251,23 @@ export class ProviderRegistry {
 
   describe(): readonly ProviderDescriptor[] {
     return this.list().map((provider) =>
-      describeProvider(provider, this.#initialized.has(provider.id), !this.#disabled.has(provider.id)),
+      describeProvider(
+        provider,
+        this.#initialized.has(provider.id),
+        !this.#disabled.has(provider.id),
+        this.#failed.get(provider.id),
+      ),
     );
+  }
+
+  /**
+   * Optional providers that failed to start, with the code they failed with.
+   *
+   * For the health path — EPIC-093 AC-7. Empty on a clean start, which is what
+   * makes a non-empty result worth reporting.
+   */
+  failures(): readonly { readonly providerId: string; readonly code: string }[] {
+    return [...this.#failed.entries()].map(([providerId, code]) => ({ providerId, code }));
   }
 
   /**
@@ -291,7 +330,33 @@ export class ProviderRegistry {
         this.#disabled.delete(provider.id);
         await provider.initialize?.(this.#contextFor(host, provider, settings));
         this.#initialized.add(provider.id);
+        this.#failed.delete(provider.id);
       } catch (error) {
+        // EPIC-093 AC-1. An optional provider's failure is recorded and the
+        // start continues; providers already initialized are *not* torn down,
+        // which is the opposite of what the required path below does and is the
+        // behaviour most easily got wrong.
+        //
+        // Isolation is not silence (§8.5): the failure is logged, described,
+        // and surfaced in health. A provider that fails quietly converts a loud
+        // failure into a silent capability gap, which is harder to diagnose
+        // than the crash it replaced.
+        if (this.#optional.has(provider.id)) {
+          const classified = toFerretError(error);
+          this.#failed.set(provider.id, classified.code);
+          host.logger.warn(
+            {
+              operation: 'provider.initialize.failed',
+              providerId: provider.id,
+              kind: provider.kind,
+              // The code, never the message: a message can carry a path or a
+              // value, and this line reaches an operator's terminal.
+              code: classified.code,
+            },
+            `Optional provider "${provider.id}" did not start; Ferret continues without it`,
+          );
+          continue;
+        }
         // A provider that already classified its own failure keeps that
         // classification. Re-labelling "your database password is missing" as
         // "a provider failed to initialize" would cost the user the exit code,
@@ -318,11 +383,33 @@ export class ProviderRegistry {
   /** Runs every provider's dependency checks. A throwing check yields `unknown`. */
   async checkAll(host: ProviderHostContext): Promise<readonly DependencyCheckResult[]> {
     const results: DependencyCheckResult[] = [];
+
+    // EPIC-093 AC-7. A provider that failed to start is reported here, before
+    // anything else, because health is where an operator looks and because
+    // isolation is not silence (§8.5): a capability quietly missing is harder
+    // to diagnose than the crash it replaced.
+    //
+    // `required: false` — the provider was registered optional, so Ferret is
+    // working as designed. Degraded, not unavailable.
+    for (const { providerId, code } of this.failures()) {
+      results.push({
+        name: `${providerId}:startup`,
+        status: DependencyStatus.DEGRADED,
+        required: false,
+        detail: `The provider did not start (${code}); Ferret is running without the capabilities it offers`,
+        remediation: `Run \`ferret doctor\` for the underlying failure, or disable "${providerId}" in configuration to stop attempting it.`,
+      });
+    }
+
     for (const provider of this.list()) {
       if (provider.checkDependencies === undefined) continue;
       // A provider that is switched off has no dependencies worth reporting:
       // its external system being down is not a Ferret problem.
       if (this.#disabled.has(provider.id)) continue;
+      // Nor has one that never started: its check would run against an object
+      // whose `initialize` threw, and would report a confusing second failure
+      // rather than the first one.
+      if (this.#failed.has(provider.id)) continue;
       try {
         const settings = providerSettings(provider, host.config);
         results.push(...(await provider.checkDependencies(this.#contextFor(host, provider, settings))));
