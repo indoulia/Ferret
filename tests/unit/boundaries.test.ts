@@ -571,6 +571,8 @@ describe('event ingestion boundary — EPIC-077', () => {
 
   it('is reachable from the core, because a host needs it', () => {
     expect([...core.files].filter((file) => file.startsWith('events/')).length).toBeGreaterThan(0);
+  });
+});
 
 describe('resolution boundary — EPIC-051', () => {
   const resolution = importGraph('resolution/index.ts');
