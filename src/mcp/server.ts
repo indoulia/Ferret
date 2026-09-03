@@ -20,7 +20,14 @@ import {
   type Principal,
 } from '../authorization/index.js';
 import type { AuditWriter } from '../audit/index.js';
-import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
+import {
+  ContentSafety,
+  NO_CONTENT_SAFETY,
+  containAttributes,
+  containEntityContent,
+  containEvidenceContent,
+  containUntrusted,
+} from '../security/index.js';
 import {
   EvidenceState,
   LifecycleState,
@@ -495,7 +502,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
               id: path.entity.id,
               kind: path.entity.kind,
               lifecycle: path.entity.lifecycle,
-              attributes: containAttributes(path.entity.attributes, safety),
+              ...containedContentOf(path.entity, safety),
               depth: path.depth,
               // The path is the answer to "how". A caller handed a release
               // cannot otherwise tell whether Ferret walked the edge it expected
@@ -505,7 +512,11 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
                 direction: step.direction,
                 id: step.entityId,
               })),
-              ...(Object.keys(path.metadata).length === 0 ? {} : { metadata: path.metadata }),
+              // F-64. What the *source* said about the edge, validated by
+              // nothing and contained by nothing until now.
+              ...(Object.keys(path.metadata).length === 0
+                ? {}
+                : { metadata: containAttributes(path.metadata, safety) }),
             })),
             withheld: walk.withheld.total,
             contentSafety: safety.report,
@@ -533,14 +544,15 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             id: neighbour.entity.id,
             kind: neighbour.entity.kind,
             lifecycle: neighbour.entity.lifecycle,
-            attributes: containAttributes(neighbour.entity.attributes, safety),
+            ...containedContentOf(neighbour.entity, safety),
             relationship: neighbour.relationshipType,
             direction: neighbour.direction,
             // What the source said about the edge itself — including whether a
             // commit added, modified or deleted the file it touched.
+            // F-64, as on the depth > 1 branch.
             ...(Object.keys(neighbour.metadata).length === 0
               ? {}
-              : { metadata: neighbour.metadata }),
+              : { metadata: containAttributes(neighbour.metadata, safety) }),
             validFrom: neighbour.validFrom,
             validTo: neighbour.validTo,
           })),
@@ -574,7 +586,14 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           ...(kinds === undefined ? {} : { kinds }),
           ...(withNeighbours === undefined ? {} : { withNeighbours }),
         });
-        return format === 'text' ? { notice: CONTENT_NOTICE, rendered: renderPack(pack) } : pack;
+        if (format === 'text') return { notice: CONTENT_NOTICE, rendered: renderPack(pack) };
+        // F-66. Returning `pack` put the notice last, under a key no other tool
+        // uses, in the default response of the one tool built to be pasted into
+        // a prompt. Renamed rather than duplicated: `contentNotice` is the pack
+        // *format*'s field and `packs.build` still returns it, while what
+        // crosses MCP is the same key every other tool leads with.
+        const { contentNotice, ...rest } = pack;
+        return { notice: contentNotice, ...rest };
       }),
   );
 
@@ -699,7 +718,10 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             question,
             ...(budget === undefined ? {} : { budget }),
           });
-          return format === 'text' ? { notice: CONTENT_NOTICE, rendered: renderAnswer(pack) } : pack;
+          if (format === 'text') return { notice: CONTENT_NOTICE, rendered: renderAnswer(pack) };
+          // F-66, as for `ferret_context_pack`.
+          const { contentNotice, ...rest } = pack;
+          return { notice: contentNotice, ...rest };
         }),
     );
   }
@@ -866,7 +888,7 @@ function describeHit(hit: SearchHit, safety: ContentSafety): Record<string, unkn
     kind: hit.entity.kind,
     lifecycle: hit.entity.lifecycle,
     source: hit.entity.source,
-    attributes: containAttributes(hit.entity.attributes, safety),
+    ...containedContentOf(hit.entity, safety),
     matchedIn: hit.source,
     highlight: hit.highlight === undefined ? undefined : safety.contain(hit.highlight),
     score: hit.score,
@@ -895,7 +917,33 @@ function describeHit(hit: SearchHit, safety: ContentSafety): Record<string, unkn
  * where content starts is the same defect as having no boundary at all.
  */
 function describeEntity(entity: CanonicalEntity, safety: ContentSafety): Record<string, unknown> {
-  return { ...entity, attributes: containAttributes(entity.attributes, safety) };
+  return { ...containEntityContent(entity, safety) };
+}
+
+/**
+ * The untrusted parts of an entity, contained, for a surface that projects
+ * fields rather than spreading the whole record.
+ *
+ * `ferret_search`, `ferret_neighbours` and the traversal branch each build their
+ * own object and each named `attributes` alone, so `unknownFields` — source data
+ * nothing validates — was either omitted (search, neighbours) or handed over raw
+ * (`ferret_get_entity`, the pack, the answer). One helper, so a surface cannot
+ * contain one field and forget the next: whichever of the three a surface
+ * chooses to emit, it emits contained.
+ */
+function containedContentOf(
+  entity: CanonicalEntity,
+  safety: ContentSafety,
+): Record<string, unknown> {
+  return {
+    attributes: containAttributes(entity.attributes, safety),
+    ...(Object.keys(entity.unknownFields).length === 0
+      ? {}
+      : { unknownFields: containAttributes(entity.unknownFields, safety) }),
+    ...(entity.externalIds.length === 0
+      ? {}
+      : { externalIds: containUntrusted(entity.externalIds, safety) }),
+  };
 }
 
 /**
@@ -918,16 +966,26 @@ function describeEvidence(
   maxDepth: number,
   safety: ContentSafety,
 ): Record<string, unknown> {
+  // Contained from a view, so `integrityHashOf(record)` below still runs
+  // against the record as stored. `field`, `locator`, `sourceUrl` and the
+  // producer identity travelled raw until F-64's re-audit: each is a
+  // `z.string()` a provider supplies, and this response is read by a model.
+  //
+  // `statement` is held out of the view deliberately. This surface emits it
+  // JSON-serialized — EPIC-048's shape, so a structured observation is
+  // readable as one value — and containing it twice would both inflate the
+  // safety counts and, worse, neutralise the first fence inside the second.
+  const view = containEvidenceContent({ ...record, statement: undefined }, safety);
   return {
     id: record.id,
-    field: record.field,
+    field: view.field,
     statement: safety.contain(JSON.stringify(record.statement)),
     // How Ferret came to believe it, and how much that is worth.
     method: record.method,
-    producer: `${record.producer}@${record.producerVersion}`,
-    sourceSystem: record.sourceSystem,
-    sourceUrl: record.sourceUrl,
-    locator: record.locator,
+    producer: `${String(view.producer)}@${String(view.producerVersion)}`,
+    sourceSystem: view.sourceSystem,
+    sourceUrl: view.sourceUrl,
+    locator: view.locator,
     authority: record.authority,
     confidence: record.confidence,
     completeness: record.completeness,
@@ -937,12 +995,15 @@ function describeEvidence(
     // a citation can be shown untampered without a round trip per record. A
     // tool whose job is checking answers should not itself be taken on trust.
     integrity: integrityHashOf(record) === record.integrityHash ? 'verified' : 'tampered',
-    derivedFrom: lineage.map((ancestor) => ({
-      id: ancestor.id,
-      method: ancestor.method,
-      producer: `${ancestor.producer}@${ancestor.producerVersion}`,
-      locator: ancestor.locator,
-    })),
+    derivedFrom: lineage.map((ancestor) => {
+      const seen = containEvidenceContent(ancestor, safety);
+      return {
+        id: ancestor.id,
+        method: ancestor.method,
+        producer: `${String(seen.producer)}@${String(seen.producerVersion)}`,
+        locator: seen.locator,
+      };
+    }),
     truncated: lineage.length >= maxDepth,
   };
 }

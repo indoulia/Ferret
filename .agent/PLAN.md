@@ -1,6 +1,6 @@
 # PLAN
 
-Batches are ordered and independently shippable. Batches 1-4 are complete except F-27; nothing after them is started.
+Batches are ordered and independently shippable. Batches 1-5 are complete except F-27; nothing after them is started.
 Each batch: failing test first, then fix, then the record it restores.
 
 | # | Batch | Findings | Gate |
@@ -9,8 +9,8 @@ Each batch: failing test first, then fix, then the record it restores.
 | 2 | Small self-contained blockers | F-30, F-29, F-17, F-16 | **DONE** — four fixtures red then green; see `docs/evidence/FERRET-BATCH-2-BLOCKERS.md` |
 | 3 | Untrusted-input bounds | F-60, F-61, F-95, F-96, F-97 | **DONE** — five fixtures red then green; see `docs/evidence/FERRET-BATCH-3-UNTRUSTED-INPUT-BOUNDS.md` |
 | 4 | Answer truthfulness | F-05, F-31, F-28, F-06, F-24 | **DONE** — see `docs/evidence/FERRET-BATCH-4-ANSWER-TRUTHFULNESS.md`. **F-27 still open**: needs a second symbol write after cross-file resolution |
-| 5 | Prompt-injection boundary | F-32, F-64, F-66 | Balanced delimiters after trimming; a nested/array leaf counted and wrapped; `notice` first on every tool via `listTools` enumeration |
-| 6 | Credential and safety enumeration | F-94, F-71 | Hostile `.git/config` cannot reshape `git log` output; no credential-bearing variable reaches a child process |
+| 5 | Prompt-injection boundary | F-32, F-64, F-66 | **DONE** — 8 of 9 fixture assertions red then green, six second-order defects corrected; see `docs/evidence/FERRET-BATCH-5-PROMPT-INJECTION-BOUNDARY.md` |
+| 6 | Credential and safety enumeration | F-94, F-71 | **NEXT — not started, not authorized.** Hostile `.git/config` cannot reshape `git log` output; no credential-bearing variable reaches a child process |
 | 7 | Code-intelligence truth | F-25, F-11 | Requires a re-index; schedule accordingly |
 | 8 | Record correction (no code) | F-74, F-75, F-87, EPIC-028 AC-14, EPIC-035 AC-4, EPIC-090 §11, F-20/F-21 registry notes | Each corrected record cites the finding |
 
@@ -18,6 +18,14 @@ Each batch: failing test first, then fix, then the record it restores.
 F-13, F-14, F-15, F-18, F-19, F-37–F-40, F-53–F-59) and behind F-20 (F-46–F-48).
 F-49 (reachability sweep scope) is worth doing regardless — it is the control that would
 have caught F-20's class.
+
+**Learned in Batch 5, and it bears on Batch 6.** All three findings were the same failure
+mode: an *enumeration* that fails towards exposure. A prose allowlist keyed by attribute
+name, a traversal that descended only into what it recognised, and a notice test carrying a
+hand-written list of four tools. Each was replaced by something derived — shape rather than
+key name, recursion over whatever is there, `listTools()` rather than a list. Batch 6 is
+that same correction applied to the safety and credential lists, so the argument is already
+made.
 
 **Not to be done:** build a session store or a `ferret sync` command (F-20, F-21); implement
 import following (F-26 — correct the AC record instead); tune benchmarks (F-50, F-51, F-91);

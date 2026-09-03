@@ -16,7 +16,12 @@ import {
   type RetrievalPort,
   type WithheldReport,
 } from '../retrieval/index.js';
-import { ContentSafety, containAttributes, type ContentSafetyReport } from '../security/index.js';
+import {
+  ContentSafety,
+  containEntityContent,
+  containEvidenceContent,
+  type ContentSafetyReport,
+} from '../security/index.js';
 import { VERSION } from '../version.js';
 
 import { estimateJsonTokens } from './budget.js';
@@ -423,7 +428,28 @@ export class AnswerPackBuilder {
       permittedScopes: this.#access.permittedScopes,
     });
     const windowTruncated = held.length > EVIDENCE_CANDIDATE_WINDOW;
-    const candidates = held.slice(0, EVIDENCE_CANDIDATE_WINDOW);
+    // Contained on entry, for the reason `pack.ts` gives at the same point: the
+    // selection emits `excluded[].field` and writes sentences that interpolate
+    // a provider-supplied field and producer name, and it is pure. Containing
+    // here makes every value downstream a contained one by construction.
+    //
+    // **This replaced `containStatement`, and its history is the argument for
+    // being here rather than there.** That function contained a claim's
+    // statement at the point the claim was built, and it was rewritten twice:
+    // once because `containAttributes` drew its line by key name and let a
+    // 110-character injection through as `statement`, and again because
+    // wrapping every string broke a client comparing `attributes.path` to a
+    // file it knows about. The rule it arrived at — prose is wrapped, a token
+    // is marked, decided by shape — is now `containUntrusted`'s, applied here
+    // to the whole record. Applying it in both places was worse than either:
+    // `contain` neutralises a delimiter it finds inside a value, so the second
+    // pass rewrote the first pass's fence to `[delimiter removed]` inside the
+    // quotation. Containment has to happen exactly once, which means it has to
+    // happen at one place.
+    const candidates = held.slice(0, EVIDENCE_CANDIDATE_WINDOW).map((candidate) => ({
+      ...candidate,
+      evidence: containEvidenceContent(candidate.evidence, context.safety),
+    }));
 
     // Limit and per-field cap both set to the window: this call is being used to
     // *rank and judge*, not to bound. The bound belongs to the claim, which is
@@ -463,6 +489,7 @@ export class AnswerPackBuilder {
       );
     }
     for (const field of selection.disputedFields) {
+      // Already contained, by `candidates` above.
       unknowns.push(
         `Current observations disagree about ${field === '' ? 'this subject' : `\`${field}\``}; ` +
           'Ferret reports both and resolves neither.',
@@ -481,8 +508,10 @@ export class AnswerPackBuilder {
     // Cheapest honest budget rule: drop the lowest-ranked claims until it fits,
     // and say how many. Trimming a *statement* is not available here for the
     // reason the pack gives — a half-quoted observation is a misquotation.
-    const contained = containAttributes(subject.attributes, context.safety);
-    const subjectView: CanonicalEntity = { ...subject, attributes: contained };
+    // F-64. `unknownFields` is source data nothing validates and `externalIds`
+    // is source-supplied; both travelled beside the contained attributes,
+    // outside the boundary, and neither was counted.
+    const subjectView: CanonicalEntity = containEntityContent(subject, context.safety);
     let dropped = 0;
     while (stated.length > 0 && estimateJsonTokens({ subject: subjectView, claims: stated }) > context.budget) {
       stated = stated.slice(0, -1);
@@ -556,6 +585,10 @@ export class AnswerPackBuilder {
     readonly safety: ContentSafety;
   }): AnswerPack {
     return Object.freeze({
+      // F-66: first, because key order is serialization order and a model reads
+      // in order. This field sat last, at the end of the one response shape
+      // whose entire purpose is to be pasted into a prompt.
+      contentNotice: CONTENT_NOTICE,
       formatVersion: ANSWER_FORMAT_VERSION,
       producer: 'ferret.context.answer',
       producerVersion: VERSION,
@@ -576,7 +609,6 @@ export class AnswerPackBuilder {
         unknowns: parts.unknowns,
       }),
       budget: parts.budget,
-      contentNotice: CONTENT_NOTICE,
       contentSafety: parts.safety.report,
     });
   }
@@ -702,7 +734,11 @@ function groupIntoClaims(
     claims.push(
       Object.freeze({
         field: best.evidence.field,
-        statement: containStatement(best.evidence.statement, safety),
+        // Already contained, once, on entry. Containing here as well rewrote
+        // the inner fence to `[delimiter removed]` and left that string in the
+        // middle of a quotation Ferret attributes to a repository — two layers
+        // of a correct control producing a wrong answer. See `#answerAbout`.
+        statement: best.evidence.statement,
         state: best.state,
         disputed: disputed.has(key),
         citations: Object.freeze(entries.slice(0, MAX_CITATIONS_PER_CLAIM).map(toCitation)),
@@ -713,49 +749,10 @@ function groupIntoClaims(
   return claims;
 }
 
-/**
- * Wraps a claim's statement, unless the statement is a bare token.
- *
- * Two defects shaped this, in opposite directions.
- *
- * **First**, `containAttributes` was reused, and it draws its line by *key name
- * or length*: `statement` is not a prose attribute name, so a 110-character
- * injection attempt was marked and not wrapped. Found by an integration test
- * written to the criterion rather than to the implementation.
- *
- * **Then**, wrapping every string statement reintroduced the exact cost EPIC-084
- * had reasoned its way out of: "a client that compares `attributes.path` to a
- * file it knows about would find every comparison fail". A claim whose field is
- * `attributes.path` and whose statement is `src/context/pack.ts` is precisely
- * such a value, and the answer surface is where a client would compare it. Found
- * by dogfooding, in the output of the fix for issue #71.
- *
- * So the line is EPIC-084's — prose is wrapped, a token is marked — drawn by
- * *shape* rather than by key name, because that is the property `statement`
- * actually has. **An injection needs sentences.** A path, an object id, a symbol
- * name and a timestamp have no whitespace; a paragraph telling a model to ignore
- * its instructions cannot avoid it. A single-token statement is still classified,
- * so `IGNORE_ALL_PREVIOUS_INSTRUCTIONS` is reported in `contentSafety.marked` —
- * the same exposure EPIC-084 already accepts for a path and a symbol name, and
- * consistency with the validated Epic is worth more than a second policy here.
- *
- * A non-string statement is passed through: wrapping would change its type, and
- * a number or a boolean cannot carry an instruction. A structured statement has
- * its top-level strings handled by `containAttributes`, which is what it is for.
- */
-function containStatement(statement: unknown, safety: ContentSafety): unknown {
-  if (typeof statement === 'string') {
-    if (/\s/.test(statement)) return safety.contain(statement);
-    safety.mark(statement);
-    return statement;
-  }
-  if (statement === null || typeof statement !== 'object' || Array.isArray(statement)) {
-    return statement;
-  }
-  return containAttributes(statement as Readonly<Record<string, unknown>>, safety);
-}
-
 function toCitation(entry: SelectedEvidence): AnswerCitation {
+  // Already a contained view — the citation's `locator`, `sourceUrl` and
+  // producer identity are all `z.string()` a provider supplies, and they were
+  // wrapped on entry with the rest of the record.
   const record = entry.evidence;
   return Object.freeze({
     evidenceId: record.id,
