@@ -769,3 +769,17 @@ export {
   readAuditEvents,
   type AuditEvent,
 } from './audit/index.js';
+
+// EPIC-072. The join between what a tracker says and what a repository shows.
+// Records in, canonical knowledge out — no transport and no store, which is
+// what lets EPIC-021's GitHub records and EPIC-071's Jira records share it.
+export {
+  CLOSING_KEYWORDS,
+  MAX_REFERENCE_SCAN_CHARACTERS,
+  findClosingReferences,
+  modelProject,
+  type ClosingReference,
+  type ProjectModelInput,
+  type ProjectModelResult,
+  type SkippedRecord,
+} from './project/index.js';

@@ -525,6 +525,27 @@ describe('GitHub provider boundary — EPIC-021 AC-20', () => {
   });
 });
 
+describe('project modelling boundary — EPIC-072 AC-17', () => {
+  const project = importGraph('project/index.ts');
+
+  it('imports no provider, no storage and no CLI', () => {
+    // The whole argument for this module is that it is a pure function from
+    // records to canonical records. An import of a provider would make it the
+    // GitHub modeller rather than the project modeller, and EPIC-071 would have
+    // to write a second one.
+    expect([...project.files].filter((file) => file.startsWith('github/'))).toStrictEqual([]);
+    expect([...project.files].filter((file) => file.startsWith('git/'))).toStrictEqual([]);
+    expect([...project.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+    expect([...project.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
+  });
+
+  it('builds on the contract, the domain and the emitter', () => {
+    expect(project.files).toContain('providers/contracts/source-project.ts');
+    expect(project.files).toContain('providers/sdk/emit.ts');
+    expect(project.files).toContain('identity/index.ts');
+  });
+});
+
 describe('developer identity boundary', () => {
   const identity = importGraph('identity/index.ts');
 
