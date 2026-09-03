@@ -132,8 +132,12 @@ implementation Epics.
 ### Conditions carried forward
 
 - **`pdfjs-dist` must be configured with `isEvalSupported: false`** (Governance §12).
-- **`exceljs` is a conditional selection** — replace it or obtain governance
-  acceptance of the unlicensed `buffers@0.1.1` transitive before EPIC-027/EPIC-028.
+- ~~**`exceljs` is a conditional selection** — replace it or obtain governance
+  acceptance of the unlicensed `buffers@0.1.1` transitive before
+  EPIC-027/EPIC-028.~~ **Settled 2026-09-03 by EPIC-028: replaced.** The
+  condition was re-measured first and still held; the `.xlsx` reader is now
+  Ferret's own over `node:zlib`, adding no dependency. TECHNOLOGY-DECISIONS §4
+  carries the resolution.
 - **tree-sitter grammar versions must be pinned and version-stamped** in the index
   (Governance §21); the two ecosystems' grammars disagreed by ~1.2% on node counts.
 - **Re-measure indexing throughput on Linux** during EPIC-031; Node's filesystem

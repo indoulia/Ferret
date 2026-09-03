@@ -8,6 +8,7 @@ import {
   createCodeParserProvider,
   createDocxParserProvider,
   createPdfParserProvider,
+  createSheetParserProvider,
   createTextParserProvider,
 } from '../../src/parsers/index.js';
 import { runProviderConformance, summarizeConformance } from '../../src/providers/sdk/testing.js';
@@ -100,6 +101,7 @@ const RUNNABLE = [
   // EPIC-026, and the gate worked a second time.
   { name: 'ferret.parser.pdf', create: () => createPdfParserProvider() },
   { name: 'ferret.parser.docx', create: () => createDocxParserProvider() },
+  { name: 'ferret.parser.sheet', create: () => createSheetParserProvider() },
 ];
 
 describe('every provider is covered — AC-1, AC-2', () => {

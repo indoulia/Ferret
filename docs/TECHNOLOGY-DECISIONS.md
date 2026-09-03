@@ -178,7 +178,7 @@ behaviour and performance together. **No parser was selected on speed alone.**
 |---|---|---|---|
 | PDF | `pdfjs-dist` 6.3.289 (Apache-2.0) | `pdf-parse` (unmaintained) | Mozilla-maintained, published 2026-08-29; 2.7× faster than pypdf |
 | DOCX | `mammoth` 1.12.2 (BSD-2-Clause) | `docx4js`, `python-docx` | Raises on malformed input where python-docx returns empty text |
-| XLSX | `exceljs` 4.4.0 (MIT) — **CONDITIONAL** | SheetJS `xlsx` (left npm; CVE history) | Best maintained MIT option on npm, but see the condition below |
+| XLSX | ~~`exceljs` 4.4.0 (MIT) — **CONDITIONAL**~~ → **Ferret's own reader** (2026-09-03, EPIC-028) | `exceljs` (unlicensed transitive), SheetJS `xlsx` (left npm; CVE history) | The condition below was settled by replacement; see the resolution |
 | CSV | `csv-parse` 6.2.1 (MIT) | `papaparse` | Streaming, part of the maintained `csv` suite |
 | Code | `web-tree-sitter` 0.25.10 (MIT) + pinned grammars | native `tree-sitter` | WASM needs no native artefact; native remains available and verified |
 
@@ -207,6 +207,33 @@ worst dependency in the tree despite winning its benchmark 2.8×:
 implemented, either replace `exceljs` or obtain explicit governance acceptance of
 the unlicensed transitive. This is exactly the case the instruction to not pick a
 parser on benchmark results alone was written for.
+
+#### Resolution — 2026-09-03, EPIC-028: replaced
+
+The condition was **re-measured before it was acted on**, because the evaluation
+above is dated and npm moves. On a clean install of `exceljs@4.4.0`:
+
+| Recorded above | Still true on 2026-09-03 |
+|---|---|
+| last published 2024-12-20 | yes — `4.4.0` is still `latest`, `time.modified` unchanged |
+| `buffers@0.1.1` declares no licence | yes — present, and the only unlicensed package in the 80 |
+| two moderate CVEs from `uuid` | yes — `npm audit` reports 2 moderate, both `uuid` |
+
+So the condition was live, and EPIC-028 took the **replace** branch — with
+nothing. A `.xlsx` is a ZIP of XML, `node:zlib` inflates, and what Ferret needs
+from a spreadsheet is its text rather than a spreadsheet engine. The replacement
+is `src/parsers/sheet/`, it adds **no dependency**, and it removes an unlicensed
+transitive from a redistributed product instead of asking for permission to ship
+one.
+
+`csv-parse` 6.2.1 is unchanged and remains selected: one package, MIT, no
+dependencies of its own.
+
+**What was given up**, stated rather than glossed: shared formulas, pivot
+caches, `.xlsm` macro packages and streaming. The framework refuses any file
+over 4 MiB before a parser is called, so streaming cannot be needed; the rest
+are recorded in EPIC-028 §16. `boundaries.test.ts` now fails if `exceljs` or
+`xlsx` ever enters any graph.
 
 ### Code parsing — grammar pinning is mandatory
 

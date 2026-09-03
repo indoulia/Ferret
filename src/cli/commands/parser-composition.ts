@@ -64,6 +64,7 @@ export const loadFerretParsers: ProviderModuleLoader = async (
       module.createCodeParserProvider(),
       module.createPdfParserProvider(),
       module.createDocxParserProvider(),
+      module.createSheetParserProvider(),
       module.createTextParserProvider(),
     ],
   };

@@ -470,7 +470,7 @@ describe('code parser boundary', () => {
     // a font engine and a decompressor; the point of the subpath is that
     // `@indoulia/ferret` needs none of it.
     expect([...packageNames(parsers)].sort()).toStrictEqual(
-      [...ALLOWED_CORE_PACKAGES, 'mammoth', 'pdfjs-dist', 'web-tree-sitter'].sort(),
+      [...ALLOWED_CORE_PACKAGES, 'csv-parse', 'mammoth', 'pdfjs-dist', 'web-tree-sitter'].sort(),
     );
   });
 
@@ -478,6 +478,19 @@ describe('code parser boundary', () => {
     expect(packageNames(parsers).has('pdfjs-dist')).toBe(true);
     expect(packageNames(core).has('pdfjs-dist')).toBe(false);
     expect(packageNames(cli).has('pdfjs-dist')).toBe(false);
+  });
+
+  it('never carries a spreadsheet library — EPIC-028 AC-15', () => {
+    // TECHNOLOGY-DECISIONS §4 selected `exceljs` conditionally and made the
+    // condition blocking on EPIC-028. The condition was settled by replacement:
+    // the `.xlsx` reader is Ferret's own, over `node:zlib`. A future `npm
+    // install exceljs` would fail here, which is where it should fail.
+    for (const graph of [parsers, core, cli]) {
+      expect(packageNames(graph).has('exceljs')).toBe(false);
+      expect(packageNames(graph).has('xlsx')).toBe(false);
+    }
+    expect(packageNames(parsers).has('csv-parse')).toBe(true);
+    expect(packageNames(core).has('csv-parse')).toBe(false);
   });
 
   it('is the only graph that carries an OOXML reader — EPIC-027 AC-13', () => {
