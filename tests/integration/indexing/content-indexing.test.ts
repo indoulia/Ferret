@@ -607,7 +607,7 @@ describeContent('the reference index end to end — EPIC-035', () => {
     // "Where is this used", by inbound traversal — AC-14. No new read surface:
     // the port that already traverses relationships answers it.
     const retrieval = new RetrievalStore(handle);
-    const inbound = await retrieval.neighbours(
+    const { neighbours: inbound } = await retrieval.neighbours(
       { from: applyTax.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
       PUBLIC_ACCESS,
     );
@@ -634,7 +634,7 @@ describeContent('the reference index end to end — EPIC-035', () => {
     if (file === undefined) return;
 
     const retrieval = new RetrievalStore(handle);
-    const declared = await retrieval.neighbours(
+    const { neighbours: declared } = await retrieval.neighbours(
       { from: file.id, direction: Direction.OUT, types: [FILE_DECLARES_SYMBOL] },
       PUBLIC_ACCESS,
     );
@@ -708,7 +708,7 @@ describeContent('the reference index end to end — EPIC-035', () => {
     if (tax === undefined) return;
 
     const retrieval = new RetrievalStore(handle);
-    const inbound = await retrieval.neighbours(
+    const { neighbours: inbound } = await retrieval.neighbours(
       { from: tax.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
       PUBLIC_ACCESS,
     );
@@ -736,7 +736,7 @@ describeContent('the reference index end to end — EPIC-035', () => {
 
     const retrieval = new RetrievalStore(handle);
     for (const target of [a, b]) {
-      const inbound = await retrieval.neighbours(
+      const { neighbours: inbound } = await retrieval.neighbours(
         { from: target.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
         PUBLIC_ACCESS,
       );
@@ -816,7 +816,7 @@ describeContent('the reference index end to end — EPIC-035', () => {
     if (declared === undefined) return;
 
     const retrieval = new RetrievalStore(handle);
-    const inbound = await retrieval.neighbours(
+    const { neighbours: inbound } = await retrieval.neighbours(
       { from: declared.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
       PUBLIC_ACCESS,
     );
@@ -851,7 +851,7 @@ describeContent('the reference index end to end — EPIC-035', () => {
     if (walk === undefined) return;
 
     const retrieval = new RetrievalStore(handle);
-    const inbound = await retrieval.neighbours(
+    const { neighbours: inbound } = await retrieval.neighbours(
       { from: walk.id, direction: Direction.IN, types: [SYMBOL_REFERENCES_SYMBOL] },
       PUBLIC_ACCESS,
     );

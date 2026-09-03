@@ -7,11 +7,11 @@ All 100 findings were re-verified against `0407618` before being recorded.
 ## P0 (1) — CLOSED in Batch 1
 - **F-01** *(fixed)* history capped at 1 000 commits, watermark advanced to the newest of a newest-first page → permanent silent loss on any larger repository; `--full` cannot recover.
 
-## P1-A — production blockers (24; 10 closed)
+## P1-A — production blockers (24; 15 closed)
 Ingestion — **CLOSED in Batch 1**: **F-02** (all branches share one watermark), **F-03** (future-dated commit stalls ingestion for ever), **F-04** (back-dated merge -> parentless stub commits).
 Storage/install — **CLOSED in Batch 2**: **F-16** (migrate before pgvector; unrepairable, version lies), **F-17** (backup that import refuses), **F-29** (document-supplied column names interpolated into SQL), **F-30** (DB password to stdout, exit 0).
 Untrusted input — **F-60, F-61, F-95 CLOSED in Batch 3**: **F-60** (zip bound trusts the declared size), **F-61** (docx bypasses the bounded reader), **F-95** (undatable commit desyncs the parser, fabricates file entities). Still open: **F-94** (`i18n.logOutputEncoding` fabricates commits under chosen SHAs).
-Truthfulness: **F-05** (deleted entity answered as current), **F-06** (supersession collapses multi-valued fields), **F-23** (corrupt xlsx = successful empty parse, cached), **F-24** (spans name the wrong bytes), **F-25** (+**F-25b**) (same-file homonym edges; duplicate open intervals), **F-27** (unresolved references discarded), **F-28** (traversal truncation unreported), **F-31** (withheld rows dropped, `truncated: false`).
+Truthfulness — **F-05, F-06, F-23, F-24, F-28, F-31 CLOSED** (F-23 in Batch 3, rest in Batch 4). Still open: **F-25** (+**F-25b**) (same-file homonym edges; duplicate open intervals), **F-27** (unresolved references discarded — needs a second symbol write after cross-file resolution).
 Boundary: **F-32** (trim cuts the closing delimiter), **F-64** (containment top-level only), **F-66** (notice last in default JSON).
 Identity: **F-11** (non-address author strings merge distinct humans irreversibly).
 

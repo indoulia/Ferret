@@ -23,6 +23,7 @@ import type { AuditWriter } from '../audit/index.js';
 import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
 import {
   EvidenceState,
+  LifecycleState,
   integrityHashOf,
   type CanonicalEntity,
   type CanonicalEvidence,
@@ -32,6 +33,7 @@ import {
   MAX_LIMIT,
   MAX_TRAVERSAL_DEPTH,
   PUBLIC_ACCESS,
+  describeStanding,
   explainQuery,
   renderExplanation,
   type AccessContext,
@@ -510,12 +512,24 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           };
         }
 
-        const neighbours = await retrieval.neighbours(query, access);
+        const reached = await retrieval.neighbours(query, access);
         return {
           notice: CONTENT_NOTICE,
           asOf: includeHistorical === true ? 'all time' : (at ?? 'now'),
-          count: neighbours.length,
-          neighbours: neighbours.map((neighbour) => ({
+          count: reached.neighbours.length,
+          // The depth-1 branch carried neither of these, and it is the default
+          // and every existing caller. A hop cut by the bound came back looking
+          // exactly like an exhaustive one, and rows this caller may not see
+          // were dropped without a word — so "nothing is connected" and "you
+          // cannot see what is connected" were the same answer.
+          ...(reached.more
+            ? {
+                truncated: true,
+                more: `More neighbours exist than the limit returned. Raise \`limit\` (max ${String(MAX_LIMIT)}).`,
+              }
+            : { truncated: false }),
+          withheld: reached.withheld.total,
+          neighbours: reached.neighbours.map((neighbour) => ({
             id: neighbour.entity.id,
             kind: neighbour.entity.kind,
             lifecycle: neighbour.entity.lifecycle,
@@ -596,25 +610,38 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         // is a wrong answer wearing a right one's clothes — the caller has no
         // way to tell, and "every file in this repository" is precisely the
         // question people ask this tool.
-        const entities = await retrieval.findEntities({
+        const found = await retrieval.findEntities({
           ...(kind === undefined ? {} : { kind }),
           ...(attributes === undefined ? {} : { attributes }),
           ...(scope === undefined ? {} : { scope }),
           ...(lifecycle === undefined ? {} : { lifecycle }),
-          limit: Math.min(requested + 1, MAX_LIMIT),
+          limit: requested,
         }, access);
-        const truncated = entities.length > requested;
-        const page = truncated ? entities.slice(0, requested) : entities;
+        // Two separate facts, and both are reported. The store says whether
+        // further matches exist; the store also says how many rows this caller
+        // may not see. Deriving either from the length of the array left was
+        // how `truncated: false` came to be asserted over an answer permission
+        // filtering had already shortened — and it made "there is nothing
+        // there" indistinguishable from "you are not allowed to see it".
+        const page = found.entities;
         const safety = new ContentSafety();
         const described = page.map((entity) => describeEntity(entity, safety));
         return {
           notice: CONTENT_NOTICE,
           count: page.length,
           contentSafety: safety.report,
-          ...(truncated
+          withheld: found.withheld.total,
+          ...(found.more || found.withheld.total > 0
             ? {
                 truncated: true,
-                more: `More than ${requested} entities match. This is a partial answer — raise \`limit\` (max ${MAX_LIMIT}) or narrow the query.`,
+                more:
+                  (found.more
+                    ? `More than ${String(requested)} entities match. `
+                    : '') +
+                  (found.withheld.total > 0
+                    ? `${String(found.withheld.total)} row(s) were withheld from this caller. `
+                    : '') +
+                  `This is a partial answer — raise \`limit\` (max ${String(MAX_LIMIT)}) or narrow the query.`,
               }
             : { truncated: false }),
           // `results`, the same key `ferret_search` uses. It was `entities`, and
@@ -732,11 +759,23 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           // Absence is an answer, not an error — EPIC-065 AC-20. Said in words
           // as well as in an empty array, because a client that treats `[]` as a
           // failure and a client that treats it as "nothing known" both exist.
+          // The subject's own standing, read once and reported either way.
+          // `ferret_why` is the surface a caller uses to check an answer rather
+          // than trust it, and it answered `held: true, integrity: verified`
+          // about entities Ferret had itself tombstoned — a citation to a file
+          // that is not there, presented as verified.
+          const subject = await retrieval.getEntity(id, access);
+          const standing =
+            subject === undefined || subject.lifecycle === LifecycleState.ACTIVE
+              ? undefined
+              : describeStanding(subject);
+
           if (held.length === 0) {
             return {
               notice: CONTENT_NOTICE,
               id,
               held: false,
+              ...(standing === undefined ? {} : { standing }),
               detail:
                 'Ferret holds no current evidence for this entity. That is what is recorded, ' +
                 'not a failure to look — an answer about it cannot be traced to a source.',
@@ -769,6 +808,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             notice: CONTENT_NOTICE,
             id,
             held: true,
+            // Beside `held`, so a caller reading the two together cannot miss
+            // that the evidence is real and the subject is gone.
+            ...(standing === undefined ? {} : { standing }),
             count: described.length,
             evidence: described,
             conflicts: conflicts.map((group) => ({

@@ -170,6 +170,7 @@ export class EvidenceStore {
    */
   async record(input: EvidenceInput, now: Date = new Date()): Promise<RecordedEvidence> {
     const canonical = createEvidence(input);
+    const collection = input.cardinality === 'collection';
 
     try {
       return await this.#db.transaction(async (tx) => {
@@ -273,6 +274,25 @@ export class EvidenceStore {
         // reserves for Ferret's interpretation, so the superseded observation
         // stays verifiable and "what did Ferret believe before" stays
         // answerable.
+        // Only a **single-valued** field is replaced by a later observation of
+        // it. A collection's members are different facts, and marking them
+        // "replaced by a newer observation" was both false and lossy: the set
+        // collapsed to whichever member was written last, and the rest were
+        // rendered to a caller as covered by a current record.
+        //
+        // The producer declares which kind this is; nothing at this layer can
+        // see it. A member that repeats is already handled above — the id is
+        // derived from the statement, so re-observing one deduplicates.
+        if (collection) {
+          return {
+            evidence: toCanonical(row, canonical.derivedFrom),
+            state: EvidenceState.CURRENT,
+            recordedAt: row.recordedAt.toISOString(),
+            supersededBy: undefined,
+            deduplicated: false,
+          };
+        }
+
         await tx
           .update(evidence)
           .set({ state: EvidenceState.SUPERSEDED, supersededBy: canonical.id, lastCheckedAt: now })

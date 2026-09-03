@@ -1375,6 +1375,10 @@ function toEvidenceInput(record: CanonicalEvidence): Parameters<EvidenceWriter['
     ...(record.observedAt === undefined ? {} : { observedAt: record.observedAt }),
     derivedFrom: [...record.derivedFrom],
     ...(record.permissionScope === undefined ? {} : { permissionScope: record.permissionScope }),
+    // Carried through, because this function is where an emitted record becomes
+    // a write again — and dropping it here is how a collection field emitted
+    // through the SDK would still have been collapsed to its last member.
+    ...(record.cardinality === undefined ? {} : { cardinality: record.cardinality }),
   };
 }
 

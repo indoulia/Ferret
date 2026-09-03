@@ -327,6 +327,45 @@ export interface SearchResult {
 }
 
 /**
+ * What an exact lookup found, and what it could not show.
+ *
+ * A result object rather than a bare array, for the reason `SearchResult` is
+ * one — and it was missing here, which is the whole of F-31. `findEntities`
+ * filtered permission-withheld rows *after* the `LIMIT`, into a tally it
+ * constructed inline and threw away, so a caller received a shorter array and
+ * nothing else. `ferret_find` then derived "is there more" from that array's
+ * length and reported `truncated: false` over an answer that had been cut.
+ *
+ * The two facts are separate and both are reported. `more` means the store
+ * holds further matches; `withheld` means rows were removed because this caller
+ * may not see them. Collapsing them would make "you are not allowed to see it"
+ * indistinguishable from "there is nothing there", which is the distinction
+ * EPIC-058 exists to keep.
+ */
+export interface EntityResult {
+  readonly entities: readonly CanonicalEntity[];
+  readonly withheld: WithheldReport;
+  /** Further matches exist beyond the ones returned. */
+  readonly more: boolean;
+}
+
+/** One hop's neighbours, what was withheld, and whether the hop was cut short. */
+export interface NeighbourResult {
+  readonly neighbours: readonly Neighbour[];
+  readonly withheld: WithheldReport;
+  /**
+   * The bound cut this hop.
+   *
+   * Reported because a traversal cannot see it otherwise: the limit is applied
+   * in SQL and the walk counts rows in TypeScript, so a frontier node whose
+   * neighbours were cut in the database looked to the walk exactly like a node
+   * that had no more — and a truncated traversal was returned as an exhaustive
+   * one.
+   */
+  readonly more: boolean;
+}
+
+/**
  * Every read Ferret can be asked to perform, and the authorization it is
  * performed under.
  *
@@ -339,9 +378,9 @@ export interface SearchResult {
  * code a reviewer can grep for.
  */
 export interface RetrievalPort {
-  findEntities(query: EntityQuery, access: AccessContext): Promise<readonly CanonicalEntity[]>;
+  findEntities(query: EntityQuery, access: AccessContext): Promise<EntityResult>;
   getEntity(id: string, access: AccessContext): Promise<CanonicalEntity | undefined>;
-  neighbours(query: TraversalQuery, access: AccessContext): Promise<readonly Neighbour[]>;
+  neighbours(query: TraversalQuery, access: AccessContext): Promise<NeighbourResult>;
   /**
    * Multi-hop traversal — EPIC-050.
    *

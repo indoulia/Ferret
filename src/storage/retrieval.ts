@@ -22,7 +22,9 @@ import {
   withholds,
   type AccessContext,
   type EntityQuery,
+  type EntityResult,
   type Neighbour,
+  type NeighbourResult,
   type RetrievalPort,
   type SearchHit,
   type SearchQuery,
@@ -238,7 +240,7 @@ export class RetrievalStore implements RetrievalPort {
    * be worse than returning nothing — a caller cannot tell the difference
    * between "these are the files" and "these are probably the files".
    */
-  async findEntities(query: EntityQuery, access: AccessContext): Promise<readonly CanonicalEntity[]> {
+  async findEntities(query: EntityQuery, access: AccessContext): Promise<EntityResult> {
     const limit = boundedLimit(query.limit);
     const offset = query.offset ?? 0;
 
@@ -268,14 +270,26 @@ export class RetrievalStore implements RetrievalPort {
     }
 
     try {
+      // One more than asked, so "is there another" is answered by the database
+      // rather than inferred from the length of a list permission filtering has
+      // already shortened. That inference is what reported `truncated: false`
+      // over a cut answer.
       const rows = await this.#db.execute<EntityRowShape>(sql`
         SELECT ${ENTITY_COLUMNS}
           FROM ferret.entity e
          WHERE ${sql.join(conditions, sql` AND `)}
          ORDER BY e.kind, e.source_id
-         LIMIT ${limit} OFFSET ${offset}
+         LIMIT ${limit + 1} OFFSET ${offset}
       `);
-      return visibleEntities(rows.rows.map(toEntity), (entity) => entity, access, new WithheldTally());
+      const more = rows.rows.length > limit;
+      const tally = new WithheldTally();
+      const entities = visibleEntities(
+        rows.rows.slice(0, limit).map(toEntity),
+        (entity) => entity,
+        access,
+        tally,
+      );
+      return { entities, withheld: tally.report, more };
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.findEntities');
     }
@@ -377,18 +391,21 @@ export class RetrievalStore implements RetrievalPort {
    * convention EPIC-007 uses everywhere, and mixing the two is how a worktree
    * appears to be on two branches for one instant.
    */
-  async neighbours(query: TraversalQuery, access: AccessContext): Promise<readonly Neighbour[]> {
-    // The public one-hop read. The tally is discarded here because this
-    // signature has never carried one; `traverse` supplies its own so a node
-    // dropped at hop three is still counted — EPIC-050 AC-11.
-    return this.#neighbours(query, access, new WithheldTally());
+  async neighbours(query: TraversalQuery, access: AccessContext): Promise<NeighbourResult> {
+    // The public one-hop read, and it now carries what it drops. The tally used
+    // to be constructed here and discarded, so a caller at depth 1 — the
+    // default, and every existing caller — learned neither that rows had been
+    // withheld nor that the bound had cut the hop.
+    const tally = new WithheldTally();
+    const page = await this.#neighbours(query, access, tally);
+    return { neighbours: page.neighbours, withheld: tally.report, more: page.more };
   }
 
   async #neighbours(
     query: TraversalQuery,
     access: AccessContext,
     tally: WithheldTally,
-  ): Promise<readonly Neighbour[]> {
+  ): Promise<{ neighbours: readonly Neighbour[]; more: boolean }> {
     const limit = boundedLimit(query.limit);
     const direction = query.direction ?? Direction.BOTH;
     const at = query.at ?? new Date().toISOString();
@@ -435,10 +452,15 @@ export class RetrievalStore implements RetrievalPort {
           rel_metadata: Record<string, unknown> | null;
         }
       >(
-        sql`SELECT * FROM (${body}) neighbours ORDER BY rel_type, valid_from DESC, source_id LIMIT ${limit}`,
+        // One more than the bound, so the cut is a fact rather than an
+        // inference. The limit is applied here in SQL and the walk counts rows
+        // in TypeScript, so without this a frontier node whose neighbours were
+        // cut in the database was indistinguishable from one that had no more.
+        sql`SELECT * FROM (${body}) neighbours ORDER BY rel_type, valid_from DESC, source_id LIMIT ${limit + 1}`,
       );
 
-      const reached = rows.rows.map((row) => ({
+      const more = rows.rows.length > limit;
+      const reached = rows.rows.slice(0, limit).map((row) => ({
         entity: toEntity(row),
         relationshipType: row.rel_type,
         direction: row.rel_direction,
@@ -450,7 +472,10 @@ export class RetrievalStore implements RetrievalPort {
       // not add one, so an edge is as visible as the entity it reaches. Filtering
       // on the reached entity is therefore the whole control available, and §4 of
       // this Epic's specification declines to add the column.
-      return visibleEntities(reached, (neighbour) => neighbour.entity, access, tally);
+      return {
+        neighbours: visibleEntities(reached, (neighbour) => neighbour.entity, access, tally),
+        more,
+      };
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.neighbours');
     }

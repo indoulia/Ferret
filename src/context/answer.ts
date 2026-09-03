@@ -1,3 +1,4 @@
+import { LifecycleState } from '../domain/index.js';
 import type {
   CanonicalEntity,
   EvidenceLocator,
@@ -435,6 +436,18 @@ export class AnswerPackBuilder {
     });
 
     const unknowns: string[] = [];
+    // First, because it qualifies everything after it: the subject's own
+    // standing. Every claim below is an observation Ferret genuinely recorded,
+    // and every one of them is in the past tense if the source no longer has
+    // the subject — which this path never checked. A file deleted months
+    // earlier answered `answered`, `[current]`, `integrity: verified` and
+    // `unknowns: []`, and a caller had no way to tell.
+    //
+    // Lifecycle was read by ranking (EPIC-057) and by nothing else, so the one
+    // surface whose contract is truthful absence never saw it.
+    const standing = describeSubjectStanding(subject);
+    if (standing !== undefined) unknowns.push(standing);
+
     const claims = groupIntoClaims(selection.selected, selection.disputedFields, context.safety, unknowns);
 
     for (const excluded of selection.excluded) {
@@ -497,6 +510,7 @@ export class AnswerPackBuilder {
     }
 
     const partial =
+      standing !== undefined ||
       context.plan?.partial === true ||
       windowTruncated ||
       dropped > 0 ||
@@ -781,6 +795,11 @@ export function renderAnswer(pack: AnswerPack): string {
     lines.push(`## subject`);
     lines.push(`${pack.subject.kind} ${pack.subject.id}`);
     lines.push(`source: ${pack.subject.source.system}:${JSON.stringify(pack.subject.source.id)}`);
+    // Beside the subject, not only in `unknowns`. A reader who scans the
+    // subject block and the claims should not have to reach the end of the
+    // document to learn that the thing being described is gone.
+    const standing = describeSubjectStanding(pack.subject);
+    if (standing !== undefined) lines.push(`standing: ${standing}`);
     lines.push('');
   }
 
@@ -827,4 +846,28 @@ export function renderAnswer(pack: AnswerPack): string {
   lines.push(`estimated ${String(pack.estimatedTokens)} of ${String(pack.budget)} tokens`);
 
   return lines.join('\n');
+}
+
+/**
+ * What the source says about the subject's own existence.
+ *
+ * `undefined` for an active subject, which is the common case and needs no
+ * sentence. Anything else is a qualification on every claim in the pack, and
+ * the wording is deliberately about the *subject* rather than about ranking:
+ * EPIC-057's `describeStanding` says "ranked below live results", which is true
+ * of a search result and means nothing in an answer.
+ */
+function describeSubjectStanding(subject: CanonicalEntity): string | undefined {
+  switch (subject.lifecycle) {
+    case LifecycleState.ACTIVE:
+      return undefined;
+    case LifecycleState.DELETED:
+      return 'The source reports this subject as removed, so every claim below describes what it was rather than what it is.';
+    case LifecycleState.SUPERSEDED:
+      return 'This subject was replaced, so every claim below describes the version Ferret recorded rather than its replacement.';
+    case LifecycleState.UNKNOWN:
+      return 'Ferret holds a reference to this subject but has never observed it, so nothing below is confirmed to exist.';
+    default:
+      return `This subject carries an unrecognised lifecycle ${JSON.stringify(subject.lifecycle)}, so its standing is unknown.`;
+  }
 }

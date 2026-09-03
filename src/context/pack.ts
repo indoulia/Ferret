@@ -357,12 +357,13 @@ export class ContextPackBuilder {
   async #toItem(hit: SearchHit, withNeighbours: boolean, safety: ContentSafety): Promise<PackItem> {
     const selection = await this.#evidenceFor(hit);
     const evidence = selection.selected.map((entry) => entry.evidence);
-    const neighbours = withNeighbours
+    const reached = withNeighbours
       ? await this.#retrieval.neighbours(
           { from: hit.entity.id, direction: Direction.BOTH, limit: 10 },
           this.#access,
         )
-      : [];
+      : undefined;
+    const neighbours = reached?.neighbours ?? [];
 
     let reason =
       hit.source === HitSource.EVIDENCE
@@ -386,7 +387,13 @@ export class ContextPackBuilder {
 
     return {
       entity,
-      reason: neighbours.length === 0 ? reason : `${reason}; ${String(neighbours.length)} connected`,
+      reason:
+        neighbours.length === 0
+          ? reason
+          : `${reason}; ${String(neighbours.length)}${reached?.more === true ? ' or more' : ''} connected` +
+            (reached !== undefined && reached.withheld.total > 0
+              ? `, ${String(reached.withheld.total)} withheld`
+              : ''),
       score: hit.score,
       evidence,
       evidenceOmitted: selection.excluded.length,

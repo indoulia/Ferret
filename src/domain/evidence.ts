@@ -183,6 +183,28 @@ export const evidenceInputSchema = z
      * happened to be stored.
      */
     permissionScope: z.string().min(1).optional(),
+
+    /**
+     * Whether this field holds one fact or a set of them.
+     *
+     * `single` — the default and the common case — means a later observation of
+     * the same field by the same source *replaces* the earlier one: a branch has
+     * one head commit, a file has one path.
+     *
+     * `collection` means the field is a set and each row is a member. Three
+     * shipping producers write one: a row per resolved reference, and a row per
+     * closing reference in a pull request body. Superseding those collapsed the
+     * set to whichever member was written last, marked the rest "replaced by a
+     * newer observation" — which was false, they are different facts — and then
+     * rendered the loss to a caller as "a current record covers `references`".
+     *
+     * Declared by the producer rather than inferred here, because cardinality is
+     * a property of the fact being recorded and nothing at this layer can see
+     * it. It is not stored: it directs how this write is applied, and a field
+     * whose kind changed between builds would be a producer defect rather than
+     * something to persist.
+     */
+    cardinality: z.enum(['single', 'collection']).default('single'),
   })
   .strict();
 
@@ -190,6 +212,20 @@ export type EvidenceInput = z.input<typeof evidenceInputSchema>;
 
 export interface CanonicalEvidence {
   readonly id: string;
+  /**
+   * How this field's cardinality was declared, when a producer said.
+   *
+   * A **write directive**, not a stored fact: it travels from the producer to
+   * the store so that evidence emitted through the SDK's `Emitter` — which
+   * builds a canonical record before anything writes it — does not lose it on
+   * the way. A record read back from the database has no cardinality, because
+   * the column does not exist and the directive has already been applied.
+   *
+   * Excluded from the integrity hash, deliberately: it describes how the write
+   * is applied rather than what was observed, and including it would make two
+   * identical observations hash differently.
+   */
+  readonly cardinality?: 'single' | 'collection';
   readonly subjectId: string;
   readonly field: string | undefined;
   readonly statement: unknown;
@@ -355,6 +391,9 @@ export function createEvidence(input: EvidenceInput): CanonicalEvidence {
 
   return Object.freeze({
     id: canonicalId(key),
+    // Only when a producer declared it, so an ordinary record is unchanged and
+    // two identical observations still compare equal.
+    ...(value.cardinality === 'collection' ? { cardinality: 'collection' as const } : {}),
     subjectId: value.subjectId,
     field: value.field,
     statement,

@@ -1,8 +1,8 @@
 # STATE
 
-**Phase:** Batch 3 implemented, re-audited and verified. Stopped, as instructed.
+**Phase:** Batch 4 implemented, re-audited and verified. Stopped, as instructed.
 **Base:** `0407618` (main, untouched). **Worktree:** `C:\AIAgent\ferret-forensic`, branch `forensic/post-roadmap-audit`.
-**Last action:** F-60/F-61/F-95/F-96/F-97 fixed; fixtures green; full verify run.
+**Last action:** F-05/F-31/F-28/F-06/F-24 fixed; F-27 left open with its analysis; full verify run.
 
 ## Done
 - Forensic verification — 100 findings (`docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md`).
@@ -23,8 +23,21 @@
   by a marker rather than by recognising content; per-commit isolation in the emitter; a
   cut-short read keeping what it read and saying so. Closes F-60, F-61, F-95, F-96, F-97.
 
+- **Batch 4 — answer truthfulness** (`docs/evidence/FERRET-BATCH-4-ANSWER-TRUTHFULNESS.md`):
+  lifecycle consulted by the answer surfaces; withheld rows and cut hops reported as
+  separate facts; supersession applied only to single-valued fields; spans that name the
+  bytes they quote. Closes F-05, F-31, F-28, F-06, F-24. **F-27 remains open** — the fix
+  needs a second symbol write after cross-file resolution, which is a structural change to
+  the content stage and was not started at the end of a batch.
+
 ## Changed
 Batch 1: `src/git/history.ts` · `src/git/provider.ts` · `src/indexing/indexer.ts`.
+Batch 4: `src/parsing/detect.ts` · `src/parsing/framework.ts` · `src/parsers/text/provider.ts` ·
+`src/context/answer.ts` · `src/context/pack.ts` · `src/mcp/server.ts` · `src/retrieval/query.ts` ·
+`src/retrieval/traverse.ts` · `src/storage/retrieval.ts` · `src/storage/evidence.ts` ·
+`src/domain/evidence.ts` · `src/indexing/content.ts` · `src/indexing/indexer.ts` ·
+`src/project/model.ts`. New test: `tests/unit/span-fidelity.test.ts`; cases added to
+`answer-pack`, `mcp/tools`, `evidence-store`; seven test files adapted to the port change.
 Batch 3: `src/parsers/sheet/zip.ts` · `src/parsers/office/document.ts` ·
 `src/git/history.ts` · `src/git/provider.ts` · `src/git/runner.ts` (export `firstLine`) ·
 `src/indexing/indexer.ts`. New tests: `tests/integration/git/malformed-history.test.ts`,
@@ -56,9 +69,11 @@ position on a resumed run (EPIC-108 AC-10).
 No new Epics. No Epic status changes. No PRs. No merge. No deploy. No changes to `main`.
 
 ## Next action (not started, not authorized)
-Batch 4 — answer truthfulness: F-05, F-31, F-28, F-27, F-06, F-24 (and F-07, F-25b if the
-diff stays readable). The batch that restores the product's central claim. Await
-authorization.
+Batch 5 — prompt-injection boundary: F-32, F-64, F-66. Small, and they are one defence
+rather than three: a trim that cuts the closing delimiter, containment that only walks
+top-level strings, and the content notice arriving last in the two prompt-facing tools.
+F-27 also remains, and is the natural companion to any further content-stage work.
+Await authorization.
 
 ## Open decisions for a human
 1. F-21 — is GitHub/Jira ingestion meant to be reachable in this release, or library-only?

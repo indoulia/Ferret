@@ -168,6 +168,26 @@ export interface ContentDetection {
   readonly sizeBytes: number;
   /** Decoded content, when the bytes are text. */
   readonly text: string | undefined;
+  /**
+   * Bytes of the file that come before `text` begins.
+   *
+   * A byte-order mark is stripped when decoding, so a parser's offsets are
+   * relative to text that starts after it. Every span was therefore short by
+   * exactly this much, pointing one character into the token before the one it
+   * meant to quote.
+   */
+  readonly textByteOffset: number;
+  /**
+   * Whether a UTF-8 byte offset into `text`, plus `textByteOffset`, names the
+   * file's own bytes.
+   *
+   * True for UTF-8 with or without a mark. False for UTF-16, where the decoded
+   * string has no byte-for-byte relationship with what is on disk — two bytes
+   * per code unit, and a parser measuring its output with a UTF-8 encoder
+   * produces offsets that land nowhere in particular. A consumer that cannot
+   * derive a byte span must not be handed one.
+   */
+  readonly byteAddressable: boolean;
 }
 
 /** The media type a path claims, or `undefined` when the name says nothing. */
@@ -212,6 +232,8 @@ export function detectContent(path: string, bytes: Uint8Array): ContentDetection
       encoding: 'utf-8',
       sizeBytes: 0,
       text: '',
+      textByteOffset: 0,
+      byteAddressable: true,
     };
   }
 
@@ -223,7 +245,15 @@ export function detectContent(path: string, bytes: Uint8Array): ContentDetection
       signature === 'application/zip' && claimed !== undefined && claimed !== 'application/zip'
         ? claimed
         : signature;
-    return { mediaType, binary: true, encoding: 'unknown', sizeBytes, text: undefined };
+    return {
+      mediaType,
+      binary: true,
+      encoding: 'unknown',
+      sizeBytes,
+      text: undefined,
+      textByteOffset: 0,
+      byteAddressable: false,
+    };
   }
 
   if (startsWith(window, UTF16LE_BOM) || startsWith(window, UTF16BE_BOM)) {
@@ -235,6 +265,11 @@ export function detectContent(path: string, bytes: Uint8Array): ContentDetection
       encoding,
       sizeBytes,
       text,
+      // The mark, which decoding removed.
+      textByteOffset: 2,
+      // Two bytes per code unit: no shift converts a UTF-8 offset into a
+      // UTF-16 one, so nothing downstream may treat these offsets as bytes.
+      byteAddressable: false,
     };
   }
 
@@ -242,15 +277,39 @@ export function detectContent(path: string, bytes: Uint8Array): ContentDetection
   // A NUL byte in the first window is the oldest and still the most reliable
   // binary test: no text encoding Ferret decodes produces one.
   if (window.includes(0)) {
-    return { mediaType: binaryMediaType(claimed), binary: true, encoding: 'unknown', sizeBytes, text: undefined };
+    return {
+      mediaType: binaryMediaType(claimed),
+      binary: true,
+      encoding: 'unknown',
+      sizeBytes,
+      text: undefined,
+      textByteOffset: 0,
+      byteAddressable: false,
+    };
   }
 
   const encoding: ContentEncoding = hasBom ? 'utf-8-bom' : 'utf-8';
   const text = decode(bytes, encoding);
   if (text === undefined) {
-    return { mediaType: binaryMediaType(claimed), binary: true, encoding: 'unknown', sizeBytes, text: undefined };
+    return {
+      mediaType: binaryMediaType(claimed),
+      binary: true,
+      encoding: 'unknown',
+      sizeBytes,
+      text: undefined,
+      textByteOffset: 0,
+      byteAddressable: false,
+    };
   }
-  return { mediaType: claimed ?? PLAIN_TEXT, binary: false, encoding, sizeBytes, text };
+  return {
+    mediaType: claimed ?? PLAIN_TEXT,
+    binary: false,
+    encoding,
+    sizeBytes,
+    text,
+    textByteOffset: hasBom ? UTF8_BOM.length : 0,
+    byteAddressable: true,
+  };
 }
 
 /** Strict decoding: invalid bytes mean this is not text, not that it is lossy. */

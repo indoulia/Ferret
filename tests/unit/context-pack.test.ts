@@ -85,14 +85,14 @@ class FakeRetrieval implements RetrievalPort {
     private readonly links: readonly Neighbour[] = [],
   ) {}
 
-  findEntities(): Promise<readonly CanonicalEntity[]> {
-    return Promise.resolve([]);
+  findEntities(): Promise<{ entities: readonly CanonicalEntity[]; withheld: WithheldReport; more: boolean }> {
+    return Promise.resolve({ entities: [], withheld: NOTHING_WITHHELD, more: false });
   }
   getEntity(): Promise<CanonicalEntity | undefined> {
     return Promise.resolve(undefined);
   }
-  neighbours(): Promise<readonly Neighbour[]> {
-    return Promise.resolve(this.links);
+  neighbours(): Promise<{ neighbours: readonly Neighbour[]; withheld: WithheldReport; more: boolean }> {
+    return Promise.resolve({ neighbours: this.links, withheld: NOTHING_WITHHELD, more: false });
   }
   search(): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
     return Promise.resolve({ hits: this.hits, withheld: NOTHING_WITHHELD });

@@ -1022,6 +1022,10 @@ async function indexReferences(
         {
           subjectId: one.toSymbolId,
           field: 'references',
+          // A set, not a fact: one row per call site. Superseding these
+          // collapsed "where is this used" to whichever call site was written
+          // last — F-06.
+          cardinality: 'collection',
           statement: {
             from: one.fromSymbolId ?? request.fileId,
             name: one.reference.name,
