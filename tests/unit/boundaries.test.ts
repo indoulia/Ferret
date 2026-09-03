@@ -233,11 +233,14 @@ describe('core public entry point', () => {
     // what any provider's options mean. `lifecycle.ts` joined it with EPIC-014
     // on exactly that ground too: it is the state vocabulary and the recovery
     // budget the registry keeps *about* a provider, and it imports nothing but
-    // `errors/`.
+    // `errors/`. `manifest.ts` joined it with EPIC-074 on the narrowest ground
+    // of all: it reads a package's `package.json` and never imports a package,
+    // so it is the one module here that exists precisely *not* to reach an
+    // implementation.
     //
     // What the core still may not reach is an implementation.
     const concreteProviders = [...graph.files].filter((file) =>
-      /^providers\/(?!contract\.ts|contracts\/|configuration\.ts|lifecycle\.ts|registry|capabilities|index|sdk\/|discovery\.ts)/.test(
+      /^providers\/(?!contract\.ts|contracts\/|configuration\.ts|lifecycle\.ts|manifest\.ts|registry|capabilities|index|sdk\/|discovery\.ts)/.test(
         file,
       ),
     );

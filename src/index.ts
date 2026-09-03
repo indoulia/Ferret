@@ -836,3 +836,16 @@ export {
   type ResolutionInput,
   type ResolutionProposal,
 } from './resolution/index.js';
+
+// EPIC-074. The extension framework's own surface: a manifest a package
+// declares, read before its code runs.
+export {
+  ManifestRefusal,
+  providerManifestSchema,
+  readProviderManifest,
+  refusesImport,
+  type DiscoveryOptions,
+  type ManifestVerdict,
+  type ProviderManifest,
+  type ProviderManifestReader,
+} from './providers/index.js';
