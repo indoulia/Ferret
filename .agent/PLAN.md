@@ -1,12 +1,12 @@
 # PLAN
 
-Batches are ordered and independently shippable. Batch 1 is complete; nothing after it is started.
+Batches are ordered and independently shippable. Batches 1 and 2 are complete; nothing after them is started.
 Each batch: failing test first, then fix, then the record it restores.
 
 | # | Batch | Findings | Gate |
 | --- | --- | --- | --- |
 | 1 | Ingestion completeness | F-01, F-02, F-03, F-04 | **DONE** — fixture red for four reasons, then green; see `docs/evidence/FERRET-BATCH-1-INGESTION-COMPLETENESS.md` |
-| 2 | Small self-contained blockers | F-30, F-29, F-17, F-16 | Userinfo URL in the export test; a crafted column name refused; a >1 MB row round-tripping; a fresh install having `ferret.embedding` (+ repair migration) |
+| 2 | Small self-contained blockers | F-30, F-29, F-17, F-16 | **DONE** — four fixtures red then green; see `docs/evidence/FERRET-BATCH-2-BLOCKERS.md` |
 | 3 | Untrusted-input bounds | F-60, F-61, F-95, F-96, F-97 | Lying ZIP header (fixture generator must be able to express it); a `.docx` capped before allocation; an undatable commit isolated and recorded |
 | 4 | Answer truthfulness | F-05, F-31, F-28, F-27, F-06, F-24 (+ F-07, F-25b if readable) | A deleted subject answers `partial`; a withheld row surfaces; N resolutions leave N current rows; a span slices the bytes it names |
 | 5 | Prompt-injection boundary | F-32, F-64, F-66 | Balanced delimiters after trimming; a nested/array leaf counted and wrapped; `notice` first on every tool via `listTools` enumeration |

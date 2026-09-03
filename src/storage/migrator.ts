@@ -456,6 +456,50 @@ async function applyOne(
 }
 
 /**
+ * Migrations that repair a state an earlier ordering defect could leave behind.
+ *
+ * Named rather than inferred, because being safe to re-run is a property of the
+ * SQL: every statement in one of these is guarded, so applying it to a healthy
+ * database does nothing.
+ */
+const REPAIR_MIGRATIONS: readonly string[] = ['embedding_repair'];
+
+/**
+ * Re-applies the repair migrations, outside the ledger.
+ *
+ * A conditional migration whose precondition was not yet true is recorded as
+ * applied all the same, and forward-only migrations never revisit it — which is
+ * the whole of the defect. A *repair* written as an ordinary migration inherits
+ * that flaw one level down: run it once while pgvector is still absent and it is
+ * spent, on exactly the installations that need it.
+ *
+ * So it runs here instead, at the one moment its precondition can newly become
+ * true: immediately after provisioning. The SQL is the migration's own, read
+ * from the file the migrator applies, so there is one definition of the table
+ * and it is reviewed as DDL rather than buried in TypeScript.
+ */
+export async function applyRepairs(pool: Pool, logger: Logger): Promise<void> {
+  for (const migration of allMigrations()) {
+    if (!REPAIR_MIGRATIONS.includes(migration.name)) continue;
+    try {
+      await pool.query(migration.sql);
+    } catch (error) {
+      // A repair that cannot run leaves the database as it was. Reported, never
+      // fatal: refusing to start because a repair failed would turn a
+      // recoverable state into an unusable one.
+      logger.warn(
+        {
+          operation: 'storage.repair',
+          migration: migration.name,
+          reason: error instanceof Error ? error.message : 'the repair failed',
+        },
+        `Could not apply the "${migration.name}" repair; the database is unchanged`,
+      );
+    }
+  }
+}
+
+/**
  * Brings the database up to the newest version in the migration set.
  *
  * Idempotent: with nothing pending it takes the lock, reads, and returns having

@@ -5,7 +5,7 @@ import { createRuntime } from '../../runtime/index.js';
 import {
   MigrationPolicy,
   createStorageProvider,
-  provisionExtensions,
+  type ExtensionProvisionResult,
   type StorageReport,
 } from '../../storage/index.js';
 import type { LogLevel } from '../../logging/index.js';
@@ -65,6 +65,13 @@ export function initCommand(output: (json: boolean) => OutputOptions): Command {
         // `--check` must not mutate: the same guarantee EPIC-004 requires of
         // health checks. `off` still validates the schema it finds.
         policy: options.check ? MigrationPolicy.OFF : MigrationPolicy.AUTO,
+        // Provisioning moved *into* initialization, ahead of the migrations,
+        // because `0008` is conditional on pgvector being present. Installing
+        // the extension after migrating left that migration recorded as applied
+        // with its table never created, on every fresh install. `--check` and
+        // `--no-extensions` still mean exactly what they meant: neither
+        // provisions anything.
+        provisionExtensions: !options.check && options.extensions,
         ...(options.lockTimeout === undefined || Number.isNaN(options.lockTimeout)
           ? {}
           : { lockTimeoutMs: options.lockTimeout }),
@@ -75,12 +82,14 @@ export function initCommand(output: (json: boolean) => OutputOptions): Command {
         ...(globals.logLevel === undefined ? {} : { logLevel: globals.logLevel }),
       });
 
-      const result = await runtime.run(async (context) => {
+      const result = await runtime.run((context) => {
         const report: StorageReport = storage.report;
-        const extensions =
-          options.check || !options.extensions
-            ? report.extensions.map((entry) => ({ ...entry, created: false, reason: undefined }))
-            : await provisionExtensions(storage.pool, context.logger);
+        // The provider already provisioned, before migrating, and its report
+        // carries what that did. Re-provisioning here would report `created:
+        // false` for an extension this very run created.
+        const extensions: readonly ExtensionProvisionResult[] =
+          report.provisioned ??
+          report.extensions.map((entry) => ({ ...entry, created: false, reason: undefined }));
 
         // Persisted only after the connection has been proven to work, so a
         // typo is never written down as if it were correct.
