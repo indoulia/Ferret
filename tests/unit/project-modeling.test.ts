@@ -110,10 +110,13 @@ describe('project modelling — the joins', () => {
     const result = model({ repositoryId: REPOSITORY, project: 'o/r', pullRequests: [PULL] });
     const edge = edges(result.relationships, RelationshipType.PULL_REQUEST_PROPOSES_COMMIT)[0];
     expect(edge).toBeDefined();
-    // The commit id Git derives: kind `commit`, global by SHA, no scope. The
-    // edge has to land on the entity EPIC-020 created, not on a second one.
+    // The commit id Git derives: kind `commit`, global by SHA, no scope, and —
+    // since EPIC-051 — in the `git` system whoever reported it. This assertion
+    // said `github` until then, which is to say it asserted the defect: the
+    // edge landed on GitHub's copy of a commit rather than on the entity
+    // EPIC-020 created.
     expect(edge?.toId).toBe(
-      canonicalId(canonicalKey({ kind: EntityKind.COMMIT, sourceSystem: 'github', sourceId: 'a'.repeat(40) })),
+      canonicalId(canonicalKey({ kind: EntityKind.COMMIT, sourceSystem: 'git', sourceId: 'a'.repeat(40) })),
     );
     expect(edge?.metadata['role']).toBe('merge-commit');
   });
@@ -137,11 +140,14 @@ describe('project modelling — the joins', () => {
   it('joins the target branch, and keeps the source branch as an attribute — AC-6', () => {
     const result = model({ repositoryId: REPOSITORY, project: 'o/r', pullRequests: [PULL] });
     const edge = edges(result.relationships, RelationshipType.PULL_REQUEST_TARGETS_BRANCH)[0];
+    // `git`, since EPIC-051: the repository scope already makes the name
+    // unique, and deriving in `github` split this `main` from the one the Git
+    // provider indexed.
     expect(edge?.toId).toBe(
       canonicalId(
         canonicalKey({
           kind: EntityKind.BRANCH,
-          sourceSystem: 'github',
+          sourceSystem: 'git',
           sourceId: 'main',
           scope: REPOSITORY,
         }),

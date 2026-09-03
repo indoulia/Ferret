@@ -34,3 +34,14 @@ export {
   proposeIdentityLinks,
   type IdentityLinkProposal,
 } from './propose.js';
+
+// EPIC-051 moved these here from `src/git/`. Reducing a remote URL to the
+// identity two clones share is not Git-specific, and a second caller — the
+// resolution module — could not reach the Git provider's module without
+// dragging a subprocess runner into the core graph. `src/git/identity.ts`
+// re-exports them, so no existing caller changed.
+export {
+  maskRemote,
+  normalizeRemote,
+  type NormalizedRemote,
+} from './remote.js';

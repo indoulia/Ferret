@@ -148,7 +148,11 @@ describe('a limitation is not parked on a closed Epic — issue #117', () => {
     // had been stale for a dozen Epics. Re-measured and rewritten rather than
     // re-pinned, which removed five parked owners and added none. The pin
     // moves down when a claim is corrected; that it moves at all is the point.
-    expect(parked.length, parked.join('\n')).toBe(68);
+    // 68 -> 67 on 2026-09-03, EPIC-051: EPIC-006 own "identity resolution is
+    // not implemented" row was narrowed rather than struck, and its EPIC-051
+    // owner stopped being parked. The pin has now moved down twice for the
+    // same reason -- a stale claim corrected -- and up none.
+    expect(parked.length, parked.join('\n')).toBe(67);
   });
 
   it('permits a limitation with no owner, which is an honest absence', () => {

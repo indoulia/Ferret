@@ -110,7 +110,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 
 | Limitation | Impact | Owner |
 | --- | --- | --- |
-| Nothing *proposes* reconciliations. Ferret records and adjudicates a mapping a caller asserts; it does not go looking for two addresses that are probably one person. | Identity resolution across sources remains manual until a provider or heuristic supplies candidates. | **EPIC-036** (Developer Identity), **EPIC-051** (Cross-Source Entity Resolution) |
+| ~~Nothing *proposes* reconciliations. Ferret records and adjudicates a mapping a caller asserts; it does not go looking for two addresses that are probably one person.~~ **Closed 2026-09-03 by EPIC-051:** `proposeResolutions` supplies candidates with a named rule, a confidence and a rationale written for a person. It still does not merge — `IdentityStore.merge` remains the only thing that does, and it requires evidence, which is what the proposals are. | Identity resolution across sources is now *proposed* and still adjudicated. | **EPIC-036** (Developer Identity), **EPIC-051** (Cross-Source Entity Resolution) |
 | A merge is not reversible by a single call. The history is retained, so it can be undone by hand, but there is no `unmerge`. | An incorrect merge needs manual repair. | EPIC-009 follow-up if a provider makes merges routine |
 | Scope selectors are not persisted. They are evaluated from whatever a caller supplies. | Storing a user's scope preferences belongs with configuration or the AI control plane. | **EPIC-066**, **EPIC-083** |
 | Scope is not yet applied to retrieval. The evaluator exists; nothing filters by it. | Same caveat as EPIC-008's permission scopes. | **EPIC-058** — Permission-Aware Retrieval |

@@ -12,6 +12,8 @@ import {
 import type { Emitter } from '../providers/sdk/emit.js';
 import type { CanonicalEntity, CanonicalEvidence, CanonicalRelationship } from '../domain/index.js';
 
+import { CANONICAL_SOURCE_SYSTEM } from '../resolution/global.js';
+
 import { findClosingReferences } from './references.js';
 
 /**
@@ -466,20 +468,35 @@ function actorEntity(state: Accumulator, actor: ProjectActor, emitter: Emitter):
   return entity;
 }
 
-/** The commit entity Git derives: kind `commit`, global by SHA, no scope. */
+/**
+ * The commit entity Git derives — EPIC-051 §8.2.
+ *
+ * `system: CANONICAL_SOURCE_SYSTEM` is the whole point and was the defect: a
+ * SHA is a hash of the commit, so there is exactly one commit with it whoever
+ * mentions it. Emitting into the reporting system produced `github`'s copy of
+ * `abc123` beside `git`'s — two entities for one object, and every
+ * `PULL_REQUEST_PROPOSES_COMMIT` edge pointing at the one nothing else knew
+ * about.
+ */
 function commitEntity(sha: string, emitter: Emitter): CanonicalEntity {
   return emitter.entity({
     kind: EntityKind.COMMIT,
-    source: { id: sha },
+    source: { id: sha, system: CANONICAL_SOURCE_SYSTEM },
     attributes: { sha },
   });
 }
 
-/** The branch entity EPIC-017 derives: scoped to the repository, keyed on the ref. */
+/**
+ * The branch entity EPIC-017 derives — scoped to the repository, keyed on the ref.
+ *
+ * The system is the canonical one for the same reason as a commit: the scope
+ * already makes the name unique, and deriving it in `github` would split `main`
+ * from the `main` the Git provider indexed. EPIC-051 §8.2.
+ */
 function branchEntity(ref: string, repositoryId: string, emitter: Emitter): CanonicalEntity {
   return emitter.entity({
     kind: EntityKind.BRANCH,
-    source: { id: ref, scope: repositoryId },
+    source: { id: ref, scope: repositoryId, system: CANONICAL_SOURCE_SYSTEM },
     attributes: { ref: redactSecrets(ref).text },
   });
 }

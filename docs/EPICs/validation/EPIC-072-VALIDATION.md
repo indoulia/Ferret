@@ -95,8 +95,14 @@ exactly as specified: the failure cost one record and named it.
 - **`COMMIT_RESOLVES_ISSUE` is declared and not emitted here** — a commit
   message is EPIC-020's input, and `findClosingReferences` is the thing it would
   reuse.
-- **A GitHub actor and a Git author are not merged.** Until EPIC-051 runs, a
+- **A GitHub actor and a Git author are not merged.** ~~Until EPIC-051 runs, a~~
+  **EPIC-051 (2026-09-03) supplies the proposal and still does not merge**: a
   person who reviews on GitHub and commits through Git is two entities with a
-  proposal between them, and a naive "who contributed" query double-counts. That
-  is a real limitation, and the alternative — merging on a display name — is the
-  failure EPIC-036 exists to prevent.
+  named, scored candidate between them, and a naive "who contributed" query
+  double-counts until somebody adjudicates it. That is a real limitation, and
+  the alternative — merging on a display name — is the failure EPIC-036 exists
+  to prevent.
+- **The merge-commit edge pointed at the wrong entity.** Found by EPIC-051 and
+  fixed there: `canonicalKey` includes the source system, so this Epic's commit
+  entity was `github`'s copy of a SHA rather than the commit Git indexed. The
+  AC-4 assertion above said `github` and was asserting the defect.
