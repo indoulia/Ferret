@@ -55,14 +55,15 @@ export const loadFerretParsers: ProviderModuleLoader = async (
   const module = await import('@indoulia/ferret/parsers');
   // All of Ferret's parsers — EPIC-029, then EPIC-026. `providers` rather than
   // `provider` because the framework picks per file: the code parser claims what
-  // its grammars cover natively, the PDF parser claims `application/pdf` and
-  // nothing else, and the text parser claims Markdown natively and other text as
+  // its grammars cover natively, the PDF and Word parsers claim one media
+  // type each, and the text parser claims Markdown natively and other text as
   // a fallback. Only the last one offers a fallback, so none can displace
   // another — which is what `ParserSupport` is for.
   return {
     providers: [
       module.createCodeParserProvider(),
       module.createPdfParserProvider(),
+      module.createDocxParserProvider(),
       module.createTextParserProvider(),
     ],
   };

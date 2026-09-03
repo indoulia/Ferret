@@ -66,3 +66,26 @@ export {
   type PdfExtraction,
   type PdfProperties,
 } from './pdf/document.js';
+
+// EPIC-027. Word documents, whose unit is a paragraph — see §8.2.
+export {
+  DOCX_MEDIA_TYPE,
+  DOCX_PARSER_ID,
+  DOCX_PARSER_VERSION,
+  DocxParserProvider,
+  createDocxParserProvider,
+  type DocxParserOptions,
+} from './office/provider.js';
+
+export {
+  DOCX_IMAGE_POLICY,
+  DocxReadError,
+  MAX_DOCX_BLOCKS,
+  MAX_DOCX_CHARACTERS,
+  MAX_DOCX_MESSAGES,
+  docxLibraryIdentity,
+  readDocx,
+  type DocxExtraction,
+} from './office/document.js';
+
+export { BlockKind, plainText, readBlocks, type HtmlBlock } from './office/html.js';

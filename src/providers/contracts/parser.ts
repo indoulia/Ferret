@@ -76,6 +76,8 @@ export interface ContentSpan {
 export const SpanUnit = {
   LINE: 'line',
   PAGE: 'page',
+  /** EPIC-027 §8.2. A Word document has no pages until something lays it out. */
+  PARAGRAPH: 'paragraph',
 } as const;
 
 export type SpanUnit = (typeof SpanUnit)[keyof typeof SpanUnit];
