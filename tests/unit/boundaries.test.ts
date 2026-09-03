@@ -546,6 +546,8 @@ describe('Jira provider boundary — EPIC-071', () => {
   it('speaks the same contract the GitHub provider does', () => {
     expect(jira.files).toContain('providers/contracts/source-project.ts');
     expect(github.files).toContain('providers/contracts/source-project.ts');
+  });
+});
 
 describe('event ingestion boundary — EPIC-077', () => {
   const events = importGraph('events/index.ts');
