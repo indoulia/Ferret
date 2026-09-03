@@ -571,6 +571,26 @@ describe('event ingestion boundary — EPIC-077', () => {
 
   it('is reachable from the core, because a host needs it', () => {
     expect([...core.files].filter((file) => file.startsWith('events/')).length).toBeGreaterThan(0);
+
+describe('resolution boundary — EPIC-051', () => {
+  const resolution = importGraph('resolution/index.ts');
+
+  it('carries identity logic and reaches no provider', () => {
+    // This gate is why `normalizeRemote` moved out of `src/git/`. Importing it
+    // from there put a subprocess runner's module into the core graph, and the
+    // objection is real rather than technical: `src/project/` depends on this
+    // module, and the core barrel depends on that.
+    expect(resolution.files).toContain('identity/remote.ts');
+    expect([...resolution.files].filter((file) => file.startsWith('git/'))).toStrictEqual([]);
+    expect([...resolution.files].filter((file) => file.startsWith('github/'))).toStrictEqual([]);
+    expect([...resolution.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+    expect([...resolution.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
+  });
+
+  it('adds no package beyond the core set', () => {
+    for (const name of packageNames(resolution)) {
+      expect(ALLOWED_CORE_PACKAGES.has(name), name).toBe(true);
+    }
   });
 });
 

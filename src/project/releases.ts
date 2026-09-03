@@ -9,6 +9,8 @@ import {
 import type { Emitter } from '../providers/sdk/emit.js';
 import type { CanonicalEntity, CanonicalEvidence, CanonicalRelationship } from '../domain/index.js';
 
+import { CANONICAL_SOURCE_SYSTEM } from '../resolution/global.js';
+
 import { commitsInRelease, MAX_RELEASE_COMMITS } from './ancestry.js';
 
 /**
@@ -190,7 +192,13 @@ function addReleaseCommits(
   for (const sha of walk.commits) {
     const commit = addEntity(
       state,
-      emitter.entity({ kind: EntityKind.COMMIT, source: { id: sha }, attributes: { sha } }),
+      // EPIC-051 §8.2: the canonical system, so this is *the* commit rather
+      // than a release provider's copy of it.
+      emitter.entity({
+        kind: EntityKind.COMMIT,
+        source: { id: sha, system: CANONICAL_SOURCE_SYSTEM },
+        attributes: { sha },
+      }),
       true,
     );
     state.relationships.push(

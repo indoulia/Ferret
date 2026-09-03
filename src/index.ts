@@ -818,3 +818,21 @@ export {
   type SourceEvent,
   type WatchOptions,
 } from './events/index.js';
+
+// EPIC-051. Two mechanisms: a global identifier resolves by construction, and
+// everything else is a proposal a person adjudicates. `IdentityStore.merge`
+// remains the only thing that merges.
+export {
+  CANONICAL_SOURCE_SYSTEM,
+  RULE_CONFIDENCE as RESOLUTION_RULE_CONFIDENCE,
+  CrossSourceRule,
+  canonicalSourceSystem,
+  hasGlobalIdentifier,
+  hostOf,
+  proposeResolutions,
+  repositoryIdentifierFor,
+  type ActorRecord,
+  type IssueRecord,
+  type ResolutionInput,
+  type ResolutionProposal,
+} from './resolution/index.js';
