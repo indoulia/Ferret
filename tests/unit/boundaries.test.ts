@@ -470,7 +470,7 @@ describe('code parser boundary', () => {
     // a font engine and a decompressor; the point of the subpath is that
     // `@indoulia/ferret` needs none of it.
     expect([...packageNames(parsers)].sort()).toStrictEqual(
-      [...ALLOWED_CORE_PACKAGES, 'pdfjs-dist', 'web-tree-sitter'].sort(),
+      [...ALLOWED_CORE_PACKAGES, 'mammoth', 'pdfjs-dist', 'web-tree-sitter'].sort(),
     );
   });
 
@@ -478,6 +478,14 @@ describe('code parser boundary', () => {
     expect(packageNames(parsers).has('pdfjs-dist')).toBe(true);
     expect(packageNames(core).has('pdfjs-dist')).toBe(false);
     expect(packageNames(cli).has('pdfjs-dist')).toBe(false);
+  });
+
+  it('is the only graph that carries an OOXML reader — EPIC-027 AC-13', () => {
+    // `mammoth` brings a ZIP reader and an XML parser with it. The core is a
+    // knowledge layer and needs neither.
+    expect(packageNames(parsers).has('mammoth')).toBe(true);
+    expect(packageNames(core).has('mammoth')).toBe(false);
+    expect(packageNames(cli).has('mammoth')).toBe(false);
   });
 });
 

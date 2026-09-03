@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createGitSourceProvider } from '../../src/git/index.js';
 import {
   createCodeParserProvider,
+  createDocxParserProvider,
   createPdfParserProvider,
   createTextParserProvider,
 } from '../../src/parsers/index.js';
@@ -98,6 +99,7 @@ const RUNNABLE = [
   { name: 'ferret.parser.text', create: () => createTextParserProvider() },
   // EPIC-026, and the gate worked a second time.
   { name: 'ferret.parser.pdf', create: () => createPdfParserProvider() },
+  { name: 'ferret.parser.docx', create: () => createDocxParserProvider() },
 ];
 
 describe('every provider is covered — AC-1, AC-2', () => {
