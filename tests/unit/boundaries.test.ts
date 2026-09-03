@@ -502,6 +502,29 @@ describe('code parser boundary', () => {
   });
 });
 
+describe('GitHub provider boundary — EPIC-021 AC-20', () => {
+  const github = importGraph('github/index.ts');
+
+  it('reaches neither storage nor the CLI', () => {
+    // A source provider that could read the database would be a second write
+    // path into it, and one that could reach the CLI would be composing itself.
+    expect([...github.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+    expect([...github.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
+  });
+
+  it('adds nothing to the core dependency set', () => {
+    // The transport is the platform's `fetch`. A vendor SDK is the one thing
+    // that would make this provider heavy, and EPIC-021 §4 declined it — so the
+    // graph carries the core's three packages and not a fourth.
+    expect([...packageNames(github)].sort()).toStrictEqual([...ALLOWED_CORE_PACKAGES].sort());
+  });
+
+  it('speaks the capability contract rather than a concrete provider', () => {
+    expect(github.files).toContain('providers/contracts/source-project.ts');
+    expect([...github.files].filter((file) => file.startsWith('git/'))).toStrictEqual([]);
+  });
+});
+
 describe('developer identity boundary', () => {
   const identity = importGraph('identity/index.ts');
 

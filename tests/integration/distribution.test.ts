@@ -107,10 +107,14 @@ describe('the package a consumer installs', () => {
     // `./providers` is EPIC-013's: a host composing Ferret needs the registry
     // and discovery without importing anything that loads a provider for it.
     // `./parsers` is EPIC-025's: the grammars are 5.6 MB of WASM, and the core
-    // must be importable without any of them.
+    // must be importable without any of them. `./github` is EPIC-021's, and is
+    // the one subpath that exists for the opposite reason: it carries no
+    // dependency at all, and is separate because a source provider is a
+    // composition choice rather than because it is heavy.
     expect(Object.keys(pkg.exports).sort()).toStrictEqual([
       '.',
       './git',
+      './github',
       './mcp',
       './package.json',
       './parsers',

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { createGitSourceProvider } from '../../src/git/index.js';
+import { createGithubProvider } from '../../src/github/index.js';
 import {
   createCodeParserProvider,
   createDocxParserProvider,
@@ -102,6 +103,21 @@ const RUNNABLE = [
   { name: 'ferret.parser.pdf', create: () => createPdfParserProvider() },
   { name: 'ferret.parser.docx', create: () => createDocxParserProvider() },
   { name: 'ferret.parser.sheet', create: () => createSheetParserProvider() },
+  // EPIC-021. Constructed with a transport that answers nothing: the
+  // conformance suite exercises the contract, not the network, and a provider
+  // that reached out during it would make this gate depend on GitHub being up.
+  {
+    name: 'ferret.source.github',
+    create: () =>
+      createGithubProvider({
+        fetch: () =>
+          Promise.resolve({
+            status: 200,
+            headers: { get: () => null },
+            text: () => Promise.resolve('[]'),
+          }),
+      }),
+  },
 ];
 
 describe('every provider is covered — AC-1, AC-2', () => {
