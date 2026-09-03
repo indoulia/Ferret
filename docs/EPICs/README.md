@@ -94,7 +94,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-025 — Code File Parsing** — P0 — VALIDATED ([spec](EPIC-025-Code-File-Parsing.md), [evidence](validation/EPIC-025-VALIDATION.md))
 - **EPIC-026 — PDF Intelligence** — P1 — VALIDATED ([spec](EPIC-026-PDF-Intelligence.md), [evidence](validation/EPIC-026-VALIDATION.md))
 - **EPIC-027 — Office Document Intelligence** — P1 — VALIDATED ([spec](EPIC-027-Office-Document-Intelligence.md), [evidence](validation/EPIC-027-VALIDATION.md))
-- **EPIC-028 — Spreadsheet Intelligence** — P1
+- **EPIC-028 — Spreadsheet Intelligence** — P1 — VALIDATED ([spec](EPIC-028-Spreadsheet-Intelligence.md), [evidence](validation/EPIC-028-VALIDATION.md))
 - **EPIC-029 — Text & Markdown Intelligence** — P1 — VALIDATED ([spec](EPIC-029-Text-And-Markdown-Intelligence.md), [evidence](validation/EPIC-029-VALIDATION.md))
 - **EPIC-030 — File Structure & Metadata** — P0 — VALIDATED ([spec](EPIC-030-File-Structure-And-Metadata.md), [evidence](validation/EPIC-030-VALIDATION.md))
 - **EPIC-031 — Incremental Indexing** — P0 — VALIDATED ([spec](EPIC-031-Incremental-Indexing.md), [evidence](validation/EPIC-031-VALIDATION.md))

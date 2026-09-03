@@ -89,3 +89,35 @@ export {
 } from './office/document.js';
 
 export { BlockKind, plainText, readBlocks, type HtmlBlock } from './office/html.js';
+
+// EPIC-028. Spreadsheets, read without a library — see §8.1 for why.
+export {
+  CSV_MEDIA_TYPE,
+  SHEET_MEDIA_TYPES,
+  SHEET_PARSER_ID,
+  SHEET_PARSER_VERSION,
+  SheetParserProvider,
+  TSV_MEDIA_TYPE,
+  XLSX_MEDIA_TYPE,
+  createSheetParserProvider,
+  type SheetParserOptions,
+} from './sheet/provider.js';
+
+export {
+  MAX_SHEETS,
+  MAX_SHEET_CELLS,
+  XlsxReadError,
+  readXlsx,
+  type Sheet,
+  type SheetRow,
+  type XlsxExtraction,
+} from './sheet/xlsx.js';
+
+export { CsvReadError, MAX_CSV_ROWS, readCsv, type CsvExtraction } from './sheet/csv.js';
+
+export {
+  MAX_ZIP_ENTRIES,
+  MAX_ZIP_INFLATED_BYTES,
+  ZipReadError,
+  readZip,
+} from './sheet/zip.js';

@@ -87,6 +87,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "commander": "^15.0.0",
+    "csv-parse": "^6.2.1",
     "drizzle-orm": "^0.45.2",
     "mammoth": "^1.12.2",
     "pdfjs-dist": "^6.3.289",

@@ -44,10 +44,11 @@ describe('composing the code parser through discovery', () => {
 
     expect(result.skipped).toStrictEqual([]);
     expect(result.modules).toStrictEqual([FERRET_PARSERS_MODULE]);
-    // Four, since EPIC-027: code, PDF, Word and text. One module, and the
-    // framework picks per file — only the text parser offers a fallback, so
-    // none can displace another, which is what `ParserSupport` is for.
-    expect(result.providers).toHaveLength(4);
+    // Five, since EPIC-028: code, PDF, Word, spreadsheet and text. One module,
+    // and the framework picks per file — only the text parser offers a
+    // fallback, so none can displace another, which is what `ParserSupport` is
+    // for.
+    expect(result.providers).toHaveLength(5);
     for (const id of result.providers) expect(registry.has(id)).toBe(true);
   });
 
@@ -102,8 +103,8 @@ describe('composing the code parser through discovery', () => {
     // A fresh instance per load, which is the property under test: two runtimes
     // must not share one provider, because `BaseProvider` refuses to initialize
     // again once it has been shut down.
-    expect(first.providers).toHaveLength(4);
-    expect(second.providers).toHaveLength(4);
+    expect(first.providers).toHaveLength(5);
+    expect(second.providers).toHaveLength(5);
     for (const [index, provider] of (first.providers ?? []).entries()) {
       expect(provider).not.toBe(second.providers?.[index]);
       expect(provider.id).toBe(second.providers?.[index]?.id);

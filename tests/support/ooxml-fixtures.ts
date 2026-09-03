@@ -166,3 +166,148 @@ function escapeXml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 }
+
+/* ------------------------------------------------------------------------- *
+ * SpreadsheetML — EPIC-028.
+ * ------------------------------------------------------------------------- */
+
+export interface XlsxSheetFixture {
+  readonly name: string;
+  /** Rows of cells. A `number` is written as a number, a `Date` as a date. */
+  readonly rows: readonly (readonly (string | number | Date | boolean | undefined)[])[];
+  /** 1-based row numbers, when the sheet should skip rows. */
+  readonly rowNumbers?: readonly number[];
+}
+
+/**
+ * A readable, uncompressed `.xlsx`.
+ *
+ * Strings go inline rather than into the shared table by default, and one
+ * fixture opts into shared strings so both paths are exercised: the shared
+ * table is what a real authoring application writes, and the inline form is
+ * what a generator writes.
+ */
+export function buildXlsx(
+  sheets: readonly XlsxSheetFixture[],
+  options: { readonly sharedStrings?: boolean } = {},
+): Uint8Array {
+  const shared: string[] = [];
+  const useShared = options.sharedStrings === true;
+
+  const sheetParts = sheets.map((sheet, index) => ({
+    path: `xl/worksheets/sheet${String(index + 1)}.xml`,
+    content: sheetXml(sheet, useShared ? shared : undefined),
+  }));
+
+  const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>${sheets
+    .map(
+      (sheet, index) =>
+        `<sheet name="${escapeXml(sheet.name)}" sheetId="${String(index + 1)}" r:id="rId${String(index + 1)}"/>`,
+    )
+    .join('')}</sheets>
+</workbook>`;
+
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${sheets
+    .map(
+      (_, index) =>
+        `<Relationship Id="rId${String(index + 1)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${String(index + 1)}.xml"/>`,
+    )
+    .join('')}
+</Relationships>`;
+
+  // Style 1 carries built-in number format 14 (a date); style 0 is General.
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/></cellXfs>
+</styleSheet>`;
+
+  const strings = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${String(shared.length)}" uniqueCount="${String(shared.length)}">
+${shared.map((value) => `<si><t xml:space="preserve">${escapeXml(value)}</t></si>`).join('')}
+</sst>`;
+
+  return buildZip([
+    { name: '[Content_Types].xml', content: SHEET_CONTENT_TYPES },
+    { name: '_rels/.rels', content: SHEET_PACKAGE_RELS },
+    { name: 'xl/workbook.xml', content: workbook },
+    { name: 'xl/_rels/workbook.xml.rels', content: rels },
+    { name: 'xl/styles.xml', content: styles },
+    ...(useShared ? [{ name: 'xl/sharedStrings.xml', content: strings }] : []),
+    ...sheetParts.map((part) => ({ name: part.path, content: part.content })),
+  ]);
+}
+
+const SHEET_CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+</Types>`;
+
+const SHEET_PACKAGE_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+/** `A`, `B`, … `AA`. */
+export function columnName(index: number): string {
+  let name = '';
+  let value = index;
+  do {
+    name = String.fromCharCode(65 + (value % 26)) + name;
+    value = Math.floor(value / 26) - 1;
+  } while (value >= 0);
+  return name;
+}
+
+/** Days since the 1900 epoch, with the leap-year bug every spreadsheet keeps. */
+export function excelSerial(date: Date): number {
+  return Math.round((date.getTime() - Date.UTC(1899, 11, 30)) / 86_400_000);
+}
+
+function sheetXml(sheet: XlsxSheetFixture, shared: string[] | undefined): string {
+  const rows = sheet.rows
+    .map((cells, index) => {
+      const number = sheet.rowNumbers?.[index] ?? index + 1;
+      const written = cells
+        .map((value, column) => cellXml(`${columnName(column)}${String(number)}`, value, shared))
+        .filter((cell) => cell.length > 0)
+        .join('');
+      return `<row r="${String(number)}">${written}</row>`;
+    })
+    .join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetData>${rows}</sheetData>
+</worksheet>`;
+}
+
+function cellXml(
+  reference: string,
+  value: string | number | Date | boolean | undefined,
+  shared: string[] | undefined,
+): string {
+  if (value === undefined) return '';
+  if (value instanceof Date) {
+    return `<c r="${reference}" s="1"><v>${String(excelSerial(value))}</v></c>`;
+  }
+  if (typeof value === 'number') return `<c r="${reference}"><v>${String(value)}</v></c>`;
+  if (typeof value === 'boolean') {
+    return `<c r="${reference}" t="b"><v>${value ? '1' : '0'}</v></c>`;
+  }
+  if (shared === undefined) {
+    return `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+  }
+  let index = shared.indexOf(value);
+  if (index === -1) index = shared.push(value) - 1;
+  return `<c r="${reference}" t="s"><v>${String(index)}</v></c>`;
+}
+
+/** A workbook part that is present but is not a workbook. */
+export function buildMalformedXlsx(): Uint8Array {
+  return buildZip([{ name: 'xl/notes.txt', content: 'A zip, but not a workbook.' }]);
+}

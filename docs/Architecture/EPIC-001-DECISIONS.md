@@ -193,5 +193,8 @@ position explicit rather than introducing a new one.
 
 **Note.** EPIC-005 §4 flags `buffers@0.1.1` (via `exceljs`) as declaring no
 licence. That dependency is **not** present in EPIC-001 — the runtime's three
-production dependencies are `commander` (MIT), `pino` (MIT) and `zod` (MIT). The
-finding remains open against EPIC-027/EPIC-028.
+production dependencies are `commander` (MIT), `pino` (MIT) and `zod` (MIT).
+~~The finding remains open against EPIC-027/EPIC-028.~~ **Closed 2026-09-03 by
+EPIC-028:** `exceljs` was replaced rather than accepted, so the unlicensed
+transitive never entered the tree, and `boundaries.test.ts` fails if it ever
+does.

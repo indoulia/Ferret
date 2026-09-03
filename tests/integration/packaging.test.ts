@@ -276,10 +276,26 @@ describe('package contents', () => {
     // by the checks around this one, and re-measured rather than assumed. The
     // headroom is 12% again, on the same reasoning: a round figure leaves room
     // to hide in.
+    //
+    // **2026-09-03, EPIC-028 — the bound moved a third time**, and the same way:
+    // measured first. Three document parsers landed in one day and the
+    // non-grammar output reached 2 537 837, 0.31% over. They account for
+    // 73 806 bytes of it and nothing else grew:
+    //
+    //     33 103  dist/parsers/sheet        (EPIC-028)
+    //     21 836  dist/parsers/pdf          (EPIC-026)
+    //     18 867  dist/parsers/office       (EPIC-027)
+    //
+    // Worth noting what the 66 kB of headroom bought: none of the three brought
+    // its dependency into the *package*. `pdfjs-dist`, `mammoth` and `csv-parse`
+    // are runtime dependencies a consumer installs, and EPIC-028's `.xlsx`
+    // reader has no dependency at all — 33 kB of Ferret's own code replacing a
+    // library with an unlicensed transitive. That trade is the reason this
+    // directory is the largest of the three and is still the cheapest.
     const grammarBytes = pack.files
       .filter((file) => file.path.startsWith('dist/parsers/code/grammars/'))
       .reduce((total, file) => total + file.size, 0);
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_530_000);
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_840_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {

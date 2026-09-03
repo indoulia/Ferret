@@ -78,6 +78,8 @@ export const SpanUnit = {
   PAGE: 'page',
   /** EPIC-027 §8.2. A Word document has no pages until something lays it out. */
   PARAGRAPH: 'paragraph',
+  /** EPIC-028 §8.2. A spreadsheet's locator is `Sheet1!7`, and 7 is the row. */
+  ROW: 'row',
 } as const;
 
 export type SpanUnit = (typeof SpanUnit)[keyof typeof SpanUnit];
