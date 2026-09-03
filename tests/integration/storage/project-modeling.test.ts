@@ -186,6 +186,69 @@ describeDb('project modelling, stored — EPIC-072 AC-18', () => {
     );
   }, 60_000);
 
+  it('stores a release, its commits and a deployment — EPIC-073 AC-15', async () => {
+    const { modelReleases } = await import('../../../src/project/index.js');
+    const parents = new Map<string, readonly string[]>([
+      ['e'.repeat(40), []],
+      ['f'.repeat(40), ['e'.repeat(40)]],
+    ]);
+    const result = modelReleases(
+      {
+        repositoryId,
+        releases: [
+          { id: 'RE_v1', tag: 'v1.0.0', publishedAt: '2026-01-01T00:00:00.000Z' },
+          { id: 'RE_v2', tag: 'v2.0.0', publishedAt: '2026-02-01T00:00:00.000Z' },
+        ],
+        deployments: [
+          { id: 'DE_1', ref: 'v2.0.0', environment: 'production', createdAt: '2026-02-02T00:00:00.000Z' },
+        ],
+        deploymentStatuses: [
+          {
+            id: 'DS_1',
+            deploymentId: 'DE_1',
+            state: 'success',
+            lifecycle: 'succeeded',
+            createdAt: '2026-02-02T00:10:00.000Z',
+          },
+        ],
+        tagCommits: new Map([
+          ['v1.0.0', 'e'.repeat(40)],
+          ['v2.0.0', 'f'.repeat(40)],
+        ]),
+        commitParents: parents,
+      },
+      emitter(),
+    );
+    expect(result.skipped).toStrictEqual([]);
+
+    const placeholders = new Set(result.placeholderEntityIds);
+    for (const entity of result.entities) {
+      await entities.upsert(
+        entityInput(entity),
+        undefined,
+        placeholders.has(entity.id) ? { ifAbsent: true } : {},
+      );
+    }
+    for (const edge of result.relationships) await relationships.assert(relationshipInput(edge));
+    for (const record of result.evidence) await evidence.record(evidenceInput(record));
+
+    const deployment = result.entities.find((one) => one.kind === EntityKind.DEPLOYMENT);
+    const stored = await entities.get(deployment?.id ?? '');
+    expect(stored?.attributes['state']).toBe('succeeded');
+    expect(stored?.attributes['environment']).toBe('production');
+
+    const neighbours = await relationships.neighbours(deployment?.id ?? '');
+    expect(neighbours.map((edge) => edge.type)).toContain(
+      RelationshipType.DEPLOYMENT_DEPLOYS_RELEASE,
+    );
+
+    const second = result.entities.find(
+      (one) => one.kind === EntityKind.RELEASE && one.attributes['tag'] === 'v2.0.0',
+    );
+    const includes = await relationships.neighbours(second?.id ?? '');
+    expect(includes.filter((edge) => edge.type === RelationshipType.RELEASE_INCLUDES_COMMIT)).toHaveLength(1);
+  }, 60_000);
+
   it('is idempotent: a second pass writes no new entity', async () => {
     // EPIC-080's property over this Epic's records. Ids are content-derived —
     // §8.1 — so a second pass must land on the same rows.

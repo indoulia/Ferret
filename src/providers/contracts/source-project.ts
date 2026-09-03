@@ -28,6 +28,10 @@ export const ProjectOperation = {
   LIST_COMMENTS: 'list-comments',
   /** Enumerate releases. */
   LIST_RELEASES: 'list-releases',
+  /** Enumerate deployments — EPIC-073. */
+  LIST_DEPLOYMENTS: 'list-deployments',
+  /** Enumerate the statuses of one deployment — EPIC-073 §8.3. */
+  LIST_DEPLOYMENT_STATUSES: 'list-deployment-statuses',
 } as const;
 
 export type ProjectOperation = (typeof ProjectOperation)[keyof typeof ProjectOperation];
@@ -138,6 +142,64 @@ export interface ProjectRelease {
 }
 
 /**
+ * Where a deployment got to — EPIC-073 §8.4.
+ *
+ * The comparable reading of a vendor's own word, the way `ProjectItemState` is.
+ * `IN_PROGRESS` is separate from `PENDING` because the difference is what an
+ * operator asks about: a deployment that has not started can be cancelled, and
+ * one that is running cannot.
+ */
+export const DeploymentState = {
+  PENDING: 'pending',
+  IN_PROGRESS: 'in-progress',
+  SUCCEEDED: 'succeeded',
+  FAILED: 'failed',
+  /** Superseded by a later deployment to the same environment. */
+  INACTIVE: 'inactive',
+} as const;
+
+export type DeploymentState = (typeof DeploymentState)[keyof typeof DeploymentState];
+
+/**
+ * A deployment, as the source system records it.
+ *
+ * **`state` is absent here on purpose.** A deployment's outcome lives in a
+ * separate statuses collection on every system that has the concept, so filling
+ * it in would mean one request per deployment — and EPIC-021 §8.4 exists
+ * because Ferret is spending somebody else's rate limit. The caller asks for
+ * statuses when it wants them.
+ */
+export interface ProjectDeployment {
+  readonly id: string;
+  /** The commit deployed, when the source names one. */
+  readonly revision?: string;
+  /** The ref requested — a tag, a branch. Not necessarily the revision. */
+  readonly ref?: string;
+  readonly environment?: string;
+  readonly description?: string;
+  /** Whether the source considers this a production environment. */
+  readonly production?: boolean;
+  readonly creator?: ProjectActor;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly url?: string;
+}
+
+/** One status of one deployment. The latest is its current state. */
+export interface ProjectDeploymentStatus {
+  readonly id: string;
+  readonly deploymentId: string;
+  /** The vendor's own word. */
+  readonly state: string;
+  /** The comparable reading. */
+  readonly lifecycle: DeploymentState;
+  readonly environment?: string;
+  readonly description?: string;
+  readonly createdAt?: string;
+  readonly url?: string;
+}
+
+/**
  * One page, and how to ask for the next.
  *
  * `cursor` is opaque and provider-defined — a GitHub `Link` URL, a Jira
@@ -210,6 +272,16 @@ export interface ProjectSource {
     query: ProjectQuery,
     context: ProviderOperationContext,
   ): Promise<ProjectPage<ProjectRelease>>;
+  /** EPIC-073. Optional: not every tracker has the concept. */
+  listDeployments?(
+    query: ProjectQuery,
+    context: ProviderOperationContext,
+  ): Promise<ProjectPage<ProjectDeployment>>;
+  /** EPIC-073 §8.3. One request per deployment, so the caller chooses. */
+  listDeploymentStatuses?(
+    query: ProjectQuery & { readonly deployment: string },
+    context: ProviderOperationContext,
+  ): Promise<ProjectPage<ProjectDeploymentStatus>>;
   /** What the last response said about the budget, without spending any. */
   rateLimit(): ProjectRateLimit | undefined;
 }

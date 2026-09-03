@@ -81,5 +81,6 @@ conformance.
   GitHub documents them as deliberately unpredictable.
 - **Nothing is cached.** An `etag` is handed back to the caller; storing it is a
   sync-cursor question and EPIC-075 owns those.
-- **`deployments` is declared in the capability's comment and not implemented.**
-  EPIC-073 will say what it needs.
+- ~~**`deployments` is declared in the capability's comment and not
+  implemented.**~~ **Closed 2026-09-03 by EPIC-073**, which added the records,
+  the two operations and the provider methods.
