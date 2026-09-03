@@ -102,3 +102,16 @@ export {
   type ProviderLifecycle,
   type RecoveryResult,
 } from './lifecycle.js';
+
+// EPIC-074. What a provider package declares about itself, read from its
+// `package.json` rather than by importing it — because importing is executing.
+export {
+  ManifestRefusal,
+  providerManifestSchema,
+  readProviderManifest,
+  refusesImport,
+  type ManifestVerdict,
+  type ProviderManifest,
+} from './manifest.js';
+
+export type { DiscoveryOptions, ProviderManifestReader } from './discovery.js';

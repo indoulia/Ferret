@@ -64,6 +64,23 @@ export const providersConfigSchema = z
   .default({});
 
 /**
+ * Module specifiers to load providers from — EPIC-074 §8.3.
+ *
+ * `providers` above configures providers *by id*, which presumes they are
+ * already registered. Nothing said where a third party's provider comes from,
+ * so until this field the only discoverable module was Ferret's own parser
+ * subpath: the extension framework had a registry, a contract, a conformance
+ * suite and no way in.
+ *
+ * **Naming a module here is authorising arbitrary code execution**, and that is
+ * the honest description rather than a warning bolted on. EPIC-013's position
+ * holds: discovery never scans a repository, a package tree or a policy file
+ * for code to run — a human writes this list. The manifest gate refuses an
+ * incompatible package before importing it, and refuses nothing else.
+ */
+export const providerModulesSchema = z.array(z.string().min(1)).default([]);
+
+/**
  * The version of the persisted configuration *file format*.
  *
  * Separate from the Ferret version and from the database schema version: a
@@ -126,6 +143,8 @@ export const ferretConfigSchema = z.object({
    */
   authorization: authorizationConfigSchema.optional(),
   providers: providersConfigSchema,
+  /** Where to load providers from — EPIC-074. Empty by default: Governance §2. */
+  providerModules: providerModulesSchema,
 });
 
 export type DatabaseConfig = z.infer<typeof databaseConfigSchema>;

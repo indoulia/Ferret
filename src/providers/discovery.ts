@@ -1,6 +1,7 @@
 import { ErrorCode, FerretError, toFerretError } from '../errors/index.js';
 
 import type { Provider } from './contract.js';
+import { readProviderManifest, refusesImport, type ManifestVerdict } from './manifest.js';
 import type { ProviderRegistry } from './registry.js';
 
 /**
@@ -16,6 +17,22 @@ export interface ProviderModuleExports {
 }
 
 export type ProviderModuleLoader = (specifier: string) => Promise<ProviderModuleExports>;
+
+/**
+ * Reads a package's `package.json` without importing the package — EPIC-074.
+ *
+ * Optional: absent means discovery behaves exactly as it did before EPIC-074,
+ * which is what keeps every existing caller unchanged. Supplying one lets
+ * discovery decline an incompatible package *before* running its top-level
+ * code, because importing is executing and a refusal after the import is a
+ * refusal after the fact.
+ */
+export type ProviderManifestReader = (specifier: string) => Promise<unknown>;
+
+export interface DiscoveryOptions {
+  readonly load?: ProviderModuleLoader;
+  readonly readManifest?: ProviderManifestReader;
+}
 
 export interface ProviderDiscoveryResult {
   readonly modules: readonly string[];
@@ -35,13 +52,32 @@ export interface ProviderDiscoverySkip {
    * distinguishing signal in `detail` — human text, which EPIC-013 AC-10
    * forbids a caller from having to parse.
    */
-  readonly reason: 'unavailable' | 'invalid' | 'duplicate' | 'lifecycle';
+  readonly reason: 'unavailable' | 'invalid' | 'duplicate' | 'lifecycle' | 'incompatible';
   readonly detail: string;
 }
 
 const defaultLoader: ProviderModuleLoader = async (specifier) => {
   return (await import(specifier)) as ProviderModuleExports;
 };
+
+/**
+ * The manifest, or `undefined` when it could not be read at all.
+ *
+ * A reader that throws is treated as silence rather than as a refusal: the
+ * package may have no `package.json` reachable by that specifier — a relative
+ * path, a workspace link — and failing to *find* metadata is not evidence that
+ * the code is incompatible.
+ */
+async function manifestVerdict(
+  readManifest: ProviderManifestReader,
+  specifier: string,
+): Promise<ManifestVerdict | undefined> {
+  try {
+    return readProviderManifest(await readManifest(specifier));
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Loads and registers providers from an explicit, ordered module list.
@@ -57,8 +93,14 @@ const defaultLoader: ProviderModuleLoader = async (specifier) => {
 export async function discoverProviders(
   registry: ProviderRegistry,
   specifiers: readonly string[],
-  load: ProviderModuleLoader = defaultLoader,
+  loadOrOptions: ProviderModuleLoader | DiscoveryOptions = defaultLoader,
 ): Promise<ProviderDiscoveryResult> {
+  // A function or an options object: EPIC-013's callers pass a loader
+  // positionally and must keep working, and EPIC-074 needs a second seam.
+  const load =
+    typeof loadOrOptions === 'function' ? loadOrOptions : (loadOrOptions.load ?? defaultLoader);
+  const readManifest = typeof loadOrOptions === 'function' ? undefined : loadOrOptions.readManifest;
+
   const modules: string[] = [];
   const providers: string[] = [];
   const skipped: ProviderDiscoverySkip[] = [];
@@ -77,6 +119,15 @@ export async function discoverProviders(
     }
     seenModules.add(specifier);
     modules.push(specifier);
+
+    // §8.2. Before the import, because importing is executing.
+    if (readManifest !== undefined) {
+      const verdict = await manifestVerdict(readManifest, specifier);
+      if (verdict !== undefined && refusesImport(verdict) && !verdict.loadable) {
+        skipped.push({ module: specifier, reason: 'incompatible', detail: verdict.detail });
+        continue;
+      }
+    }
 
     let exports: ProviderModuleExports;
     try {

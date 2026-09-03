@@ -172,6 +172,10 @@ describe('describeConfig', () => {
         migrate: 'auto',
       },
       exclude: [],
+      // EPIC-074. Rendered even when empty: "no external providers are
+      // configured" is a diagnosable fact, and omitting the field would make
+      // it indistinguishable from a Ferret that cannot load any.
+      providerModules: [],
       providers: {},
     });
   });
