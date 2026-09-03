@@ -2,6 +2,8 @@ import { createRequire } from 'node:module';
 
 import mammoth from 'mammoth';
 
+import { MAX_ZIP_INFLATED_BYTES, assertZipWithinBound } from '../sheet/zip.js';
+
 import { readBlocks, type HtmlBlock } from './html.js';
 
 /**
@@ -36,6 +38,8 @@ export interface DocxExtraction {
 export interface DocxReadOptions {
   readonly maxBlocks?: number;
   readonly maxCharacters?: number;
+  /** Total inflated bytes the package may hold. Defaults to the ZIP reader's. */
+  readonly maxInflatedBytes?: number;
   readonly signal?: AbortSignal;
 }
 
@@ -82,6 +86,30 @@ export async function readDocx(
   options.signal?.throwIfAborted();
   const maxBlocks = options.maxBlocks ?? MAX_DOCX_BLOCKS;
   const maxCharacters = options.maxCharacters ?? MAX_DOCX_CHARACTERS;
+
+  // The package goes through Ferret's bounded ZIP reader *before* `mammoth`
+  // unpacks it with its own.
+  //
+  // `mammoth` inflates the archive itself, so this was the one path on which a
+  // repository file reached a decompressor with no bound at all: a 353 KiB
+  // `.docx` was measured producing 480 MiB of resident memory over 5.7 s, and
+  // `maxBlocks`/`maxCharacters` cannot help, because they are applied to a
+  // document that has already been materialised. EPIC-024 §11 says the
+  // framework bounds content before a parser sees it; for `.docx` that held
+  // only for the compressed size.
+  //
+  // The cost is inflating twice, and it is paid only by archives that stay
+  // inside the bound. One that does not is refused here, before `mammoth`
+  // allocates anything.
+  try {
+    assertZipWithinBound(bytes, {
+      maxInflatedBytes: options.maxInflatedBytes ?? MAX_ZIP_INFLATED_BYTES,
+    });
+  } catch (error) {
+    throw new DocxReadError(error instanceof Error ? error.message : String(error));
+  }
+
+  options.signal?.throwIfAborted();
 
   let result: { value: string; messages: readonly { type: string; message: string }[] };
   try {

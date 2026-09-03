@@ -509,6 +509,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     commits: readonly CommitRecord[];
     cursor: string | undefined;
     tip: string | undefined;
+    incomplete: { readonly reason: string } | undefined;
   }> {
     const options = this.#gitOptions(repository, context);
     const skip = request.cursor === undefined ? (request.skip ?? 0) : this.#decodeHistoryCursor(request.cursor);
@@ -540,7 +541,11 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       cursor: page.truncated
         ? encodeCursor(this.id, Capability.SOURCE_REPOSITORY, { skip: skip + page.commits.length })
         : undefined,
-      tip,
+      // Not reported when the read was cut short by a failure. A tip is the
+      // position a later run excludes, and recording one for history that was
+      // never read would turn a recoverable gap into a permanent one.
+      ...(page.incomplete === undefined ? { tip } : { tip: undefined }),
+      incomplete: page.incomplete,
     };
   }
 
@@ -609,6 +614,13 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
      * entities are placeholders and the writer declines to regress them.
      */
     placeholderEntityIds: readonly string[];
+    /**
+     * Commits this page could not represent, and why.
+     *
+     * Never silently empty: a history read that returns fewer commits than it
+     * was given is indistinguishable from a smaller repository.
+     */
+    skippedRecords: readonly { readonly id: string; readonly reason: string }[];
   } {
     const emitter = this.#requireEmitter();
     const observedAt = options.observedAt ?? new Date();
@@ -618,6 +630,12 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     const placeholders = new Set<string>();
     const relationships = new Map<string, CanonicalRelationship>();
     const evidence: CanonicalEvidence[] = [];
+    /** Records an observation, and how to take it back. */
+    const observe = (...rows: readonly CanonicalEvidence[]): void => {
+      const mark = evidence.length;
+      undo.push(() => evidence.splice(mark));
+      evidence.push(...rows);
+    };
 
     // `placeholder` marks a record emitted only so that an edge has an
     // endpoint — a parent commit Ferret has not read yet. It fills a gap and
@@ -627,15 +645,34 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     // Without the distinction, `git log`'s newest-first order guarantees that
     // every commit which is a parent of a newer one is stored as its stub: the
     // right shape, and empty.
+    // Every mutation records how to undo itself, so one commit that cannot be
+    // represented costs that commit and not the page — EPIC-019 AC-9. Without
+    // it a single invalid field threw out of the middle of the loop and the
+    // whole read produced nothing, which is the failure §13 describes as
+    // "breaking what it knows" rather than reducing it.
+    let undo: (() => void)[] = [];
+
     const add = (entity: CanonicalEntity, placeholder = false): CanonicalEntity => {
       const existing = entities.get(entity.id);
       if (existing !== undefined && (placeholder || !placeholders.has(entity.id))) return existing;
+      const wasPlaceholder = placeholders.has(entity.id);
+      undo.push(() => {
+        if (existing === undefined) entities.delete(entity.id);
+        else entities.set(entity.id, existing);
+        if (wasPlaceholder) placeholders.add(entity.id);
+        else placeholders.delete(entity.id);
+      });
       entities.set(entity.id, entity);
       if (placeholder) placeholders.add(entity.id);
       else placeholders.delete(entity.id);
       return entity;
     };
     const link = (relationship: CanonicalRelationship): void => {
+      const existing = relationships.get(relationship.id);
+      undo.push(() => {
+        if (existing === undefined) relationships.delete(relationship.id);
+        else relationships.set(relationship.id, existing);
+      });
       relationships.set(relationship.id, relationship);
     };
 
@@ -711,7 +748,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         actorEvidence.add(actor.id);
         const rewritten = identity.comparable !== raw.comparable;
         const emails = actor.attributes['emails'] ?? [identity.comparable];
-        evidence.push(
+        observe(
           rewritten
             ? emitter.parsed({
                 subjectId: actor.id,
@@ -746,7 +783,11 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     /** The earliest instant each file was observed to exist, across this page. */
     const firstSeen = new Map<string, { at: Date; file: CanonicalEntity }>();
 
+    const skippedRecords: { id: string; reason: string }[] = [];
+
     for (const commit of commits) {
+      undo = [];
+      try {
       const commitEntity = add(
         emitter.entity({
           kind: 'commit',
@@ -778,8 +819,9 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
 
       // A commit's valid time is a fact Git *does* know, unlike a branch's
       // containment: the commit came into being when it was committed.
-      const committedAt = new Date(commit.committedAt);
-      const commitTime = Number.isNaN(committedAt.getTime()) ? observedAt : committedAt;
+      const committedAt = commit.committedAt === undefined ? undefined : new Date(commit.committedAt);
+      const commitTime =
+        committedAt === undefined || Number.isNaN(committedAt.getTime()) ? observedAt : committedAt;
 
       for (const parent of commit.parents) {
         const parentEntity = add(
@@ -819,7 +861,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
             commitTime,
           ),
         );
-        evidence.push(
+        observe(
           emitter.about(commitEntity, 'attributes.authoredAt', commit.authoredAt, {
             observedAt: commit.authoredAt,
           }),
@@ -854,6 +896,11 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         if (change.kind !== ChangeKind.DELETED) {
           const earliest = firstSeen.get(file.id);
           if (earliest === undefined || commitTime < earliest.at) {
+            const previousFirst = firstSeen.get(file.id);
+            undo.push(() => {
+              if (previousFirst === undefined) firstSeen.delete(file.id);
+              else firstSeen.set(file.id, previousFirst);
+            });
             firstSeen.set(file.id, { at: commitTime, file });
           }
         }
@@ -895,6 +942,18 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
             ),
           );
         }
+      }
+      } catch (error) {
+        // This commit, and only this commit. Everything it had already emitted
+        // is taken back, so the page never carries half of a record Ferret
+        // could not finish — and the run is told which commit was lost and why,
+        // because a silently shorter history is the failure EPIC-019 §12 exists
+        // to prevent.
+        for (const step of undo.reverse()) step();
+        skippedRecords.push({
+          id: commit.sha,
+          reason: error instanceof Error ? error.message : 'the commit could not be represented',
+        });
       }
     }
 
@@ -942,6 +1001,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       // real commit, so it is a genuine gap-filler rather than one this batch
       // went on to describe properly.
       placeholderEntityIds: [...placeholders],
+      skippedRecords,
     };
   }
 

@@ -562,7 +562,7 @@ function redactVector(args: readonly string[]): readonly string[] {
   return args.map((argument) => argument.replace(/\/\/[^/@\s]+@/g, '//***@'));
 }
 
-function firstLine(text: string): string {
+export function firstLine(text: string): string {
   const line = text.split('\n', 1)[0]?.trim() ?? '';
   return line.length > 0 ? line.slice(0, 500) : 'no detail on stderr';
 }

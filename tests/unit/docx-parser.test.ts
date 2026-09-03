@@ -17,7 +17,7 @@ import {
   readBlocks,
 } from '../../src/parsers/index.js';
 import { createTestOperationContext } from '../../src/providers/sdk/testing.js';
-import { buildDocx, buildMalformedDocx, buildZip } from '../support/ooxml-fixtures.js';
+import { buildDeflatedDocx, buildDocx, buildMalformedDocx, buildZip } from '../support/ooxml-fixtures.js';
 import type { ParseOutcome, ParsedContent } from '../../src/index.js';
 
 /**
@@ -207,6 +207,26 @@ describe('DOCX parser — refusals', () => {
     expect(outcome.detail).toContain('main document part');
     expect(outcome.parserId).toBe(DOCX_PARSER_ID);
   });
+
+  it('refuses a package that inflates past the archive bound — F-61', async () => {
+    // `.docx` went straight to `mammoth`, which unpacks the archive itself:
+    // Ferret's bounded ZIP reader was never on this path, and the block and
+    // character caps apply to a document that has already been materialised.
+    // A small file therefore bought an arbitrarily large allocation, which is
+    // EPIC-024 §11's claim ("the framework enforces the size bound before a
+    // parser sees the content, so a decompression attack cannot start")
+    // inverted for one media type.
+    const paragraph = '<w:p><w:r><w:t>x</w:t></w:r></w:p>';
+    const bytes = buildDeflatedDocx(paragraph.repeat(2_200_000));
+    expect(bytes.byteLength).toBeLessThan(1024 * 1024);
+
+    const outcome = await parse(bytes);
+
+    expect(outcome.parsed).toBe(false);
+    if (outcome.parsed) return;
+    expect(outcome.reason).toBe('parser-failed');
+    expect(outcome.detail).toMatch(/bound|exceed/u);
+  }, 120_000);
 
   it('fails on bytes that are not an archive at all — AC-10', async () => {
     const outcome = await parse(new TextEncoder().encode('not a zip'));

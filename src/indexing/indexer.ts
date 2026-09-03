@@ -229,7 +229,7 @@ export interface IndexableSource {
     },
     context: ProviderOperationContext,
   ): Promise<{
-    commits: readonly { committedAt: string; sha?: string }[];
+    commits: readonly { committedAt?: string | undefined; sha?: string }[];
     /**
      * Present when the page was cut short — the same signal `listBranches` and
      * `listFiles` carry, and for the same reason.
@@ -247,6 +247,14 @@ export interface IndexableSource {
      * to belong to a commit.
      */
     tip?: string | undefined;
+    /**
+     * Why the read stopped early, when it did.
+     *
+     * A page that could not be finished must not move the position: the commits
+     * it did not reach are still unread, and a resume that excluded them would
+     * make the gap permanent.
+     */
+    incomplete?: { readonly reason: string } | undefined;
   }>;
   listFiles(
     repository: DiscoveredRepository,
@@ -309,6 +317,14 @@ interface Graph {
    * some earlier run read in full.
    */
   readonly placeholderEntityIds?: readonly string[];
+  /**
+   * Records the source could not represent, and why.
+   *
+   * Optional, so a source that never skips one is unaffected. Named rather than
+   * counted: a run that returns fewer records than the source holds and cannot
+   * say which is indistinguishable from a smaller source.
+   */
+  readonly skippedRecords?: readonly { readonly id: string; readonly reason: string }[];
 }
 
 export interface IndexerDependencies {
@@ -794,6 +810,7 @@ export class RepositoryIndexer {
     let commitsRead = 0;
     let newestCommitAt = previousCommitAt;
     let tips: readonly string[] = previousTips;
+    let incompleteHistory: string | undefined;
     if (options.withHistory !== false) {
       throwIfAborted(context.signal, 'index.history');
       let cursor: string | undefined;
@@ -818,8 +835,24 @@ export class RepositoryIndexer {
         );
         commitsRead += page.commits.length;
         newestCommitAt = newest(page.commits, newestCommitAt);
-        if (page.tip !== undefined) tips = rememberTip(tips, page.tip);
+        if (page.incomplete !== undefined) {
+          // Read what it could, keep it, and do not move on. Recording the tip
+          // here would tell the next run that everything behind it is already
+          // known, which is the one thing this page cannot claim.
+          incompleteHistory = page.incomplete.reason;
+          skipped.push({ path: '(history)', reason: page.incomplete.reason });
+          this.#logger?.warn(
+            { operation: 'index.history', repository: repositoryEntity.id, reason: page.incomplete.reason },
+            'History could not be read to the end; the position was not advanced',
+          );
+        } else if (page.tip !== undefined) {
+          tips = rememberTip(tips, page.tip);
+        }
         const graph = this.#source.emitHistory(repository, page.commits as readonly never[], { observedAt });
+        // Commits the provider could not represent are named, not counted. A
+        // history that quietly returns fewer commits than the repository holds
+        // is indistinguishable from a smaller repository.
+        for (const one of graph.skippedRecords ?? []) skipped.push({ path: one.id, reason: one.reason });
         await write(withoutRewrittenFiles(graph, writtenFiles));
         cursor = page.cursor;
         pages += 1;
@@ -868,7 +901,15 @@ export class RepositoryIndexer {
     // The watermark moves only after everything above succeeded. A run that
     // failed halfway must be repeated, not resumed from a position it never
     // reached — Governance §6, never claim to know something you did not.
-    await this.#writeWatermark(watermarkScope, newestCommitAt, tips, observedAt);
+    // A read that could not be finished leaves the position exactly where it
+    // was. `newestCommitAt` would otherwise carry the newest commit of a partial
+    // page, and the legacy date resume would skip everything behind it.
+    await this.#writeWatermark(
+      watermarkScope,
+      incompleteHistory === undefined ? newestCommitAt : previousCommitAt,
+      tips,
+      observedAt,
+    );
 
     const report: IndexReport = {
       repositoryId: repositoryEntity.id,
@@ -1287,9 +1328,15 @@ function clampToNow(instant: string | undefined, now: Date): string | undefined 
  * back would make the next run re-read everything between. Taking the maximum
  * costs nothing and removes the whole class.
  */
-function newest(commits: readonly { committedAt: string }[], previous: string | undefined): string | undefined {
+function newest(
+  commits: readonly { committedAt?: string | undefined }[],
+  previous: string | undefined,
+): string | undefined {
   let best = previous;
   for (const commit of commits) {
+    // A commit Git could not date carries no instant. It is skipped rather than
+    // parsed into `NaN`, which is the same outcome by a longer route.
+    if (commit.committedAt === undefined) continue;
     const at = Date.parse(commit.committedAt);
     if (Number.isNaN(at)) continue;
     if (best === undefined || at > Date.parse(best)) best = commit.committedAt;
