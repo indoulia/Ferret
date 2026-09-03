@@ -546,6 +546,29 @@ describe('Jira provider boundary — EPIC-071', () => {
   it('speaks the same contract the GitHub provider does', () => {
     expect(jira.files).toContain('providers/contracts/source-project.ts');
     expect(github.files).toContain('providers/contracts/source-project.ts');
+
+describe('event ingestion boundary — EPIC-077', () => {
+  const events = importGraph('events/index.ts');
+  const core = importGraph('index.ts');
+
+  it('hosts no server and reaches no provider', () => {
+    // Ferret verifies and normalizes; terminating an HTTP request is the
+    // host's. A framework here would be the largest dependency in the tree, for
+    // the part of the problem Ferret is least suited to own.
+    expect([...events.files].filter((file) => file.startsWith('github/'))).toStrictEqual([]);
+    expect([...events.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+    expect([...events.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
+  });
+
+  it('adds no package at all', () => {
+    // `node:crypto` and `node:fs`. Everything a webhook needs is in the
+    // platform, and a signature verifier is the last place to take a
+    // dependency.
+    expect([...packageNames(events)]).toStrictEqual([]);
+  });
+
+  it('is reachable from the core, because a host needs it', () => {
+    expect([...core.files].filter((file) => file.startsWith('events/')).length).toBeGreaterThan(0);
   });
 });
 

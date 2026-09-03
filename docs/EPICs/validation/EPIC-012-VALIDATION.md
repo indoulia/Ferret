@@ -197,7 +197,7 @@ one, it says `unassigned` rather than guessing:
 | --- | --- | --- |
 | rate limiter is per-process | **EPIC-078** | the row's own parenthetical read "EPIC-032 *(scheduling)*" — it was naming the scheduling Epic by the wrong number, and Periodic Reconciliation is that Epic |
 | no circuit breaker | **EPIC-078** | "Suppressing work across operations is a scheduling decision, not a provider one" — which also rules out EPIC-014 |
-| no incremental repository discovery | **EPIC-077** | "It needs a filesystem watcher", and Event & Webhook Ingestion is where event-driven sources belong |
+| ~~no incremental repository discovery~~ **Delivered 2026-09-03 by EPIC-077:** `RepositoryWatcher` emits a `SourceEvent` per quiet burst, debounced per root. A hint rather than a source of truth — `fs.watch` drops events under load and says nothing about what happened while the process was not running — so EPIC-078 stays what is correct. | **EPIC-077** | "It needs a filesystem watcher", and Event & Webhook Ingestion is where event-driven sources belong |
 | indexing is sequential, no back-pressure | **EPIC-078** | "Parallelism across repositories is a scheduling decision" |
 | offset paging is O(offset) | *none — accepted* | the row's own Impact settles it: "The read that matters for a running Ferret is the incremental one (`since`)." An accepted cost, not parked work |
 | a failed run repeats rather than resumes | *none — accepted* | "Deliberate: resuming from a position never reached would leave a permanent gap." A design decision, recorded as one |

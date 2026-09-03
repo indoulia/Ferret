@@ -795,3 +795,26 @@ export {
   type ReleaseModelInput,
   type ReleaseModelResult,
 } from './project/index.js';
+
+// EPIC-077. Event-driven sources: a webhook says something changed on a server,
+// a filesystem watcher says the same about a disk. Both are hints, and
+// EPIC-078's reconciliation stays what is actually correct. Ferret verifies and
+// normalizes; terminating an HTTP request is the host's.
+export {
+  DEFAULT_WATCH_DEBOUNCE_MS,
+  DeliveryLedger,
+  EventSubject,
+  MAX_REMEMBERED_DELIVERIES,
+  MAX_WATCHED_ROOTS,
+  RepositoryWatcher,
+  SIGNATURE_REFUSAL_MESSAGE,
+  SignatureRefusal,
+  SignatureScheme,
+  normalizeGithubEvent,
+  normalizeJiraEvent,
+  verifySignature,
+  type NormalizeResult,
+  type SignatureVerdict,
+  type SourceEvent,
+  type WatchOptions,
+} from './events/index.js';
