@@ -1,4 +1,4 @@
-import { ErrorCode, FerretError } from '../errors/index.js';
+import { ErrorCode, FerretError, redactString } from '../errors/index.js';
 
 import { firstLine, runGit, type GitRunOptions } from './runner.js';
 
@@ -246,13 +246,34 @@ export async function readHistory(options: ReadHistoryOptions): Promise<HistoryP
     // thing a caller must not do is treat this as "there is nothing more".
     if (result.stdout.length === 0) return { commits: [], truncated: false };
     return {
-      commits: parseLog(result.stdout, options.withChanges === true),
+      commits: parseHistoryOutput(result.stdout, options.withChanges === true).commits,
       truncated: false,
-      incomplete: { reason: firstLine(result.stderr) },
+      // Git's stderr is text from a repository Ferret does not trust, and it is
+      // about to be stored on a page, logged, and reported as a skipped path.
+      // Through the same redaction as every other string that leaves the
+      // process — F-71. Redaction preserves the diagnostic; a reason that says
+      // nothing would be its own defect.
+      incomplete: { reason: redactString(firstLine(result.stderr)) },
     };
   }
 
-  const commits = parseLog(result.stdout, options.withChanges === true);
+  const parsed = parseHistoryOutput(result.stdout, options.withChanges === true);
+  const commits = parsed.commits;
+  if (parsed.unreadable > 0) {
+    // F-94's general case. Git exited zero, so nothing failed — but part of its
+    // output was not the record format Ferret asked for, which means something
+    // reshaped the stream. The commits that *were* read are returned, and the
+    // page says it is incomplete so the watermark does not advance over the gap.
+    return {
+      commits: commits.slice(0, limit),
+      truncated: commits.length > limit,
+      incomplete: {
+        reason:
+          `Git produced ${String(parsed.unreadable)} region(s) of output Ferret could not read; ` +
+          'the repository or the environment may be overriding how Git formats its output.',
+      },
+    };
+  }
   return {
     commits: commits.slice(0, limit),
     truncated: commits.length > limit,
@@ -319,7 +340,37 @@ export async function knownCommits(
  * named like a hash.
  */
 export function parseLog(stdout: string, withChanges: boolean): readonly CommitRecord[] {
-  if (stdout.length === 0) return [];
+  return parseHistoryOutput(stdout, withChanges).commits;
+}
+
+/** What {@link parseHistoryOutput} made of Git's output, and what it could not. */
+export interface ParsedHistory {
+  readonly commits: readonly CommitRecord[];
+  /**
+   * Tokens outside any record.
+   *
+   * Zero for every healthy `git log`, because the format Ferret asks for is
+   * entirely marker-delimited records. Anything else is Git having produced
+   * output Ferret did not ask for and cannot read — a re-encoded stream, a
+   * signature block, a key nobody has found yet — and {@link readHistory} turns
+   * it into an incomplete page rather than silently reporting fewer commits.
+   *
+   * This is the half of F-94 that does not depend on knowing the key. The
+   * `-c` pins in the runner close the two encodings that were measured; this
+   * closes the class, by *effect* rather than by name.
+   */
+  readonly unreadable: number;
+}
+
+/**
+ * {@link parseLog}, with what it could not read reported rather than dropped.
+ *
+ * Separate entry point rather than a changed return type, because several
+ * callers want only the commits and a tuple at each of them would be noise. The
+ * counting happens once, here.
+ */
+export function parseHistoryOutput(stdout: string, withChanges: boolean): ParsedHistory {
+  if (stdout.length === 0) return { commits: [], unreadable: 0 };
 
   // `git log -z` terminates each *record*, so a trailing NUL is expected. With
   // `--name-status` the last change entry is terminated too.
@@ -328,18 +379,26 @@ export function parseLog(stdout: string, withChanges: boolean): readonly CommitR
 
   const commits: CommitRecord[] = [];
   let index = 0;
+  let unreadable = 0;
 
   while (index < tokens.length) {
     if (!isRecordStart(tokens, index)) {
       // Not a record boundary. Skip one token rather than abandoning the read:
       // a malformed region should cost the commits it touches, not the
-      // ninety-nine thousand after it.
+      // ninety-nine thousand after it — and count it, so "cost" is a fact the
+      // caller is told rather than one it has to infer from a short page.
       index += 1;
+      unreadable += 1;
       continue;
     }
     // The marker is not a field; the eleven that follow it are.
     const header = tokens.slice(index + 1, index + 12);
-    if (header.length < 11) break;
+    if (header.length < 11) {
+      // A record that begins and then stops: the output was cut, which is a
+      // thing to report and not a page that simply ends here.
+      unreadable += tokens.length - index;
+      break;
+    }
     index += 12;
 
     const changes: CommitChange[] = [];
@@ -359,7 +418,7 @@ export function parseLog(stdout: string, withChanges: boolean): readonly CommitR
     commits.push(buildCommit(header, changes));
   }
 
-  return commits;
+  return { commits, unreadable };
 }
 
 /**

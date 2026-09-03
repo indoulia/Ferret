@@ -31,7 +31,23 @@ export {
  * `./containment.js` directly, and this barrel keeps its claim: it declares only
  * controls a production path reaches.
  */
-export { CREDENTIAL_ENV, withoutCredentials } from './credentials.js';
+/**
+ * The child-environment control, named as production reaches it.
+ *
+ * This line read `export { CREDENTIAL_ENV, withoutCredentials }` until Batch 6.
+ * Both are still correct and still enforced — but the only caller either has is
+ * now `subprocess.ts`, a sibling *inside* this module, because the two spawners
+ * were unified onto one policy. `control-reachability.test.ts` reported them
+ * dead and was right to: a barrel that declares a control no production path
+ * reaches is making a claim it cannot support, which is this module's own rule
+ * and the reason `containsSecret` is not here either.
+ *
+ * So the barrel declares `scrubEnvironment`, which is what `git/runner.ts` and
+ * `environment/detect.ts` actually call, and the credential list and its filter
+ * become what they now are — internals of it. The two tests that assert on them
+ * import from `./credentials.js` directly, exactly as the note below prescribes.
+ */
+export { GIT_ENVIRONMENT_STRIPPED, scrubEnvironment } from './subprocess.js';
 /**
  * `containsSecret` is deliberately **not** re-exported here.
  *

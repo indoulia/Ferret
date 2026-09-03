@@ -15,7 +15,7 @@ import {
   secretResolverSources,
   withoutCredentialFields,
 } from '../../src/config/index.js';
-import { CREDENTIAL_ENV, withoutCredentials } from '../../src/security/index.js';
+import { CREDENTIAL_ENV, withoutCredentials } from '../../src/security/credentials.js';
 import { GIT_STRIPPED_ENV, scrubEnvironment } from '../../src/git/index.js';
 
 /**
@@ -112,7 +112,23 @@ describe('the subprocess environment is a boundary — AC-8', () => {
   });
 
   it('names the credential variables, so adding one is a visible change', () => {
-    expect([...CREDENTIAL_ENV].sort()).toStrictEqual(['FERRET_DATABASE_PASSWORD', 'PGPASSFILE', 'PGPASSWORD']);
+    // It did its job. This list read `FERRET_DATABASE_PASSWORD`, `PGPASSFILE`,
+    // `PGPASSWORD` until F-71, which is the finding that `FERRET_DATABASE_URL`
+    // carries the same password and two other modules already treated it as a
+    // credential. `PGSERVICEFILE` and `PGSSLKEY` came with it: each names a file
+    // holding the same secret, and each was missing for the same reason.
+    //
+    // The list is no longer the whole policy — `tests/security/credential-surface.test.ts`
+    // asserts the three derived rules that cover the variables no list can name.
+    // It stays because a change to *this* set should be visible in a diff.
+    expect([...CREDENTIAL_ENV].sort()).toStrictEqual([
+      'FERRET_DATABASE_PASSWORD',
+      'FERRET_DATABASE_URL',
+      'PGPASSFILE',
+      'PGPASSWORD',
+      'PGSERVICEFILE',
+      'PGSSLKEY',
+    ]);
   });
 });
 

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { CREDENTIAL_CONFIG_PATHS, ConfigStore, credentialsFor, parseConfig, withoutCredentialFields } from '../../src/config/index.js';
-import { CREDENTIAL_ENV, withoutCredentials } from '../../src/security/index.js';
+import { CREDENTIAL_ENV, withoutCredentials } from '../../src/security/credentials.js';
 
 /**
  * **A credential does not leave the one place that needs it.**

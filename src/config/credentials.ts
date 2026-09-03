@@ -1,3 +1,5 @@
+import { registerCredentialValue } from '../security/credentials.js';
+
 import type { FerretConfig } from './schema.js';
 
 /**
@@ -64,6 +66,11 @@ export function credentialsFor(
     if (!CREDENTIAL_CONFIG_PATHS.includes(path)) continue;
     if (path === 'database.password' && config.database.password !== undefined) {
       granted[path] = config.database.password;
+      // F-71. A password written literally in `config.json` never passes
+      // through secret resolution, so this is the one place Ferret learns it is
+      // holding one. Registering it here is what keeps it out of a subprocess
+      // environment under a name nothing lists, and out of a log line.
+      registerCredentialValue(config.database.password);
     }
   }
   return granted;

@@ -10,44 +10,19 @@
  * defect, under-redaction is a security defect.
  */
 
-import { SECRET_KINDS } from '../security/secrets.js';
-
-export const REDACTED = '[redacted]';
+import { knownCredentialValues } from '../security/credentials.js';
+import { SECRET_KINDS, isSecretKey } from '../security/secrets.js';
 
 /**
- * Key name fragments that mark a value as sensitive. Matched against the
- * tokenized key, so `apiKey`, `api_key`, `API-KEY` and `apikey` all match.
+ * Re-exported, not redefined.
+ *
+ * `isSecretKey` moved to `security/secrets.ts` so the subprocess-environment
+ * policy could share one vocabulary with redaction rather than keep a second
+ * copy of it. This export path is unchanged for every caller.
  */
-const SECRET_TOKENS: ReadonlySet<string> = new Set([
-  'apikey',
-  'accesskey',
-  'accesstoken',
-  'auth',
-  'authorization',
-  'bearer',
-  'certificate',
-  'connectionstring',
-  'cookie',
-  'credential',
-  'credentials',
-  'dsn',
-  'key',
-  'passphrase',
-  'passwd',
-  'password',
-  'privatekey',
-  'pwd',
-  'refreshtoken',
-  'secret',
-  'secrets',
-  'session',
-  'sessionid',
-  'signature',
-  'token',
-]);
+export { isSecretKey };
 
-/** Key names that look sensitive but are safe and useful to keep. */
-const ALLOWED_KEYS: ReadonlySet<string> = new Set(['keys', 'keyword', 'keywords', 'public_key_id']);
+export const REDACTED = '[redacted]';
 
 /**
  * Value patterns redacted regardless of the key they appear under, because
@@ -115,38 +90,19 @@ const URI_USERINFO = /\b([a-z][a-z0-9+.-]*):\/\/([^\s/:@]+)(:[^\s/@]*)?@/gi;
  */
 const KEYVALUE_SECRET = /\b([A-Za-z0-9_]*(?:passwd|password|pwd|secret|token|api[_-]?key))\s*=\s*[^;,\s]+/gi;
 
-function tokenizeKey(key: string): string[] {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .split(/[^A-Za-z0-9]+/)
-    .filter((part) => part.length > 0)
-    .map((part) => part.toLowerCase());
-}
-
-/** True when a property name indicates the value must not be disclosed. */
-export function isSecretKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (ALLOWED_KEYS.has(key.toLowerCase()) || ALLOWED_KEYS.has(normalized)) return false;
-  if (SECRET_TOKENS.has(normalized)) return true;
-
-  const tokens = tokenizeKey(key);
-  for (let i = 0; i < tokens.length; i += 1) {
-    const token = tokens[i];
-    if (token !== undefined && SECRET_TOKENS.has(token)) return true;
-    const next = tokens[i + 1];
-    if (token !== undefined && next !== undefined && SECRET_TOKENS.has(`${token}${next}`)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /**
  * Redacts credentials embedded inside a string while preserving the parts that
  * make the string useful for diagnosis (scheme, host, database name).
  */
 export function redactString(value: string): string {
   let result = value;
+  // The credentials Ferret actually resolved on this run, removed by value —
+  // F-71. A database password has no shape a pattern can recognise, so before
+  // this it was redacted only where it happened to sit inside a URL or after an
+  // `=`. Git's stderr, a `trace` field and a `cause` chain are none of those.
+  for (const secret of knownCredentialValues()) {
+    if (result.includes(secret)) result = result.split(secret).join(REDACTED);
+  }
   for (const pattern of SECRET_VALUE_PATTERNS) {
     result = result.replace(pattern, REDACTED);
   }

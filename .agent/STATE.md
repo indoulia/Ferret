@@ -1,9 +1,9 @@
 # STATE
 
-**Phase:** Batch 5 implemented, re-audited and verified. Stopped, as instructed.
+**Phase:** Batch 6 implemented, re-audited and verified. Stopped, as instructed.
 **Base:** `0407618` (main, untouched). **Worktree:** `C:\AIAgent\ferret-forensic`, branch `forensic/post-roadmap-audit`.
-**Last action:** F-32/F-64/F-66 fixed as one boundary; six second-order defects found by
-re-auditing and corrected; one wrong-layer test replaced; full verify run.
+**Last action:** F-94/F-71 fixed as one enumeration; eight second-order defects found by
+re-auditing and corrected; one wrong-layer test replaced twice; full verify run, all green.
 
 ## Done
 - Forensic verification — 100 findings (`docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md`).
@@ -41,7 +41,24 @@ re-auditing and corrected; one wrong-layer test replaced; full verify run.
   needs a second symbol write after cross-file resolution, which is a structural change to
   the content stage and was not started at the end of a batch.
 
+- **Batch 6 — credential and safety enumeration** (`docs/evidence/FERRET-BATCH-6-CREDENTIAL-AND-SAFETY-ENUMERATION.md`):
+  the Git safety configuration extended to the keys that change output *shape* rather than
+  only those that name a program, and — because a pin is still an enumeration — the parser
+  now **counts** every region of Git's output it cannot read and `readHistory` reports the
+  page incomplete, so an unenumerated key produces a page that says it is wrong instead of a
+  page that is silently wrong. Credentials judged by four independent rules — named,
+  registered (a `$secret` reference's variable and every value Ferret resolves), named like
+  a credential, shaped like a credential — with `redactString` removing registered values and
+  `gitVector` refusing an argument that carries one. Closes F-94, F-71.
+
 ## Changed
+Batch 6: `src/security/credentials.ts` · `src/security/subprocess.ts` (new) ·
+`src/security/secrets.ts` · `src/security/index.ts` · `src/errors/redact.ts` ·
+`src/git/runner.ts` · `src/git/history.ts` · `src/git/index.ts` · `src/config/secret-ref.ts` ·
+`src/config/credentials.ts` · `src/environment/detect.ts`. New tests:
+`tests/security/git-output-integrity.test.ts`, `tests/security/credential-surface.test.ts`;
+`credential-isolation`, `credential-containment` and `packaging` updated for what changed
+beneath them.
 Batch 5: `src/security/containment.ts` · `src/security/index.ts` · `src/context/pack.ts` ·
 `src/context/answer.ts` · `src/mcp/server.ts`. New test:
 `tests/security/injection-boundary.test.ts`; five cases added and one corrected in
@@ -67,7 +84,19 @@ New tests: `tests/integration/indexing/history-completeness.test.ts`,
 `tests/integration/storage/embedding-provisioning.test.ts`, plus one case in
 `tests/unit/export.test.ts`.
 
-## Verified
+## Verified (Batch 6)
+`lint && typecheck && build && vitest run`: **3491 passed, 7 skipped, 0 failed** (172 files, 357 s).
+The run before it failed five and every one was real: two `boundaries` failures (the first
+attempt at unifying the two spawners imported `git/runner.ts` from `environment/`, which the
+core must not do), the packaging secret scan (a credentialled URI in a new comment), the
+packaging size bound (+29 207 bytes, 0.50% over — measured on both sides and moved to
+2 950 000 with the record the file's convention demands), and `credential-isolation` asserting
+the old three-name `CREDENTIAL_ENV`, which is that test doing its job.
+**F-92, F-73 and F-101 did not fire**: the wide-tree walk passed, packaging ran all 34 tests,
+and `scale.test.ts` passed. F-101 *did* fire in the preceding run with identical code for that
+test, which is the intermittent planner behaviour it already records.
+
+## Verified (Batch 5)
 `lint && typecheck && build && vitest run`: **3442 passed, 7 skipped, 1 failed** (170 files).
 The failure is `scale.test.ts > scans rather than indexes when the whole table is wanted`:
 PostgreSQL chose `Index Only Scan using entity_lifecycle_idx` over a sequential scan for
@@ -76,6 +105,29 @@ PostgreSQL chose `Index Only Scan using entity_lifecycle_idx` over a sequential 
 schema or query planning. Recorded as **F-101**, a new infrastructure finding of F-92's
 class. F-92 and F-73 did not fire this run: the wide-tree walk passed and packaging
 completed all 34 tests.
+
+## Proved (Batch 6)
+Both fixtures are at the real boundary. F-94: a real repository, real `git`, assertions on
+`readHistory`'s return value, every hostile case carrying a **control** that proves the vector
+works without Ferret's overrides. **11 of 17 assertions red** — four repository-reachable
+configuration paths (`.git/config`, a second encoding key, `include.path`, `config.worktree`)
+and two environment-borne ones (`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`) each returned
+`[]` where three commits exist; `gpg.program` **executed**; no output-shape pins existed;
+`parseHistoryOutput` did not exist. F-71: the surface measured against unchanged code —
+**6 of 12** variables reached every `git` subprocess (`FERRET_DATABASE_URL`, `PGSERVICEFILE`,
+`PGSSLKEY`, a URL-shaped `DATABASE_URL`, a token-named variable, and the password under a
+name nothing lists), and `redactString` returned Ferret's own password verbatim; 29 of 31 red.
+
+Eight second-order defects found by re-auditing and corrected: `gpg.program` as an
+*execution* vector `SAFETY_CONFIG` missed; `GIT_CONFIG_GLOBAL`/`_SYSTEM` unstripped (fixed by
+a prefix rule, not two more names); `incomplete.reason` repeating Git's stderr unredacted;
+`redactVector` knowing one credential shape; **`PWD` stripped from every child** — found by
+measuring against a real environment, and the reason every derived rule now carries a
+preserved-half assertion; two spawners with two policies; a barrel declaring two controls no
+production path reached (caught by `control-reachability.test.ts`); and a credentialled URI in
+a shipped comment (caught by the packaging secret scan). A performance claim was also
+corrected by its own measurement: the four rules cost ~0.05 ms, not the 0.73 ms first read —
+copying `process.env` already cost 0.42 ms before any of this existed.
 
 ## Proved (Batch 5)
 The fixture is at the **response** layer — an MCP client and server over an in-memory
@@ -108,15 +160,14 @@ position on a resumed run (EPIC-108 AC-10).
 No new Epics. No Epic status changes. No PRs. No merge. No deploy. No changes to `main`.
 
 ## Next action (not started, not authorized)
-Batch 6 — credential and safety enumeration: F-94, F-71. Make the safety lists
-deny-by-default or derived rather than hand-maintained; F-94 proves the enumeration is
-incomplete and F-71 is the same list missing `FERRET_DATABASE_URL`. Batch 5's own argument
-supports it: every finding it closed was an enumeration that failed towards exposure — a
-prose *allowlist* by key name, a traversal that visited only what it recognised, a notice
-test with a hand-written tool list.
+Batch 7 — code-intelligence truth: F-25 (+F-25b) and F-11. Both change what Ferret asserts
+about people and call graphs, and both need a re-index to take effect, so they want a slot
+where a re-index is acceptable. F-27 remains open and is the natural companion to any further
+content-stage work — its fix needs a second symbol write after cross-file resolution, which is
+a structural change to the content stage.
 
-F-27 also remains, and is the natural companion to any further content-stage work.
-Await authorization.
+F-92, F-73 and F-101 remain open, unowned by any batch, and none of them fired in Batch 6's
+verification run. Await authorization.
 
 ## Open decisions for a human
 1. F-21 — is GitHub/Jira ingestion meant to be reachable in this release, or library-only?

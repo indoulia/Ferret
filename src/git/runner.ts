@@ -1,9 +1,19 @@
 import { execFile, spawn } from 'node:child_process';
 import { isAbsolute } from 'node:path';
 
-import { ErrorCode, FerretError } from '../errors/index.js';
+import { ErrorCode, FerretError, redactString } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
-import { withoutCredentials } from '../security/credentials.js';
+import { carriesRefusableCredential } from '../security/credentials.js';
+import { GIT_ENVIRONMENT_STRIPPED, scrubEnvironment } from '../security/subprocess.js';
+
+/**
+ * Re-exported, not redefined.
+ *
+ * The child-environment policy moved to `security/subprocess.ts` so that
+ * `environment/detect.ts` could share it without the core importing `git/`.
+ * These export paths are unchanged for every caller and every test.
+ */
+export { scrubEnvironment };
 
 /**
  * The single point at which Ferret executes `git`.
@@ -43,8 +53,25 @@ import { withoutCredentials } from '../security/credentials.js';
  * Configuration overrides applied to every invocation.
  *
  * Passed as `-c key=value` before the subcommand, which is the highest-precedence
- * layer Git has — it beats repository, global and system configuration. Each
- * entry disables a key whose value names a program.
+ * layer Git has — it beats repository, global and system configuration, and it
+ * beats every path a repository can reach one through: `include.path`,
+ * `includeIf`, and the `config.worktree` file `extensions.worktreeConfig` turns
+ * on. Each of those was measured rather than assumed; see
+ * `tests/security/git-output-integrity.test.ts`.
+ *
+ * **Two properties, not one — F-94.** The first eleven entries disable a key
+ * whose value *names a program*, which is what this list was written for. That
+ * is half the threat. A key that changes the **shape of Git's output** needs no
+ * program: it rewrites the stream Ferret's parser is reading, and the parser
+ * reports whatever it makes of the result as fact. `i18n.logOutputEncoding=UTF-16`
+ * re-encodes the whole of `git log`'s output, and against the version this was
+ * found in that produced a fabricated commit under a SHA the repository chose.
+ *
+ * A pin is still an enumeration, and this audit has watched enumerations fail
+ * four times. So it is not the only defence: `parseHistoryOutput` counts every
+ * region of Git's output it cannot read and `readHistory` reports the page as
+ * incomplete, which catches the key nobody has found yet by its *effect* rather
+ * than by its name.
  */
 const SAFETY_CONFIG: readonly string[] = Object.freeze([
   // A hooks path pointing at a directory in the repository is the classic
@@ -68,46 +95,32 @@ const SAFETY_CONFIG: readonly string[] = Object.freeze([
   'filter.lfs.process=',
   // Diff and merge drivers likewise name external programs.
   'diff.external=',
-]);
+  // Signature verification runs `gpg.program`, which the repository names. This
+  // is a *program* vector the first eleven entries missed, found by re-auditing
+  // F-94 rather than by the report: `log.showSignature=true` plus a
+  // `gpg.program` in `.git/config` executes it on every `git log`, on Windows
+  // too. Pinning `showSignature` closes it without pinning `gpg.program`, since
+  // nothing else Ferret runs verifies a signature — and an empty `gpg.program`
+  // would make Git try to execute the empty string.
+  'log.showSignature=false',
 
-/** Environment variables removed from what a Git subprocess inherits. */
-const STRIPPED_ENV: readonly string[] = Object.freeze([
-  // Any of these silently redirects Git at a different repository than the one
-  // Ferret resolved, which would make every fact it reports attach to the wrong
-  // entity.
-  'GIT_DIR',
-  'GIT_WORK_TREE',
-  'GIT_INDEX_FILE',
-  'GIT_COMMON_DIR',
-  'GIT_OBJECT_DIRECTORY',
-  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
-  'GIT_NAMESPACE',
-  'GIT_CEILING_DIRECTORIES',
-  // Config injection through the environment, equivalent to editing .git/config.
-  'GIT_CONFIG',
-  'GIT_CONFIG_PARAMETERS',
-  'GIT_CONFIG_COUNT',
-  // Programs Git would run.
-  'GIT_SSH',
-  'GIT_SSH_COMMAND',
-  'GIT_ASKPASS',
-  'SSH_ASKPASS',
-  'GIT_EXTERNAL_DIFF',
-  'GIT_PAGER',
-  'GIT_EDITOR',
-  'GIT_SEQUENCE_EDITOR',
-  'GIT_PROXY_COMMAND',
+  // Output shape. Everything below decides what Git's output *looks like*
+  // rather than what it runs — F-94.
+  //
+  // Both encodings re-encode the entire `git log` stream, including the NUL
+  // separators `-z` and the record marker depend on. Measured: nine commits in,
+  // zero out, with no error.
+  'i18n.logOutputEncoding=UTF-8',
+  'i18n.commitEncoding=UTF-8',
+  // Path shape. Inert for the readers Ferret has today — they all pass `-z`,
+  // which suppresses quoting — and pinned so a reader added later inherits a
+  // shape the repository does not choose.
+  'core.quotePath=false',
+  // `diff.relative=true` truncates `--name-status` paths to the directory Git
+  // was run in. Ferret runs at the repository root, so it is inert today and
+  // would silently produce a *wrong* path rather than no path if that changed.
+  'diff.relative=false',
 ]);
-
-/** Environment variables set on every invocation. */
-const FORCED_ENV: Readonly<Record<string, string>> = Object.freeze({
-  // A repository that needs credentials must fail, not block a background index
-  // on a prompt nobody is watching.
-  GIT_TERMINAL_PROMPT: '0',
-  // Ferret only ever reads. Taking a lock would make an index compete with the
-  // developer working in the same repository.
-  GIT_OPTIONAL_LOCKS: '0',
-});
 
 export interface GitRunOptions {
   /** Absolute path Git runs in. Passed as `-C`, never interpolated. */
@@ -166,6 +179,27 @@ function gitVector(args: readonly string[], cwd: string): readonly string[] {
         remediation: 'Reject the path before it reaches the Git runner.',
       });
     }
+    if (carriesRefusableCredential(argument)) {
+      // An argument vector is readable by other processes on every platform
+      // Ferret supports — `/proc/<pid>/cmdline`, `ps`, Windows' process list —
+      // so passing a credential here discloses it whether or not the child
+      // reads it. Refusing rather than redacting, because a redacted argument
+      // is a *different argument* and Git would act on it.
+      //
+      // Only values Ferret resolved as its own credentials, and only from
+      // twelve characters up: the consequence is a stopped index, and a
+      // coincidence is what would stop it. See `MIN_REFUSABLE_VALUE`.
+      throw new FerretError(ErrorCode.USAGE, 'A Git argument carries a credential Ferret holds', {
+        details: { argumentCount: args.length, operation: args[0] ?? 'git' },
+        remediation: 'Pass the object id or ref a previous read returned, never a configured secret.',
+      });
+    }
+  }
+  if (carriesRefusableCredential(cwd)) {
+    throw new FerretError(ErrorCode.USAGE, 'A Git working directory carries a credential Ferret holds', {
+      details: { operation: args[0] ?? 'git' },
+      remediation: 'Index a path that does not contain a configured secret.',
+    });
   }
 
   const vector = [...SAFETY_CONFIG.flatMap((entry) => ['-c', entry]), '-C', cwd, ...args];
@@ -526,30 +560,10 @@ function classify(
   });
 }
 
-/**
- * The environment a Git subprocess receives.
- *
- * Inherit-then-remove rather than build-from-nothing: Git legitimately needs
- * `PATH`, `HOME`, `SystemRoot` and a dozen platform-specific variables, and a
- * hand-built environment would break in ways that are tedious to discover one
- * platform at a time. What is removed is the specific set that can redirect Git
- * at a different repository or name a program for it to run — and, since
- * EPIC-081, every variable carrying a credential Ferret holds.
- */
-export function scrubEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  // Credentials first — EPIC-081 §8.4. The list below was written to stop Git
-  // being redirected, not to stop a secret leaving, and the two concerns want
-  // different lists in different places: this one is Ferret-wide and applies to
-  // every child process, not only to `git`.
-  const environment: NodeJS.ProcessEnv = withoutCredentials(source);
-  for (const name of STRIPPED_ENV) delete environment[name];
-  return { ...environment, ...FORCED_ENV };
-}
-
 /** The safety overrides, exported so a test can assert they are actually applied. */
 export const GIT_SAFETY_CONFIG = SAFETY_CONFIG;
 /** The variables removed from a Git subprocess's environment. */
-export const GIT_STRIPPED_ENV = STRIPPED_ENV;
+export const GIT_STRIPPED_ENV = GIT_ENVIRONMENT_STRIPPED;
 
 /**
  * A logged argument vector.
@@ -557,9 +571,14 @@ export const GIT_STRIPPED_ENV = STRIPPED_ENV;
  * Arguments can carry a remote URL, and a remote URL frequently carries a
  * personal access token. `FerretError` redacts its message but a `trace` log
  * field is not a message, so it is redacted here.
+ *
+ * Through the same `redactString` every error and log line uses, rather than the
+ * one URL-userinfo expression that used to be here — F-71. That expression knew
+ * about `//user:token@` and nothing else, so a token in any other position, and
+ * a credential Ferret itself resolved, were both written out verbatim.
  */
 function redactVector(args: readonly string[]): readonly string[] {
-  return args.map((argument) => argument.replace(/\/\/[^/@\s]+@/g, '//***@'));
+  return args.map((argument) => redactString(argument));
 }
 
 export function firstLine(text: string): string {

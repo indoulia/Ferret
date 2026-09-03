@@ -10,8 +10,8 @@ Each batch: failing test first, then fix, then the record it restores.
 | 3 | Untrusted-input bounds | F-60, F-61, F-95, F-96, F-97 | **DONE** — five fixtures red then green; see `docs/evidence/FERRET-BATCH-3-UNTRUSTED-INPUT-BOUNDS.md` |
 | 4 | Answer truthfulness | F-05, F-31, F-28, F-06, F-24 | **DONE** — see `docs/evidence/FERRET-BATCH-4-ANSWER-TRUTHFULNESS.md`. **F-27 still open**: needs a second symbol write after cross-file resolution |
 | 5 | Prompt-injection boundary | F-32, F-64, F-66 | **DONE** — 8 of 9 fixture assertions red then green, six second-order defects corrected; see `docs/evidence/FERRET-BATCH-5-PROMPT-INJECTION-BOUNDARY.md` |
-| 6 | Credential and safety enumeration | F-94, F-71 | **NEXT — not started, not authorized.** Hostile `.git/config` cannot reshape `git log` output; no credential-bearing variable reaches a child process |
-| 7 | Code-intelligence truth | F-25, F-11 | Requires a re-index; schedule accordingly |
+| 6 | Credential and safety enumeration | F-94, F-71 | **DONE** — 11 of 17 and 29 of 31 fixture assertions red then green, eight second-order defects corrected; see `docs/evidence/FERRET-BATCH-6-CREDENTIAL-AND-SAFETY-ENUMERATION.md` |
+| 7 | Code-intelligence truth | F-25, F-11 | **NEXT — not started, not authorized.** Requires a re-index; schedule accordingly |
 | 8 | Record correction (no code) | F-74, F-75, F-87, EPIC-028 AC-14, EPIC-035 AC-4, EPIC-090 §11, F-20/F-21 registry notes | Each corrected record cites the finding |
 
 **Deferred, gated on a product decision:** everything behind F-21 (F-07, F-08, F-09, F-10,
@@ -26,6 +26,17 @@ hand-written list of four tools. Each was replaced by something derived — shap
 key name, recursion over whatever is there, `listTools()` rather than a list. Batch 6 is
 that same correction applied to the safety and credential lists, so the argument is already
 made.
+
+**Learned in Batch 6, and it bears on Batch 7.** The correction held, and one thing sharpened
+it: a derived rule needs its own control against over-reach. Judging a variable by name-shape
+stripped `PWD` from every child process — solving disclosure by destroying the environment —
+found by measuring against a real machine's environment, not by reasoning about the rule. So
+a derived rule added from here carries a preserved-half assertion in the same table as its
+stripping half, and neither can be improved at the other's expense. Second lesson, cheaper:
+two of the eight second-order defects were found by Ferret's own controls
+(`control-reachability`, the packaging secret scan) rather than by re-reading the diff, and
+one architectural regression by `boundaries.test.ts` — run the full suite before believing a
+re-audit is finished.
 
 **Not to be done:** build a session store or a `ferret sync` command (F-20, F-21); implement
 import following (F-26 — correct the AC record instead); tune benchmarks (F-50, F-51, F-91);
