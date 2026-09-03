@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createGitSourceProvider } from '../../src/git/index.js';
 import { createGithubProvider } from '../../src/github/index.js';
+import { createJiraProvider } from '../../src/jira/index.js';
 import {
   createCodeParserProvider,
   createDocxParserProvider,
@@ -115,6 +116,21 @@ const RUNNABLE = [
             status: 200,
             headers: { get: () => null },
             text: () => Promise.resolve('[]'),
+          }),
+      }),
+  },
+  // EPIC-071, on the same terms: the conformance suite exercises the contract,
+  // not the network.
+  {
+    name: 'ferret.source.jira',
+    create: () =>
+      createJiraProvider({
+        baseUrl: 'https://example.atlassian.net',
+        fetch: () =>
+          Promise.resolve({
+            status: 200,
+            headers: { get: () => null },
+            text: () => Promise.resolve('{}'),
           }),
       }),
   },

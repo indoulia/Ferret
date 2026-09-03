@@ -73,8 +73,17 @@ export interface ProjectActor {
 export interface ProjectRecord {
   /** Stable within the source system. `owner/repo#123`, `PROJ-45`. */
   readonly id: string;
-  /** The number a person would quote. */
+  /** The number a person would quote, where the tracker uses numbers. */
   readonly number?: number;
+  /**
+   * The key a person would quote, where the tracker uses keys — EPIC-071 §8.5.
+   *
+   * `FER-12`. Added by the second implementation, which is what §8.1 said this
+   * contract was for: GitHub numbers its issues and Jira keys them, and a
+   * contract with only `number` would have made every Jira issue arrive without
+   * the identifier its users actually say out loud.
+   */
+  readonly key?: string;
   readonly title: string;
   readonly body?: string;
   readonly state: string;
@@ -188,25 +197,37 @@ export interface ProjectRateLimit {
   readonly reserved?: number;
 }
 
-/** The `source.project` capability. */
+/**
+ * The `source.project` capability.
+ *
+ * **Only `listIssues` is required** — EPIC-071 §8.2. The first draft required
+ * five methods, which was a contract written for one provider while claiming to
+ * be written for two: Jira has no pull requests and no reviews, and a second
+ * implementation would have had to return empty pages indistinguishable from
+ * "there are none".
+ *
+ * What a provider offers is its `operations` declaration, the way the Git
+ * provider declares `RepositoryOperation`. The method being absent and the
+ * operation being undeclared are then the same fact, stated once.
+ */
 export interface ProjectSource {
   listIssues(
     query: ProjectQuery,
     context: ProviderOperationContext,
   ): Promise<ProjectPage<ProjectIssue>>;
-  listPullRequests(
+  listPullRequests?(
     query: ProjectQuery,
     context: ProviderOperationContext,
   ): Promise<ProjectPage<ProjectPullRequest>>;
-  listReviews(
+  listReviews?(
     query: ProjectQuery & { readonly pullRequest: number },
     context: ProviderOperationContext,
   ): Promise<ProjectPage<ProjectReview>>;
-  listComments(
-    query: ProjectQuery & { readonly item: number },
+  listComments?(
+    query: ProjectQuery & { readonly item: number | string },
     context: ProviderOperationContext,
   ): Promise<ProjectPage<ProjectComment>>;
-  listReleases(
+  listReleases?(
     query: ProjectQuery,
     context: ProviderOperationContext,
   ): Promise<ProjectPage<ProjectRelease>>;
@@ -217,11 +238,9 @@ export interface ProjectSource {
 /** True when a provider also implements the project-source capability. */
 export function isProjectSource(value: unknown): value is ProjectSource {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Partial<ProjectSource>;
-  return (
-    typeof candidate.listIssues === 'function' &&
-    typeof candidate.listPullRequests === 'function' &&
-    typeof candidate.listReviews === 'function' &&
-    typeof candidate.listReleases === 'function'
-  );
+  // `listIssues` alone: a provider that cannot list the things a tracker exists
+  // to track is not a project source, and everything beyond that is declared
+  // per operation. The first version required four methods and would have
+  // refused the Jira provider — EPIC-071 §8.2.
+  return typeof (value as Partial<ProjectSource>).listIssues === 'function';
 }
