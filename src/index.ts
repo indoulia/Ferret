@@ -783,3 +783,15 @@ export {
   type ProjectModelResult,
   type SkippedRecord,
 } from './project/index.js';
+
+// EPIC-073. Releases, deployments, and the commit-graph walk that answers which
+// commits a release contains — the one question no release API answers.
+export {
+  MAX_RELEASE_COMMITS,
+  commitsInRelease,
+  modelReleases,
+  type AncestryOptions,
+  type AncestryWalk,
+  type ReleaseModelInput,
+  type ReleaseModelResult,
+} from './project/index.js';

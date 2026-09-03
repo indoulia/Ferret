@@ -19,3 +19,19 @@ export {
   findClosingReferences,
   type ClosingReference,
 } from './references.js';
+
+// EPIC-073. What shipped, and where it went. The ancestry walk is separate
+// because it is the only part that is a claim rather than a translation: no
+// release API says which commits a release contains.
+export {
+  modelReleases,
+  type ReleaseModelInput,
+  type ReleaseModelResult,
+} from './releases.js';
+
+export {
+  MAX_RELEASE_COMMITS,
+  commitsInRelease,
+  type AncestryOptions,
+  type AncestryWalk,
+} from './ancestry.js';

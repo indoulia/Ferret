@@ -76,16 +76,21 @@ const PULL = {
 };
 
 describe('GitHub provider — the capability', () => {
-  it('declares source.project with its five operations — AC-1', async () => {
+  it('declares source.project with the operations it implements — AC-1', async () => {
     const instance = await provider(new RecordedTransport([]));
     const declaration = instance.capabilities[0];
     expect(declaration?.capability).toBe(Capability.SOURCE_PROJECT);
+    // Five at EPIC-021, seven since EPIC-073 added deployments. Named per
+    // operation rather than claimed wholesale, so the next one added does not
+    // arrive already claimed.
     expect(declaration?.operations).toStrictEqual([
       'list-issues',
       'list-pull-requests',
       'list-reviews',
       'list-comments',
       'list-releases',
+      'list-deployments',
+      'list-deployment-statuses',
     ]);
     expect(isProjectSource(instance)).toBe(true);
   });
@@ -238,6 +243,95 @@ describe('GitHub provider — mapping', () => {
     const releases = await instance.listReleases({ project: 'o/r' }, createTestOperationContext());
     expect(releases.items[0]?.tag).toBe('v1.2.0');
     expect(releases.items[0]?.name).toBe('Spring');
+  });
+});
+
+describe('GitHub provider — deployments (EPIC-073)', () => {
+  it('declares both deployment operations — AC-12', async () => {
+    const instance = await provider(new RecordedTransport([]));
+    expect(instance.capabilities[0]?.operations).toContain('list-deployments');
+    expect(instance.capabilities[0]?.operations).toContain('list-deployment-statuses');
+  });
+
+  it('lists deployments in one request, without their statuses — AC-13', async () => {
+    // A deployment's outcome is a separate collection. Filling it in here would
+    // cost one request per deployment against somebody else's rate limit.
+    const transport = new RecordedTransport([
+      {
+        status: 200,
+        body: [
+          {
+            node_id: 'DE_1',
+            sha: 'c'.repeat(40),
+            ref: 'v2.0.0',
+            environment: 'production',
+            production_environment: true,
+            created_at: '2026-02-02T00:00:00Z',
+          },
+        ],
+        headers: healthyRateLimit(),
+      },
+    ]);
+    const instance = await provider(transport);
+    const page = await instance.listDeployments({ project: 'o/r' }, createTestOperationContext());
+    expect(transport.calls).toHaveLength(1);
+    expect(transport.calls[0]?.url).toContain('/repos/o/r/deployments');
+    const deployment = page.items[0];
+    expect(deployment?.id).toBe('DE_1');
+    expect(deployment?.revision).toBe('c'.repeat(40));
+    expect(deployment?.ref).toBe('v2.0.0');
+    expect(deployment?.production).toBe(true);
+    // No state: the record does not carry one, and inventing it here is what
+    // §8.4 refuses.
+    expect('state' in (deployment ?? {})).toBe(false);
+  });
+
+  it('maps GitHub seven status states onto the contract five — AC-14', async () => {
+    const transport = new RecordedTransport([
+      {
+        status: 200,
+        body: [
+          { node_id: 'S1', state: 'success' },
+          { node_id: 'S2', state: 'failure' },
+          { node_id: 'S3', state: 'error' },
+          { node_id: 'S4', state: 'in_progress' },
+          { node_id: 'S5', state: 'queued' },
+          { node_id: 'S6', state: 'pending' },
+          { node_id: 'S7', state: 'inactive' },
+        ],
+        headers: healthyRateLimit(),
+      },
+    ]);
+    const instance = await provider(transport);
+    const page = await instance.listDeploymentStatuses(
+      { project: 'o/r', deployment: '42' },
+      createTestOperationContext(),
+    );
+    expect(page.items.map((one) => one.lifecycle)).toStrictEqual([
+      'succeeded',
+      // `error` and `failure` differ by *who* failed, which Ferret has no use
+      // for; `queued` and `pending` are both "not started".
+      'failed',
+      'failed',
+      'in-progress',
+      'pending',
+      'pending',
+      // Superseded, not failed. Counting it as a failure would be wrong in the
+      // direction that matters.
+      'inactive',
+    ]);
+    expect(page.items[0]?.deploymentId).toBe('42');
+    // The vendor's own word is kept beside the comparable reading.
+    expect(page.items.map((one) => one.state)).toContain('error');
+  });
+
+  it('refuses a project name on the deployment paths too — AC-17', async () => {
+    const transport = new RecordedTransport([]);
+    const instance = await provider(transport);
+    await expect(
+      instance.listDeployments({ project: '../../etc' }, createTestOperationContext()),
+    ).rejects.toThrow(/owner\/repository/u);
+    expect(transport.calls).toStrictEqual([]);
   });
 });
 

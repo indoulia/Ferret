@@ -263,8 +263,11 @@ updated.
   be guessing.
 - **No caching.** An `etag` is returned to the caller and the caller decides what
   to do with it. Storing it is a sync-cursor question, which is EPIC-075's.
-- **`deployments` is declared in the capability comment and not implemented.**
-  EPIC-073 owns deployment modelling and will say what it needs.
+- ~~**`deployments` is declared in the capability comment and not implemented.**
+  EPIC-073 owns deployment modelling and will say what it needs.~~ **Closed
+  2026-09-03 by EPIC-073:** it said what it needed — `ProjectDeployment`,
+  `ProjectDeploymentStatus` and two operations — and the provider implements
+  both. Statuses stayed a separate call, for this Epic's own §8.4 reason.
 
 ## 17. Recorded during implementation
 

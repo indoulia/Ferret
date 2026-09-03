@@ -2,10 +2,13 @@ import { z } from 'zod';
 
 import { Capability, CAPABILITY_VERSIONS } from '../providers/capabilities.js';
 import {
+  DeploymentState,
   ProjectItemState,
   ProjectOperation,
   type ProjectActor,
   type ProjectComment,
+  type ProjectDeployment,
+  type ProjectDeploymentStatus,
   type ProjectIssue,
   type ProjectPage,
   type ProjectPullRequest,
@@ -85,6 +88,8 @@ export class GithubProvider extends BaseProvider implements Provider, ProjectSou
         ProjectOperation.LIST_REVIEWS,
         ProjectOperation.LIST_COMMENTS,
         ProjectOperation.LIST_RELEASES,
+        ProjectOperation.LIST_DEPLOYMENTS,
+        ProjectOperation.LIST_DEPLOYMENT_STATUSES,
       ],
       systems: [GITHUB_SOURCE_SYSTEM],
       limits: {
@@ -253,6 +258,38 @@ export class GithubProvider extends BaseProvider implements Provider, ProjectSou
     return { ...page, items: (page.raw ?? []).map((release) => toRelease(release, query.project)) };
   }
 
+  /**
+   * Deployments — EPIC-073.
+   *
+   * Without their statuses: a deployment's outcome is a separate collection, so
+   * filling it in here would cost one request per deployment against somebody
+   * else's rate limit. `listDeploymentStatuses` is the caller's choice.
+   */
+  async listDeployments(
+    query: ProjectQuery,
+    context: ProviderOperationContext,
+  ): Promise<ProjectPage<ProjectDeployment>> {
+    const page = await this.#page<GithubDeployment>(
+      `/repos/${project(query)}/deployments`,
+      query,
+      context,
+      {},
+    );
+    return { ...page, items: (page.raw ?? []).map((one) => toDeployment(one, query.project)) };
+  }
+
+  async listDeploymentStatuses(
+    query: ProjectQuery & { readonly deployment: string },
+    context: ProviderOperationContext,
+  ): Promise<ProjectPage<ProjectDeploymentStatus>> {
+    const path = `/repos/${project(query)}/deployments/${encodeURIComponent(query.deployment)}/statuses`;
+    const page = await this.#page<GithubDeploymentStatus>(path, query, context, {});
+    return {
+      ...page,
+      items: (page.raw ?? []).map((one) => toDeploymentStatus(one, query.deployment)),
+    };
+  }
+
   /** One page: the request, the conditional headers, and the cursor back. */
   async #page<T>(
     path: string,
@@ -344,6 +381,30 @@ interface GithubComment {
   readonly created_at?: string;
   readonly updated_at?: string;
   readonly html_url?: string;
+}
+
+interface GithubDeployment {
+  readonly node_id?: string;
+  readonly id?: number;
+  readonly sha?: string;
+  readonly ref?: string;
+  readonly environment?: string;
+  readonly description?: string | null;
+  readonly production_environment?: boolean;
+  readonly creator?: GithubUser;
+  readonly created_at?: string;
+  readonly updated_at?: string;
+  readonly url?: string;
+}
+
+interface GithubDeploymentStatus {
+  readonly node_id?: string;
+  readonly id?: number;
+  readonly state: string;
+  readonly environment?: string;
+  readonly description?: string | null;
+  readonly created_at?: string;
+  readonly target_url?: string;
 }
 
 interface GithubRelease {
@@ -481,6 +542,68 @@ function toRelease(release: GithubRelease, project: string): ProjectRelease {
       : { publishedAt: release.published_at }),
     ...(toActor(release.author) === undefined ? {} : { author: toActor(release.author) }),
     ...(release.html_url === undefined ? {} : { url: release.html_url }),
+  };
+}
+
+function toDeployment(deployment: GithubDeployment, project: string): ProjectDeployment {
+  return {
+    id: deployment.node_id ?? `${project}/deployment/${String(deployment.id ?? '')}`,
+    ...(deployment.sha === undefined ? {} : { revision: deployment.sha }),
+    ...(deployment.ref === undefined ? {} : { ref: deployment.ref }),
+    ...(deployment.environment === undefined ? {} : { environment: deployment.environment }),
+    ...(deployment.description === undefined || deployment.description === null
+      ? {}
+      : { description: deployment.description }),
+    ...(deployment.production_environment === undefined
+      ? {}
+      : { production: deployment.production_environment }),
+    ...(toActor(deployment.creator) === undefined ? {} : { creator: toActor(deployment.creator) }),
+    ...(deployment.created_at === undefined ? {} : { createdAt: deployment.created_at }),
+    ...(deployment.updated_at === undefined ? {} : { updatedAt: deployment.updated_at }),
+    ...(deployment.url === undefined ? {} : { url: deployment.url }),
+  };
+}
+
+/**
+ * GitHub's seven status states, as the contract's five.
+ *
+ * `error` and `failure` are both failures — GitHub distinguishes them by *who*
+ * failed, the deployment or the system reporting it, and Ferret has no use for
+ * that distinction. `queued` and `pending` are both "not started yet".
+ * `inactive` is its own thing: superseded by a later deployment, which is not a
+ * failure and must not be counted as one.
+ */
+function toDeploymentState(state: string): DeploymentState {
+  switch (state.toLowerCase()) {
+    case 'success':
+      return DeploymentState.SUCCEEDED;
+    case 'failure':
+    case 'error':
+      return DeploymentState.FAILED;
+    case 'in_progress':
+      return DeploymentState.IN_PROGRESS;
+    case 'inactive':
+      return DeploymentState.INACTIVE;
+    default:
+      return DeploymentState.PENDING;
+  }
+}
+
+function toDeploymentStatus(
+  status: GithubDeploymentStatus,
+  deploymentId: string,
+): ProjectDeploymentStatus {
+  return {
+    id: status.node_id ?? `${deploymentId}/status/${String(status.id ?? '')}`,
+    deploymentId,
+    state: status.state,
+    lifecycle: toDeploymentState(status.state),
+    ...(status.environment === undefined ? {} : { environment: status.environment }),
+    ...(status.description === undefined || status.description === null
+      ? {}
+      : { description: status.description }),
+    ...(status.created_at === undefined ? {} : { createdAt: status.created_at }),
+    ...(status.target_url === undefined ? {} : { url: status.target_url }),
   };
 }
 
