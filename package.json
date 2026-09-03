@@ -40,6 +40,10 @@
       "types": "./dist/git/index.d.ts",
       "default": "./dist/git/index.js"
     },
+    "./github": {
+      "types": "./dist/github/index.d.ts",
+      "default": "./dist/github/index.js"
+    },
     "./mcp": {
       "types": "./dist/mcp/index.d.ts",
       "default": "./dist/mcp/index.js"

@@ -131,7 +131,7 @@ Recorded rather than glossed over, per Governance §6 and AI Development Rule §
 
 | Limitation | Impact | Owner |
 | --- | --- | --- |
-| **Seven of eight capabilities have no implementation.** Only `storage` is offered by a real provider. | The contracts are exercised through the registry and one real provider; the rest are shapes waiting for their Epic. This is the honest state of a foundation Epic, not a gap in it. | **EPIC-017**, **EPIC-021**, **EPIC-024**, **EPIC-054**, **EPIC-064**, **EPIC-071** |
+| ~~**Seven of eight capabilities have no implementation.** Only `storage` is offered by a real provider.~~ **Re-measured 2026-09-03, on EPIC-021:** seven of eight now are. `storage` (EPIC-002), `source.repository`, `source.history` and `source.file` (EPIC-017/019), `parser` (EPIC-024 through EPIC-029), `mcp` (EPIC-064), and `source.project` (EPIC-021, GitHub). | Only `embedding` remains a shape waiting for its Epic. | **EPIC-054** |
 | Capability contracts declare *what* a provider offers, not the **method signatures** it must implement. | A `source.repository` provider knows it must enumerate repositories; the exact interface is defined by the Epic that first needs it. Fixing signatures now would be designing against imagined requirements. | **EPIC-012** (SDK) and each consuming Epic |
 | Selection is by registration order, with no scoring or preference. | Deterministic and explicit, which is the right default. A user with two source providers cannot yet express a preference. | **EPIC-013** (Discovery), **EPIC-015** (Configuration) |
 | Cancellation and error-classification invariants are stated but unverified. | See §4. | **EPIC-016** |

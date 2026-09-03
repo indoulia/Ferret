@@ -1,0 +1,227 @@
+import type { ProviderOperationContext } from '../sdk/operation.js';
+
+/**
+ * What a `source.project` provider is asked, and what it returns — EPIC-021.
+ *
+ * `Capability.SOURCE_PROJECT` has existed since EPIC-013 with the comment
+ * *"Issues, pull requests, reviews, releases, deployments"* and no contract
+ * behind it. This is the contract, and it is deliberately written for two
+ * providers at once: GitHub here, Jira in EPIC-071. A contract shaped around one
+ * vendor's JSON is a contract the second provider has to break.
+ *
+ * **It returns records, not knowledge.** Turning a pull request into entities,
+ * relationships and evidence is EPIC-072's; turning a release into a deployment
+ * fact is EPIC-073's. The separation is the same one EPIC-024 draws between a
+ * parser and the canonical model, and for the same reason: a transport that
+ * also modelled would make every modelling change a transport change.
+ */
+
+/** What a provider offers. Declared per operation, never wholesale. */
+export const ProjectOperation = {
+  /** Enumerate issues. */
+  LIST_ISSUES: 'list-issues',
+  /** Enumerate pull requests, or a tracker's equivalent. */
+  LIST_PULL_REQUESTS: 'list-pull-requests',
+  /** Enumerate the reviews on one pull request. */
+  LIST_REVIEWS: 'list-reviews',
+  /** Enumerate comments on an issue or pull request. */
+  LIST_COMMENTS: 'list-comments',
+  /** Enumerate releases. */
+  LIST_RELEASES: 'list-releases',
+} as const;
+
+export type ProjectOperation = (typeof ProjectOperation)[keyof typeof ProjectOperation];
+
+/**
+ * Where a record is in its own lifecycle.
+ *
+ * Three states, because they are what every tracker agrees on. A vendor's own
+ * status — `in review`, `blocked`, a custom workflow column — is richer and is
+ * kept verbatim in `state`, which is the honest place for a value Ferret cannot
+ * compare across systems.
+ */
+export const ProjectItemState = {
+  OPEN: 'open',
+  CLOSED: 'closed',
+  MERGED: 'merged',
+} as const;
+
+export type ProjectItemState = (typeof ProjectItemState)[keyof typeof ProjectItemState];
+
+/**
+ * A person, as the source system names them.
+ *
+ * `identity` is the provider-scoped stable id — a GitHub node id, a Jira account
+ * id — and is what EPIC-040's resolution keys on. `login` and `email` are
+ * whatever the system chose to expose, and either may be absent: GitHub hides
+ * an email by default, and a deleted account has no login at all.
+ */
+export interface ProjectActor {
+  readonly identity: string;
+  readonly login?: string;
+  readonly displayName?: string;
+  readonly email?: string;
+}
+
+/**
+ * Fields every project record carries.
+ *
+ * `body` is **untrusted text a stranger wrote**. It is carried verbatim and is
+ * never interpreted here: an issue body containing instructions is data, and
+ * the MCP surface already says so of everything it renders.
+ */
+export interface ProjectRecord {
+  /** Stable within the source system. `owner/repo#123`, `PROJ-45`. */
+  readonly id: string;
+  /** The number a person would quote. */
+  readonly number?: number;
+  readonly title: string;
+  readonly body?: string;
+  readonly state: string;
+  /** The comparable reading of `state`. */
+  readonly lifecycle: ProjectItemState;
+  readonly url?: string;
+  readonly author?: ProjectActor;
+  /** ISO-8601, as the source reported it. */
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly closedAt?: string;
+  readonly labels?: readonly string[];
+}
+
+export interface ProjectIssue extends ProjectRecord {
+  readonly assignees?: readonly ProjectActor[];
+}
+
+export interface ProjectPullRequest extends ProjectRecord {
+  readonly sourceBranch?: string;
+  readonly targetBranch?: string;
+  /** The merge commit, when there is one. EPIC-072 joins this to history. */
+  readonly mergeCommit?: string;
+  readonly mergedAt?: string;
+  readonly draft?: boolean;
+  readonly requestedReviewers?: readonly ProjectActor[];
+}
+
+/** One review. `state` is the vendor's; `approved` is the comparable reading. */
+export interface ProjectReview {
+  readonly id: string;
+  readonly pullRequestId: string;
+  readonly reviewer?: ProjectActor;
+  readonly state: string;
+  readonly approved: boolean;
+  readonly body?: string;
+  readonly submittedAt?: string;
+}
+
+export interface ProjectComment {
+  readonly id: string;
+  /** The issue or pull request this belongs to. */
+  readonly parentId: string;
+  readonly author?: ProjectActor;
+  readonly body: string;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly url?: string;
+}
+
+export interface ProjectRelease {
+  readonly id: string;
+  readonly tag: string;
+  readonly name?: string;
+  readonly body?: string;
+  readonly draft?: boolean;
+  readonly prerelease?: boolean;
+  readonly publishedAt?: string;
+  readonly author?: ProjectActor;
+  readonly url?: string;
+}
+
+/**
+ * One page, and how to ask for the next.
+ *
+ * `cursor` is opaque and provider-defined — a GitHub `Link` URL, a Jira
+ * `startAt`. A caller that constructed one itself would be guessing at a
+ * pagination scheme it cannot see, which EPIC-075 already refused for sync
+ * cursors.
+ *
+ * `unchanged` is the conditional-request answer: the server said nothing has
+ * changed since the caller's `etag`, so there are no items *and that is not the
+ * same as an empty page*. Collapsing the two would make "nothing exists" and
+ * "nothing changed" the same fact.
+ */
+export interface ProjectPage<T> {
+  readonly items: readonly T[];
+  readonly cursor?: string;
+  readonly etag?: string;
+  readonly unchanged?: boolean;
+}
+
+export interface ProjectQuery {
+  /** The repository or project, as the provider names it: `owner/repo`. */
+  readonly project: string;
+  /** Continue from a previous page. */
+  readonly cursor?: string;
+  /** Only records updated at or after this ISO-8601 instant. */
+  readonly since?: string;
+  /** From a previous page, for a conditional request. */
+  readonly etag?: string;
+  /** Provider-enforced ceiling applies regardless. */
+  readonly pageSize?: number;
+  /** Include records the source considers closed. Default: everything. */
+  readonly state?: ProjectItemState;
+}
+
+/**
+ * What the source system says about how much traffic is left.
+ *
+ * Reported rather than hidden, because a caller that cannot see the budget
+ * cannot pace itself, and a provider that silently blocks for an hour is
+ * indistinguishable from one that hung. EPIC-021 §8.4.
+ */
+export interface ProjectRateLimit {
+  readonly limit: number;
+  readonly remaining: number;
+  /** ISO-8601 instant at which `remaining` returns to `limit`. */
+  readonly resetsAt?: string;
+  /** The provider stopped short of the limit deliberately. */
+  readonly reserved?: number;
+}
+
+/** The `source.project` capability. */
+export interface ProjectSource {
+  listIssues(
+    query: ProjectQuery,
+    context: ProviderOperationContext,
+  ): Promise<ProjectPage<ProjectIssue>>;
+  listPullRequests(
+    query: ProjectQuery,
+    context: ProviderOperationContext,
+  ): Promise<ProjectPage<ProjectPullRequest>>;
+  listReviews(
+    query: ProjectQuery & { readonly pullRequest: number },
+    context: ProviderOperationContext,
+  ): Promise<ProjectPage<ProjectReview>>;
+  listComments(
+    query: ProjectQuery & { readonly item: number },
+    context: ProviderOperationContext,
+  ): Promise<ProjectPage<ProjectComment>>;
+  listReleases(
+    query: ProjectQuery,
+    context: ProviderOperationContext,
+  ): Promise<ProjectPage<ProjectRelease>>;
+  /** What the last response said about the budget, without spending any. */
+  rateLimit(): ProjectRateLimit | undefined;
+}
+
+/** True when a provider also implements the project-source capability. */
+export function isProjectSource(value: unknown): value is ProjectSource {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<ProjectSource>;
+  return (
+    typeof candidate.listIssues === 'function' &&
+    typeof candidate.listPullRequests === 'function' &&
+    typeof candidate.listReviews === 'function' &&
+    typeof candidate.listReleases === 'function'
+  );
+}

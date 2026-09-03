@@ -142,7 +142,13 @@ describe('a limitation is not parked on a closed Epic — issue #117', () => {
           `${one.file}:${String(one.line)} → EPIC-${one.epic} (${String(statuses.get(one.epic))})`,
       );
 
-    expect(parked.length, parked.join('\n')).toBe(72);
+    // 72 -> 68 on 2026-09-03, EPIC-021. Not because the sweep changed: making
+    // EPIC-021 VALIDATED would have parked a *seventy-third* row, and the row
+    // in question -- "seven of eight capabilities have no implementation" --
+    // had been stale for a dozen Epics. Re-measured and rewritten rather than
+    // re-pinned, which removed five parked owners and added none. The pin
+    // moves down when a claim is corrected; that it moves at all is the point.
+    expect(parked.length, parked.join('\n')).toBe(68);
   });
 
   it('permits a limitation with no owner, which is an honest absence', () => {

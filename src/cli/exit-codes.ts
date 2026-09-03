@@ -59,6 +59,13 @@ const BY_ERROR_CODE: Readonly<Record<ErrorCode, ExitCode>> = {
   [ErrorCode.CONFIG_INVALID]: ExitCode.CONFIG,
   [ErrorCode.CONFIG_MISSING]: ExitCode.CONFIG,
   [ErrorCode.DEPENDENCY_UNAVAILABLE]: ExitCode.DEPENDENCY,
+  // A remote source system is an external dependency like any other — EPIC-021.
+  // Both map to `DEPENDENCY` deliberately: a script retries the same way whether
+  // GitHub is down or the token is wrong, and the *message* is what tells an
+  // operator which. Giving a bad token its own exit code would imply Ferret can
+  // tell a revoked token from an expired one, and it cannot.
+  [ErrorCode.SOURCE_UNAUTHORIZED]: ExitCode.DEPENDENCY,
+  [ErrorCode.SOURCE_UNAVAILABLE]: ExitCode.DEPENDENCY,
   [ErrorCode.DEPENDENCY_UNSUPPORTED]: ExitCode.DEPENDENCY,
   [ErrorCode.LIFECYCLE_INVALID_STATE]: ExitCode.ERROR,
   [ErrorCode.INITIALIZATION_FAILED]: ExitCode.ERROR,

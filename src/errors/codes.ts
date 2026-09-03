@@ -87,6 +87,23 @@ export const ErrorCode = {
    * distinguished them would let a caller probe for a token's existence.
    */
   CONFIRMATION_INVALID: 'E_CONFIRMATION_INVALID',
+  /**
+   * A remote source system refused the credential Ferret presented — EPIC-021.
+   *
+   * Distinct from `NOT_PERMITTED`, which is *Ferret's* authorization decision
+   * about its own caller. This one is somebody else's system saying no, and the
+   * remediation is a token rather than a grant. Conflating them would send a
+   * user to `ferret` when the fix is on GitHub.
+   */
+  SOURCE_UNAUTHORIZED: 'E_SOURCE_UNAUTHORIZED',
+  /**
+   * A remote source system is unreachable, failing, or rate-limiting — EPIC-021.
+   *
+   * Retryable by construction: unlike `DEPENDENCY_UNAVAILABLE`, which reports a
+   * missing local tool that no amount of waiting installs, this says the system
+   * exists and is not answering *now*.
+   */
+  SOURCE_UNAVAILABLE: 'E_SOURCE_UNAVAILABLE',
   /** The capability exists in the roadmap but is not implemented in this release. */
   NOT_IMPLEMENTED: 'E_NOT_IMPLEMENTED',
   /** The operation was interrupted by a signal. */
