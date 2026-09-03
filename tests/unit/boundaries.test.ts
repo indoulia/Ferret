@@ -525,6 +525,30 @@ describe('GitHub provider boundary — EPIC-021 AC-20', () => {
   });
 });
 
+describe('Jira provider boundary — EPIC-071', () => {
+  const jira = importGraph('jira/index.ts');
+  const github = importGraph('github/index.ts');
+
+  it('reaches neither storage, the CLI, nor the other provider', () => {
+    // The last of those is the point of this Epic: a second implementation that
+    // imported the first would be a subclass wearing a provider's clothes, and
+    // would prove nothing about whether the contract generalises.
+    expect([...jira.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+    expect([...jira.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
+    expect([...jira.files].filter((file) => file.startsWith('github/'))).toStrictEqual([]);
+    expect([...github.files].filter((file) => file.startsWith('jira/'))).toStrictEqual([]);
+  });
+
+  it('adds nothing to the core dependency set', () => {
+    expect([...packageNames(jira)].sort()).toStrictEqual([...ALLOWED_CORE_PACKAGES].sort());
+  });
+
+  it('speaks the same contract the GitHub provider does', () => {
+    expect(jira.files).toContain('providers/contracts/source-project.ts');
+    expect(github.files).toContain('providers/contracts/source-project.ts');
+  });
+});
+
 describe('project modelling boundary — EPIC-072 AC-17', () => {
   const project = importGraph('project/index.ts');
 

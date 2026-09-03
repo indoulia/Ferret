@@ -115,6 +115,7 @@ describe('the package a consumer installs', () => {
       '.',
       './git',
       './github',
+      './jira',
       './mcp',
       './package.json',
       './parsers',

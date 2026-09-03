@@ -167,7 +167,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 
 ### External Project Knowledge
 
-- **EPIC-071 — Jira Provider** — P1
+- **EPIC-071 — Jira Provider** — P1 — VALIDATED ([spec](EPIC-071-Jira-Provider.md), [evidence](validation/EPIC-071-VALIDATION.md))
 - **EPIC-072 — Pull Request & Review Modeling** — P1 — VALIDATED ([spec](EPIC-072-Pull-Request-And-Review-Modeling.md), [evidence](validation/EPIC-072-VALIDATION.md))
 - **EPIC-073 — Release & Deployment Modeling** — P1 — VALIDATED ([spec](EPIC-073-Release-And-Deployment-Modeling.md), [evidence](validation/EPIC-073-VALIDATION.md))
 - **EPIC-074 — External Provider Extension Framework** — P2
