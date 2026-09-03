@@ -219,9 +219,35 @@ export interface IndexableSource {
   }>;
   readHistory(
     repository: DiscoveredRepository,
-    request: { revision?: string; limit?: number; since?: string; withChanges?: boolean },
+    request: {
+      revision?: string;
+      limit?: number;
+      cursor?: string;
+      since?: string;
+      exclude?: readonly string[];
+      withChanges?: boolean;
+    },
     context: ProviderOperationContext,
-  ): Promise<{ commits: readonly { committedAt: string }[] }>;
+  ): Promise<{
+    commits: readonly { committedAt: string; sha?: string }[];
+    /**
+     * Present when the page was cut short — the same signal `listBranches` and
+     * `listFiles` carry, and for the same reason.
+     *
+     * It was declared on both of those and not on this one, and the omission
+     * was not visible: the provider returned it, the port did not name it, and
+     * the run then advanced its position past commits it had never read. A
+     * bounded read whose bound the caller cannot see is a silent truncation.
+     */
+    cursor?: string | undefined;
+    /**
+     * The commit `revision` names now, when the provider can say.
+     *
+     * What the next run excludes. A position, rather than a date that happens
+     * to belong to a commit.
+     */
+    tip?: string | undefined;
+  }>;
   listFiles(
     repository: DiscoveredRepository,
     request: { revision?: string; limit?: number },
@@ -494,7 +520,18 @@ export class RepositoryIndexer {
     const watermarkScope = watermarkScopeId(repositoryEntity.id, options.revision);
 
     const previous = options.full === true ? undefined : await this.#readWatermark(watermarkScope);
-    const since = typeof previous?.lastCommitAt === 'string' ? previous.lastCommitAt : undefined;
+    const previousTips = readTips(previous);
+    const previousCommitAt = typeof previous?.lastCommitAt === 'string' ? previous.lastCommitAt : undefined;
+    // Reachability when the last run left tips, the date otherwise. Never both:
+    // a date filter applied on top of an exclusion would reintroduce exactly
+    // the commits the exclusion exists to stop losing.
+    //
+    // `previousCommitAt` is still carried forward whichever is used. It is no
+    // longer what a run resumes *from*, but it is still what the run reports and
+    // what "how far behind" is measured from, and a resumed run that read
+    // nothing new must not report that it has read nothing at all.
+    const exclude = previousTips;
+    const since = exclude.length > 0 ? undefined : previousCommitAt;
 
     const entities = counter();
     const relationships = counter();
@@ -735,32 +772,68 @@ export class RepositoryIndexer {
       await this.#tracer.span('index.files', runFileStage, { metric: Metric.INDEX_STAGE_MS });
     }
 
-    // Stage 2 — history, bounded by the watermark unless a full run was asked
-    // for.
+    // Stage 2 — history, resumed from what the last run read.
     //
-    // `--since` has second granularity and an inclusive boundary, so the
-    // watermark commit itself is re-read every run. That is deliberate: moving
-    // the boundary forward by a second to avoid it would risk skipping a sibling
-    // commit made in the same second, and silently losing history is far worse
-    // than re-reading one commit whose write is already idempotent.
+    // **Every page, not the first one.** The provider bounds a read and says so
+    // by returning a cursor; the run follows it until there is none. Reading one
+    // page and then recording a position past its end is how a repository larger
+    // than a page silently lost everything older than it (F-01), and no later
+    // run went back: the position had already moved beyond the commits that were
+    // never read.
+    //
+    // **Excluded by reachability, not filtered by date**, when a previous
+    // position is available. `--since` asks "is this commit newer than a date",
+    // which is a property of the commit rather than of what Ferret has seen: a
+    // branch merged after it was written, a rebase, an imported history and a
+    // clock an hour fast are all commits Ferret has never read whose dates say
+    // they are old. `^<tip>` asks the only question that matters — is this
+    // reachable from something already read — and Git answers it exactly.
+    //
+    // `since` remains the fallback for a position written before tips existed,
+    // so an upgrade does not force a full re-read of every repository.
     let commitsRead = 0;
-    let newestCommitAt = since;
+    let newestCommitAt = previousCommitAt;
+    let tips: readonly string[] = previousTips;
     if (options.withHistory !== false) {
       throwIfAborted(context.signal, 'index.history');
-      const page = await this.#source.readHistory(
-        repository,
-        {
-          ...(options.revision === undefined ? {} : { revision: options.revision }),
-          ...(options.historyLimit === undefined ? {} : { limit: options.historyLimit }),
-          ...(since === undefined ? {} : { since }),
-          withChanges: options.withChanges !== false,
-        },
-        context,
-      );
-      commitsRead = page.commits.length;
-      newestCommitAt = newest(page.commits, since);
-      const graph = this.#source.emitHistory(repository, page.commits as readonly never[], { observedAt });
-      await write(withoutRewrittenFiles(graph, writtenFiles));
+      let cursor: string | undefined;
+      let pages = 0;
+      do {
+        throwIfAborted(context.signal, 'index.history');
+        const page = await this.#source.readHistory(
+          repository,
+          {
+            ...(options.revision === undefined ? {} : { revision: options.revision }),
+            ...(options.historyLimit === undefined ? {} : { limit: options.historyLimit }),
+            ...(cursor === undefined ? {} : { cursor }),
+            // Every page, not only the first. A cursor is an offset into *this*
+            // walk; carrying the offset without the filter that defined the walk
+            // would page into a different history and skip precisely the commits
+            // the exclusion was meant to find.
+            ...(exclude.length === 0 ? {} : { exclude }),
+            ...(exclude.length > 0 || since === undefined ? {} : { since }),
+            withChanges: options.withChanges !== false,
+          },
+          context,
+        );
+        commitsRead += page.commits.length;
+        newestCommitAt = newest(page.commits, newestCommitAt);
+        if (page.tip !== undefined) tips = rememberTip(tips, page.tip);
+        const graph = this.#source.emitHistory(repository, page.commits as readonly never[], { observedAt });
+        await write(withoutRewrittenFiles(graph, writtenFiles));
+        cursor = page.cursor;
+        pages += 1;
+        // A provider that returned a cursor for ever would page for ever. The
+        // bound is deliberately far above any real history at this page size,
+        // and hitting it is a provider defect rather than a large repository.
+        if (pages >= MAX_HISTORY_PAGES && cursor !== undefined) {
+          this.#logger?.warn(
+            { operation: 'index.history', repository: repositoryEntity.id, pages },
+            'History paging stopped at its bound; the read is incomplete',
+          );
+          break;
+        }
+      } while (cursor !== undefined);
     }
 
     if (!contentStage.run) {
@@ -795,12 +868,12 @@ export class RepositoryIndexer {
     // The watermark moves only after everything above succeeded. A run that
     // failed halfway must be repeated, not resumed from a position it never
     // reached — Governance §6, never claim to know something you did not.
-    await this.#writeWatermark(watermarkScope, newestCommitAt, observedAt);
+    await this.#writeWatermark(watermarkScope, newestCommitAt, tips, observedAt);
 
     const report: IndexReport = {
       repositoryId: repositoryEntity.id,
       repositoryKey: repository.identityKey,
-      incremental: since !== undefined,
+      incremental: since !== undefined || exclude.length > 0,
       entities: entities.counts,
       relationships: relationships.counts,
       evidence: { recorded, deduplicated },
@@ -1056,10 +1129,18 @@ export class RepositoryIndexer {
   async #writeWatermark(
     repositoryId: string,
     lastCommitAt: string | undefined,
+    tips: readonly string[],
     now: Date,
   ): Promise<void> {
+    // `lastCommitAt` is no longer what the next run resumes from — `tips` is —
+    // but it is still what "how far behind is this source" is measured from, so
+    // it is clamped to now. A commit dated in the future is a repository's
+    // mistake, and carrying it into the position made that mistake Ferret's:
+    // the stored date outran every real commit and the source went quiet.
+    const clamped = clampToNow(lastCommitAt, now);
     const position = {
-      ...(lastCommitAt === undefined ? {} : { lastCommitAt }),
+      ...(clamped === undefined ? {} : { lastCommitAt: clamped }),
+      ...(tips.length === 0 ? {} : { tips: [...tips] }),
       indexedAt: now.toISOString(),
     };
     if (this.#cursors !== undefined) {
@@ -1076,10 +1157,7 @@ export class RepositoryIndexer {
         scopeId: repositoryId,
         producer: INDEXER_PRODUCER,
         producerVersion: VERSION,
-        metadata: {
-          ...(lastCommitAt === undefined ? {} : { lastCommitAt }),
-          indexedAt: now.toISOString(),
-        },
+        metadata: position,
       },
       now,
     );
@@ -1147,6 +1225,58 @@ function counter(): { record(outcome: string): void; readonly counts: WriteCount
       return { created, updated, unchanged };
     },
   };
+}
+
+/**
+ * How many pages one history read will follow.
+ *
+ * At the provider's page size this is far more history than any repository has,
+ * and it exists only so a provider that returned a cursor for ever could not
+ * make a run unbounded. Hitting it is a provider defect, and the run says so
+ * rather than reporting a complete read.
+ */
+const MAX_HISTORY_PAGES = 10_000;
+
+/** How many tips a position carries. Well above one per branch anyone indexes. */
+const MAX_TIPS = 64;
+
+/**
+ * The commits a stored position says were already read.
+ *
+ * Absent on a position written before tips existed, and on one written by a run
+ * that read no history. Both mean the same thing to the caller — there is no
+ * exclusion to apply — and neither is an error.
+ */
+function readTips(position: Readonly<Record<string, unknown>> | undefined): readonly string[] {
+  const tips = position?.['tips'];
+  if (!Array.isArray(tips)) return [];
+  return tips.filter((tip): tip is string => typeof tip === 'string' && /^[0-9a-f]{7,64}$/.test(tip));
+}
+
+/**
+ * The tip set, with this run's tip in it.
+ *
+ * Newest first and bounded, so indexing many branches in turn cannot grow a
+ * position without limit. Dropping the oldest tip costs a re-read of commits
+ * that are already written — idempotent — rather than a gap.
+ */
+function rememberTip(tips: readonly string[], tip: string): readonly string[] {
+  return [tip, ...tips.filter((existing) => existing !== tip)].slice(0, MAX_TIPS);
+}
+
+/**
+ * A commit instant, never later than the instant it was observed.
+ *
+ * The stored date is a fact about how far Ferret has read, and a commit dated
+ * in 2035 is not evidence that Ferret has read 2035. Clamping keeps "how far
+ * behind is this source" answerable; it is no longer load-bearing for
+ * *resuming*, which is why the clamp is safe to apply at all.
+ */
+function clampToNow(instant: string | undefined, now: Date): string | undefined {
+  if (instant === undefined) return undefined;
+  const parsed = Date.parse(instant);
+  if (Number.isNaN(parsed)) return undefined;
+  return parsed > now.getTime() ? now.toISOString() : instant;
 }
 
 /**

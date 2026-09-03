@@ -62,7 +62,7 @@ import {
   readBlob,
   type TreeEntry,
 } from './files.js';
-import { ChangeKind, readHistory, type CommitRecord } from './history.js';
+import { ChangeKind, knownCommits, readHistory, resolveCommit, type CommitRecord } from './history.js';
 import { listBranches, listWorktrees } from './refs.js';
 import { RepositoryIdentitySource, maskRemote, normalizeRemote, repositoryIdentity } from './identity.js';
 import { runGit } from './runner.js';
@@ -484,23 +484,55 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
    *
    * Paged by offset. `git log --skip` walks the history to reach the offset, so
    * this is O(offset) on a deep repository — acceptable for the first pages and
-   * wrong for the ten-thousandth. The read that actually matters for a running
-   * Ferret is the *incremental* one, `since`, which walks only what is new; a
-   * better deep-paging strategy belongs with the Epic that schedules indexing.
+   * wrong for the ten-thousandth. A caller reading a whole history follows
+   * `cursor` until it is absent; a caller resuming passes `exclude`, which
+   * makes the walk proportional to what is new rather than to what exists.
+   *
+   * `tip` is the commit `revision` names *now*. It is the position a later
+   * incremental read excludes, and it is reported whether or not this page was
+   * the first: a caller that read nothing new still needs to know where the
+   * ref stands.
    */
   async readHistory(
     repository: DiscoveredRepository,
-    request: { revision?: string; limit?: number; skip?: number; since?: string; withChanges?: boolean },
+    request: {
+      revision?: string;
+      limit?: number;
+      skip?: number;
+      cursor?: string;
+      since?: string;
+      exclude?: readonly string[];
+      withChanges?: boolean;
+    },
     context: ProviderOperationContext,
-  ): Promise<{ commits: readonly CommitRecord[]; cursor: string | undefined }> {
-    const skip = request.skip ?? 0;
+  ): Promise<{
+    commits: readonly CommitRecord[];
+    cursor: string | undefined;
+    tip: string | undefined;
+  }> {
+    const options = this.#gitOptions(repository, context);
+    const skip = request.cursor === undefined ? (request.skip ?? 0) : this.#decodeHistoryCursor(request.cursor);
+    // Dropped rather than passed through: an id this repository no longer holds
+    // makes `git log` fail, and a failed read here is indistinguishable from an
+    // empty one. Reading more than necessary is the safe direction.
+    const exclude =
+      request.exclude === undefined || request.exclude.length === 0
+        ? []
+        : await knownCommits(options, request.exclude);
+
     const page = await readHistory({
-      ...this.#gitOptions(repository, context),
+      ...options,
       ...(request.revision === undefined ? {} : { revision: request.revision }),
       ...(request.limit === undefined ? {} : { limit: request.limit }),
       ...(request.since === undefined ? {} : { since: request.since }),
+      ...(exclude.length === 0 ? {} : { exclude }),
       ...(request.withChanges === undefined ? {} : { withChanges: request.withChanges }),
       skip,
+    });
+
+    const tip = await resolveCommit({
+      ...options,
+      ...(request.revision === undefined ? {} : { revision: request.revision }),
     });
 
     return {
@@ -508,7 +540,19 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       cursor: page.truncated
         ? encodeCursor(this.id, Capability.SOURCE_REPOSITORY, { skip: skip + page.commits.length })
         : undefined,
+      tip,
     };
+  }
+
+  #decodeHistoryCursor(cursor: string): number {
+    return decodeCursor(this.id, Capability.SOURCE_REPOSITORY, cursor, (state) => {
+      if (typeof state !== 'object' || state === null) throw new Error('not a history cursor');
+      const { skip } = state as { skip?: unknown };
+      if (typeof skip !== 'number' || !Number.isInteger(skip) || skip < 0) {
+        throw new Error('not a history cursor');
+      }
+      return skip;
+    });
   }
 
   /**

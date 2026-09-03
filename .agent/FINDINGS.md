@@ -4,11 +4,11 @@ Full evidence: `docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md`.
 Full triage: `docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md`.
 All 100 findings were re-verified against `0407618` before being recorded.
 
-## P0 (1)
-- **F-01** history capped at 1 000 commits, watermark advanced to the newest of a newest-first page → permanent silent loss on any larger repository; `--full` cannot recover.
+## P0 (1) — CLOSED in Batch 1
+- **F-01** *(fixed)* history capped at 1 000 commits, watermark advanced to the newest of a newest-first page → permanent silent loss on any larger repository; `--full` cannot recover.
 
-## P1-A — production blockers (24)
-Ingestion: **F-02** (all branches share one watermark), **F-03** (future-dated commit stalls ingestion for ever), **F-04** (back-dated merge → parentless stub commits).
+## P1-A — production blockers (24; 3 closed)
+Ingestion — **CLOSED in Batch 1**: **F-02** (all branches share one watermark), **F-03** (future-dated commit stalls ingestion for ever), **F-04** (back-dated merge -> parentless stub commits).
 Storage/install: **F-16** (migrate before pgvector; unrepairable, version lies), **F-17** (backup that import refuses), **F-29** (document-supplied column names interpolated into SQL), **F-30** (DB password to stdout, exit 0).
 Untrusted input: **F-60** (zip bound trusts the declared size), **F-61** (docx bypasses the bounded reader), **F-94** (`i18n.logOutputEncoding` fabricates commits under chosen SHAs), **F-95** (undatable commit desyncs the parser, fabricates file entities).
 Truthfulness: **F-05** (deleted entity answered as current), **F-06** (supersession collapses multi-valued fields), **F-23** (corrupt xlsx = successful empty parse, cached), **F-24** (spans name the wrong bytes), **F-25** (+**F-25b**) (same-file homonym edges; duplicate open intervals), **F-27** (unresolved references discarded), **F-28** (traversal truncation unreported), **F-31** (withheld rows dropped, `truncated: false`).

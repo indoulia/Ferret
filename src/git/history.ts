@@ -97,6 +97,22 @@ export interface ReadHistoryOptions extends GitRunOptions {
   readonly skip?: number;
   /** Only commits after this instant, for an incremental read. */
   readonly since?: string;
+  /**
+   * Commits already read, and everything they reach, excluded from the walk.
+   *
+   * This is what an incremental read should be, and `since` is not. A date is a
+   * value the repository chooses and it does not order the commit graph: a
+   * branch merged after being written, a rebase, an imported history and a
+   * wrong clock are all commits Ferret has never seen whose dates say
+   * otherwise. Reachability has none of those cases — a commit is either
+   * reachable from something already read, or it is new — and it is the
+   * question Git is built to answer.
+   *
+   * Every value must be an object id, and each is passed as `^<oid>`. A `^`
+   * prefix cannot be read as an option, which `--not` before a caller-supplied
+   * list could be.
+   */
+  readonly exclude?: readonly string[];
   /** Include per-commit file changes. Costs Git a diff per commit. */
   readonly withChanges?: boolean;
 }
@@ -138,6 +154,16 @@ export async function readHistory(options: ReadHistoryOptions): Promise<HistoryP
   const revision = options.revision ?? 'HEAD';
   assertSafeRevision(revision);
 
+  const exclude = options.exclude ?? [];
+  for (const oid of exclude) {
+    if (!SHA.test(oid)) {
+      throw new FerretError(ErrorCode.USAGE, 'An excluded commit must be an object id', {
+        details: { exclude: oid },
+        remediation: 'Pass the commit ids a previous read returned.',
+      });
+    }
+  }
+
   const args = [
     'log',
     '-z',
@@ -149,6 +175,7 @@ export async function readHistory(options: ReadHistoryOptions): Promise<HistoryP
     ...(options.since === undefined ? [] : [`--since=${options.since}`]),
     ...(options.withChanges === true ? ['--name-status', '--find-renames'] : []),
     revision,
+    ...exclude.map((oid) => `^${oid}`),
     // Everything after this is a path, never an option. Nothing follows, which
     // is the point: it closes the argument list.
     '--',
@@ -166,6 +193,52 @@ export async function readHistory(options: ReadHistoryOptions): Promise<HistoryP
     commits: commits.slice(0, limit),
     truncated: commits.length > limit,
   };
+}
+
+/**
+ * The commit a revision names, or `undefined` when it names none.
+ *
+ * The position an incremental read resumes from. An empty repository, a ref
+ * that was deleted and a revision that never existed all answer `undefined`
+ * rather than failing: none of them is an error, and each means the same thing
+ * to a caller — there is no tip here to remember.
+ */
+export async function resolveCommit(
+  options: GitRunOptions & { readonly revision?: string },
+): Promise<string | undefined> {
+  const revision = options.revision ?? 'HEAD';
+  assertSafeRevision(revision);
+
+  const result = await runGit(['rev-parse', '--verify', '--quiet', `${revision}^{commit}`], {
+    ...options,
+    allowFailure: true,
+  });
+  if (result.exitCode !== 0) return undefined;
+  const oid = result.stdout.trim();
+  return SHA.test(oid) ? oid : undefined;
+}
+
+/**
+ * The subset of `oids` this repository still holds as commits.
+ *
+ * A stored position can name a commit that is no longer here — a rewritten
+ * history, a deleted branch, a pruned object. Excluding it would make `git log`
+ * fail, and a failed read here returns "no commits" (an empty repository and a
+ * broken argument are the same exit code), so a stale position would look
+ * exactly like a repository with nothing new in it. Dropping what is gone
+ * degrades to reading more, which is the safe direction.
+ */
+export async function knownCommits(
+  options: GitRunOptions,
+  oids: readonly string[],
+): Promise<readonly string[]> {
+  const known: string[] = [];
+  for (const oid of oids) {
+    if (!SHA.test(oid)) continue;
+    const resolved = await resolveCommit({ ...options, revision: oid });
+    if (resolved !== undefined) known.push(oid);
+  }
+  return known;
 }
 
 /**
