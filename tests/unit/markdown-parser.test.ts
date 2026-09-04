@@ -250,3 +250,66 @@ describe('a degenerate document — AC-14', () => {
     expect(parsed.warnings.map((one) => one.code)).toContain('segment-limit');
   });
 });
+
+/**
+ * **A CRLF document is the same document — F-22.**
+ *
+ * `linesOf` split on `\n` and left the CR at the end of every line. `.` matches
+ * a CR, so `# Title\r` still matched the ATX pattern — with the carriage return
+ * *inside the captured title* — and every rule downstream that compared a line
+ * to a literal stopped matching. Measured before the fix: an identical document
+ * parsed LF gave 2 headings and 1 outline node; parsed CRLF it gave **0 and 0**.
+ *
+ * That is not an edge case. Git checks Markdown out as CRLF on Windows by
+ * default, so on that platform it was every Markdown file Ferret indexes,
+ * including its own 206 — the files where most of its recorded knowledge lives.
+ * Nothing failed, nothing warned: the structure was simply absent, and a
+ * document with no outline is retrievable only as a blob.
+ */
+describe('line endings do not change the document — F-22', () => {
+  const SOURCE = '# Title\n\nBody text.\n\n## Sécond\n\nMore.\n';
+  const crlf = (text: string): string => text.replace(/\n/gu, '\r\n');
+
+  it('finds the same headings in a CRLF document as in an LF one', () => {
+    const unix = parseMarkdown(SOURCE);
+    const windows = parseMarkdown(crlf(SOURCE));
+
+    const labels = (parsed: ReturnType<typeof parseMarkdown>): readonly unknown[] =>
+      parsed.segments.filter((one) => one.kind === 'heading').map((one) => one.label);
+
+    expect(labels(windows), 'a CRLF document lost its headings').toStrictEqual(labels(unix));
+    expect(labels(windows)).toStrictEqual(['Title', 'Sécond']);
+  });
+
+  it('builds the same outline structure', () => {
+    // Structure, not spans. A CRLF document is genuinely longer, so its byte
+    // offsets differ by one per preceding line and *must* — comparing the nodes
+    // whole would assert the offsets are wrong.
+    const shape = (parsed: ReturnType<typeof parseMarkdown>): string =>
+      JSON.stringify(parsed.outline, (key, value: unknown) => (key === 'span' ? undefined : value));
+
+    expect(shape(parseMarkdown(crlf(SOURCE)))).toStrictEqual(shape(parseMarkdown(SOURCE)));
+  });
+
+  it('carries no carriage return into a heading label or a segment', () => {
+    // The half that would survive a naive fix: the ATX pattern *did* match, so
+    // the defect could also have been "headings found, titles dirty".
+    const parsed = parseMarkdown(crlf(SOURCE));
+    expect(JSON.stringify(parsed.segments)).not.toContain('\r');
+  });
+
+  it('still names the bytes it quotes — AC-10 under CRLF', () => {
+    // The regression a careless fix causes: strip the CR from the content and
+    // forget it is still a byte of the source, and every span after the first
+    // line points one byte early — per line. `Sécond` is multibyte on purpose.
+    const source = crlf(SOURCE);
+    const bytes = new TextEncoder().encode(source);
+    const decoder = new TextDecoder();
+
+    for (const segment of parseMarkdown(source).segments) {
+      expect(decoder.decode(bytes.slice(segment.span.startByte, segment.span.endByte))).toBe(
+        segment.text,
+      );
+    }
+  });
+});
