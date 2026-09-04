@@ -33,6 +33,23 @@ interface FixtureRun {
 }
 
 /**
+ * Strips ANSI colour, so an assertion is about content and not about styling.
+ *
+ * **CI found this, and a local run structurally could not.** Vitest colours its
+ * output when it believes the terminal supports it, and GitHub Actions is such
+ * a terminal while a redirected local run is not. Coloured, the summary line
+ * reads `ESC[2m Tests ESC[22m … ESC[33m2 skipped ESC[39m` — which
+ * breaks a `Tests\s+` match, because what follows `Tests ` is an escape rather
+ * than whitespace, and breaks `\b2` too, because the character before the `2`
+ * is the `m` ending the escape and `m`-to-`2` is not a word boundary. The
+ * assertions below passed locally and failed on all four CI platforms at once.
+ */
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\u001b\[[0-9;]*m/g, '');
+}
+
+/**
  * Runs the fixture harness as a real child process.
  *
  * A nested Vitest, deliberately: the guard's contract is the run's *exit code*
@@ -51,7 +68,7 @@ function runFixture(
   });
   return {
     code: result.status ?? 1,
-    output: `${result.stdout ?? ''}${result.stderr ?? ''}`,
+    output: stripAnsi(`${result.stdout ?? ''}${result.stderr ?? ''}`),
   };
 }
 
