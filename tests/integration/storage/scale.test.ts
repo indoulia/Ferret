@@ -394,11 +394,35 @@ describeDb(`scale and query plans (${databaseAvailable() ? 'real PostgreSQL' : S
     });
 
     it('scans rather than indexes when the whole table is wanted, which is correct', async () => {
-      // The control. A plan assertion that could not distinguish "index chosen"
+      // The control, and it has to be a *selectivity* control to be worth
+      // anything: a plan assertion that could not distinguish "index chosen"
       // from "index always chosen" would pass against a database that had lost
       // its statistics — the exact failure issue #109 recorded.
-      const plan = await planFor(`SELECT count(*) FROM ferret.entity`);
+      //
+      // F-101. This asked for the plan of `SELECT count(*) FROM ferret.entity`
+      // and required a sequential scan. That is not a control, it is a coin
+      // toss: PostgreSQL answers `count(*)` with an **Index Only Scan** as soon
+      // as the visibility map is sufficiently frozen, and an index-only scan of
+      // a whole table is not a wrong plan — it is usually the better one. The
+      // assertion therefore pinned an autovacuum timing artefact, passed in
+      // isolation, and failed after a full suite had dirtied and then frozen
+      // the table. It failed the merged `main` run on CI (33864075157), which
+      // is what took it out of the "intermittent, probably infrastructure"
+      // bucket: the test was wrong, not the environment.
+      //
+      // The property actually worth holding is the one the sibling above names
+      // — "the repository's are twenty thousand, which is a scan and correctly
+      // so". Same column, same index, same table: selective asks for the index,
+      // unselective does not. That is discrimination by selectivity, which is
+      // what makes every `expectIndex` in this block mean something, and it does
+      // not depend on when a visibility map was last frozen.
+      const plan = await planFor(`SELECT * FROM ferret.entity WHERE source_scope = $1`, [
+        repositoryId,
+      ]);
 
+      expect(plan, 'an unselective scope lookup should not use entity_scope_idx').not.toContain(
+        'entity_scope_idx',
+      );
       expect(plan).toMatch(/Seq Scan|Parallel Seq Scan/i);
     });
   });

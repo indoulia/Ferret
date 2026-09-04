@@ -185,21 +185,48 @@ export function createDestructiveToolGuard(
       // *whether* a token was presented, never the token — it is the thing that
       // authorises the change, and an audit journal is exactly where it must
       // not be written.
-      const failure = dependencies.audit?.record({
-        category: AuditCategory.CONFIRMATION,
-        action: `mcp.${operation}`,
-        outcome: AuditOutcome.PERMITTED,
-        actor: dependencies.principal.id,
-        permission,
-        reason: confirm === undefined ? 'requested' : 'consumed',
-      });
-      if (failure !== undefined) {
-        dependencies.logger.warn(
-          { operation: 'audit.write', reason: failure.message },
-          'Could not record an audit event; the operation continues',
-        );
+      //
+      // F-88. This was written *before* `consume`, with `outcome: PERMITTED` and
+      // `reason: 'consumed'` hard-coded. So a token that was absent, expired,
+      // spent or issued for a different plan — every refusal `consume` exists to
+      // make — was journalled as a confirmation that had been consumed, and the
+      // journal said the opposite of what happened. It was latent only because
+      // F-63 leaves `audit` undefined on every production path; wiring an audit
+      // writer would have made it live, which is the wrong order to discover it.
+      //
+      // The decision is now taken first and the event records its result. Both
+      // outcomes are journalled, because "a confirmation was required" and "a
+      // confirmation was refused" are things an operator chasing "why did nothing
+      // happen" needs to find, and an event written only on success is a journal
+      // that cannot answer that question.
+      const journal = (outcome: AuditOutcome, reason: string): void => {
+        const failure = dependencies.audit?.record({
+          category: AuditCategory.CONFIRMATION,
+          action: `mcp.${operation}`,
+          outcome,
+          actor: dependencies.principal.id,
+          permission,
+          reason,
+        });
+        if (failure !== undefined) {
+          dependencies.logger.warn(
+            { operation: 'audit.write', reason: failure.message },
+            'Could not record an audit event; the operation continues',
+          );
+        }
+      };
+
+      try {
+        dependencies.confirmations.consume(built, confirm);
+      } catch (error) {
+        // `confirm === undefined` is the first half of the two-step flow and not
+        // a caller error, so it is `required` rather than `refused`; a token that
+        // was presented and rejected is the second. Both are denials of *this*
+        // attempt, and neither is a consumed confirmation.
+        journal(AuditOutcome.DENIED, confirm === undefined ? 'required' : 'refused');
+        throw error;
       }
-      dependencies.confirmations.consume(built, confirm);
+      journal(AuditOutcome.PERMITTED, 'consumed');
       return run();
     });
 }

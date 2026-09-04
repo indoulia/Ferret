@@ -1,8 +1,11 @@
+import { dirname } from 'node:path';
+
 import { Command } from 'commander';
 
+import { AuditWriter, auditEventsPath } from '../../audit/index.js';
 import { accessContextFor, principalFrom } from '../../authorization/index.js';
-import { ConfigStore, defaultConfigSources, resolveConfig } from '../../config/index.js';
-import type { LogLevel } from '../../logging/index.js';
+import { ConfigStore, defaultConfigSources, resolveConfig, userConfigPath } from '../../config/index.js';
+import { processInvocationId, type LogLevel } from '../../logging/index.js';
 import { createMcpServer, serveStdio } from '../../mcp/index.js';
 import { probeHealth } from '../health.js';
 import { Capability, assertSupported } from '../../providers/index.js';
@@ -133,6 +136,21 @@ export function mcpCommand(): Command {
           }),
           access,
           principal,
+          // EPIC-085, and F-63. `McpServerDependencies` has always accepted an
+          // audit writer and this composition root has never supplied one, so
+          // every `AuditWriter` call behind the tool guards was `audit?.record`
+          // against `undefined`: the journal EPIC-085 specifies existed, was
+          // tested, and recorded nothing a real client ever did. `export`,
+          // `import` and `prune` each build one exactly this way — the same path
+          // from `userConfigPath()`, the same per-process invocation id, so a
+          // reader can correlate an MCP decision with a CLI one in a single
+          // file — and the MCP surface, which is the only surface an AI client
+          // has, was the one omission.
+          audit: new AuditWriter({
+            path: auditEventsPath(dirname(userConfigPath())),
+            invocation: processInvocationId(),
+            agent: 'ferret-mcp',
+          }),
           logger: context.logger,
         });
 
