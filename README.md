@@ -98,8 +98,19 @@ if the body throws — so a started runtime cannot leak.
 | `ferret reconcile` | Implemented | EPIC-078 |
 | `ferret upgrade` | Implemented | EPIC-106 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
+| `ferret sync` | **Planned** | EPIC-021, EPIC-071, EPIC-072 |
+| `ferret session` | **Planned** | EPIC-039–043 |
 
-Every approved command in this release is implemented. The mechanism for
+The two planned rows are not a roadmap gesture. The GitHub and Jira providers,
+project modelling and the session and memory domain are **real, tested and
+reachable as libraries** — every Epic that built them excluded transport,
+persistence and a client surface by name, and delivered the scope it declared.
+What was missing was any way for an operator to find that out: `ferret sync`
+answered with an unknown-command error indistinguishable from a typo. It now
+exits 5 with `E_NOT_IMPLEMENTED` and names the Epics that own the behaviour,
+where an unknown command still exits 2.
+
+Every other approved command in this release is implemented. The mechanism for
 reporting an approved-but-unbuilt command — exit code `5` with
 `E_NOT_IMPLEMENTED` and the owning Epic — remains, because the honest answer to
 "is this coming" is worth more than an unknown-command error.
