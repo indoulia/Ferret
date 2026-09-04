@@ -177,6 +177,7 @@ export {
   type LockHolder,
 } from './diagnostics.js';
 export { indexRun, type IndexRunRow } from './schema/runs.js';
+export { instanceRestore, type InstanceRestoreRow as InstanceRestoreTableRow } from './schema/provenance.js';
 export {
   ContentStore,
   MAX_STORED_TEXT_BYTES,
@@ -201,12 +202,15 @@ export {
 } from './retention.js';
 export {
   EXPORT_BATCH_ROWS,
+  EXPORT_EXCLUSIONS,
   EXPORT_TABLES,
   ExportService,
   backupCommandFor,
   isExportManifest,
   isExportTrailer,
   readExportDocument,
+  type CredentialFinding,
+  type ExcludedTable,
   type ExportManifest,
   type ExportOptions,
   type ExportResult,
@@ -221,6 +225,7 @@ export {
   readDocument,
   type CheckedDocument,
   type ImportOptions,
+  type ImportProvenance,
   type ImportReport,
   type ImportTableReport,
 } from './import.js';

@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm';
 
 import { VERSION } from '../version.js';
 import { ENTITY_SCHEMA_VERSION } from '../domain/index.js';
-import { redactString } from '../errors/index.js';
+import { ErrorCode, FerretError, redactString } from '../errors/index.js';
 import { redactSecrets } from '../security/index.js';
 
 import type { FerretDatabase } from './entities.js';
@@ -57,6 +57,89 @@ export const EXPORT_TABLES: readonly TableSpec[] = [
 
 /** Rows read per round trip. Bounds memory, not the export. */
 export const EXPORT_BATCH_ROWS = 500;
+
+/** A table the document deliberately does not carry, and what to do about it. */
+export interface ExcludedTable {
+  readonly table: string;
+  readonly reason: string;
+  /** What an operator does instead. Never "nothing" — say so if it is lost. */
+  readonly recovery: string;
+}
+
+/**
+ * Every table in `ferret` that the document does **not** carry — D2, F-45.
+ *
+ * `EXPORT_TABLES` said what travels and nothing said what does not, so
+ * `ferret.embedding` and `ferret.instance` were dropped in silence: a restore
+ * lost every vector and minted a fresh identity, and neither the manifest nor
+ * the import report mentioned either. The omissions were defensible; the
+ * silence was not.
+ *
+ * This is the other half of the statement, and it is exhaustive by test:
+ * `backup-contract.test.ts` asserts against a live schema that every table is
+ * either exported or named here, so a table added by a later migration cannot
+ * be quietly left out the way `embedding` was.
+ */
+export const EXPORT_EXCLUSIONS: readonly ExcludedTable[] = [
+  {
+    table: 'embedding',
+    reason:
+      'Vectors are not part of the export payload. They are derived data — reproducible from ' +
+      'content by the model that made them — and carrying them would tie the document to a ' +
+      'target that has pgvector and to one model version.',
+    recovery:
+      'Regenerate after the restore by re-indexing with an embedding provider configured. ' +
+      'Ferret ships no embedding provider today, so until one is wired there is nothing to ' +
+      'regenerate and semantic retrieval reports itself unavailable. Vectors are never ' +
+      'fabricated to fill the gap.',
+  },
+  {
+    table: 'instance',
+    reason:
+      'Instance identity is not transferable. A restored index is a second installation, and ' +
+      'two installations answering to one identity is a correctness problem that outranks a ' +
+      'restored index being able to name itself.',
+    recovery:
+      'The target keeps the identity its own `ferret init` minted. The source identity in this ' +
+      "manifest's `sourceInstanceId` is recorded as provenance in `ferret.instance_restore`, so " +
+      'the restore is traceable to the installation that wrote the document.',
+  },
+  {
+    table: 'instance_restore',
+    reason:
+      'Bookkeeping about the importing installation, not about the index. Carrying it would ' +
+      'assert that the target was restored from documents it never saw.',
+    recovery: 'Not applicable — it describes the target, and the target writes its own.',
+  },
+  {
+    table: 'schema_migrations',
+    reason:
+      "The target's own migration ledger. Importing another installation's would claim " +
+      'migrations had run here that have not.',
+    recovery: 'Not applicable — `ferret init` and `ferret upgrade` own this table.',
+  },
+  {
+    table: 'schema_migration_failures',
+    reason: "The target's own record of migrations that failed here.",
+    recovery: 'Not applicable — it describes the target.',
+  },
+];
+
+/**
+ * A value the credential scanner recognises, exported faithfully and reported.
+ *
+ * Never carries the value, and the row's key is redacted before it is put here:
+ * `entity_external_id` is keyed partly on `external_id`, so a key echoed
+ * verbatim could republish the very string this is warning about.
+ */
+export interface CredentialFinding {
+  readonly table: string;
+  readonly column: string;
+  /** The row's key, redacted. Enough to find the row, never enough to leak it. */
+  readonly key: string;
+  /** Which credential shapes fired, from `SECRET_KINDS`. */
+  readonly kinds: readonly string[];
+}
 
 /**
  * The columns PostgreSQL computes, which a document must not carry.
@@ -144,6 +227,24 @@ export interface ExportManifest {
   readonly exportedAt: string;
   readonly scope: string | undefined;
   readonly tables: readonly string[];
+  /**
+   * What the document does **not** carry — D2, F-45.
+   *
+   * Optional in the type and always written by this build. A document from
+   * before D2 has no `excluded`, and `ferret import` says the manifest predates
+   * the declaration rather than reporting that nothing was excluded — the two
+   * are different claims and only one of them would be true.
+   */
+  readonly excluded?: readonly ExcludedTable[];
+  /**
+   * The identity of the installation that wrote this document — D2.
+   *
+   * Carried as provenance and **never** restored: `ferret.instance` is excluded
+   * above, so an import records this alongside the target's own identity rather
+   * than replacing it. `undefined` when the source predates migration 0001 or
+   * could not be read, which is recorded as `undefined` rather than guessed.
+   */
+  readonly sourceInstanceId?: string | undefined;
 }
 
 /**
@@ -163,6 +264,15 @@ export interface ExportTrailer {
   readonly rows: number;
   /** Over every row line written, in the order written. */
   readonly digest: string;
+  /**
+   * Values the credential scanner recognised, exported faithfully — D1, F-44.
+   *
+   * Here and not in the manifest for the digest's reason: it is knowable only
+   * after the rows have gone past. Absent in documents written before D1, and
+   * an empty array is the positive statement that the scanner found nothing —
+   * which is not the same claim as "this build did not look".
+   */
+  readonly credentialShaped?: readonly CredentialFinding[];
 }
 
 export interface ExportRow {
@@ -176,6 +286,8 @@ export interface ExportResult {
   readonly counts: Readonly<Record<string, number>>;
   readonly digest: string;
   readonly rows: number;
+  /** What the scanner recognised. Empty means it looked and found nothing. */
+  readonly credentialShaped: readonly CredentialFinding[];
 }
 
 export interface ExportOptions {
@@ -183,6 +295,16 @@ export interface ExportOptions {
   readonly scope?: string | undefined;
   /** Rows per round trip. */
   readonly batch?: number | undefined;
+  /**
+   * Refuse rather than write a document carrying a credential-shaped value — D1.
+   *
+   * The default export is faithful and says what it carried. Strict is for the
+   * operator who would rather have no document than one with a credential in
+   * it: neither emitting the value (a credential in a cleartext file) nor
+   * rewriting it (a hash that no longer describes its row) is acceptable, so
+   * the export refuses and names the row.
+   */
+  readonly strict?: boolean | undefined;
 }
 
 /** Where a line goes. A function rather than a stream, so a test can collect. */
@@ -264,11 +386,16 @@ export class ExportService {
       exportedAt: new Date().toISOString(),
       scope: options.scope,
       tables: EXPORT_TABLES.map((spec) => spec.table),
+      // D2 — the document says what it does not carry, in the line an importer
+      // reads first, so "vectors are absent" arrives before any row does.
+      excluded: EXPORT_EXCLUSIONS,
+      sourceInstanceId: await this.#instanceId(reader),
     };
     await sink(JSON.stringify(manifest));
 
     const hash = createHash('sha256');
     const counts: Record<string, number> = {};
+    const credentialShaped: CredentialFinding[] = [];
     let total = 0;
 
     for (const spec of EXPORT_TABLES) {
@@ -277,21 +404,44 @@ export class ExportService {
         const carried = Object.fromEntries(
           Object.entries(row).filter(([column]) => !generated.has(`${spec.table}.${column}`)),
         );
-        // The second line of defence, over each *value* rather than over the
-        // assembled line. §8.4's first line is that a `${env:...}` reference is
-        // stored as the reference and never resolved, and every producer that
-        // carries untrusted text redacts before it writes.
+
+        // **D1 — the scanner still runs, and it no longer rewrites.**
         //
-        // Over the line it was not a second line of defence but a way to lose a
-        // backup. `redactSecrets` fails closed on size, replacing its whole
-        // input with a sentence — and `JSON.stringify` costs six characters for
-        // one stored byte of a control character, so a row far inside every
-        // storage bound serialized past the scan limit, stopped being JSON, and
-        // was written with a digest computed over the replacement. The trailer
-        // then verified a document `ferret import` refuses as damaged.
+        // §11 requires the redactor to apply to an export, and it does: every
+        // string value is scanned. What changed is what happens when it fires.
         //
-        // Per value, the framing can never be what is replaced.
-        const line = JSON.stringify({ table: spec.table, row: redactRow(carried) } satisfies ExportRow);
+        // It used to substitute the value. `content_hash` is derived from
+        // `attributes` (`domain/entity.ts`) and was exported as it stood, so a
+        // single rewritten string left the hash describing a row that no longer
+        // existed — measured: one credential-shaped file path produced five
+        // findings from `ferret verify` on the restored index, including
+        // `evidence-tampered`, each naming a cause that was false and each
+        // remediating with "re-read the source", which is the one thing a
+        // restore cannot do. And `sameContent` compares the hash alone, so
+        // re-importing that document into the live index reported `unchanged`
+        // and discarded the redaction — meaning EPIC-090 §8.7's
+        // export-then-import scrub silently scrubbed nothing.
+        //
+        // EPIC-087 §8.2 already settles where redaction belongs: "before it
+        // lands, never on the way out", because a read-time control is one a
+        // new caller can forget. EPIC-089 §8.5 says content is exported as
+        // content. EPIC-090 §8.7 wants the *unfiltered* document so the filter
+        // that ran is auditable. Governance §6 forbids rewriting source
+        // evidence silently. So the row goes out as it is, and the finding is
+        // reported rather than applied.
+        const finding = findCredentials(spec.table, spec.key, carried);
+        if (finding !== undefined) {
+          // Strict cannot satisfy both halves of the contract at once — the
+          // faithful value is a credential in a cleartext file, and the
+          // redacted one is a hash that lies — so it satisfies neither and
+          // says so. Thrown mid-stream on purpose: the trailer is never
+          // written, so whatever reached the sink is a document `readDocument`
+          // refuses as truncated rather than a shorter export that looks whole.
+          if (options.strict === true) throw strictRefusal(finding);
+          credentialShaped.push(finding);
+        }
+
+        const line = JSON.stringify({ table: spec.table, row: carried } satisfies ExportRow);
         hash.update(line);
         hash.update('\n');
         await sink(line);
@@ -306,10 +456,30 @@ export class ExportService {
       counts,
       rows: total,
       digest: hash.digest('hex'),
+      credentialShaped,
     };
     await sink(JSON.stringify(trailer));
 
-    return { manifest, trailer, counts, digest: trailer.digest, rows: total };
+    return { manifest, trailer, counts, digest: trailer.digest, rows: total, credentialShaped };
+  }
+
+  /**
+   * This installation's identity, for the manifest's `sourceInstanceId` — D2.
+   *
+   * Absent rather than guessed when it cannot be read. The table is migration
+   * 0001's, so the only way to reach this without it is a database mid-bootstrap
+   * — and a document that claimed an identity it had not read would be worse
+   * than one that admits it has none.
+   */
+  async #instanceId(reader: Reader): Promise<string | undefined> {
+    try {
+      const rows = await reader.execute<{ [column: string]: unknown; instance_id: string }>(
+        sql`SELECT instance_id FROM ferret.instance LIMIT 1`,
+      );
+      return rows.rows[0]?.instance_id;
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -473,32 +643,99 @@ export function readExportDocument(text: string): {
   };
 }
 
-/** How deep a JSON value is walked when redacting. Beyond this it is left alone. */
-const MAX_REDACTION_DEPTH = 12;
+/** How deep a JSON value is walked when scanning. Beyond this it is left alone. */
+const MAX_SCAN_DEPTH = 12;
 
 /**
- * A row with every string in it scanned for credentials.
+ * Whether a row carries a credential-shaped value — D1, and it changes nothing.
  *
  * Walks into objects and arrays, because `attributes` and `metadata` are
- * `jsonb`: a secret in a nested field is a secret. Structure is preserved
- * exactly — only string leaves can change — so whatever this returns still
- * serializes to the same shape the importer expects.
+ * `jsonb`: a secret in a nested field is a secret. The row itself is never
+ * touched — that is the whole difference from what this replaced.
+ *
+ * `redactSecrets` is used as the oracle rather than a second pattern list, so
+ * "what the export reports" and "what every other surface redacts" cannot
+ * drift apart. It is also idempotent (measured), which is why a value already
+ * redacted at insert produces no finding here: only a producer that skipped
+ * insert-time redaction reaches this.
  */
-function redactRow(row: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
-  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, redactValues(value, 1)]));
+function findCredentials(
+  table: string,
+  key: readonly string[],
+  row: Readonly<Record<string, unknown>>,
+): CredentialFinding | undefined {
+  for (const [column, value] of Object.entries(row)) {
+    const kinds = scanValue(value, 1);
+    if (kinds.length > 0) {
+      return {
+        table,
+        column,
+        // Redacted, because `entity_external_id` is keyed partly on
+        // `external_id`: a key echoed verbatim could republish the string this
+        // finding exists to warn about. Printed output, so the same rule as
+        // `backupCommandFor`.
+        key: redactSecrets(key.map((name) => keyPart(row[name])).join(':')).text,
+        kinds,
+      };
+    }
+  }
+  return undefined;
 }
 
-function redactValues(value: unknown, depth = 0): unknown {
-  if (typeof value === 'string') return redactSecrets(value).text;
-  if (depth >= MAX_REDACTION_DEPTH || value === null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map((item) => redactValues(item, depth + 1));
-  // Anything that is not a plain object is carried through untouched. No column
-  // is binary today, and walking a `Buffer` with `Object.entries` would turn it
-  // into a map of numeric keys — an export that silently rewrote the value it
-  // was copying, which is the failure this whole function exists to end.
-  if (value instanceof Date || Buffer.isBuffer(value) || ArrayBuffer.isView(value)) return value;
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, redactValues(item, depth + 1)]),
+/** One column of a row's key, as text. Never `[object Object]`. */
+function keyPart(value: unknown): string {
+  if (value === null || value === undefined) return '?';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  if (value instanceof Date) return value.toISOString();
+  // Every `TableSpec.key` is a text, uuid or integer column, so this branch is
+  // unreachable today and says so rather than stringifying into nonsense.
+  return '?';
+}
+
+function scanValue(value: unknown, depth = 0): readonly string[] {
+  if (typeof value === 'string') return Object.keys(redactSecrets(value).found);
+  if (depth >= MAX_SCAN_DEPTH || value === null || typeof value !== 'object') return [];
+  // A Date or a Buffer has no string leaves to scan, and walking one with
+  // `Object.entries` would produce a map of numeric keys.
+  if (value instanceof Date || Buffer.isBuffer(value) || ArrayBuffer.isView(value)) return [];
+  const found = new Set<string>();
+  for (const item of Array.isArray(value) ? value : Object.values(value)) {
+    for (const kind of scanValue(item, depth + 1)) found.add(kind);
+  }
+  return [...found];
+}
+
+/**
+ * The strict refusal — D1.
+ *
+ * Names the table, the column and the row, and says which of the two
+ * guarantees could not be kept. `EXPORT_REFUSED` rather than a generic failure
+ * so a caller can tell "this index cannot be exported strictly" from "the
+ * database went away".
+ */
+function strictRefusal(finding: CredentialFinding): FerretError {
+  return new FerretError(
+    ErrorCode.EXPORT_REFUSED,
+    `Strict export refused: ${finding.table}.${finding.column} carries a ${finding.kinds.join(', ')} ` +
+      `shape (row ${finding.key}). A faithful export would write that value into a cleartext ` +
+      'document; a redacted one would carry a content hash that no longer describes its row. ' +
+      'Strict mode satisfies neither, so it exports nothing.',
+    {
+      details: {
+        table: finding.table,
+        column: finding.column,
+        row: finding.key,
+        kinds: finding.kinds,
+      },
+      remediation:
+        'Remove the credential at its source and re-index so insert-time redaction covers it ' +
+        '(EPIC-087 §8.2), then export again. To take the document as it stands — faithful, with ' +
+        'the value in it, and the finding recorded in the trailer — run `ferret export` without ' +
+        '`--strict`.',
+    },
   );
 }
 

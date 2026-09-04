@@ -104,6 +104,18 @@ export const ErrorCode = {
    * exists and is not answering *now*.
    */
   SOURCE_UNAVAILABLE: 'E_SOURCE_UNAVAILABLE',
+  /**
+   * A strict export cannot satisfy the fidelity contract — EPIC-089 D1.
+   *
+   * Not a fault in the index and not a failure of the database: the index
+   * holds a credential-shaped value, and a strict export will neither write it
+   * into a cleartext document nor rewrite it and leave a content hash that no
+   * longer describes its row. Distinct from `STORAGE_*` so a caller can tell
+   * "this index cannot be exported strictly" from "the export broke", and
+   * distinct from `NOT_PERMITTED` because nothing was refused to the operator —
+   * the operator can take the faithful document instead.
+   */
+  EXPORT_REFUSED: 'E_EXPORT_REFUSED',
   /** The capability exists in the roadmap but is not implemented in this release. */
   NOT_IMPLEMENTED: 'E_NOT_IMPLEMENTED',
   /** The operation was interrupted by a signal. */

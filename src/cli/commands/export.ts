@@ -1,4 +1,4 @@
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { once } from 'node:events';
 
@@ -44,9 +44,20 @@ export function exportCommand(output: (json: boolean) => OutputOptions): Command
         false,
       ),
     )
+    // D1. The default export is faithful and reports what it carried; strict
+    // is for the operator who would rather have no document than one with a
+    // credential-shaped value in it. Not the default, because refusing by
+    // default would block the recovery path on a file path that merely looks
+    // like a key — measured: `AKIA`-shaped filenames do exactly that.
+    .addOption(
+      new Option(
+        '--strict',
+        'Refuse rather than write a document carrying a credential-shaped value',
+      ).default(false),
+    )
     .action(
       async (
-        options: { out?: string; scope?: string; backupCommand: boolean },
+        options: { out?: string; scope?: string; backupCommand: boolean; strict: boolean },
         command: Command,
       ) => {
         const globals = command.optsWithGlobals<{ json?: boolean; logLevel?: LogLevel }>();
@@ -97,6 +108,7 @@ export function exportCommand(output: (json: boolean) => OutputOptions): Command
           try {
             const written = await service.exportDocument(sink.write, {
               ...(options.scope === undefined ? {} : { scope: options.scope }),
+              strict: options.strict,
             });
             await sink.close();
 
@@ -121,9 +133,22 @@ export function exportCommand(output: (json: boolean) => OutputOptions): Command
               manifest: written.manifest,
               trailer: written.trailer,
               destination: options.out ?? 'stdout',
+              credentialShaped: written.credentialShaped,
             };
           } catch (error) {
             await sink.close();
+            // A refused or failed export must not leave a file that looks like
+            // a document. It would have no trailer, so `ferret import` refuses
+            // it as truncated — but "refuses it" is a worse answer than "there
+            // is nothing there", and a half-written strict export is precisely
+            // the file whose contents the operator asked not to have on disk.
+            if (options.out !== undefined) {
+              try {
+                rmSync(options.out, { force: true });
+              } catch {
+                // The original failure is the one worth reporting.
+              }
+            }
             throw error;
           }
         });
@@ -135,6 +160,45 @@ export function exportCommand(output: (json: boolean) => OutputOptions): Command
         emitResult(output(json), result, () => render(result.manifest, result.trailer, result.destination));
       },
     );
+}
+
+/**
+ * What the document does not carry, and what the scanner found — D1 and D2.
+ *
+ * Printed for every export, not only when something is wrong. "Vectors are
+ * excluded" is a property of the document rather than an incident, and an
+ * operator who reads it only on the bad day learns it on the bad day.
+ */
+function disclosures(manifest: ExportManifest, trailer: ExportTrailer): readonly string[] {
+  const lines: string[] = [];
+
+  const excluded = manifest.excluded ?? [];
+  if (excluded.length > 0) {
+    lines.push('', 'Not carried by this document:');
+    for (const table of excluded) lines.push(`  ${table.table} — ${table.reason}`);
+    const embedding = excluded.find((table) => table.table === 'embedding');
+    if (embedding !== undefined) lines.push('', `Vectors: ${embedding.recovery}`);
+  }
+
+  const findings = trailer.credentialShaped ?? [];
+  if (findings.length > 0) {
+    lines.push(
+      '',
+      `${String(findings.length)} value(s) match a credential shape and were exported as they are:`,
+    );
+    for (const finding of findings.slice(0, 10)) {
+      lines.push(`  ${finding.table}.${finding.column} (row ${finding.key}) — ${finding.kinds.join(', ')}`);
+    }
+    if (findings.length > 10) lines.push(`  … and ${String(findings.length - 10)} more`);
+    lines.push(
+      '',
+      'They are carried faithfully on purpose: rewriting them would leave a content hash',
+      'that no longer describes its row, so a restore would report itself tampered with.',
+      'Treat this document as containing those values. `--strict` refuses instead.',
+    );
+  }
+
+  return lines;
 }
 
 interface Sink {
@@ -184,6 +248,7 @@ function render(manifest: ExportManifest, trailer: ExportTrailer, destination: s
     '',
     `Ferret ${manifest.ferretVersion}, entity schema ${String(manifest.entitySchemaVersion)}`,
     `Digest ${trailer.digest}`,
+    ...disclosures(manifest, trailer),
     '',
     'This is an export, not a backup. `ferret export --backup-command` prints the',
     'pg_dump command for a point-in-time copy of this same schema version.',
