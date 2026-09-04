@@ -7,7 +7,7 @@ can be read in one sitting.
 | --- | --- |
 | **Branch** | `forensic/post-merge-remediation` |
 | **Base** | `10531e003acc38aff3a656b368cf438580d6dd0f` — current merged `main`, PR #153 |
-| **Commits ahead / behind** | 16 ahead, **0 behind** — no rebase pending |
+| **Commits ahead / behind** | 18 ahead, **0 behind** — no rebase pending |
 | **Working tree** | clean |
 | **Pushed** | yes, local and remote at the same SHA |
 | **Merged** | no. **Deployed** — no. |
@@ -16,9 +16,13 @@ can be read in one sitting.
 
 1. Ten commits of post-merge forensic remediation — twelve findings.
 2. Three commits of F-73 release-gate work — §1-§10 below.
-3. Three commits implementing the **D1/F-44** and **D2/F-45** product decisions
-   the owner took on 2026-09-04 — **§11**, which is the newest work and the part
-   most worth a reviewer's time.
+3. Five commits implementing the **D1/F-44** and **D2/F-45** product decisions
+   the owner took on 2026-09-04, plus the CI fix that running them exposed —
+   **§11**, the newest work and the part most worth a reviewer's time.
+
+**CI is green on all five jobs** — Ubuntu, Windows, macOS, PostgreSQL 17 +
+pgvector, and the dependency audit. It was not green on the first attempt, and
+§11.9 is that story.
 
 ---
 
@@ -45,7 +49,9 @@ release-gate work, then three implementing the D1/D2 decisions (§11).
 | `53d0880` | docs(evidence): record the corpus regression the final check caught | — |
 | `e32853a` | feat(export,import): a faithful document, and a restore that says what it lost | **F-44, F-45** |
 | `3bf1ffa` | test(storage): the two contracts, and the four controls that caught the change | **F-44, F-45** |
-| _(this one)_ | docs(decisions,epic): D1 and D2 decided and implemented | F-44 / F-45 |
+| `90cd7a1` | docs(decisions,epic): D1 and D2 decided and implemented | F-44 / F-45 |
+| `ab6a760` | test(harness): the gate’s own test asserted styling, not content | §11.9 |
+| _(this one)_ | docs(evidence): the CI evidence for the D1/D2 cycle | — |
 
 **`c1aa6c9` was rewritten once, and the reason is worth a reviewer's
 attention.** Its first version quoted the fixture's filename literally — an
@@ -268,8 +274,11 @@ Stated rather than smoothed over.
 - **F-10 is open** and is not a release blocker.
 - **P2/P3 deferred findings are untouched**, including the Batch 8 record
   corrections.
-- **Windows CI is post-merge**, by the arrangement recorded in `ci.yml`. This
-  branch has had no CI run of any kind — every figure above is local.
+- ~~**This branch has had no CI run of any kind.**~~ **It has now** — see
+  §11.9. Dispatched via `workflow_dispatch`, so Windows and macOS ran too
+  despite `ci.yml` keeping them off the pull-request gate. Green on all five
+  jobs at `ab6a760`, and the first attempt failed for a reason no local run
+  could have surfaced.
 - **No human review has occurred.** That is what this document is for.
 
 ## 10. Reviewer's shortlist
@@ -304,7 +313,9 @@ implementation. The decisions, rationale and stated limitations are in
 | --- | --- |
 | `e32853a` | feat(export,import): a faithful document, and a restore that says what it lost |
 | `3bf1ffa` | test(storage): the two contracts, and the four controls that caught the change |
-| _(this one)_ | docs(decisions,epic): D1 and D2 decided and implemented |
+| `90cd7a1` | docs(decisions,epic): D1 and D2 decided and implemented |
+| `ab6a760` | test(harness): the gate’s own test asserted styling, not content — §11.9 |
+| _(this one)_ | docs(evidence): the CI evidence for this cycle |
 
 ### 11.2 Files changed — 18 files, +1428 / −55
 
@@ -420,7 +431,88 @@ measurement comment, nothing else.
 | Security / regression | all 9 `tests/security/*` green |
 | Regression pins verified red-first | 3 of the 9 D1 tests confirmed failing against the old behaviour before it was replaced |
 
-### 11.9 Remaining non-blocking findings, unchanged
+### 11.9 CI — run, observed, and it found something local runs could not
+
+**CI was available and was run.** No PR was opened and nothing was merged: the
+workflow declares `workflow_dispatch`, so it was dispatched against the branch
+directly. No GitHub billing or infrastructure limit was encountered.
+
+| Run | Commit | Result |
+| --- | --- | --- |
+| [33904857924](https://github.com/indoulia/Ferret/actions/runs/33904857924) | `90cd7a1` | **failure** — 4 of 5 jobs. One cause. |
+| [33906098585](https://github.com/indoulia/Ferret/actions/runs/33906098585) | `ab6a760` | **success** — 5 of 5 jobs |
+
+**The first run failed, and the failure is worth reading rather than
+skipping.** It failed identically on Ubuntu, Windows, macOS *and* the storage
+job while the full suite was green locally — and it was not the D1/D2 work. It
+was `required-groups.test.ts`, the F-73 guard's own regression test from the
+previous cycle, asserting against Vitest's coloured output.
+
+Vitest colours when it believes the terminal supports it. GitHub Actions is such
+a terminal; a redirected local run is not. Coloured, the summary reads `Tests`
+then an escape then a styled `2 skipped`, and both halves of
+`/Tests\s+[^\n]*\b2 skipped\b/` break on it — `\s+` because what follows
+`Tests ` is an escape rather than whitespace, and `\b2` because the character
+before the `2` is the `m` ending the escape. The assertion was about styling and
+merely agreed with the content on the one platform it was written on. Worse, its
+negative twin was passing *vacuously*, so the half meant to guard against a
+future Vitest reporting these as failures was guarding nothing.
+
+Fixed in `ab6a760` by stripping ANSI before matching, and verified locally by
+forcing colour in the child rather than by waiting for CI. **This is the case
+for running CI rather than reasoning about it**, and it is why the previous
+cycle's conclusion — reached without any CI run — was premature.
+
+**Final CI results, per job:**
+
+| Job | Result |
+| --- | --- |
+| storage integration (PostgreSQL 17 + pgvector) | **180/180 files**, packaging 34/34 |
+| verify (ubuntu-latest, node 22) | 133 passed \| 47 skipped (180), packaging 34/34 |
+| verify (windows-latest, node 22) | 133 passed \| 47 skipped (180), packaging 34/34 |
+| verify (macos-latest, node 22) | 133 passed \| 47 skipped (180), packaging 34/34 |
+| dependency audit | success |
+
+The 47 skipped *files* on the three `verify` jobs are the database suites, which
+`ci.yml` skips there by design (`FERRET_SKIP_DOCKER_POSTGRES=1`) and the
+`storage` job owns against a pinned service container — the arrangement
+`ci.yml` documents, and the reason a skip there is recorded as a skip rather
+than a pass. **The F-73 guard printed `34/34 tests executed` on all four
+platforms**, which is the packaging gate confirming itself on hardware this
+machine is not.
+
+### 11.10 Operator-level validation
+
+Through the real CLI against PostgreSQL 17 + pgvector, two databases, with a
+repository containing a file whose *path* matches an AWS access-key shape.
+
+```
+ferret export --strict   E_EXPORT_REFUSED, exit 1, no file left on disk
+ferret export            exit 0; five exclusions declared; the vectors recovery
+                         statement printed; 4 credential-shape findings named
+                         with redacted row keys
+in the database          AKIA…567.txt  36ed3a23…9cc7
+in the document          AKIA…567.txt  36ed3a23…9cc7      ← identical
+ferret import --yes      exclusions repeated; both identities named; provenance
+                         recorded in ferret.instance_restore
+ferret verify            "No problems found."  exit 0
+source instance          48af8e67-f643-4e25-8e4f-7d9c7568eeb4
+target instance          c1acef2d-e183-4bb0-97f3-3b8f01917c70   ← different
+provenance row           source 48af8e67…, version 0.1.0, 31 rows
+vectors in target        0                                      ← not fabricated
+```
+
+The line that matters most is `ferret verify` → **"No problems found", exit 0**.
+Before D1 the same round trip produced five findings and exit 1, every one of
+them naming a cause that was false.
+
+One detail worth noting: the faithful export reported **four** findings from one
+credential-shaped path — `entity.attributes`, `entity.canonical_key`,
+`evidence.locator` and `evidence.source_id`. That is the same amplification the
+original measurement found, and it is why rewriting one string corrupted four
+rows.
+
+### 11.11 Remaining non-blocking findings, unchanged
 
 **F-92** (wall-clock budget, environment/load — not a release blocker),
 **F-10**, and the P2/P3 deferred set including the Batch 8 record corrections.
