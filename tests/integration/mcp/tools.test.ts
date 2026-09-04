@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -1442,5 +1442,61 @@ describe('audit events for a decision', () => {
     const result = await call('ferret_search', { query: 'anything' });
 
     expect(result['count']).toBe(1);
+  });
+});
+
+/**
+ * **The README documents every tool that exists — F-87.**
+ *
+ * The catalogue listed 15 of the 18 tools `src/mcp/` registers: `ferret_answer`,
+ * `ferret_why` and `ferret_explain` were absent — the answer and provenance
+ * surfaces, which is to say the ones a reader evaluating whether Ferret can cite
+ * its sources would most want to find.
+ *
+ * Read from the **registrations**, not from a list written here and not from one
+ * server's `listTools()`. A hand-written enumeration is a second place to forget
+ * — Batch 5's lesson from the notice test — and a runtime enumeration would only
+ * ever see the tools that particular composition wired, which is four of the
+ * eighteen for the server this file builds. The registration is the thing the
+ * README is supposed to agree with, so that is what this reads.
+ */
+describe('the README catalogue matches the registered tools — F-87', () => {
+  const README = readFileSync(new URL('../../../README.md', import.meta.url), 'utf8');
+
+  /** Every `registerTool('ferret_…')` across the MCP surface. */
+  function registeredTools(): readonly string[] {
+    const directory = new URL('../../../src/mcp/', import.meta.url);
+    const names = new Set<string>();
+    for (const file of readdirSync(directory).filter((one) => one.endsWith('.ts'))) {
+      const source = readFileSync(new URL(file, directory), 'utf8');
+      for (const match of source.matchAll(/registerTool\(\s*'(ferret_[a-z_]+)'/gu)) {
+        names.add(match[1] ?? '');
+      }
+    }
+    return [...names].sort();
+  }
+
+  it('finds every tool the surface registers', () => {
+    // The control on the control: if the scan stopped matching, both assertions
+    // below would pass vacuously against an empty set.
+    expect(registeredTools().length).toBeGreaterThanOrEqual(18);
+  });
+
+  it('documents every registered tool', () => {
+    const undocumented = registeredTools().filter((name) => !README.includes(`\`${name}\``));
+
+    expect(undocumented, `not in README.md: ${undocumented.join(', ')}`).toStrictEqual([]);
+  });
+
+  it('documents no tool that is not registered', () => {
+    // The other direction, which a count alone would not catch: a tool renamed
+    // in code and left behind in the README reads as a capability that is gone.
+    // Matched inside backticks, so `FERRET_DATABASE_PASSWORD=ferret_dogfood`
+    // further down the README is not mistaken for a tool.
+    const registered = new Set(registeredTools());
+    const documented = [...README.matchAll(/`(ferret_[a-z_]+)`/gu)].map((match) => match[1] ?? '');
+    const phantom = [...new Set(documented)].filter((name) => !registered.has(name));
+
+    expect(phantom, `documented but not registered: ${phantom.join(', ')}`).toStrictEqual([]);
   });
 });

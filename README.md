@@ -202,6 +202,9 @@ secret out of one more file.
 | `ferret_get_entity` | One commit, file or branch, with its identifiers |
 | `ferret_neighbours` | "What touched this file?" — and, with `at`, "what was I working on last Tuesday?" |
 | `ferret_context_pack` | A bounded pack of relevant knowledge for a question |
+| `ferret_answer` | An answer assembled from indexed evidence, with every claim cited |
+| `ferret_why` | "What is this claim based on?" — the observations behind a stated fact |
+| `ferret_explain` | "Why did I get these results?" — how a query was planned and ranked |
 | `ferret_config_describe` | "What is Ferret configured to do, and which layer decided it?" |
 | `ferret_config_schema` | "What can I configure?" — every key, type and default |
 | `ferret_config_validate` | "Is the configuration usable?" — changes nothing |
