@@ -592,3 +592,35 @@ and a re-run of the gate after any rebase.
 
 §11 produced as documentation only at `c696dac6`. Nothing pushed, no PR opened, nothing merged,
 nothing deployed; `main` untouched at `0407618`.
+
+---
+
+## 12. Addendum — merged, and the cycle that followed
+
+`10531e003acc38aff3a656b368cf438580d6dd0f`. PR #153 squash-merged the remediation set to `main`
+on 2026-09-04, after CI passed on `fda7531` across Ubuntu, macOS, a pinned PostgreSQL 17 +
+pgvector service container, and the dependency audit. §11's statement that `main` contained none
+of this was true when written and is left standing as the record of that state.
+
+**Merged-`main` CI then failed**, on `scale.test.ts > scans rather than indexes when the whole
+table is wanted` — **F-101**, which §6 and §11 both carried as an intermittent infrastructure
+finding. It is not one. The test required a sequential scan for `SELECT count(*)`, and
+PostgreSQL answers that with an Index Only Scan once the visibility map is frozen enough; an
+index-only scan of a whole table is not a wrong plan. The assertion pinned an autovacuum timing
+artefact, which is why it passed in isolation and failed after a full suite had dirtied and then
+frozen the table. That is a wrong test, not a flaky environment, and the distinction matters:
+"difficult to reproduce" was doing the work that "wrong" should have been doing.
+
+A post-merge cycle on `forensic/post-merge-remediation` re-audited every remaining finding
+against the merged tree and fixed twelve: F-101, F-63, F-88, F-22, F-102, F-78, F-86, F-84,
+F-65, F-87, F-20/F-21 and F-12. Three were re-verified as already closed (F-89, F-67, F-73);
+four were isolated as requiring a product decision (F-41/F-42, F-44, F-45, F-10). The complete
+disposition of all 102 findings is at the foot of `.agent/FINDINGS.md` and is the current
+statement; this document remains the audit as taken at `cd3ca85`.
+
+The deployment surface §11.6 listed as unexercised is now verified end to end by
+`tests/integration/storage/upgrade-deployment-path.test.ts`: a populated pre-`0013` database is
+upgraded, its rows are asserted to survive, a real repository is indexed into it and read back,
+and the upgraded schema is compared against a fresh install with data carried across.
+
+Verdict unchanged at **QUALIFIED**, for fewer reasons. Nothing was deployed.

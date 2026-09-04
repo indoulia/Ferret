@@ -33,8 +33,15 @@ and saying otherwise is the error this plan already had to correct once:
 | — | **F-23 — a corrupt worksheet is not an empty one** (`896bcaa`, branch `fix/f-23-corrupt-worksheet-silent-empty`, off `main`) | F-23 | **DONE** — structural root check before the regex scanner, workbook part refused on the existing path, `SHEET_PARSER_VERSION` 1.0.0 → 1.1.0 so cached silent-empty artefacts are re-extracted. 15 new cases in `tests/unit/sheet-corruption.test.ts`; 45 focused sheet tests green |
 | — | **Integration + F-27's read half** (`23b92c7`, `3dc8181`, `c696dac`, branch `integration/p1a-remediation`, off `main`) | F-27 | **DONE** — the two sibling branches merged into one tree and validated together for the first time, then `ReferenceCompleteness` carried from the persisted counts to `ferret_neighbours`. 6 of 7 tool-surface and 2 of 4 store assertions red first; full gate green at `c696dac6` |
 
-**The remediation set is complete at `c696dac6` and lives only there.** `main` is `0407618` and
-contains none of it. Nothing has been pushed, no PR opened, nothing merged, nothing deployed.
+**The remediation set was completed at `c696dac6` and is now merged.** PR #153 squash-merged it
+to `main` as `10531e003acc38aff3a656b368cf438580d6dd0f`. The sentence that `main` contained none
+of it was true until that merge and is kept as the record of the state this plan was written in.
+
+**A second cycle followed, against the merged tree** — branch
+`forensic/post-merge-remediation`, twelve further findings fixed and every remaining one given
+an evidence-backed disposition. **Not merged.** Batch 8 is now partly done: F-20 and F-21's
+`PLANNED_COMMANDS` remedy has landed; F-74, F-75, F-87's sibling record corrections and the
+benchmark-claim corrections have not.
 
 **Deferred, gated on a product decision:** everything behind F-21 (F-07, F-08, F-09, F-10,
 F-13, F-14, F-15, F-18, F-19, F-37–F-40, F-53–F-59) and behind F-20 (F-46–F-48).
