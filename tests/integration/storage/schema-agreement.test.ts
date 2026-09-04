@@ -6,6 +6,7 @@ import { createNullLogger } from '../../../src/index.js';
 import {
   contentBlob,
   derivedArtifact,
+  engineeringMemory,
   entity,
   entityExternalId,
   evidence,
@@ -15,6 +16,9 @@ import {
   instanceRestore,
   migrate,
   relationship,
+  session,
+  sessionCapture,
+  sessionCheckpoint,
 } from '../../../src/storage/index.js';
 import { SKIP_REASON, createTestDatabase, databaseAvailable, type TestDatabase } from '../../support/postgres.js';
 
@@ -62,6 +66,10 @@ const DRIZZLE_TABLES: readonly PgTable[] = [
   indexRun,
   instanceRestore,
   relationship,
+  session,
+  sessionCapture,
+  sessionCheckpoint,
+  engineeringMemory,
 ];
 
 /**

@@ -6,13 +6,23 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { EntityKind, EvidenceMethod, RelationshipType, createNullLogger } from '../../../src/index.js';
+import {
+  EntityKind,
+  EvidenceMethod,
+  RelationshipType,
+  createEngineeringMemory,
+  createNullLogger,
+  createSession,
+  createSessionCheckpoint,
+  endSession,
+} from '../../../src/index.js';
 import {
   CompatibilityService,
   ContentStore,
   EntityStore,
   EvidenceStore,
   RelationshipStore,
+  SessionStore,
   migrate,
   type FerretDatabase,
 } from '../../../src/storage/index.js';
@@ -50,6 +60,7 @@ let relationships: RelationshipStore;
 let evidence: EvidenceStore;
 let content: ContentStore;
 let compatibility: CompatibilityService;
+let sessions: SessionStore;
 let repositoryId: string;
 
 async function count(table: string): Promise<number> {
@@ -110,6 +121,7 @@ describeDb(`idempotent ingestion (${databaseAvailable() ? 'real PostgreSQL' : SK
     evidence = new EvidenceStore(handle);
     content = new ContentStore(handle);
     compatibility = new CompatibilityService(handle, db.pool);
+    sessions = new SessionStore(handle);
 
     repositoryId = (
       await entities.upsert({
@@ -162,6 +174,9 @@ describeDb(`idempotent ingestion (${databaseAvailable() ? 'real PostgreSQL' : SK
         'store.ts:replace',
         'identities.ts:record',
         'bookkeeping.ts:record',
+        'sessions.ts:save',
+        'sessions.ts:saveCheckpoint',
+        'sessions.ts:recordMemory',
       ]);
 
       for (const { key } of writeMethods()) {
@@ -350,6 +365,83 @@ describeDb(`idempotent ingestion (${databaseAvailable() ? 'real PostgreSQL' : SK
       const closedAt = rows.rows[0]?.valid_to;
       expect(closedAt).not.toBeNull();
       expect(new Date(closedAt as string | Date).toISOString()).toBe(at.toISOString());
+    });
+  });
+
+  describe('the session store writes nothing new on a replay — EPIC-109', () => {
+    const START = '2026-09-01T09:00:00.000Z';
+
+    it('saving a session twice adds no row, and an ended one replays unchanged', async () => {
+      const started = createSession({
+        sessionId: 'idem-1',
+        provider: 'claude-code',
+        actorId: 'actor-1',
+        startedAt: START,
+      });
+      await sessions.save(started);
+      const before = await count('session');
+
+      await sessions.save(started);
+      expect(await count('session')).toBe(before);
+
+      // And across the lifecycle: an end applied twice is one end, at the
+      // moment it first happened, not the moment it was retried.
+      const ended = endSession(started, 'completed', new Date('2026-09-01T10:00:00.000Z'));
+      await sessions.save(ended);
+      await sessions.save(ended);
+
+      expect(await count('session')).toBe(before);
+      const read = await sessions.getSession('idem-1');
+      expect(read?.endedAt).toBe('2026-09-01T10:00:00.000Z');
+    });
+
+    it('recording the same memory twice adds no row', async () => {
+      await sessions.save(
+        createSession({ sessionId: 'idem-2', provider: 'claude-code', actorId: 'actor-1', startedAt: START }),
+      );
+      const memory = createEngineeringMemory({
+        sessionId: 'idem-2',
+        kind: 'decision',
+        statement: 'the id is derived from session, kind and statement',
+        origin: 'explicit',
+        recordedAt: START,
+      });
+
+      await sessions.recordMemory(memory);
+      const before = await count('engineering_memory');
+      await sessions.recordMemory(memory);
+
+      expect(await count('engineering_memory')).toBe(before);
+      expect(await sessions.memoriesFor('idem-2')).toHaveLength(1);
+    });
+
+    it('a checkpoint replayed at a taken sequence writes nothing new', async () => {
+      await sessions.save(
+        createSession({ sessionId: 'idem-3', provider: 'claude-code', actorId: 'actor-1', startedAt: START }),
+      );
+      const checkpoint = createSessionCheckpoint({
+        sessionId: 'idem-3',
+        provider: 'claude-code',
+        checkpointSequence: 1,
+        capturedThroughSequence: 4,
+        checkpointedAt: START,
+        summary: 'first',
+        continuationState: {},
+      });
+      await sessions.saveCheckpoint(checkpoint);
+      const before = await count('session_checkpoint');
+
+      // Rejected rather than absorbed, and this file's own definition is the
+      // one that matters: idempotent means "writes nothing new", not "does not
+      // fail". A checkpoint's id is derived from its session and sequence but
+      // not from its summary, so a second write at a taken sequence is
+      // ambiguous — the same checkpoint replayed, or a different one claiming a
+      // position. Storage refuses instead of guessing which, exactly as an
+      // append-only transcript does.
+      await expect(sessions.saveCheckpoint(checkpoint)).rejects.toThrow();
+
+      expect(await count('session_checkpoint')).toBe(before);
+      expect((await sessions.latestCheckpoint('idem-3'))?.summary).toBe('first');
     });
   });
 

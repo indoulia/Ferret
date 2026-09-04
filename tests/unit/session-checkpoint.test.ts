@@ -83,6 +83,20 @@ describe('durable session checkpoints', () => {
     expect(verifySessionCheckpointIntegrity(checkpoint)).toBe(true);
   });
 
+  it('hashes an instant by its value, not its spelling — EPIC-109', () => {
+    // The same instant, two spellings. `checkpointedAt` is inside the content
+    // hash and the column storing it is a `timestamptz`, so a hash over the raw
+    // string could not be recomputed from a stored row — the defect
+    // `canonicalInstant` was written for, reported against 135 commits then.
+    const utc = createSessionCheckpoint({ ...input, checkpointedAt: '2026-08-31T17:30:00.000Z' });
+    const offset = createSessionCheckpoint({ ...input, checkpointedAt: '2026-08-31T23:00:00.000+05:30' });
+
+    expect(offset.contentHash).toBe(utc.contentHash);
+    expect(verifySessionCheckpointIntegrity(offset)).toBe(true);
+    // The value keeps the spelling it arrived with; only the hash canonicalises.
+    expect(offset.checkpointedAt).toBe('2026-08-31T23:00:00.000+05:30');
+  });
+
   it('uses session plus checkpoint sequence for identity', () => {
     expect(sessionCheckpointKey('session-a', 1)).toBe(sessionCheckpointKey('session-a', 1));
     expect(sessionCheckpointKey('session-a', 1)).not.toBe(sessionCheckpointKey('session-a', 2));

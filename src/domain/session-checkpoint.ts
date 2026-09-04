@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { ErrorCode, FerretError } from '../errors/index.js';
-import { canonicalId, contentHash, encodeKeyParts, stableStringify } from './identity.js';
+import { canonicalId, canonicalInstant, contentHash, encodeKeyParts, stableStringify } from './identity.js';
 
 const jsonValueSchema: z.ZodType<JsonValue, JsonValue> = z.lazy(() =>
   z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(jsonValueSchema), z.record(z.string(), jsonValueSchema)]),
@@ -43,34 +43,60 @@ function invalid(message: string, details: Record<string, unknown>, remediation:
   return new FerretError(ErrorCode.IDENTITY_INVALID, message, { details, remediation });
 }
 
-function payloadOf(checkpoint: SessionCheckpoint): Record<string, unknown> {
+/** The semantic fields the content hash covers — everything but `id` and the hash. */
+interface CheckpointPayload {
+  readonly sessionId: string;
+  readonly provider: string;
+  readonly checkpointSequence: number;
+  readonly capturedThroughSequence: number;
+  readonly checkpointedAt: string;
+  readonly summary: string;
+  readonly continuationState: Readonly<Record<string, JsonValue>>;
+}
+
+/**
+ * The hashed payload — one definition, used by the write path and the verify path.
+ *
+ * Both used to build this field list separately, thirty lines apart. That is the
+ * arrangement EPIC-094 found drifting in `evidence.ts`, and the fix there was
+ * this one: state the payload once so the two paths cannot disagree.
+ *
+ * `checkpointedAt` is canonicalised — see `canonicalInstant`. The checkpoint is
+ * stored in a `timestamptz` column (EPIC-109), so `…T23:00:00+05:30` reads back
+ * as `…T17:30:00.000Z`: the same instant, different bytes. Hashing the raw
+ * string would make the hash a function of the spelling a client happened to
+ * use, and it could not be recomputed from the stored row at all — exactly what
+ * was reported against 135 commits before `canonicalInstant` existed. The value
+ * itself keeps the spelling it arrived with; only the hash normalises.
+ */
+function payloadOf(checkpoint: CheckpointPayload): Record<string, unknown> {
   return {
     sessionId: checkpoint.sessionId,
     provider: checkpoint.provider,
     checkpointSequence: checkpoint.checkpointSequence,
     capturedThroughSequence: checkpoint.capturedThroughSequence,
-    checkpointedAt: checkpoint.checkpointedAt,
+    checkpointedAt: canonicalInstant(checkpoint.checkpointedAt),
     summary: checkpoint.summary,
     continuationState: checkpoint.continuationState,
   };
 }
 
 function buildCheckpoint(value: SessionCheckpointInput): SessionCheckpoint {
-  const payload = {
+  const continuationState = Object.freeze({ ...value.continuationState });
+  const payload: CheckpointPayload = {
     sessionId: value.sessionId,
     provider: value.provider,
     checkpointSequence: value.checkpointSequence,
     capturedThroughSequence: value.capturedThroughSequence,
     checkpointedAt: value.checkpointedAt,
     summary: value.summary,
-    continuationState: value.continuationState,
+    continuationState,
   };
 
   return Object.freeze({
     id: canonicalId(sessionCheckpointKey(value.sessionId, value.checkpointSequence)),
     ...payload,
-    continuationState: Object.freeze({ ...value.continuationState }),
-    contentHash: contentHash(stableStringify(payload)),
+    contentHash: contentHash(stableStringify(payloadOf(payload))),
   });
 }
 
