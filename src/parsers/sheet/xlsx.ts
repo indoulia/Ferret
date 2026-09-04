@@ -86,6 +86,14 @@ export function readXlsx(bytes: Uint8Array, options: XlsxReadOptions = {}): Xlsx
       'Could not find xl/workbook.xml. Are you sure this is a valid .xlsx file?',
     );
   }
+  // F-23. Present is not the same as readable: an error page, a truncated
+  // download or some other XML under this name parsed to zero `<sheet>`
+  // elements and was reported as a workbook that simply had none.
+  if (rootStructure(DECODER.decode(workbook), 'workbook') !== 'ok') {
+    throw new XlsxReadError(
+      'xl/workbook.xml is not a readable workbook part. Are you sure this is a valid .xlsx file?',
+    );
+  }
 
   const targets = relationshipTargets(entries.get('xl/_rels/workbook.xml.rels'));
   const strings = sharedStrings(entries.get('xl/sharedStrings.xml'));
@@ -121,6 +129,25 @@ export function readXlsx(bytes: Uint8Array, options: XlsxReadOptions = {}): Xlsx
       continue;
     }
 
+    // F-23, again, and this is where it bit: a worksheet part is read by regex,
+    // so anything that is not one matches no `<row>` and arrives as a sheet with
+    // no rows. That is the same answer a genuinely empty sheet gives.
+    const structure = rootStructure(DECODER.decode(part), 'worksheet');
+    if (structure !== 'ok') {
+      warnings.push(
+        structure === 'truncated'
+          ? {
+              code: 'truncated-sheet',
+              detail: `"${declaration.name}" is cut off: its part never closes </worksheet>.`,
+            }
+          : {
+              code: 'unreadable-sheet',
+              detail: `"${declaration.name}" names a part that is not a worksheet.`,
+            },
+      );
+      continue;
+    }
+
     const parsed = readSheet(part, strings, dateFormats, maxCells - cells);
     cells += parsed.cellCount;
     if (parsed.truncated) {
@@ -135,6 +162,27 @@ export function readXlsx(bytes: Uint8Array, options: XlsxReadOptions = {}): Xlsx
   }
 
   return { sheets, truncated, warnings };
+}
+
+/**
+ * Whether a part is the document it claims to be — F-23.
+ *
+ * The opening tag alone is not enough. A download cut off mid-file still starts
+ * with a correct root, and the difference between "this is not a worksheet" and
+ * "this is a worksheet that did not finish arriving" is the difference between
+ * two warnings a reader acts on differently. So the closing tag is checked too,
+ * and only a self-closing root is excused from having one.
+ *
+ * The prefix group is what keeps `<x:worksheet>` legitimate: SpreadsheetML may
+ * be written with the main namespace bound to a prefix, and rejecting that would
+ * refuse real workbooks in the name of catching corrupt ones.
+ */
+function rootStructure(xml: string, root: string): 'ok' | 'unreadable' | 'truncated' {
+  const opening = new RegExp(`<(?:[A-Za-z_][\\w.-]*:)?${root}\\b[^>]*>`, 'u').exec(xml);
+  if (opening === null) return 'unreadable';
+  if (opening[0].endsWith('/>')) return 'ok';
+  const closing = new RegExp(`</(?:[A-Za-z_][\\w.-]*:)?${root}\\s*>`, 'u');
+  return closing.test(xml.slice(opening.index)) ? 'ok' : 'truncated';
 }
 
 interface SheetDeclaration {
