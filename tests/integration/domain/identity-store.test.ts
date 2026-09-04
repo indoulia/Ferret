@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -337,6 +338,47 @@ describeDb(`identity reconciliation (${databaseAvailable() ? 'real PostgreSQL' :
       await expect(store.merge(survivor, survivor, evidenceId)).rejects.toMatchObject({
         code: 'E_IDENTITY_INVALID',
       });
+    });
+
+    it('records no supersession when the merge transaction fails — F-12', async () => {
+      // The relationship write sat in a `finally`, which runs on the way out of
+      // a `catch` that rethrows. So a merge that never happened - rolled back,
+      // or refused before the transaction opened - still asserted
+      // ENTITY_SUPERSEDES_ENTITY from the merged identity to the survivor, and
+      // the graph was left holding an edge for an event that did not occur.
+      //
+      // Identity is the one place Ferret cannot correct itself afterwards:
+      // `merge` refuses to cross the actor-class boundary, so a false
+      // supersession recorded by a refused cross-class merge is not reversible
+      // by another merge. This asserts the refusal leaves the graph untouched.
+      // The failure has to come from *inside* the transaction. A cross-class or
+      // self merge is refused by `assertSameActorClass` before the `try` opens,
+      // so the `finally` never runs for those and they prove nothing here. An
+      // evidence id that does not exist gets past every pre-check and violates
+      // the alias table's foreign key once the transaction is under way, which
+      // is the shape of every real failure this guard is about: a constraint, a
+      // dropped connection, a deadlock.
+      const absentEvidence = '00000000-0000-4000-8000-00000000f12f';
+      const left = await actor(EntityKind.DEVELOPER, 'dev-f12-left', 'F12 Left');
+      const right = await actor(EntityKind.DEVELOPER, 'dev-f12-right', 'F12 Right');
+      await store.link({
+        system: 'git',
+        externalId: 'f12.right@example.com',
+        actorId: right,
+        actorClass: ActorClass.DEVELOPER,
+      });
+
+      await expect(store.merge(left, right, absentEvidence)).rejects.toBeDefined();
+
+      const edges = await handle.execute<{ n: string }>(sql`
+        SELECT count(*)::text AS n FROM "ferret"."relationship"
+         WHERE type = 'entity_supersedes_entity' AND from_id = ${right}
+      `);
+      expect(edges.rows[0]?.n, 'a failed merge recorded a supersession').toBe('0');
+
+      // And the merge really did roll back, so the assertion above is about a
+      // missing edge rather than a merge that quietly succeeded.
+      expect((await entities.get(right))?.lifecycle).toBe(LifecycleState.ACTIVE);
     });
   });
 
