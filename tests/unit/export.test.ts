@@ -35,16 +35,27 @@ interface FakeRow {
  * those are integration-tested against a real graph.
  */
 function fakeDatabase(tables: Readonly<Record<string, readonly FakeRow[]>>): FerretDatabase {
-  let call = -1;
+  let prologue = 0;
+  let call = 0;
   const reader = {
     execute: () => {
-      // Call zero is the catalogue read that tells the export which columns
-      // PostgreSQL generates — EPIC-090 found that `search_vector` must not be
-      // exported, and the answer comes from `information_schema`. An empty
-      // answer means "none generated", which is right for hand-built rows.
-      if (call === -1) {
-        call = 0;
+      // **Two reads happen before the first table, and both feed the manifest.**
+      //
+      // The catalogue read tells the export which columns PostgreSQL generates
+      // — EPIC-090 found that `search_vector` must not be exported, and the
+      // answer comes from `information_schema`. An empty answer means "none
+      // generated", which is right for hand-built rows.
+      //
+      // The instance read is EPIC-090 D2's `sourceInstanceId`: the manifest is
+      // line one and carries the identity of the installation that wrote the
+      // document, so it has to be known before anything is emitted.
+      if (prologue === 0) {
+        prologue = 1;
         return Promise.resolve({ rows: [] });
+      }
+      if (prologue === 1) {
+        prologue = 2;
+        return Promise.resolve({ rows: [{ instance_id: '00000000-0000-4000-8000-00000000fake' }] });
       }
       const spec = EXPORT_TABLES[call];
       call += 1;
@@ -192,14 +203,19 @@ describe('the export is streamed, not assembled — AC-12', () => {
     // and fail on an index larger than memory, which is the case this Epic
     // exists for.
     const order: string[] = [];
-    let served = -1;
+    let prologue = 0;
+    let served = 0;
 
     const reader = {
       execute: () => {
-        // The catalogue read first, as above, and not counted as a page.
-        if (served === -1) {
-          served = 0;
+        // The two manifest reads first, as above, and neither is a page.
+        if (prologue === 0) {
+          prologue = 1;
           return Promise.resolve({ rows: [] });
+        }
+        if (prologue === 1) {
+          prologue = 2;
+          return Promise.resolve({ rows: [{ instance_id: '00000000-0000-4000-8000-00000000fake' }] });
         }
         order.push('query');
         served += 1;

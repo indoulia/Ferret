@@ -315,10 +315,38 @@ describe('package contents', () => {
     // than assumed. The headroom is 3.4%, deliberately tighter than the 12% of
     // the earlier raises: this batch added no product surface, so the next
     // crossing should be a decision sooner rather than later.
+    //
+    // **2026-09-04, EPIC-089/090 D1 and D2 — the fifth raise, and it is the
+    // decision the paragraph above asked for.** The non-grammar output reached
+    // 2 951 306, 0.04% over. Measured first and on both sides, by building the
+    // branch tip before this cycle (`53d0880`) in a second worktree and
+    // building again with the changes applied: `dist/` went from 2 882 117
+    // non-grammar bytes to 2 919 428, so this cycle accounts for 37 311 of
+    // them and nothing else grew:
+    //
+    //     +8 113  dist/storage/schema          (the instance_restore table)
+    //     +7 984  dist/storage/export.js       (D1: detect, declare, refuse)
+    //     +4 691  dist/cli/commands            (--strict, the disclosures)
+    //     +3 818  dist/storage/import.js       (D2: provenance)
+    //     +3 723  dist/storage/export.d.ts
+    //     +2 909  dist/storage/migrations      (0014)
+    //     +1 312  dist/storage/import.d.ts
+    //     +1 122  dist/storage/bookkeeping.js  (readLatestRestore)
+    //       +859  dist/storage/bookkeeping.d.ts
+    //     +1 373  dist/errors, dist/cli/exit-codes, dist/storage/migrator, index
+    //
+    // Unlike the fourth raise this one *does* add product surface — a table, a
+    // migration, an export contract and a CLI flag — and most of the growth is
+    // again comment rather than code, which is this repository's style. No
+    // dependency was added, and nothing improper ships: re-measured, not
+    // assumed.
+    //
+    // The headroom is 3%, on the same reasoning as last time and for the same
+    // purpose: the next crossing should be a decision rather than a formality.
     const grammarBytes = pack.files
       .filter((file) => file.path.startsWith('dist/parsers/code/grammars/'))
       .reduce((total, file) => total + file.size, 0);
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_950_000);
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_040_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {

@@ -152,15 +152,30 @@ describeCli(`ferret export (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REA
     expect(help.stdout).not.toContain('backup ');
   });
 
-  it('exports no secret-shaped value into the document — AC-6, AC-13', async () => {
-    const out = join(home, 'redacted.ndjson');
+  it('exports no secret-shaped value out of an index that holds none — §8.4', async () => {
+    const out = join(home, 'faithful.ndjson');
     await runCli(['export', '--out', out], { env });
 
     const raw = readFileSync(out, 'utf8');
-    // Nothing secret-shaped reaches the document. The first line of defence is
-    // that the index holds no credential; this asserts the second — EPIC-091's
-    // redactor over each assembled line — has not been removed.
+    // **What this measures, stated accurately.** It measures §8.4's *first*
+    // line of defence — that the index holds no credential, because every
+    // producer redacts before it writes (EPIC-087 §8.2). It does not and
+    // cannot measure a second line at export time, because this fixture's
+    // index has nothing for one to catch.
+    //
+    // The title used to cite AC-6 and AC-13, which are the `READ` grant and the
+    // audit event, and the comment used to claim this asserted that an
+    // export-time redactor "has not been removed". Neither was true, and the
+    // second became actively misleading when D1 stopped that redactor
+    // rewriting values: a faithful export of an index that *did* hold a
+    // credential now carries it, reports it in the trailer, and offers
+    // `--strict` to refuse instead. That behaviour is measured where it can
+    // be — `export-fidelity.test.ts`, against an index seeded with one.
     expect(raw).not.toContain('password=');
     expect(raw).not.toMatch(/ghp_[A-Za-z0-9]{20,}/);
+    // And the positive half, which is the claim that is actually available
+    // here: the scanner ran and found nothing, rather than not having run.
+    const trailer = readExportDocument(raw).trailer;
+    expect(trailer?.credentialShaped).toStrictEqual([]);
   });
 });

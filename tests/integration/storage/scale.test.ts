@@ -70,8 +70,17 @@ const SAMPLES = 30;
  *
  * Adding an index without a query fails the build; writing a query for one
  * fails too. Both are the review moment.
+ *
+ * **Raised from 27 on 2026-09-04, and this is that review moment.** Migration
+ * `0014` adds `instance_restore_restored_at_idx` for EPIC-090 D2. It is
+ * unexercised here for the first of the two reasons above and not the second:
+ * this fixture seeds no restore, because a restore is an import and this sweep
+ * measures query plans over a seeded index. The index has one reader —
+ * `readLatestRestore`, which is `ORDER BY restored_at DESC LIMIT 1`, exactly
+ * what a descending index is for — and that reader is exercised by
+ * `backup-contract.test.ts` against real rows.
  */
-const PINNED_UNEXERCISED = 27;
+const PINNED_UNEXERCISED = 28;
 
 interface Measurement {
   readonly label: string;
