@@ -99,7 +99,7 @@ if the body throws — so a started runtime cannot leak.
 | `ferret upgrade` | Implemented | EPIC-106 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
 | `ferret sync` | **Planned** | EPIC-021, EPIC-071, EPIC-072 |
-| `ferret session` | **Planned** | EPIC-039–043 |
+| `ferret session` | **Planned** | EPIC-039–043, EPIC-109, EPIC-110 |
 
 The two planned rows are not a roadmap gesture. The GitHub and Jira providers,
 project modelling and the session and memory domain are **real, tested and
@@ -109,6 +109,12 @@ What was missing was any way for an operator to find that out: `ferret sync`
 answered with an unknown-command error indistinguishable from a typo. It now
 exits 5 with `E_NOT_IMPLEMENTED` and names the Epics that own the behaviour,
 where an unknown command still exits 2.
+
+`ferret session` has since lost half its distance. EPIC-109 built the store the
+session Epics deferred: sessions, transcripts, checkpoints and extracted
+memories persist, and `recoverSession` runs against a real database rather than
+a test double. What is still missing is the command itself — EPIC-110 — so the
+row stays `Planned` and the capability is reachable only as a library.
 
 Every other approved command in this release is implemented. The mechanism for
 reporting an approved-but-unbuilt command — exit code `5` with

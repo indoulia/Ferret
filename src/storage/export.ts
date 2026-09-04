@@ -123,6 +123,56 @@ export const EXPORT_EXCLUSIONS: readonly ExcludedTable[] = [
     reason: "The target's own record of migrations that failed here.",
     recovery: 'Not applicable — it describes the target.',
   },
+  // The four Session & Agent Memory tables — EPIC-109. One decision, stated
+  // four times because the contract is per table and a reader checking one
+  // should not have to find the others.
+  //
+  // Named here rather than exported because a scoped export narrows by *entity
+  // id*, and a session is not an entity: `session.repository_id` is free text
+  // precisely so a session can be recorded outside any repository Ferret has
+  // indexed (EPIC-039 AC-3). There is no predicate that answers "which sessions
+  // belong to this scope" without first deciding what a scoped export of a
+  // session means, and that decision is not in the repository. Carrying them
+  // only in a full export and silently dropping them from a scoped one is the
+  // exact silence F-45 was about, so they travel in neither until it is made.
+  {
+    table: 'session',
+    reason:
+      'Session identity and lifecycle are not part of the export payload. A scoped export narrows by ' +
+      'entity id and a session is not an entity, so there is no scope predicate for one; carrying ' +
+      'sessions in a full export and dropping them from a scoped export would be an omission the ' +
+      'manifest could not describe.',
+    recovery:
+      'Session context does not survive `ferret export` and `ferret import` — it is lost, and this ' +
+      'says so rather than implying otherwise. Use `pg_dump` for a full-fidelity copy of an ' +
+      'installation, which EPIC-089 §8.1 already assigns it. Roadmap EPIC-116 decides what a scoped ' +
+      'export of a session means; until it does, nothing is exported rather than exported partially.',
+  },
+  {
+    table: 'session_capture',
+    reason:
+      'The raw transcript of a session, which travels with the session or not at all. Excluded for ' +
+      'the same reason `session` is, and additionally the largest and least reconstructable payload ' +
+      'in the schema.',
+    recovery:
+      'Lost on export/import; use `pg_dump`. The transcript is evidence in EPIC-008\'s sense and ' +
+      'cannot be regenerated from anything else once the installation is gone.',
+  },
+  {
+    table: 'session_checkpoint',
+    reason: 'Derived from a session, and excluded with it — a checkpoint whose session did not travel is dangling.',
+    recovery: 'Lost on export/import; use `pg_dump`.',
+  },
+  {
+    table: 'engineering_memory',
+    reason:
+      'What a session decided and learned. Excluded with its session: a memory names the captures it ' +
+      'was drawn from, and importing it without them would carry a claim whose evidence did not ' +
+      'arrive — the one thing EPIC-042 exists to prevent.',
+    recovery:
+      'Lost on export/import; use `pg_dump`. This is the most valuable thing the exclusion costs, ' +
+      'and it is the reason EPIC-116 exists rather than a reason to carry it half-formed.',
+  },
 ];
 
 /**

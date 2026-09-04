@@ -71,16 +71,29 @@ const SAMPLES = 30;
  * Adding an index without a query fails the build; writing a query for one
  * fails too. Both are the review moment.
  *
- * **Raised from 27 on 2026-09-04, and this is that review moment.** Migration
- * `0014` adds `instance_restore_restored_at_idx` for EPIC-090 D2. It is
- * unexercised here for the first of the two reasons above and not the second:
- * this fixture seeds no restore, because a restore is an import and this sweep
- * measures query plans over a seeded index. The index has one reader —
- * `readLatestRestore`, which is `ORDER BY restored_at DESC LIMIT 1`, exactly
- * what a descending index is for — and that reader is exercised by
- * `backup-contract.test.ts` against real rows.
+ * **Raised from 27 on 2026-09-04.** Migration `0014` adds
+ * `instance_restore_restored_at_idx` for EPIC-090 D2. It is unexercised here
+ * for the first of the two reasons above and not the second: this fixture seeds
+ * no restore, because a restore is an import and this sweep measures query
+ * plans over a seeded index. The index has one reader — `readLatestRestore`,
+ * which is `ORDER BY restored_at DESC LIMIT 1`, exactly what a descending index
+ * is for — and that reader is exercised by `backup-contract.test.ts` against
+ * real rows.
+ *
+ * **Raised from 28 to 32 on 2026-09-05, and this is that review moment.**
+ * Migration `0015` adds four for EPIC-109: `session_actor_idx`,
+ * `session_parent_idx`, `engineering_memory_session_idx` and
+ * `engineering_memory_live_idx`. All four are unexercised for the first reason
+ * and not the second — this fixture seeds entities, evidence and relationships,
+ * and no session. Each has a named reader, and every one of them is exercised
+ * against real rows in `sessions.test.ts`: `sessionsFor` orders by actor and
+ * start time, `recoverSession` walks `parent_session_id` across a real lineage,
+ * and `memoriesFor` reads by session — the partial `_live_idx` serving the
+ * superseded-drop that recovery performs by default. The scale of a session
+ * store is a transcript, not 20,000 entities, so measuring their plans here
+ * would measure a fixture this sweep is not about.
  */
-const PINNED_UNEXERCISED = 28;
+const PINNED_UNEXERCISED = 32;
 
 interface Measurement {
   readonly label: string;

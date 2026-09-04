@@ -176,7 +176,18 @@ export {
   type IndexInventory,
   type LockHolder,
 } from './diagnostics.js';
+export { SessionStore } from './sessions.js';
 export { indexRun, type IndexRunRow } from './schema/runs.js';
+export {
+  engineeringMemory,
+  session,
+  sessionCapture,
+  sessionCheckpoint,
+  type EngineeringMemoryRow,
+  type SessionCaptureRow,
+  type SessionCheckpointRow,
+  type SessionRow,
+} from './schema/sessions.js';
 export { instanceRestore, type InstanceRestoreRow as InstanceRestoreTableRow } from './schema/provenance.js';
 export {
   ContentStore,
