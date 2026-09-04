@@ -7,6 +7,7 @@ import {
   resolveReferences,
   type CodeSymbol,
   type SymbolIndexPort,
+  type FileReferenceResolution,
   type SymbolIndexReport,
 } from '../code/index.js';
 import { DEFAULT_SYMBOL_SOURCE_SYSTEM } from '../code/identity.js';
@@ -156,6 +157,23 @@ export interface ContentStageResult {
    */
   readonly structure: ReadonlyMap<string, FileStructure>;
   /**
+   * How much of each file's code this run resolved — F-27.
+   *
+   * Written onto the `file` entity by the indexer, through the same seam as
+   * `structure` and for the same reason: the source provider owns file identity.
+   * Only files this run actually resolved references in appear, so "not
+   * measured" and "measured, nothing unresolved" stay apart.
+   */
+  readonly resolution: ReadonlyMap<string, FileReferenceResolution>;
+  /**
+   * Endpoints this run re-derived every reference edge for — F-25b.
+   *
+   * The indexer may close an edge from one of these that it did not re-assert,
+   * and may not close anything else: for a file the stage never visited, an
+   * absent edge means "not looked at" rather than "gone".
+   */
+  readonly sources: ReadonlySet<string>;
+  /**
    * Symbol edges this stage derived — EPIC-035.
    *
    * Returned rather than written for the reason `structure` is returned: this
@@ -261,6 +279,17 @@ export async function runContentStage(
   // how two halves of one graph stop agreeing.
   const fileIds = fileEntityIds(request.emitted.entities);
   const structure = new Map<string, FileStructure>();
+  /** F-27. How much of each file's code this run could resolve, by path. */
+  const resolution = new Map<string, FileReferenceResolution>();
+  /**
+   * Endpoints this run re-derived references *from* — F-25b.
+   *
+   * Every file the stage resolved and every symbol it built, whether or not it
+   * produced an edge. The distinction is the whole point: a file whose last call
+   * was deleted contributes no edge, and without it in this set the indexer
+   * could not tell "no longer references anything" from "not looked at".
+   */
+  const sources = new Set<string>();
 
   let filesConsidered = 0;
   let filesSkippedUnchanged = 0;
@@ -280,6 +309,10 @@ export async function runContentStage(
     readonly built: readonly CodeSymbol[];
     readonly references: readonly CodeReference[];
     readonly imports: readonly string[];
+    /** What the gate needs, so the artefact can be written after resolution. */
+    readonly scopeId: string;
+    readonly contentHash: string;
+    readonly structure: FileStructure;
   }[] = [];
   const textOmitted: Record<string, number> = {};
 
@@ -315,6 +348,12 @@ export async function runContentStage(
       // structure the last run derived would rewrite the entity to remove it,
       // which is a row written for a file nothing about which changed.
       if (replayed !== undefined) structure.set(entry.path, replayed);
+      // F-27, replayed for the same reason and with the same consequence if it
+      // is not: the file entity is about to be re-emitted, and without this the
+      // attribute the last run derived would be stripped from a file whose
+      // content, parser and grammar are all unchanged.
+      const replayedResolution = replayResolution(verdict.metadata);
+      if (replayedResolution !== undefined) resolution.set(entry.path, replayedResolution);
       logger?.debug(
         { operation: 'index.content.skip', path: entry.path, reason: 'unchanged' },
         `Skipped ${entry.path}: content, parser and grammar are unchanged`,
@@ -404,7 +443,15 @@ export async function runContentStage(
       // Recorded anyway, and deliberately. "No parser claims this media type" is
       // a stable answer for unchanged content, and re-deriving it every run
       // would make the gate useless for exactly the files it is cheapest on.
-      await record(artifacts, scopeId, producerVersion, known.contentHash, described, request.observedAt);
+      await record(
+        artifacts,
+        scopeId,
+        producerVersion,
+        known.contentHash,
+        described,
+        undefined,
+        request.observedAt,
+      );
       continue;
     }
 
@@ -449,9 +496,16 @@ export async function runContentStage(
       built,
       references: outcome.references ?? [],
       imports: outcome.imports ?? [],
+      scopeId,
+      contentHash: known.contentHash,
+      structure: described,
     });
 
-    await record(artifacts, scopeId, producerVersion, known.contentHash, described, request.observedAt);
+    // The artefact for a parsed file is written *after* its references resolve —
+    // F-27. It has to carry the resolution counts, and those do not exist until
+    // the second phase below, because resolving needs every file's symbols.
+    // A file that never reaches that phase records no artefact and is re-parsed
+    // next run, which is the safe direction.
   }
 
   // The reference pass — EPIC-035, in two phases over the whole run.
@@ -491,6 +545,28 @@ export async function runContentStage(
     );
     references = addReferences(references, found.counts);
     edges.push(...found.edges);
+    // F-27. The counts were folded into a run total, logged at `debug`, and
+    // dropped — so "nothing references this" and "we refused to resolve most of
+    // the references in the file that would have" were the same answer. Kept
+    // per file, which is the granularity a caller can act on and the one
+    // EPIC-035 §12 names.
+    if (file.fileId !== undefined) sources.add(file.fileId);
+    for (const symbol of file.built) sources.add(symbol.id);
+    const summary = {
+      extracted: found.counts.extracted,
+      resolved: found.counts.resolved,
+      unresolved: { ...found.counts.unresolved },
+    };
+    resolution.set(file.path, summary);
+    await record(
+      artifacts,
+      file.scopeId,
+      file.producerVersion,
+      file.contentHash,
+      file.structure,
+      summary,
+      request.observedAt,
+    );
   }
 
   return {
@@ -510,6 +586,13 @@ export async function runContentStage(
       references,
     },
     structure,
+    // F-27. Returned rather than written, for the same reason `structure` is:
+    // this stage runs between the listing and the write, and the file entity it
+    // belongs on is emitted by the source provider.
+    resolution,
+    // F-25b. The endpoints the indexer may retire edges from, because this run
+    // re-derived every edge they have.
+    sources,
     // EPIC-035. Derived here and written by the indexer, after the entities
     // these edges point at exist.
     edges,
@@ -717,6 +800,13 @@ async function record(
   producerVersion: string | undefined,
   contentHash: string,
   structure: FileStructure,
+  /**
+   * How much of the file resolved — F-27, and `undefined` for a file that was
+   * never parsed. Stored for the reason the structure is: a gate skip re-emits
+   * the entity, and emitting it without an attribute the last run derived
+   * *removes* that attribute and writes a row for a file nothing changed about.
+   */
+  resolution: FileReferenceResolution | undefined,
   now: Date,
 ): Promise<void> {
   await artifacts.recordArtifact(
@@ -729,10 +819,36 @@ async function record(
       // The structure is the artefact. Recording it is what lets a gate skip
       // replay what the last run derived instead of emitting a file stripped of
       // it — no bytes are stored, which §4 reserves for EPIC-087.
-      metadata: { structure: { ...structure } },
+      metadata: {
+        structure: { ...structure },
+        ...(resolution === undefined ? {} : { referenceResolution: { ...resolution } }),
+      },
     },
     now,
   );
+}
+
+/**
+ * The resolution counts a previous run recorded — F-27.
+ *
+ * Shape-checked rather than cast: an artefact written by an older version holds
+ * no such key, and one written by a newer one may hold a shape this does not
+ * understand. Either way the answer is nothing, which re-derives rather
+ * than replaying something it cannot read.
+ */
+function replayResolution(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): FileReferenceResolution | undefined {
+  const stored = metadata?.['referenceResolution'];
+  if (typeof stored !== 'object' || stored === null) return undefined;
+  const candidate = stored as Partial<FileReferenceResolution>;
+  if (typeof candidate.extracted !== 'number' || typeof candidate.resolved !== 'number') return undefined;
+  if (typeof candidate.unresolved !== 'object' || candidate.unresolved === null) return undefined;
+  return {
+    extracted: candidate.extracted,
+    resolved: candidate.resolved,
+    unresolved: { ...candidate.unresolved },
+  };
 }
 
 /** The structure a previous run recorded, when the record still holds one. */
@@ -991,11 +1107,21 @@ async function indexReferences(
         // The rule is on the edge because it is the answer to "how sure are
         // you" — a caller reading a call graph needs to know which half of it
         // is an inference from the absence of a homonym.
+        // **No `line` — F-25b.** `#findOpenEquivalent` matches an open interval
+        // on byte-identical metadata, so with the call site's line in here an
+        // edit that moved a call opened a *second* open interval for a fact
+        // that had not changed. Measured live: `checkAll` at 408 and at 412,
+        // both `validTo: null`, from two runs of the same indexer.
+        //
+        // The line is not lost. It is per *call site*, and a call site is what
+        // the evidence row below records — `cardinality: 'collection'`, one row
+        // each, with a `line` locator. It was never a property of the edge:
+        // "`use` references `helper`" is one fact however many times it is
+        // written and wherever in the file it sits.
         metadata: {
           rule: one.rule,
           referenceKind: one.reference.kind,
           name: one.reference.name,
-          line: one.reference.span.startLine,
         },
         sourceSystem: DEFAULT_SYMBOL_SOURCE_SYSTEM,
         sourceId: request.path,

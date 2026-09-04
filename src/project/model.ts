@@ -442,7 +442,17 @@ function actorEntity(state: Accumulator, actor: ProjectActor, emitter: Emitter):
   // disagree with it eventually. An actor with no address at all is classified
   // on its name, which is all there is.
   const classification = classifyIdentity(
-    normalized ?? { name, email: '', comparable: '', localPart: '', domain: '', login: undefined },
+    normalized ?? {
+      name,
+      email: '',
+      comparable: '',
+      localPart: '',
+      domain: '',
+      login: undefined,
+      // F-11's flag. This stand-in exists to classify a *name* when there is no
+      // address at all, which is exactly what the flag reports.
+      addressed: false,
+    },
   );
 
   const entity = emitter.entity({

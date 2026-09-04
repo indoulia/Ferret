@@ -1,9 +1,9 @@
 # STATE
 
-**Phase:** Batch 6 implemented, re-audited and verified. Stopped, as instructed.
+**Phase:** Batch 7 implemented and re-audited — the final implementation batch. Final forensic audit next.
 **Base:** `0407618` (main, untouched). **Worktree:** `C:\AIAgent\ferret-forensic`, branch `forensic/post-roadmap-audit`.
-**Last action:** F-94/F-71 fixed as one enumeration; eight second-order defects found by
-re-auditing and corrected; one wrong-layer test replaced twice; full verify run, all green.
+**Last action:** F-25/F-25b/F-27/F-11 fixed; six second-order defects found by re-auditing
+and corrected; one existing test that encoded the defect corrected rather than deleted.
 
 ## Done
 - Forensic verification — 100 findings (`docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md`).
@@ -51,7 +51,23 @@ re-auditing and corrected; one wrong-layer test replaced twice; full verify run,
   a credential, shaped like a credential — with `redactString` removing registered values and
   `gitVector` refusing an argument that carries one. Closes F-94, F-71.
 
+- **Batch 7 — code-intelligence and identity truth** (`docs/evidence/FERRET-BATCH-7-CODE-INTELLIGENCE-TRUTH.md`):
+  the receiver carried from the parser so `this.has()` corroborates and `map.has()` does not;
+  `line` out of a reference edge's identity, and the indexer closing what a re-derived
+  endpoint no longer asserts; per-file resolution counts persisted on the `file` entity and
+  replayed through the gate; and an address that is not an address minting no actor — after
+  the mailmap, with the commit recording `unattributedAuthor` instead. Closes F-25, F-25b,
+  F-27 (persistence half — see below), F-11. **The last implementation batch.**
+
 ## Changed
+Batch 7: `src/code/references.ts` · `src/code/index.ts` · `src/parsers/code/provider.ts` ·
+`src/providers/contracts/parser.ts` · `src/indexing/content.ts` · `src/indexing/indexer.ts` ·
+`src/indexing/ports.ts` · `src/storage/relationships.ts` · `src/git/provider.ts` ·
+`src/identity/git-identity.ts` · `src/project/model.ts` · `src/domain/attributes.ts`.
+New tests: `tests/unit/code-reference-truth.test.ts`,
+`tests/integration/indexing/reference-intervals.test.ts`,
+`tests/integration/git/identity-collapse.test.ts`; one case in `tests/unit/code-references.test.ts`
+corrected and one added.
 Batch 6: `src/security/credentials.ts` · `src/security/subprocess.ts` (new) ·
 `src/security/secrets.ts` · `src/security/index.ts` · `src/errors/redact.ts` ·
 `src/git/runner.ts` · `src/git/history.ts` · `src/git/index.ts` · `src/config/secret-ref.ts` ·
@@ -84,6 +100,15 @@ New tests: `tests/integration/indexing/history-completeness.test.ts`,
 `tests/integration/storage/embedding-provisioning.test.ts`, plus one case in
 `tests/unit/export.test.ts`.
 
+## Verified (Batch 7)
+See the final audit section below — this batch's numbers are the audit's numbers.
+One existing assertion changed and it is worth naming: `code-references.test.ts` >
+"still resolves a member call to a declaration in the same file" passed **no receiver**, so
+what it asserted was that *any* member call resolves to a same-file homonym — the defect
+itself, with a comment describing the case it did not test. It now passes `this`, and a
+second case asserts the refusal for every other receiver. Corrected rather than deleted, and
+not changed merely to make the suite green.
+
 ## Verified (Batch 6)
 `lint && typecheck && build && vitest run`: **3491 passed, 7 skipped, 0 failed** (172 files, 357 s).
 The run before it failed five and every one was real: two `boundaries` failures (the first
@@ -105,6 +130,26 @@ PostgreSQL chose `Index Only Scan using entity_lifecycle_idx` over a sequential 
 schema or query planning. Recorded as **F-101**, a new infrastructure finding of F-92's
 class. F-92 and F-73 did not fire this run: the wide-tree walk passed and packaging
 completed all 34 tests.
+
+## Proved (Batch 7)
+**12 of 20 fixture assertions red first**, each for the reason the finding names.
+F-25: 5 of 9 — the resolver refused nothing and the parser reported no receiver.
+F-25b/F-27: 5 of 6 — a moved call produced **two open intervals** ("expected [ {…}, {…} ] to
+have a length of 1 but got 2"), `line` was in the edge's identity, a deleted call was still
+asserted, and `referenceResolution` was undefined. The one green was the control that an
+unchanged file's edges must not move, and it stayed green.
+F-11: 2 of 5 — three commits by three people (Alice `<unknown>`, Bob `<unknown>`, Carol
+`<carol@example.com>`) produced **two** developers, with the surviving display name decided by
+Git's return order. Exactly the order-dependent merge the triage predicted.
+
+Six second-order defects found by re-auditing and corrected: a second run would have rewritten
+every gate-skipped file (AC-6), because the new attribute was not replayed from the artefact —
+the same trap `structure` already documents; one database round trip per symbol in the retire
+sweep; the sweep reporting nothing, so "closed none" and "never ran" were one observation; a
+commit silently rolled back because the strict attribute schema had not been extended; two
+orphaned doc comments from a bad splice; and a **vacuous assertion in my own fixture**
+(`?? false` made a missing property read as the desired value, so it was green against the
+defect it was written for).
 
 ## Proved (Batch 6)
 Both fixtures are at the real boundary. F-94: a real repository, real `git`, assertions on
@@ -159,15 +204,15 @@ position on a resumed run (EPIC-108 AC-10).
 ## Constraints in force
 No new Epics. No Epic status changes. No PRs. No merge. No deploy. No changes to `main`.
 
-## Next action (not started, not authorized)
-Batch 7 — code-intelligence truth: F-25 (+F-25b) and F-11. Both change what Ferret asserts
-about people and call graphs, and both need a re-index to take effect, so they want a slot
-where a re-index is acceptable. F-27 remains open and is the natural companion to any further
-content-stage work — its fix needs a second symbol write after cross-file resolution, which is
-a structural change to the content stage.
+## Next action
+**Implementation is closed.** Batch 7 was the final authorized batch; the remaining work is
+the read-only final forensic audit, whose report is the deliverable.
 
-F-92, F-73 and F-101 remain open, unowned by any batch, and none of them fired in Batch 6's
-verification run. Await authorization.
+Remaining, and explicitly *not* to be implemented: **F-27's read half** — a completeness
+notice on `ferret_neighbours` for reference queries. The counts are persisted and reach any
+caller that reads the `file` entity; the tool does not yet qualify an empty inbound list.
+Batch 8 (record correction, no code) is unstarted. F-73, F-92 and F-101 remain open
+infrastructure findings.
 
 ## Open decisions for a human
 1. F-21 — is GitHub/Jira ingestion meant to be reachable in this release, or library-only?

@@ -1,6 +1,12 @@
 import { Metric, Tracer, defaultMetrics, type MetricsRegistry } from '../observability/index.js';
 import { processInvocationId } from '../logging/index.js';
 import {
+  FILE_DECLARES_SYMBOL,
+  FILE_REFERENCES_SYMBOL,
+  SYMBOL_REFERENCES_SYMBOL,
+  type FileReferenceResolution,
+} from '../code/index.js';
+import {
   EntityKind,
   canonicalId,
   encodeKeyParts,
@@ -24,6 +30,24 @@ import type { ParserFramework } from '../parsing/index.js';
 
 import { runContentStage, type ContentCounts } from './content.js';
 import { ContentStageSkip } from './ports.js';
+
+/**
+ * The edge types the content stage owns, and the only ones it may close.
+ *
+ * F-25b's blast radius, written down. A sweep that could retire any edge type
+ * would be able to close history edges from a content run.
+ */
+function edgeKey(fromId: string, type: string, toId: string): string {
+  // NUL, because no id or type can contain one: with a separator that can, two
+  // different edges could share a key and one would be retired in error.
+  return [fromId, type, toId].join(String.fromCharCode(0));
+}
+
+const CONTENT_EDGE_TYPES: ReadonlySet<string> = new Set([
+  FILE_DECLARES_SYMBOL,
+  FILE_REFERENCES_SYMBOL,
+  SYMBOL_REFERENCES_SYMBOL,
+]);
 import type {
   ContentArtifactStore,
   ContentBlobWriter,
@@ -156,6 +180,14 @@ export interface IndexReport {
   readonly incremental: boolean;
   readonly entities: WriteCounts;
   readonly relationships: WriteCounts;
+  /**
+   * Reference edges closed because the code no longer contains the call — F-25b.
+   *
+   * Separate from `lifecycle.retired`, which is about *entities*. Nothing ever
+   * ended a content edge before this, so a call deleted from a file stayed
+   * asserted for ever and every impact answer kept repeating it.
+   */
+  readonly referencesRetired: number;
   readonly evidence: { readonly recorded: number; readonly deduplicated: number };
   /**
    * Conflict reconciliation over the subjects this run wrote about — EPIC-047.
@@ -611,6 +643,17 @@ export class RepositoryIndexer {
     let content: ContentCounts | undefined;
     let contentStructure: ReadonlyMap<string, FileStructure> | undefined;
     let contentEdges: readonly RelationshipInput[] = [];
+    let contentResolution: ReadonlyMap<string, FileReferenceResolution> | undefined;
+    /** Endpoints the content stage re-derived this run — F-25b's retire scope. */
+    let contentSources: ReadonlySet<string> = new Set();
+    /**
+     * Reference edges this run closed — F-25b.
+     *
+     * Reported rather than kept internal, for the reason every other counter in
+     * this file is: a sweep whose effect is invisible is one nobody can tell
+     * from a sweep that never ran.
+     */
+    let referencesRetired = 0;
     if (!contentStage.run) {
       this.#logger?.info(
         {
@@ -734,6 +777,8 @@ export class RepositoryIndexer {
         );
         content = stage.counts;
         contentStructure = stage.structure;
+        contentResolution = stage.resolution;
+        contentSources = stage.sources;
         contentEdges = stage.edges;
       }
 
@@ -747,6 +792,10 @@ export class RepositoryIndexer {
           : this.#source.emitFiles(repository, listing.entries as readonly never[], {
               ...emitOptions,
               structure: contentStructure,
+              // F-27. Written onto the same `file` entity as the structure, and
+              // for the same reason it is threaded through here rather than
+              // asserted in the stage: the provider owns file identity.
+              ...(contentResolution === undefined ? {} : { referenceResolution: contentResolution }),
             });
 
       skipped.push(...graph.skipped);
@@ -764,6 +813,19 @@ export class RepositoryIndexer {
       // the first end-to-end run.
       for (const edge of contentEdges) {
         await this.#relationships.assert(edge, observedAt);
+      }
+
+      // F-25b's second half. Nothing ever ended a content edge — the indexer
+      // only asserted, and the only `retire` caller in `src/` was the entity
+      // lifecycle sweep — so a call deleted from a file stayed in the graph for
+      // ever and every impact answer kept asserting it.
+      //
+      // Scoped to the endpoints this run actually re-derived. A file the
+      // content stage did not visit contributes no `fromId`, so an incremental
+      // run cannot retire edges it was never in a position to observe: absence
+      // from `contentEdges` then means "not looked at", not "gone".
+      if (contentStage.run) {
+        referencesRetired += await this.#retireVanishedEdges(contentEdges, contentSources, observedAt);
       }
     };
 
@@ -917,6 +979,8 @@ export class RepositoryIndexer {
       incremental: since !== undefined || exclude.length > 0,
       entities: entities.counts,
       relationships: relationships.counts,
+      // F-25b. Reference edges closed because the call is no longer in the file.
+      referencesRetired,
       evidence: { recorded, deduplicated },
       conflicts,
       commitsRead,
@@ -946,6 +1010,49 @@ export class RepositoryIndexer {
     );
 
     return report;
+  }
+
+  /**
+   * Closes reference edges the file no longer has — F-25b.
+   *
+   * Nothing ever ended a content edge. The indexer only asserted, and the sole
+   * `retire` caller in `src/` was the entity lifecycle sweep, so a call deleted
+   * from a file stayed open for ever and every impact answer kept asserting it.
+   *
+   * **Scoped to endpoints this run re-derived.** `sources` is every file the
+   * content stage resolved and every symbol it built, whether or not it produced
+   * an edge — which is the distinction that makes this safe. For a file the
+   * stage skipped at the gate, an absent edge means "not looked at"; for one in
+   * `sources`, it means the call is gone. Retiring on the first would delete a
+   * correct graph on every incremental run.
+   *
+   * A tombstone, not a delete: the interval closes so "when did this stop being
+   * true" stays answerable.
+   */
+  async #retireVanishedEdges(
+    asserted: readonly RelationshipInput[],
+    sources: ReadonlySet<string>,
+    at: Date,
+  ): Promise<number> {
+    const open = this.#relationships.openOutgoingOfTypes?.bind(this.#relationships);
+    const retire = this.#relationships.retire?.bind(this.#relationships);
+    // Both, or neither. Half of this pair would read every edge and close none,
+    // which is the shape of a control that reports success having done nothing.
+    if (open === undefined || retire === undefined || sources.size === 0) return 0;
+
+    const kept = new Set(
+      asserted
+        .filter((edge) => CONTENT_EDGE_TYPES.has(edge.type))
+        .map((edge) => edgeKey(edge.fromId, edge.type, edge.toId)),
+    );
+
+    let closed = 0;
+    for (const edge of await open([...sources], [...CONTENT_EDGE_TYPES])) {
+      if (kept.has(edgeKey(edge.fromId, edge.type, edge.toId))) continue;
+      await retire(edge.fromId, edge.type, edge.toId, at, at);
+      closed += 1;
+    }
+    return closed;
   }
 
   /**

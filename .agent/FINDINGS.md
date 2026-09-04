@@ -7,11 +7,11 @@ All 100 findings were re-verified against `0407618` before being recorded.
 ## P0 (1) — CLOSED in Batch 1
 - **F-01** *(fixed)* history capped at 1 000 commits, watermark advanced to the newest of a newest-first page → permanent silent loss on any larger repository; `--full` cannot recover.
 
-## P1-A — production blockers (24; 18 closed)
+## P1-A — production blockers (24; 24 closed)
 Ingestion — **CLOSED in Batch 1**: **F-02** (all branches share one watermark), **F-03** (future-dated commit stalls ingestion for ever), **F-04** (back-dated merge -> parentless stub commits).
 Storage/install — **CLOSED in Batch 2**: **F-16** (migrate before pgvector; unrepairable, version lies), **F-17** (backup that import refuses), **F-29** (document-supplied column names interpolated into SQL), **F-30** (DB password to stdout, exit 0).
 Untrusted input — **CLOSED**: **F-60** (zip bound trusts the declared size), **F-61** (docx bypasses the bounded reader), **F-95** (undatable commit desyncs the parser, fabricates file entities) in Batch 3; **F-94** (`i18n.logOutputEncoding` reshapes `git log`) in Batch 6.
-Truthfulness — **F-05, F-06, F-23, F-24, F-28, F-31 CLOSED** (F-23 in Batch 3, rest in Batch 4). Still open: **F-25** (+**F-25b**) (same-file homonym edges; duplicate open intervals), **F-27** (unresolved references discarded — needs a second symbol write after cross-file resolution).
+Truthfulness — **F-05, F-06, F-23, F-24, F-28, F-31 CLOSED** (F-23 in Batch 3, rest in Batch 4).
 Boundary — **CLOSED in Batch 5**: **F-32** (trim cut the closing delimiter), **F-64** (containment reached top-level strings of one field only), **F-66** (notice last, under a key no other tool used). One boundary, not three patches: the fence survives truncation, containment recurses and counts, the prose/token line is drawn by shape rather than key name, and untrusted records are contained where they *enter* the pack and answer builders. Six second-order defects found by re-auditing and corrected — see `docs/evidence/FERRET-BATCH-5-PROMPT-INJECTION-BOUNDARY.md` §4.
 Enumeration — **CLOSED in Batch 6**: **F-94** (repository-controlled Git configuration
 reshapes `git log`; after Batch 3's record marker it produced *silence* — three commits in,
@@ -23,7 +23,15 @@ corrected — a `gpg.program` execution vector, `GIT_CONFIG_GLOBAL`/`_SYSTEM` un
 unredacted stderr on `incomplete.reason`, a one-shape `redactVector`, `PWD` stripped from
 every child, two spawners with two policies, a dead barrel export and a credentialled URI in
 a shipped comment. See `docs/evidence/FERRET-BATCH-6-CREDENTIAL-AND-SAFETY-ENUMERATION.md`.
-Identity: **F-11** (non-address author strings merge distinct humans irreversibly).
+Code intelligence and identity — **CLOSED in Batch 7**: **F-25** (a member call resolved to a
+same-file homonym at the top confidence band; the receiver now corroborates, so `this.has()`
+resolves and `map.has()` does not), **F-25b** (`line` removed from edge identity, and the
+indexer closes what a re-derived endpoint no longer asserts), **F-27** (per-file resolution
+counts persisted on the `file` entity — *persistence only*; the read-side notice on
+`ferret_neighbours` is **not** delivered and is recorded as remaining work), **F-11** (an
+address that is not an address mints no actor; the commit records `unattributedAuthor`
+instead, after the mailmap rather than before it). Six second-order defects found by
+re-auditing and corrected — see `docs/evidence/FERRET-BATCH-7-CODE-INTELLIGENCE-TRUTH.md` §4.
 
 ## P1-B — deferrable (15; 1 closed)
 **F-07**, **F-08**, **F-09**, **F-10**, **F-12**, **F-13**, **F-14**, **F-15**, **F-18**, **F-19**, **F-22**, **F-26**, **F-65**, **F-67**. **F-71 CLOSED in Batch 6.**

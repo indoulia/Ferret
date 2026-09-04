@@ -11,7 +11,7 @@ Each batch: failing test first, then fix, then the record it restores.
 | 4 | Answer truthfulness | F-05, F-31, F-28, F-06, F-24 | **DONE** — see `docs/evidence/FERRET-BATCH-4-ANSWER-TRUTHFULNESS.md`. **F-27 still open**: needs a second symbol write after cross-file resolution |
 | 5 | Prompt-injection boundary | F-32, F-64, F-66 | **DONE** — 8 of 9 fixture assertions red then green, six second-order defects corrected; see `docs/evidence/FERRET-BATCH-5-PROMPT-INJECTION-BOUNDARY.md` |
 | 6 | Credential and safety enumeration | F-94, F-71 | **DONE** — 11 of 17 and 29 of 31 fixture assertions red then green, eight second-order defects corrected; see `docs/evidence/FERRET-BATCH-6-CREDENTIAL-AND-SAFETY-ENUMERATION.md` |
-| 7 | Code-intelligence truth | F-25, F-11 | **NEXT — not started, not authorized.** Requires a re-index; schedule accordingly |
+| 7 | Code-intelligence and identity truth | F-25, F-25b, F-27, F-11 | **DONE** — 12 of 20 fixture assertions red then green, six second-order defects corrected; see `docs/evidence/FERRET-BATCH-7-CODE-INTELLIGENCE-TRUTH.md`. **Final implementation batch.** |
 | 8 | Record correction (no code) | F-74, F-75, F-87, EPIC-028 AC-14, EPIC-035 AC-4, EPIC-090 §11, F-20/F-21 registry notes | Each corrected record cites the finding |
 
 **Deferred, gated on a product decision:** everything behind F-21 (F-07, F-08, F-09, F-10,

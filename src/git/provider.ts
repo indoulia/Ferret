@@ -19,6 +19,7 @@ import {
   type Mailmap,
 } from '../identity/index.js';
 import { fileAttributesFrom, fileVersionAttributesFrom, type FileStructure } from '../files/index.js';
+import type { FileReferenceResolution } from '../code/index.js';
 import { isSecretPath, redactSecrets } from '../security/index.js';
 import { VERSION } from '../version.js';
 import {
@@ -690,6 +691,34 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     /** Actors already given identity evidence on this page — one row each. */
     const actorEvidence = new Set<string>();
 
+    /**
+     * What Git said about an author Ferret will not identify — F-11.
+     *
+     * Refusing to mint an identity is not licence to lose the observation. The
+     * commit keeps what the repository claimed, marked as unattributed, so "who
+     * wrote this" answers *"Git said `Alice Ainsworth <unknown>`, which is not
+     * an address"* rather than answering nothing — and a later `.mailmap` can
+     * still repair it, because the raw strings are still there.
+     *
+     * A separate pure predicate rather than a second return channel from
+     * `actorFor`, so that the commit entity — built before the author is
+     * resolved — can carry the attribute without reordering the emission.
+     */
+    const unattributedAuthorFor = (
+      name: string,
+      email: string,
+    ): { name: string; email: string; reason: string } | undefined => {
+      const raw = normalizeGitIdentity(name, email);
+      const identity =
+        raw === undefined || options.mailmap === undefined ? raw : applyMailmap(options.mailmap, raw);
+      if (identity !== undefined && identity.addressed) return undefined;
+      return {
+        name: name.trim(),
+        email: email.trim(),
+        reason: raw === undefined ? 'the commit records no author address' : 'the author address is not an address',
+      };
+    };
+
     const actorFor = (
       name: string,
       email: string,
@@ -699,6 +728,20 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       // merge every "unknown" author in the repository into one person.
       if (raw === undefined) return undefined;
       const identity = options.mailmap === undefined ? raw : applyMailmap(options.mailmap, raw);
+
+      // F-11. The comment above stated this guarantee and the code delivered it
+      // for the empty string alone: `unknown`, `(no author)`, `root` and every
+      // other non-address were kept as opaque identities whose `comparable` is
+      // the raw string, so the entity id derived from it and two people became
+      // one. Measured on a three-commit fixture: Alice and Bob, both authored
+      // `unknown`, emitted **one** developer — and which display name survived
+      // depended on the order Git returned the commits.
+      //
+      // After the mailmap, not before: a `.mailmap` exists to give imported
+      // history real addresses, and refusing first would disable it on exactly
+      // the repositories that need it. The caller records what Git said.
+      if (!identity.addressed) return undefined;
+
       const { actorClass, reason } = classifyIdentity(identity);
 
       const display = identity.name.length === 0 ? identity.comparable : identity.name;
@@ -788,6 +831,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     for (const commit of commits) {
       undo = [];
       try {
+      const unattributed = unattributedAuthorFor(commit.authorName, commit.authorEmail);
       const commitEntity = add(
         emitter.entity({
           kind: 'commit',
@@ -799,6 +843,10 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
             committedAt: commit.committedAt,
             parents: [...commit.parents],
             ...(commit.tree === undefined ? {} : { tree: commit.tree }),
+            // F-11. Present only when Ferret declined to identify the author,
+            // so an ordinary commit's attributes are unchanged and a query for
+            // unattributed history is a single predicate.
+            ...(unattributed === undefined ? {} : { unattributedAuthor: unattributed }),
           },
           sourceObservedAt: commit.committedAt,
         }),
@@ -1100,6 +1148,14 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
        * from the map is emitted exactly as it was before EPIC-030.
        */
       structure?: ReadonlyMap<string, FileStructure>;
+      /**
+       * How much of each file's code the caller could resolve — F-27.
+       *
+       * Optional, and by path, exactly like `structure`: nothing here parses,
+       * and a caller that did not run the content stage supplies none. A path
+       * absent from the map is emitted as it was before.
+       */
+      referenceResolution?: ReadonlyMap<string, FileReferenceResolution>;
     } = {},
   ): {
     entities: readonly CanonicalEntity[];
@@ -1139,6 +1195,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
 
       const extension = extensionOf(entry.path);
       const structure = options.structure?.get(entry.path);
+      const resolution = options.referenceResolution?.get(entry.path);
       const file = emitter.entity({
         kind: 'file',
         source: { id: entry.path, scope: repositoryEntity.id },
@@ -1146,6 +1203,10 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
           path: entry.path,
           ...(extension === undefined ? {} : { extension }),
           ...(structure === undefined ? {} : fileAttributesFrom(structure)),
+          // F-27. Present only for a file this run actually resolved
+          // references in, so "not measured" and "measured, none unresolved"
+          // stay apart — the distinction the counters lost by being logged.
+          ...(resolution === undefined ? {} : { referenceResolution: { ...resolution } }),
         },
       });
       entities.push(file);
