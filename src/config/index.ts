@@ -45,7 +45,6 @@ export {
   auditLogPath,
   configHome,
   findRepositoryConfig,
-  isInside,
   userConfigPath,
 } from './paths.js';
 

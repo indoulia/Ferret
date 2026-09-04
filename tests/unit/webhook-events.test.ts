@@ -11,6 +11,7 @@ import {
   SignatureRefusal,
   normalizeGithubEvent,
   normalizeJiraEvent,
+  SignatureScheme,
   verifySignature,
 } from '../../src/events/index.js';
 import type { SourceEvent } from '../../src/events/index.js';
@@ -378,5 +379,56 @@ describe('the repository watcher', () => {
     });
     for (let index = 0; index < MAX_WATCHED_ROOTS; index += 1) watcher.add(`/root-${String(index)}`);
     expect(() => watcher.add('/one-too-many')).toThrow(/more than 64 roots/u);
+  });
+});
+
+/**
+ * **The scheme table decides something — F-78.**
+ *
+ * `verifySignature` chose its prefix with `scheme === GITHUB_SHA256 ? 'sha256='
+ * : 'sha256='`. Two identical branches: not wrong for the two schemes Ferret
+ * has, both of which really do use that prefix over HMAC-SHA-256, but it read as
+ * a decision while making none. The first scheme with a different prefix or
+ * digest would have been verified as SHA-256 against a header it does not use,
+ * and the only symptom would be signatures that mysteriously fail.
+ *
+ * The table is now `Record<SignatureScheme, …>`, which is exhaustive — adding a
+ * member to the enum fails to compile until somebody states its prefix and its
+ * digest. That guarantee is a compiler one and cannot be asserted at runtime;
+ * what these assert is that the table is actually consulted and that the digest
+ * length is derived from it rather than pinned.
+ */
+describe('the signature scheme is read from a table — F-78', () => {
+  const SECRET = 'a-shared-secret';
+  const BODY = '{"hello":"world"}';
+
+  function signatureFor(body: string, secret: string): string {
+    return `sha256=${createHmac('sha256', secret).update(body, 'utf8').digest('hex')}`;
+  }
+
+  it('verifies under both declared schemes, which share a prefix', () => {
+    const header = signatureFor(BODY, SECRET);
+    for (const scheme of Object.values(SignatureScheme)) {
+      expect(verifySignature(BODY, header, SECRET, scheme).verified, scheme).toBe(true);
+    }
+  });
+
+  it('refuses a digest of the wrong length as malformed, derived not pinned', () => {
+    // Was `/^[0-9a-fA-F]{64}$/` — a literal 64 that silently encodes "sha256"
+    // a second time, in a place a new scheme's author would not think to look.
+    const short = `sha256=${'ab'.repeat(16)}`;
+    const verdict = verifySignature(BODY, short, SECRET);
+
+    expect(verdict.verified).toBe(false);
+    if (verdict.verified) return;
+    expect(verdict.refusal).toBe('malformed');
+  });
+
+  it('still refuses a correctly shaped, wrong signature as a mismatch — the control', () => {
+    const verdict = verifySignature(BODY, signatureFor(BODY, 'a-different-secret'), SECRET);
+
+    expect(verdict.verified).toBe(false);
+    if (verdict.verified) return;
+    expect(verdict.refusal).toBe('mismatch');
   });
 });
