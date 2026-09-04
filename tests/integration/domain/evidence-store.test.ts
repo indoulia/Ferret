@@ -1094,7 +1094,7 @@ describeDb(`conflict state (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REA
   });
 });
 
-describe('a field that holds several facts at once — F-06', () => {
+describeDb(`a field that holds several facts at once — F-06 (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REASON})`, () => {
   /**
    * Supersession asked one question — has this source restated this field? —
    * and applied the answer to every field alike. Three shipping producers use
