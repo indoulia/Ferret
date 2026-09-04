@@ -29,14 +29,18 @@ import { readXlsx, type Sheet, type SheetRow } from './xlsx.js';
 
 export const SHEET_PARSER_ID = 'ferret.parser.sheet';
 /**
- * 1.1.0 — F-23.
+ * 1.2.0 — F-23, then F-102.
  *
- * Not cosmetic. Until this version a corrupt worksheet part was extracted as a
- * sheet with no rows, and that artefact is cached. EPIC-031 re-extracts when the
- * producer identity moves, so moving it is what stops a silently-empty sheet
- * from being replayed out of the store for the life of the content.
+ * Not cosmetic, and the same argument twice. Until 1.1.0 a *corrupt* worksheet
+ * part was extracted as a sheet with no rows; until 1.2.0 a perfectly valid
+ * **namespace-prefixed** one was too. Both produce a cached artefact that is
+ * indistinguishable from an empty spreadsheet, and EPIC-031 re-extracts only
+ * when the producer identity moves — so moving it is the whole of what stops a
+ * silently-empty sheet being replayed out of the store for the life of the
+ * content. A fix to this reader that does not move this string leaves every
+ * document already indexed exactly as wrong as it was.
  */
-export const SHEET_PARSER_VERSION = '1.1.0';
+export const SHEET_PARSER_VERSION = '1.2.0';
 
 export const XLSX_MEDIA_TYPE =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

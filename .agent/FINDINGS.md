@@ -4,11 +4,15 @@ Full evidence: `docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md`.
 Full triage: `docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md`.
 All 100 findings were re-verified against `0407618` before being recorded.
 
-**Statuses below describe the combined remediation tree at
-`c696dacff7e9b0ea57329b5b106367764d544ff2`, branch `integration/p1a-remediation`** — the first
-ref that has ever held both the forensic branch's seven batches and F-23, validated as one tree.
-`main` is `0407618` and contains **none** of these fixes. See "Where the remediation lives",
-below.
+**`main` is now `10531e003acc38aff3a656b368cf438580d6dd0f`** — PR #153 squash-merged the
+complete P0/P1-A remediation set on 2026-09-04. The statement that `main` contained none of it
+was true until that merge and is now historical; it is preserved in the branch-topology section
+below, marked as such.
+
+**P0 and all 24 P1-A findings are closed on `main`.** A second cycle then ran against the merged
+tree — `forensic/post-merge-remediation` — re-auditing every remaining finding from source and
+fixing twelve more. Its dispositions are in "Post-merge remediation cycle", at the foot of this
+file, and they supersede any status above for the findings they name.
 
 ## P0 (1) — CLOSED in Batch 1
 - **F-01** *(fixed)* history capped at 1 000 commits, watermark advanced to the newest of a newest-first page → permanent silent loss on any larger repository; `--full` cannot recover.
@@ -190,7 +194,13 @@ or client wiring is **not** in scope for it and was explicitly ruled out by the 
 **F-102 — namespace-prefixed SpreadsheetML reads as an empty spreadsheet.** *(new; takes the
 count of recorded findings to 102.)*
 
-**Severity: unassigned. Deliberately not P1-A**, and not part of the closed set above.
+**FIXED in the post-merge cycle** — see the disposition table at the foot of this file. The
+record below is what was known when it was raised, and is kept because the reasoning about
+*input* reachability is the part worth keeping: the fix was made on code reachability alone,
+which turned out to be the right call and was not obvious at the time.
+
+**Severity when raised: unassigned. Deliberately not P1-A**, and not part of the closed set
+above.
 
 `rootStructure` accepts a prefixed root (`<x:worksheet>`, `<x:workbook>`) so that legitimate
 prefixed workbooks are not refused — the right call, and F-23's own test file records the
@@ -276,4 +286,102 @@ F-101 did not fire** in any of these runs, which — as those findings themselve
 not disprove an intermittent condition.
 
 No new migration was added by the integration or by F-27; the schema is Batch 2's `0013`.
+
+---
+
+## Post-merge remediation cycle — final disposition of every remaining finding
+
+> **Baseline.** Merged `main` at `10531e003acc38aff3a656b368cf438580d6dd0f` (PR #153).
+> Branch `forensic/post-merge-remediation`. Every status below was established from
+> that tree, not carried from an earlier record.
+
+### Fixed in this cycle (12)
+
+| Finding | What was actually wrong | Evidence |
+| --- | --- | --- |
+| **F-101** | `scale.test.ts` asserted `SELECT count(*)` plans as a sequential scan. PostgreSQL answers `count(*)` with an Index Only Scan once the visibility map is frozen, and that is not a wrong plan — so the assertion pinned an autovacuum timing artefact. **It failed the merged-`main` CI run (33864075157)**, which is what moved it out of "infrastructure". | Control rewritten to assert discrimination by *selectivity* on the same index a sibling proves is used. 19/19 green. `7024d42` |
+| **F-63** | The MCP composition root never built an `AuditWriter`. Every guard called `audit?.record` against `undefined`, so EPIC-085's journal recorded nothing any real client did — on the only surface an AI client has. | Writer wired the way `export`/`import`/`prune` already do. `7024d42` |
+| **F-88** | The `CONFIRMATION` event was written *before* `consume()`, with `PERMITTED`/`consumed` hard-coded. Every refusal was journalled as a consumed confirmation. | Decision taken first, event records its result. 2 of 4 red first. `7024d42` |
+| **F-22** | `linesOf` split on `\n`, leaving the CR on every line. Measured: identical document, LF → 2 headings / 1 outline node; CRLF → **0 and 0**. On a Windows checkout that is every Markdown file Ferret indexes, including its own 206. | CR stripped from content, still counted in offsets so spans stay honest. 2 of 4 red first. `ba86bdd` |
+| **F-102** | F-23 taught the root check to accept a namespace prefix; the eleven extractors beneath it stayed prefix-blind. A valid prefixed workbook read as `{"sheets":[],"warnings":[]}` — F-23's own signature on files that are not corrupt. | Prefix defined once, all eleven derived from it, with an over-reach control. Parser version → 1.2.0. 4 of 5 red first. `ba86bdd` |
+| **F-78** | `scheme === GITHUB_SHA256 ? 'sha256=' : 'sha256='` — two identical branches, and a `{64}` hex literal encoding "sha256" a second time. | Exhaustive `Record<SignatureScheme, …>`; digest length derived. `e928f3d` |
+| **F-86** | Four rank tiebreaks used `localeCompare` with no locale, so result order was a property of the host. | Code-unit ordering on machine identifiers. `e928f3d` |
+| **F-84** | `isInside` documented as "keeps file reads in bounds", exported on the public barrel, called by nothing. | Deleted, per the triage. `e928f3d` |
+| **F-65** | Relaxation ran `replace(' & ', ' | ')` over a rendered tsquery, inverting negation: `a & !b` → `a | !b`, selecting documents *because* they lacked the excluded term. Measured at the time: strict 0 rows, relaxed 3 775 of 3 777, all scoring 0. | Relaxation now applies only to a flat conjunction; any other shape keeps the strict query. 48 retrieval tests green. `94f265d` |
+| **F-87** | README documented 15 of 18 tools; the three missing were the answer and provenance surfaces. | README corrected; control derived from the registrations, both directions, with a control on the control. `4190e36` |
+| **F-20 / F-21** | Not missing features — every Epic excluded transport and persistence by name. What was missing was any way to *learn* that: `PLANNED_COMMANDS` was empty and `ferret sync` gave an unknown-command error indistinguishable from a typo. | Two planned commands; exit 5 with owning Epics vs exit 2 for unknown. `0c89322` |
+| **F-12** | The supersession write sat in a `finally`, which runs on the way out of a rethrowing `catch` — so a rolled-back merge still recorded that it happened, in the one subsystem that cannot correct itself afterwards. | Moved to the success path. Red first: "a failed merge recorded a supersession: expected '1' to be '0'". `742fb86` |
+
+### Closed and re-verified against the merged tree (3)
+
+| Finding | Evidence |
+| --- | --- |
+| **F-89** | `guardDestructive` wraps `ferret_config_set` (`config-tools.ts:438`) and `ferret_config_unset` (`:509`). Permission *and* confirmation are enforced. |
+| **F-67** | A duplicate of F-05, closed by Batch 4. `planner.ts:280` derives `partial` from skipped outcomes; it is no longer the constant `true` the finding describes. |
+| **F-73** | Packaging ran **all 34 tests** on the merged-`main` CI run and on every local full run in this cycle. Not reproduced. Kept OPEN as an intermittent-contention finding: a passing run does not disprove it. |
+
+### Infrastructure / test-harness, with evidence (1)
+
+| Finding | Evidence |
+| --- | --- |
+| **F-92** | `discovery.test.ts > walks a wide tree within budget`, 30 s ceiling. Did not fire in any run this cycle, local or CI. Unlike F-101 it does **not** assert a planner choice — it asserts a wall-clock budget, which is a legitimate thing to assert and legitimately contention-sensitive. Genuinely infrastructure, and named as such rather than used as an escape hatch: the distinguishing test is whether the assertion is *about* the environment, and this one is. |
+
+### Product / design decision required (4)
+
+Each is isolated; everything independent of them was fixed.
+
+| Finding | The exact decision needed |
+| --- | --- |
+| **F-41 / F-42** | The prune anti-join has no lifecycle filter, so — `file_version` being content-addressed and append-only — the blob prune target is empty by construction, and F-41's READ COMMITTED race is masked behind it. **Decision: does `prune --blobs` reclaim content referenced only by *tombstoned* file versions?** EPIC-087 says a blob "outlives the last file version that referenced it, deliberately", which settles nothing about retired ones. Any fix picks a retention semantic, so it is not mine to pick. Fixing F-42 makes F-41 reachable and the two must ship together. |
+| **F-44** | `sameContent` short-circuits on `content_hash` (`import.ts:419`), and export redacts *values* while exporting the hash unchanged — so a redacted row re-imports as `UNCHANGED`. **Decision: should `export` produce a redacted (lossy, non-restorable) backup at all, or an unredacted one protected by other means?** Until that is answered, every repair encodes an answer. |
+| **F-45** | `EXPORT_TABLES` omits `ferret.embedding` and `ferret.instance`. The manifest *does* declare which tables a backup covers, so the information is present but never surfaced as an absence. **Decision: are vectors part of a backup (they are derived and re-computable, but expensive) and should a restore mint a new instance identity or carry the old one?** Neither Epic states a scope. |
+| **F-10** | Issue identity keying — the triage says it "should be **decided** now", before any data exists. Unchanged by this cycle. |
+
+### Not reachable today, with evidence (17)
+
+`modelProject` has no production caller and no transport wires the GitHub or Jira
+providers, which is F-21's subject and is now *stated* by `ferret sync` rather than
+merely true. These are real defects in library code, reachable by an embedder and
+not by this product:
+
+**F-08, F-09, F-13, F-14, F-15, F-18, F-19, F-37, F-38, F-39, F-40, F-53, F-54,
+F-55, F-56, F-57, F-58, F-59.**
+
+**F-15 is called out** rather than left in the list: it is latent credential
+exfiltration — a cursor or `Link` URL followed verbatim, receiving the token — and
+the triage is explicit that it must be fixed *before* any cursor persistence.
+Recorded here so wiring the GitHub provider cannot happen without meeting it.
+
+**F-46, F-47, F-48** are the same for the session/memory domain (F-20), now equally
+stated by `ferret session`.
+
+### Documentation / scope (7)
+
+| Finding | Disposition |
+| --- | --- |
+| **F-26** | EPIC-035 AC-4 is recorded MET on a fixture the finding says does not compile. The remedy is a **record** correction, and `ferret-docs` forbids changing an Epic's acceptance-criteria record from an implementation task without governance authorisation. Isolated for that reason, not deferred for convenience. |
+| **F-74** | 53 Epic specification headers disagree with the registry. Bulk record correction, unstarted. |
+| **F-75** | `23505` reversal recorded nowhere. |
+| **F-50, F-51, F-91** | Benchmark honesty. The triage is explicit: **do not tune the benchmarks** — correct the claims that cite them. Unstarted. |
+| **F-49** | The reachability sweep's scope — the control that would have caught F-20's class. Worth doing regardless; not done in this cycle. |
+
+### Remaining P2/P3 small correctness — verified present, not fixed (rest)
+
+Verified still present in the merged tree and left with an honest label rather than
+a fix: **F-33, F-34, F-35, F-36, F-43, F-52, F-62, F-68, F-69, F-70, F-76, F-77,
+F-79, F-80, F-81, F-82, F-83, F-85, F-90, F-93, F-98, F-99.**
+
+Two are worth naming because they were confirmed by reading the code in this cycle:
+
+- **F-81** — `credentialsFor` silently `continue`s a declared credential path that is
+  not in `CREDENTIAL_CONFIG_PATHS` (`config/credentials.ts:66`). A provider that
+  declares a path Ferret does not recognise gets no credential and no warning.
+- **F-77 / F-79 / F-99** — confirmed present; each is a contained correctness defect
+  with no data-loss or security consequence.
+
+These are **LEGITIMATELY DEFERRED**, and the justification is scope rather than
+difficulty: each is a P2/P3 with no data-loss, security or truthfulness
+consequence, none blocks a release, and this cycle prioritised the findings that
+do. They are not classified as unreachable or infrastructural, because they are
+neither.
 

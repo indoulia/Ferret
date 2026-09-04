@@ -1,10 +1,15 @@
 # STATE
 
-**Phase:** COMPLETE. Seven implementation batches, a read-only final forensic audit, the F-23
-fix, one controlled integration, F-27's read half, and this record reconciliation.
-**All 24 P1-A findings and the P0 are closed.** The combined tree awaits the owner.
+**Phase:** COMPLETE, and merged. Seven implementation batches, a read-only final forensic
+audit, the F-23 fix, one controlled integration, F-27's read half, a record reconciliation —
+**merged to `main` as PR #153** — and then a second cycle against the merged tree.
+**All 24 P1-A findings and the P0 are closed on `main`.**
 
-**Base:** `0407618` (`main`, **untouched** — it contains **none** of this remediation).
+**Base:** `0407618`. **`main` is now `10531e003acc38aff3a656b368cf438580d6dd0f`** — PR #153,
+squash-merged, carrying all 92 files. The earlier "`main` contains none of this" was true
+until that merge and is kept below as the record of the state this file was written in.
+**Post-merge cycle:** branch `forensic/post-merge-remediation` — twelve further findings
+fixed, every remaining one given an evidence-backed disposition. **Not merged.**
 **Tree:** `C:\AIAgent\Ferret`, branch **`integration/p1a-remediation`** at
 **`c696dacff7e9b0ea57329b5b106367764d544ff2`**. The forensic worktree
 `C:\AIAgent\ferret-forensic` (branch `forensic/post-roadmap-audit`, `6439449`) is intact and is
@@ -12,8 +17,10 @@ now an ancestor of this branch.
 
 **Last action:** documentation and evidence reconciliation — no source or test change.
 
-**Verdict: QUALIFIED.** Technical remediation is complete and validated; release readiness is
-a different claim and is not made. See "Verdict" below.
+**Verdict: QUALIFIED**, for fewer reasons than before. CI has now run on three platforms and
+a pinned PostgreSQL 17 + pgvector, and the deployment surface is verified end to end. What
+remains is human review and four isolated product decisions. See "Verdict" below and the
+disposition table at the foot of `.agent/FINDINGS.md`.
 
 **Validation, combined tree at `c696dac6`** — the first valid numbers for the remediation set:
 **176 files, 3 542 passed, 7 skipped, 0 failed, exit 0**; lint, typecheck and build/package
@@ -309,23 +316,35 @@ it — the discipline F-23 cost us. Every earlier per-branch total is superseded
 **Release / readiness status: QUALIFIED — not READY.** What is closed is closed; what remains
 is that the tree has never been anywhere but this machine.
 
-- **It has run on one platform, once.** Windows, one clean pass. F-73, F-92 and F-101 are open
-  contention artefacts that did not fire — which those findings themselves say proves nothing
-  about an intermittent condition. CI has never seen this tree, and Linux is where the
-  `gpg.program` execution vector in `git-output-integrity` actually demonstrates.
+- ~~**It has run on one platform, once.**~~ **Closed.** CI ran on `fda7531` — Ubuntu, macOS,
+  PostgreSQL 17 + pgvector, dependency audit, all pass — and again on merged `main`
+  (`33864075157`), which adds Windows. **F-101 fired on that merged-`main` run**, and the
+  useful part is what it turned out to be: not a flaky environment but a wrong assertion,
+  pinning one of two valid query plans. Fixed. F-73 and F-92 did not fire, which still proves
+  nothing about them.
 - **Nothing has reviewed it.** No push, no PR, no second pair of eyes on 46 changed source
   files. Two of Batch 6's eight second-order defects were found by Ferret's own controls
   rather than by re-reading a diff, which is the argument for review, not against it.
-- **The merge is untested against a moving base.** `main` has not advanced since `0407618`, but
-  local green goes stale the moment it does; the gate is re-run after a rebase, not before.
-- **F-102 is reachable and unclassified.** Proved in code, not in any corpus. It is not P1-A on
-  the evidence available, and it is not nothing either: the same silent-omission signature as
-  F-23, on files that are not corrupt.
-- **Real deployment surfaces are unexercised.** `upgrade`/`import` against an installation that
-  predates `0013`, and a repository at a scale none of these fixtures reach.
+- ~~**The merge is untested against a moving base.**~~ **Closed by the merge itself** — PR #153
+  landed on an unmoved `main` and merged-`main` CI then ran on the result.
+- ~~**F-102 is reachable and unclassified.**~~ **Fixed** in the post-merge cycle, on code
+  reachability alone — the corpus question never needed answering, because a valid prefixed
+  workbook reading as empty is wrong whatever its prevalence.
+- **Partly closed. The upgrade path is verified end to end** —
+  `tests/integration/storage/upgrade-deployment-path.test.ts` upgrades a *populated* pre-`0013`
+  database, asserts the pre-upgrade rows survived, indexes a real git repository into it and
+  reads entities and edges back; and asserts an upgraded installation reaches the same schema
+  as one installed today, with data carried across. **Still unexercised:** a repository at a
+  scale none of these fixtures reach, and `import` of a backup taken from a pre-`0013`
+  installation — which is entangled with the undecided F-44/F-45.
 
 None of these is a defect. They are the difference between *proven correct here* and *ready to
 release*, and the record should not blur them.
+
+**What is left, after the post-merge cycle:** human review of the diff, four isolated product
+decisions (F-41/F-42, F-44, F-45, F-10), a scale surface, and a P2/P3 tail with no data-loss,
+security or truthfulness consequence. The disposition of every one is at the foot of
+`.agent/FINDINGS.md`.
 
 ## Next action
 **Nothing. Stopped, as instructed.** Nothing pushed, no PR, nothing merged, nothing deployed;

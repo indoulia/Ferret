@@ -291,8 +291,9 @@ export class IdentityStore {
     const mergedClass = await this.#actorClassOf(mergedId);
     assertSameActorClass(survivorClass, mergedClass, { survivorId, mergedId });
 
+    let outcome: { survivorId: string; mergedId: string; movedAliases: string[] };
     try {
-      return await this.#db.transaction(async (tx) => {
+      outcome = await this.#db.transaction(async (tx) => {
         const aliases = await tx
           .select()
           .from(identityAlias)
@@ -347,22 +348,34 @@ export class IdentityStore {
       });
     } catch (error) {
       throw classifyDatabaseError(error, 'storage.identity.merge');
-    } finally {
-      // Recorded outside the transaction so a relationship failure cannot roll
-      // back a completed merge; the relationship is a description of what
-      // happened, not part of making it happen.
-      await this.#relationships
-        .assert({
-          fromId: mergedId,
-          type: RelationshipType.ENTITY_SUPERSEDES_ENTITY,
-          toId: survivorId,
-          validFrom: now.toISOString(),
-          sourceSystem: 'ferret',
-          sourceId: evidenceId,
-          metadata: { reason: 'identity-reconciliation' },
-        })
-        .catch(() => undefined);
     }
+
+    // F-12. This was a `finally`, which runs on the way out of a `catch` that
+    // rethrows — so a merge that rolled back still asserted
+    // `ENTITY_SUPERSEDES_ENTITY` from the merged identity to the survivor. The
+    // transaction had undone the alias moves and the supersession, and the graph
+    // was left holding an edge saying a merge happened that did not. Identity is
+    // the one place Ferret cannot correct itself afterwards: `merge` refuses to
+    // cross the actor-class boundary, so a false supersession edge is not
+    // reversible by another merge.
+    //
+    // Still outside the transaction, which was the right half of the original
+    // reasoning and is kept: the relationship describes what happened rather
+    // than being part of making it happen, so a failure to write it must not
+    // roll back a merge that already committed. What changed is *when* — only
+    // after the transaction has actually returned.
+    await this.#relationships
+      .assert({
+        fromId: mergedId,
+        type: RelationshipType.ENTITY_SUPERSEDES_ENTITY,
+        toId: survivorId,
+        validFrom: now.toISOString(),
+        sourceSystem: 'ferret',
+        sourceId: evidenceId,
+        metadata: { reason: 'identity-reconciliation' },
+      })
+      .catch(() => undefined);
+    return outcome;
   }
 
   /** Actors that would collide if this identity were linked to `actorId`. */

@@ -12,6 +12,7 @@ import {
   evidenceDerivation,
   identityAlias,
   indexRun,
+  instanceRestore,
   migrate,
   relationship,
 } from '../../../src/storage/index.js';
@@ -59,6 +60,7 @@ const DRIZZLE_TABLES: readonly PgTable[] = [
   evidenceDerivation,
   identityAlias,
   indexRun,
+  instanceRestore,
   relationship,
 ];
 

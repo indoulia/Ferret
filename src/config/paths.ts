@@ -1,6 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
+import { dirname, join, parse, resolve } from 'node:path';
 
 /**
  * Where Ferret keeps configuration, and how it finds a repository's own policy.
@@ -95,11 +95,3 @@ export function findRepositoryConfig(startDirectory: string = process.cwd()): st
   }
 }
 
-/** True when `path` is inside `directory`, used to keep file reads in bounds. */
-export function isInside(directory: string, path: string): boolean {
-  const base = resolve(directory);
-  const target = resolve(path);
-  if (!isAbsolute(base) || !isAbsolute(target)) return false;
-  const relative = target.slice(base.length);
-  return target === base || (target.startsWith(base) && (relative.startsWith('/') || relative.startsWith('\\')));
-}

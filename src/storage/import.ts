@@ -11,6 +11,7 @@ import {
   isExportManifest,
   isExportTrailer,
   type ColumnFacts,
+  type ExcludedTable,
   type ExportManifest,
   type ExportRow,
   type ExportTrailer,
@@ -53,12 +54,41 @@ export interface ImportTableReport {
   readonly failure?: string | undefined;
 }
 
+/**
+ * What a restore did about identity — D2.
+ *
+ * Both ids are reported, always, because the point of the contract is that they
+ * are *different*: the target keeps its own and the source's is recorded beside
+ * it. A report that named only one would leave the reader unable to tell
+ * whether identity had been transferred.
+ */
+export interface ImportProvenance {
+  /** This installation's identity. Never taken from the document. */
+  readonly instanceId: string | undefined;
+  /** The identity of the installation that wrote the document. */
+  readonly sourceInstanceId: string | undefined;
+  /** True when the provenance row was written — only on an applied import. */
+  readonly recorded: boolean;
+  /** Why it was not recorded, when it was not. Never silent. */
+  readonly note?: string | undefined;
+}
+
 export interface ImportReport {
   readonly manifest: ExportManifest;
   readonly trailer: ExportTrailer;
   readonly tables: readonly ImportTableReport[];
   /** True when rows were written; false for a plan — §8.1, EPIC-088's shape. */
   readonly applied: boolean;
+  /**
+   * What the document declares it does not carry — D2.
+   *
+   * `undefined` means the manifest predates the declaration, which is reported
+   * as exactly that. It is not reported as "nothing was excluded": vectors were
+   * absent from those documents too, and claiming otherwise would be the
+   * silence D2 exists to end.
+   */
+  readonly excluded: readonly ExcludedTable[] | undefined;
+  readonly provenance: ImportProvenance;
 }
 
 export interface ImportOptions {
@@ -233,7 +263,99 @@ export class ImportService {
       tables.push(await this.#table(spec.table, spec.key, rows, apply, facts));
     }
 
-    return { manifest: document.manifest, trailer: document.trailer, tables, applied: apply };
+    const written = tables.reduce((sum, table) => sum + table.written, 0);
+    return {
+      manifest: document.manifest,
+      trailer: document.trailer,
+      tables,
+      applied: apply,
+      excluded: document.manifest.excluded,
+      provenance: await this.#recordProvenance(document, apply, written),
+    };
+  }
+
+  /**
+   * Records what this index was restored from, without changing what it is — D2.
+   *
+   * Two rules, and they pull in opposite directions until you separate them:
+   *
+   * - **A restored installation gets a new identity.** `ferret.instance` is in
+   *   `EXPORT_EXCLUSIONS`, so no document can carry an identity into a target;
+   *   the target keeps the one its own `ferret init` minted. That is what stops
+   *   two live installations restored from one document from answering to the
+   *   same id.
+   * - **The source identity is kept as provenance.** Otherwise a restored index
+   *   is indistinguishable from one that indexed the same repositories itself,
+   *   which is what F-45 actually reported.
+   *
+   * Append-only, so a second restore does not erase the first — Governance §6.
+   * Failure here never fails the import: the rows are already written and
+   * committed, and a provenance row that could not be recorded is reported as
+   * not recorded rather than turned into a rollback of a successful restore.
+   */
+  async #recordProvenance(
+    document: CheckedDocument,
+    apply: boolean,
+    rowsWritten: number,
+  ): Promise<ImportProvenance> {
+    const source = document.manifest.sourceInstanceId;
+    let instanceId: string | undefined;
+    try {
+      const rows = await this.#db.execute<{ [column: string]: unknown; instance_id: string }>(
+        sql`SELECT instance_id FROM ferret.instance LIMIT 1`,
+      );
+      instanceId = rows.rows[0]?.instance_id;
+    } catch {
+      instanceId = undefined;
+    }
+
+    if (!apply) {
+      return {
+        instanceId,
+        sourceInstanceId: source,
+        recorded: false,
+        note: 'A plan writes nothing, including this.',
+      };
+    }
+    if (instanceId === undefined) {
+      return {
+        instanceId,
+        sourceInstanceId: source,
+        recorded: false,
+        note: 'This database has no instance identity of its own, so there is nothing to record it against. Run `ferret init`.',
+      };
+    }
+
+    try {
+      await this.#db.execute(
+        sql`INSERT INTO ferret.instance_restore
+              (instance_id, source_instance_id, source_ferret_version, source_exported_at,
+               document_digest, rows_written)
+            VALUES (${instanceId}, ${source ?? null}, ${document.manifest.ferretVersion},
+                    ${document.manifest.exportedAt}, ${document.trailer.digest}, ${rowsWritten})`,
+      );
+      return {
+        instanceId,
+        sourceInstanceId: source,
+        recorded: true,
+        ...(source === undefined
+          ? {
+              note: 'The document predates the source-identity declaration, so the restore is recorded with no source to trace back to.',
+            }
+          : {}),
+      };
+    } catch (error) {
+      // Schema 13 and earlier has no `instance_restore`. An older database
+      // importing a newer document is a supported direction, and it is not
+      // worth failing a restore that otherwise succeeded — but it is worth
+      // saying, because the provenance the contract promises is absent.
+      return {
+        instanceId,
+        sourceInstanceId: source,
+        recorded: false,
+        note: `Provenance could not be recorded: ${classifyDatabaseError(error, 'import.provenance').message} Run \`ferret upgrade\` so a restore can be traced to its source.`,
+      };
+    }
   }
 
   /**

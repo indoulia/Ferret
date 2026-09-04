@@ -45,7 +45,16 @@ export default async function setup({ provide }: TestProject): Promise<() => Pro
     cwd: ROOT,
     stdio: 'inherit',
   });
-  execFileSync(process.execPath, ['scripts/copy-migrations.mjs'], { cwd: ROOT, stdio: 'inherit' });
+  // F-72: the same asset steps `npm run build` runs, and for the same reason.
+  // With only `copy-migrations` here, `packaging.test.ts` asserted that the
+  // tarball ships four tree-sitter grammars and the golden dataset against
+  // whatever a *previous* build happened to have left in `dist/` — so on a
+  // clean tree the packaging gate failed spuriously, and on a dirty one it
+  // proved stale bytes. `clean` is deliberately not run: the point is that what
+  // the suite packs is what the suite built, not that it rebuilds from nothing.
+  for (const script of ['copy-migrations.mjs', 'copy-grammars.mjs', 'copy-datasets.mjs']) {
+    execFileSync(process.execPath, [`scripts/${script}`], { cwd: ROOT, stdio: 'inherit' });
+  }
 
   // EPIC-003 made the runtime read a real user configuration file. Without this
   // the suite would pick up whatever the developer running it has configured,

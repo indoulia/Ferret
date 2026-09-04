@@ -794,9 +794,32 @@ export class RetrievalStore implements RetrievalPort {
     // `FROM` clause; `replace(...)::tsquery` is a scalar expression and needs a
     // select around it. Both branches take the same shape so the two call sites
     // below do not have to know which one they were given.
+    // F-65. This was an unconditional `replace(… , ' & ', ' | ')` over the
+    // *rendered* tsquery, which is string surgery on an expression tree and
+    // inverts the one operator that must not move: `'a' & !'b'` became
+    // `'a' | !'b'`, so a relaxed search returned documents selected **because**
+    // they lacked the excluded term. Measured when the finding was raised:
+    // strict 0 rows, relaxed 3 775 of 3 777, every one scoring 0 — a search that
+    // answered "nothing matched" by returning almost the whole corpus.
+    //
+    // Splitting the rendered text on ' & ' and reassembling would fix the
+    // negation and break something else: `websearch_to_tsquery` emits
+    // parenthesised groups for an `or`, so `'a' | ('b' & 'c')` splits into
+    // fragments that are not valid queries. Rather than parse a tsquery in SQL,
+    // relaxation now applies only where the plain rewrite is provably safe — a
+    // flat conjunction, with no negation, no alternation and no grouping. Any
+    // other shape keeps the strict query.
+    //
+    // That narrows relaxation rather than widening it, which is the correct
+    // direction for this defect: the failure being fixed is a search that
+    // matched too much, for the wrong reason, and said nothing about it.
     const tsquery =
       query.relax === true
-        ? sql`(SELECT replace(websearch_to_tsquery('english', ${text})::text, ' & ', ' | ')::tsquery) AS q(query)`
+        ? sql`(SELECT CASE
+                 WHEN strict.query::text ~ '[!|()]' THEN strict.query
+                 ELSE replace(strict.query::text, ' & ', ' | ')::tsquery
+               END
+                 FROM (SELECT websearch_to_tsquery('english', ${text}) AS query) strict) AS q(query)`
         : sql`(SELECT websearch_to_tsquery('english', ${text})) AS q(query)`;
 
     const entityMatches = sql`

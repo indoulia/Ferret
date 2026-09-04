@@ -110,6 +110,11 @@ const BY_ERROR_CODE: Readonly<Record<ErrorCode, ExitCode>> = {
   // unusable is in the error the caller already has.
   [ErrorCode.CONFIRMATION_REQUIRED]: ExitCode.NOT_CONFIRMED,
   [ErrorCode.CONFIRMATION_INVALID]: ExitCode.NOT_CONFIRMED,
+  // EPIC-089 D1. `ERROR` rather than `STORAGE`: the database is healthy and
+  // the index is intact — a strict export declined to write a document it
+  // could not make both faithful and credential-free, and the operator's next
+  // move is to fix the source value or take the faithful document.
+  [ErrorCode.EXPORT_REFUSED]: ExitCode.ERROR,
   [ErrorCode.NOT_IMPLEMENTED]: ExitCode.NOT_IMPLEMENTED,
   [ErrorCode.INTERRUPTED]: ExitCode.INTERRUPTED,
 };

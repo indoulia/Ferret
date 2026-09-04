@@ -176,3 +176,49 @@ export async function readInstanceId(client: PoolClient): Promise<string | undef
   );
   return result.rows[0]?.instance_id;
 }
+
+/** One recorded restore — EPIC-090 D2, migration 0014. */
+export interface InstanceRestoreRow {
+  readonly sourceInstanceId: string | undefined;
+  readonly sourceFerretVersion: string;
+  readonly sourceExportedAt: Date;
+  readonly documentDigest: string;
+  readonly rowsWritten: number;
+  readonly restoredAt: Date;
+}
+
+/**
+ * The most recent restore into this installation, if it is one.
+ *
+ * This is what makes D2's provenance answerable rather than merely stored: a
+ * restored index reports what it was restored from, so it is distinguishable
+ * from one that indexed the same repositories itself. `undefined` means this
+ * installation has never had a document imported into it — which is the common
+ * case and is not a finding.
+ */
+export async function readLatestRestore(client: PoolClient): Promise<InstanceRestoreRow | undefined> {
+  const result = await client.query<{
+    source_instance_id: string | null;
+    source_ferret_version: string;
+    source_exported_at: Date;
+    document_digest: string;
+    rows_written: number;
+    restored_at: Date;
+  }>(
+    `SELECT source_instance_id, source_ferret_version, source_exported_at,
+            document_digest, rows_written, restored_at
+       FROM ferret.instance_restore
+      ORDER BY restored_at DESC
+      LIMIT 1`,
+  );
+  const row = result.rows[0];
+  if (row === undefined) return undefined;
+  return {
+    sourceInstanceId: row.source_instance_id ?? undefined,
+    sourceFerretVersion: row.source_ferret_version,
+    sourceExportedAt: row.source_exported_at,
+    documentDigest: row.document_digest,
+    rowsWritten: row.rows_written,
+    restoredAt: row.restored_at,
+  };
+}

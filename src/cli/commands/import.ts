@@ -132,6 +132,42 @@ function render(report: ImportReport, document: string): string {
       'between two installations that disagree — import into an empty database instead.',
     );
   }
+
+  // D2 — what the restore did *not* recover, stated on the restore rather than
+  // only on the export. An operator restoring a backup is rarely the one who
+  // took it, and this is the moment the gap matters.
+  if (report.excluded === undefined) {
+    lines.push(
+      '',
+      'This document predates the exclusion declaration, so it does not say what it',
+      'omits. Vectors and instance identity were not carried by that format either.',
+    );
+  } else if (report.excluded.length > 0) {
+    lines.push('', 'Not carried by this document, so not restored:');
+    for (const table of report.excluded) lines.push(`  ${table.table} — ${table.reason}`);
+    const embedding = report.excluded.find((table) => table.table === 'embedding');
+    if (embedding !== undefined) {
+      lines.push('', `Vectors: ${embedding.recovery}`);
+    }
+  }
+
+  // D2 — both identities, always, because the contract is that they differ.
+  const { instanceId, sourceInstanceId, recorded, note } = report.provenance;
+  lines.push(
+    '',
+    'Instance identity:',
+    `  this installation  ${instanceId ?? '(none — run `ferret init`)'}`,
+    `  document written by ${sourceInstanceId ?? '(not declared by this document)'}`,
+  );
+  if (instanceId !== undefined && sourceInstanceId !== undefined && instanceId !== sourceInstanceId) {
+    lines.push(
+      '  This index keeps its own identity. The source is recorded as provenance, not adopted:',
+      '  two installations restored from one document must not answer to one identity.',
+    );
+  }
+  if (recorded) lines.push('  Recorded in ferret.instance_restore.');
+  if (note !== undefined) lines.push(`  ${note}`);
+
   if (!report.applied) {
     lines.push('', 'Nothing has been written. Re-run with --yes to proceed.');
   }

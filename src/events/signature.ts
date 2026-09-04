@@ -42,6 +42,30 @@ export type SignatureVerdict =
   | { readonly verified: false; readonly refusal: SignatureRefusal };
 
 /**
+ * What each scheme actually is — F-78.
+ *
+ * This was a ternary, `scheme === GITHUB_SHA256 ? 'sha256=' : 'sha256='`, with
+ * two identical branches. It was not wrong — both schemes Ferret supports really
+ * do use a `sha256=` prefix over an HMAC-SHA-256 — but it *read* as a decision
+ * while making none, so the first scheme added with a different prefix or digest
+ * would have been verified as SHA-256 against a header it does not use, and the
+ * only symptom would be signatures that mysteriously fail. A verifier that
+ * silently applies the wrong algorithm is the one place a vacuous branch is
+ * expensive.
+ *
+ * A total record rather than a branch: `Record<SignatureScheme, …>` is exhaustive,
+ * so adding a member to `SignatureScheme` fails to compile until somebody states
+ * its prefix and its digest. The decision is forced at the moment it is created
+ * rather than defaulted at the moment it is used.
+ */
+const SCHEMES: Readonly<
+  Record<SignatureScheme, { readonly prefix: string; readonly algorithm: string }>
+> = Object.freeze({
+  [SignatureScheme.GITHUB_SHA256]: { prefix: 'sha256=', algorithm: 'sha256' },
+  [SignatureScheme.HUB_SHA256]: { prefix: 'sha256=', algorithm: 'sha256' },
+});
+
+/**
  * Verify a signature over the **raw body**.
  *
  * Raw, not parsed and re-serialized. `JSON.parse` followed by `JSON.stringify`
@@ -66,18 +90,21 @@ export function verifySignature(
     return { verified: false, refusal: SignatureRefusal.MISSING };
   }
 
-  const prefix = scheme === SignatureScheme.GITHUB_SHA256 ? 'sha256=' : 'sha256=';
+  const { prefix, algorithm } = SCHEMES[scheme];
   if (!header.startsWith(prefix)) {
     return { verified: false, refusal: SignatureRefusal.MALFORMED };
   }
   const provided = header.slice(prefix.length);
-  if (!/^[0-9a-fA-F]{64}$/u.test(provided)) {
-    return { verified: false, refusal: SignatureRefusal.MALFORMED };
-  }
 
-  const expected = createHmac('sha256', secret)
+  const expected = createHmac(algorithm, secret)
     .update(typeof body === 'string' ? Buffer.from(body, 'utf8') : body)
     .digest();
+  // Hex, and exactly as long as this scheme's digest — derived from the digest
+  // rather than pinned at 64, which would silently reject a scheme with any
+  // other output size while appearing to validate it.
+  if (!/^[0-9a-fA-F]+$/u.test(provided) || provided.length !== expected.length * 2) {
+    return { verified: false, refusal: SignatureRefusal.MALFORMED };
+  }
   const candidate = Buffer.from(provided, 'hex');
 
   // Length is checked before the comparison because `timingSafeEqual` throws on

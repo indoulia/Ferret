@@ -58,11 +58,28 @@ function linesOf(text: string): readonly Line[] {
   let byte = 0;
   let number = 1;
 
-  for (const raw of text.split('\n')) {
+  for (const line of text.split('\n')) {
+    // F-22. Splitting a CRLF document on the LF leaves the CR at the end of
+    // every line, and `.` matches it — so `# Title\r` matched ATX with the title
+    // `Title\r`, the fence and list rules matched with trailing carriage
+    // returns, and the `trim()` that would have hidden it runs only on the
+    // title. Measured before this: an identical document parsed LF gave 2
+    // headings and 1 outline node, parsed CRLF gave **0 and 0**. Every heading
+    // in a CRLF Markdown file was silently reclassified as prose, which on a
+    // Windows checkout is every Markdown file Ferret indexes — including its own
+    // 206, where most of its recorded knowledge lives.
+    //
+    // The CR is stripped from the line's *content* and still counted in the
+    // *offsets*: it is a real byte of the source, so the next line starts after
+    // it, and `endByte` excludes it exactly as it excludes the LF. A span keeps
+    // naming the bytes it quotes — EPIC-024's contract, and F-24's lesson.
+    const carriageReturn = line.endsWith('\r');
+    const raw = carriageReturn ? line.slice(0, -1) : line;
     const length = encoder.encode(raw).length;
     lines.push({ text: raw, startByte: byte, endByte: byte + length, number });
-    // The newline that split them, which the next line's start must clear.
-    byte += length + 1;
+    // The line terminator the split consumed — one byte for LF, two for CRLF —
+    // which the next line's start must clear.
+    byte += length + (carriageReturn ? 2 : 1);
     number += 1;
   }
   return lines;

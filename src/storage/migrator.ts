@@ -11,9 +11,11 @@ import {
   readApplied,
   readFailures,
   readInstanceId,
+  readLatestRestore,
   recordApplied,
   recordFailure,
   type AppliedMigrationRow,
+  type InstanceRestoreRow,
   type MigrationFailureRow,
 } from './bookkeeping.js';
 import { classifyDatabaseError, isMissingRelation } from './connection.js';
@@ -116,6 +118,14 @@ export interface SchemaStatus {
   readonly unknown: readonly number[];
   readonly failures: readonly MigrationFailureRow[];
   readonly instanceId: string | undefined;
+  /**
+   * The most recent document imported into this installation — EPIC-090 D2.
+   *
+   * `undefined` for an installation nothing was restored into, and also for one
+   * whose schema predates migration 0014. Present is the only informative
+   * value: it means this index is a restore and names what of.
+   */
+  readonly restoredFrom: InstanceRestoreRow | undefined;
 }
 
 export interface MigrationReport {
@@ -365,6 +375,7 @@ export async function readSchemaStatus(
           unknown: [],
           failures: [],
           instanceId: undefined,
+          restoredFrom: undefined,
         };
       }
       throw classifyDatabaseError(error, 'storage.status.read');
@@ -373,6 +384,11 @@ export async function readSchemaStatus(
     const { unknown, drift, pending, schemaVersion } = reconcile(applied, shipped);
     const instanceId = await readInstanceId(client).catch((error: unknown) =>
       isMissingRelation(error) ? undefined : Promise.reject(classifyDatabaseError(error, 'storage.status.instance')),
+    );
+
+    // Absent before migration 0014, which is a schema this build still reads.
+    const restoredFrom = await readLatestRestore(client).catch((error: unknown) =>
+      isMissingRelation(error) ? undefined : Promise.reject(classifyDatabaseError(error, 'storage.status.restore')),
     );
 
     return {
@@ -384,6 +400,7 @@ export async function readSchemaStatus(
       unknown,
       failures,
       instanceId,
+      restoredFrom,
     };
   } finally {
     client.release();

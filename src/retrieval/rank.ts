@@ -202,6 +202,27 @@ export function rank<T extends SearchHit & RankSignals>(
  * `kind → sourceId → id` is EPIC-056's determinism tail, unchanged, so the order
  * stays total and AC-2 still holds.
  */
+/**
+ * Order two identifiers the same way on every machine — F-86.
+ *
+ * Every tiebreak below was `String.localeCompare` with no locale, which uses the
+ * host's default. That makes the order of a ranked answer a property of the
+ * machine that produced it: an ISO timestamp, an entity kind, a source id and a
+ * UUID collate differently under `tr-TR` (dotless i), under `sv-SE` (where `ä`
+ * sorts after `z`) and under ICU versions that changed a collation table. Two
+ * Ferret instances on the same data would then return the same hits in a
+ * different order, and neither would be wrong — which is the worst shape for a
+ * result a caller is invited to cite.
+ *
+ * These are machine identifiers, not prose: nothing here is shown to a person as
+ * a sorted list, and no language's collation rules are the right answer for a
+ * UUID. Code-unit order is total, stable, and identical everywhere.
+ */
+function compareIdentifier(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
 function compareRanked<T extends SearchHit & RankSignals & { readonly ranking: RankBreakdown }>(
   a: T,
   b: T,
@@ -212,10 +233,10 @@ function compareRanked<T extends SearchHit & RankSignals & { readonly ranking: R
     authorityOf(b) - authorityOf(a) ||
     // Descending, and a missing timestamp is the empty string — so it never
     // precedes a hit that has one, and is not called old either.
-    recencyKey(b.entity).localeCompare(recencyKey(a.entity)) ||
-    a.entity.kind.localeCompare(b.entity.kind) ||
-    a.entity.source.id.localeCompare(b.entity.source.id) ||
-    a.entity.id.localeCompare(b.entity.id)
+    compareIdentifier(recencyKey(b.entity), recencyKey(a.entity)) ||
+    compareIdentifier(a.entity.kind, b.entity.kind) ||
+    compareIdentifier(a.entity.source.id, b.entity.source.id) ||
+    compareIdentifier(a.entity.id, b.entity.id)
   );
 }
 

@@ -175,11 +175,13 @@ describe('sheet parser — a corrupt workbook part', () => {
   });
 
   /**
-   * The root check must not refuse a prefixed root. Whether the `<sheet>`
-   * declarations *inside* it are then matched is `declaredSheets`' regex and a
-   * separate gap: it reads `<sheet>` but not `<x:sheet>`, before this fix and
-   * after it. That is not F-23's to change, so this asserts only that the
-   * structural guard lets the part through.
+   * The root check must not refuse a prefixed root.
+   *
+   * When this was written the `<sheet>` declarations *inside* it were still read
+   * by a prefix-blind regex, and this asserted only that the structural guard
+   * let the part through — the gap recorded as F-102. That gap is now closed;
+   * the assertion below is unchanged and the prefixed cases are covered in full
+   * by the F-102 block at the end of this file.
    */
   it('accepts a namespace-prefixed workbook root rather than refusing the file', () => {
     const bytes = buildZip([
@@ -206,5 +208,105 @@ describe('sheet parser — the cached-artefact boundary', () => {
     const target = { path: 'a.xlsx', mediaType: XLSX_MEDIA_TYPE, binary: true, sizeBytes: 10 };
     expect(parser.supports(target)).toBeDefined();
     expect(parser.parserVersion).not.toBe('1.0.0');
+    // F-102 moved it again, for the same reason: a prefixed workbook cached as
+    // empty is replayed until the producer identity changes.
+    expect(parser.parserVersion).not.toBe('1.1.0');
+  });
+});
+
+/**
+ * **A prefixed workbook is a workbook — F-102.**
+ *
+ * SpreadsheetML may bind the main namespace to a prefix, so
+ * `<x:worksheet><x:sheetData><x:row>` is valid and not corrupt. F-23's guard
+ * accepted a prefixed *root* for exactly that reason and every extractor beneath
+ * it still matched `<sheet`, `<row`, `<c` with no prefix — so the guard said
+ * "this is a valid worksheet" and the reader found nothing inside it.
+ *
+ * Measured before the fix: a fully prefixed workbook returned
+ * `{"sheets":[],"warnings":[]}`; one with prefixed rows returned a sheet with
+ * zero rows and no warning. F-23's own signature — real data, silently empty,
+ * cached — on files that are not corrupt, and reached by ordinary content.
+ */
+describe('sheet parser — a namespace-prefixed workbook — F-102', () => {
+  const NS_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+
+  /** The same one-cell workbook, written against a bound prefix throughout. */
+  function prefixedPackage(): Uint8Array {
+    return buildZip([
+      {
+        name: 'xl/workbook.xml',
+        content:
+          `<?xml version="1.0"?><x:workbook xmlns:x="${NS_MAIN}" xmlns:r="r">` +
+          '<x:sheets><x:sheet name="Q1" sheetId="1" r:id="rId1"/></x:sheets></x:workbook>',
+      },
+      { name: 'xl/_rels/workbook.xml.rels', content: RELS },
+      {
+        name: 'xl/worksheets/sheet1.xml',
+        content:
+          `<?xml version="1.0"?><x:worksheet xmlns:x="${NS_MAIN}"><x:sheetData>` +
+          '<x:row r="1"><x:c r="A1" t="inlineStr"><x:is><x:t>REAL DATA</x:t></x:is></x:c></x:row>' +
+          '</x:sheetData></x:worksheet>',
+      },
+    ]);
+  }
+
+  it('reads the rows of a fully prefixed workbook', () => {
+    const extraction = readXlsx(prefixedPackage());
+
+    expect(extraction.sheets, 'a prefixed workbook declared no sheets').toHaveLength(1);
+    expect(extraction.sheets[0]?.rows[0]?.cells).toStrictEqual(['REAL DATA']);
+    expect(extraction.warnings).toStrictEqual([]);
+  });
+
+  it('reads prefixed rows inside an unprefixed workbook', () => {
+    // The mixed form, which is what a transform pipeline tends to emit.
+    const extraction = readXlsx(
+      workbookWithSheet(
+        `<?xml version="1.0"?><x:worksheet xmlns:x="${NS_MAIN}"><x:sheetData>` +
+          '<x:row r="1"><x:c r="A1" t="inlineStr"><x:is><x:t>REAL DATA</x:t></x:is></x:c></x:row>' +
+          '</x:sheetData></x:worksheet>',
+      ),
+    );
+
+    expect(extraction.sheets[0]?.rows[0]?.cells).toStrictEqual(['REAL DATA']);
+    expect(extraction.warnings).toStrictEqual([]);
+  });
+
+  it('gives a prefixed and an unprefixed workbook the same answer', () => {
+    // The property, stated directly: a prefix is a spelling, not a difference.
+    const prefixed = readXlsx(prefixedPackage());
+    const plain = readXlsx(
+      workbookWithSheet(
+        `${WORKSHEET_HEAD}<row r="1"><c r="A1" t="inlineStr"><is><t>REAL DATA</t></is></c></row>` +
+          '</sheetData></worksheet>',
+      ),
+    );
+
+    expect(prefixed.sheets).toStrictEqual(plain.sheets);
+  });
+
+  it('does not let prefix tolerance swallow a different element — the over-reach control', () => {
+    // A derived rule needs a control against its own reach: `<c` must not match
+    // `<col`, `<sheet` must not match `<sheetData`, `<t` must not match
+    // `<table`. Without the word boundary the tolerance would quietly widen
+    // every pattern in the reader.
+    const extraction = readXlsx(
+      workbookWithSheet(
+        `<?xml version="1.0"?><x:worksheet xmlns:x="${NS_MAIN}">` +
+          '<x:cols><x:col min="1" max="1" width="9"/></x:cols>' +
+          '<x:sheetData><x:row r="1"><x:c r="A1" t="inlineStr"><x:is><x:t>only</x:t></x:is></x:c></x:row></x:sheetData>' +
+          '</x:worksheet>',
+      ),
+    );
+
+    expect(extraction.sheets[0]?.rows).toHaveLength(1);
+    expect(extraction.sheets[0]?.rows[0]?.cells).toStrictEqual(['only']);
+  });
+
+  it('still refuses a part that is genuinely not a worksheet — the control', () => {
+    // F-23 must survive F-102: tolerance of a prefix is not tolerance of rubbish.
+    const extraction = readXlsx(workbookWithSheet('<html><body>504</body></html>'));
+    expect(extraction.warnings.map((warning) => warning.code)).toContain('unreadable-sheet');
   });
 });

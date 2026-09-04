@@ -165,6 +165,40 @@ export function readXlsx(bytes: Uint8Array, options: XlsxReadOptions = {}): Xlsx
 }
 
 /**
+ * An optional namespace prefix on an element name — F-23, and then F-102.
+ *
+ * SpreadsheetML may be written with the main namespace bound to a prefix, so
+ * `<x:worksheet><x:sheetData><x:row>` is a valid workbook and not a corrupt one.
+ * F-23's structural guard accepted a prefixed **root** for exactly that reason,
+ * and every extractor below then read the part with a prefix-blind pattern — so
+ * the guard said "this is a valid worksheet" and the reader found nothing in it.
+ * Measured: a fully prefixed workbook returned `{"sheets":[],"warnings":[]}`, and
+ * one with prefixed rows returned a sheet with zero rows and no warning. That is
+ * F-23's own signature — real data, silently empty, cached — on files that are
+ * not corrupt.
+ *
+ * Defined once and every pattern derived from it, rather than pasted into
+ * eleven regexes. Batch 5 and Batch 6 both landed on the same rule: an
+ * enumeration that has to be maintained by hand fails towards the wrong answer,
+ * because the twelfth element is added without it. `elementOpen` and
+ * `elementBody` are the only two shapes this reader needs, and
+ * `prefix-tolerance.test.ts` asserts that no raw `<tag` pattern is left.
+ *
+ * Non-capturing, so every capture-group index below is unchanged.
+ */
+const NS = '(?:[A-Za-z_][\\w.-]*:)?';
+
+/** `<name …>` or `<name …/>`, whatever prefix it carries. */
+function elementOpen(name: string, attributes = '([^>]*)'): RegExp {
+  return new RegExp(`<${NS}${name}\\b${attributes}\\/?>`, 'gu');
+}
+
+/** `<name …>body</name>`, whatever prefix either tag carries. */
+function elementBody(name: string, flags = 'gu'): RegExp {
+  return new RegExp(`<${NS}${name}\\b[^>]*>([\\s\\S]*?)<\\/${NS}${name}>`, flags);
+}
+
+/**
  * Whether a part is the document it claims to be — F-23.
  *
  * The opening tag alone is not enough. A download cut off mid-file still starts
@@ -178,10 +212,10 @@ export function readXlsx(bytes: Uint8Array, options: XlsxReadOptions = {}): Xlsx
  * refuse real workbooks in the name of catching corrupt ones.
  */
 function rootStructure(xml: string, root: string): 'ok' | 'unreadable' | 'truncated' {
-  const opening = new RegExp(`<(?:[A-Za-z_][\\w.-]*:)?${root}\\b[^>]*>`, 'u').exec(xml);
+  const opening = new RegExp(`<${NS}${root}\\b[^>]*>`, 'u').exec(xml);
   if (opening === null) return 'unreadable';
   if (opening[0].endsWith('/>')) return 'ok';
-  const closing = new RegExp(`</(?:[A-Za-z_][\\w.-]*:)?${root}\\s*>`, 'u');
+  const closing = new RegExp(`</${NS}${root}\\s*>`, 'u');
   return closing.test(xml.slice(opening.index)) ? 'ok' : 'truncated';
 }
 
@@ -194,7 +228,7 @@ interface SheetDeclaration {
 function declaredSheets(part: Uint8Array): readonly SheetDeclaration[] {
   const xml = DECODER.decode(part);
   const sheets: SheetDeclaration[] = [];
-  for (const match of xml.matchAll(/<sheet\b([^>]*)\/?>/gu)) {
+  for (const match of xml.matchAll(elementOpen('sheet'))) {
     const attributes = match[1] ?? '';
     const name = attribute(attributes, 'name');
     if (name === undefined) continue;
@@ -206,7 +240,7 @@ function declaredSheets(part: Uint8Array): readonly SheetDeclaration[] {
 function relationshipTargets(part: Uint8Array | undefined): ReadonlyMap<string, string> {
   const targets = new Map<string, string>();
   if (part === undefined) return targets;
-  for (const match of DECODER.decode(part).matchAll(/<Relationship\b([^>]*)\/?>/gu)) {
+  for (const match of DECODER.decode(part).matchAll(elementOpen('Relationship'))) {
     const attributes = match[1] ?? '';
     const id = attribute(attributes, 'Id');
     const target = attribute(attributes, 'Target');
@@ -226,9 +260,9 @@ function sharedStrings(part: Uint8Array | undefined): readonly string[] {
   if (part === undefined) return [];
   const xml = DECODER.decode(part);
   const strings: string[] = [];
-  for (const item of xml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/gu)) {
+  for (const item of xml.matchAll(elementBody('si'))) {
     let text = '';
-    for (const run of (item[1] ?? '').matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/gu)) {
+    for (const run of (item[1] ?? '').matchAll(elementBody('t'))) {
       text += decodeXml(run[1] ?? '');
     }
     strings.push(text);
@@ -251,17 +285,17 @@ function dateStyles(part: Uint8Array | undefined): ReadonlySet<number> {
   const xml = DECODER.decode(part);
 
   const custom = new Set<number>();
-  for (const match of xml.matchAll(/<numFmt\b([^>]*)\/?>/gu)) {
+  for (const match of xml.matchAll(elementOpen('numFmt'))) {
     const attributes = match[1] ?? '';
     const id = Number(attribute(attributes, 'numFmtId'));
     const code = attribute(attributes, 'formatCode') ?? '';
     if (Number.isInteger(id) && isDateFormat(decodeXml(code))) custom.add(id);
   }
 
-  const cellXfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/u.exec(xml);
+  const cellXfs = elementBody('cellXfs', 'u').exec(xml);
   if (cellXfs === null) return dates;
   let index = 0;
-  for (const match of (cellXfs[1] ?? '').matchAll(/<xf\b([^>]*)\/?>/gu)) {
+  for (const match of (cellXfs[1] ?? '').matchAll(elementOpen('xf'))) {
     const id = Number(attribute(match[1] ?? '', 'numFmtId'));
     if ((id >= 14 && id <= 22) || (id >= 45 && id <= 47) || custom.has(id)) dates.add(index);
     index += 1;
@@ -292,12 +326,12 @@ function readSheet(
   const rows: SheetRow[] = [];
   let cellCount = 0;
 
-  for (const rowMatch of xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/gu)) {
+  for (const rowMatch of xml.matchAll(new RegExp(`<${NS}row\\b([^>]*)>([\\s\\S]*?)<\\/${NS}row>`, 'gu'))) {
     const number = Number(attribute(rowMatch[1] ?? '', 'r'));
     const cells: string[] = [];
     let held = false;
 
-    for (const cellMatch of (rowMatch[2] ?? '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/gu)) {
+    for (const cellMatch of (rowMatch[2] ?? '').matchAll(new RegExp(`<${NS}c\\b([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/${NS}c>)`, 'gu'))) {
       if (cellCount >= budget) return { rows, cellCount, truncated: true };
       const attributes = cellMatch[1] ?? '';
       const text = cellValue(attributes, cellMatch[2] ?? '', strings, dateFormats);
@@ -349,7 +383,7 @@ function cellValue(
   }
   if (type === 'inlineStr') {
     let inline = '';
-    for (const run of body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/gu)) inline += decodeXml(run[1] ?? '');
+    for (const run of body.matchAll(elementBody('t'))) inline += decodeXml(run[1] ?? '');
     return inline;
   }
   if (type === 'str' || type === 'e') return decodeXml(text(body, 'v'));
@@ -389,7 +423,7 @@ function excelDate(serial: number): string | undefined {
 }
 
 function text(body: string, tag: string): string {
-  return new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, 'u').exec(body)?.[1] ?? '';
+  return elementBody(tag, 'u').exec(body)?.[1] ?? '';
 }
 
 /**
