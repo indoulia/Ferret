@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 
 import {
   SessionStatus,
@@ -376,7 +376,7 @@ export class SessionStore implements SessionRecoveryPort {
       const rows = await this.#db
         .select()
         .from(session)
-        .where(and(eq(session.actorId, actorId)))
+        .where(eq(session.actorId, actorId))
         .orderBy(desc(session.startedAt))
         .limit(limit);
       return rows.map(toSession);
