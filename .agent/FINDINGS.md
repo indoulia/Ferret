@@ -4,89 +4,153 @@ Full evidence: `docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md`.
 Full triage: `docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md`.
 All 100 findings were re-verified against `0407618` before being recorded.
 
+**Statuses below describe the combined remediation tree at
+`c696dacff7e9b0ea57329b5b106367764d544ff2`, branch `integration/p1a-remediation`** — the first
+ref that has ever held both the forensic branch's seven batches and F-23, validated as one tree.
+`main` is `0407618` and contains **none** of these fixes. See "Where the remediation lives",
+below.
+
 ## P0 (1) — CLOSED in Batch 1
 - **F-01** *(fixed)* history capped at 1 000 commits, watermark advanced to the newest of a newest-first page → permanent silent loss on any larger repository; `--full` cannot recover.
 
-## P1-A — production blockers (24; 22 closed, 1 partial, 1 OPEN)
-> Re-verified at `cd3ca85` with every batch present — see
-> `docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md` §3.
+## P1-A — production blockers (24; **24 closed**)
+> **Roster and count reconciled at `c696dac6`.** The authoritative severity assignment is the
+> triage's own §9 table — 25 blockers, 1 P0 + **24 P1-A** — and the roster below is that table,
+> enumerated so the count and the rows agree. Two long-standing record defects are corrected
+> here without changing what any finding means:
 >
-> **The count changed in the record correction at `8faa0c1`+.** F-23 was carried as CLOSED
-> from Batch 3 onwards. It is not closed and never was: no batch modified
-> `src/parsers/sheet/xlsx.ts` (`git log 0407618..HEAD -- src/parsers/sheet/xlsx.ts` is
-> empty), and the finding's mechanism is that file's `readSheet`. Corrected to OPEN below,
-> with the evidence, rather than left as an unsupported claim.
-Ingestion — **CLOSED in Batch 1**: **F-02** (all branches share one watermark), **F-03** (future-dated commit stalls ingestion for ever), **F-04** (back-dated merge -> parentless stub commits).
-Storage/install — **CLOSED in Batch 2**: **F-16** (migrate before pgvector; unrepairable, version lies), **F-17** (backup that import refuses), **F-29** (document-supplied column names interpolated into SQL), **F-30** (DB password to stdout, exit 0).
-Untrusted input — **CLOSED**: **F-60** (zip bound trusts the declared size), **F-61** (docx bypasses the bounded reader), **F-95** (undatable commit desyncs the parser, fabricates file entities) in Batch 3; **F-94** (`i18n.logOutputEncoding` reshapes `git log`) in Batch 6.
-Truthfulness — **F-05, F-06, F-24, F-28, F-31 CLOSED** (Batch 4).
+> - **F-71 was listed under both P1-A and P1-B.** The triage classifies it **P1-B**
+>   (`FERRET-POST-FORENSIC-TRIAGE.md:13` — "F-65, F-67, F-71 → P1-B") and it is absent from the
+>   §9 blocker table. It is P1-B, listed once, below. Its closure in Batch 6 is unaffected.
+> - **F-94 appeared twice**, under "Untrusted input" and again under "Enumeration". One finding,
+>   one entry. It is a member of both the untrusted-input bound and the credential/safety
+>   enumeration, and the dependency line at the foot of this file already records that.
+>
+> **F-96 and F-97 are not P1-A.** The triage rates them P2 (small correctness, §384-385) and
+> promoted them into Batch 3 because they are the same defect class as F-95. They were closed
+> there; they are recorded in the P2 group, not here. The final audit's §3 table listed them
+> under a P0/P1-A heading, which is corrected in that document.
 
-**F-23 — OPEN. Not closed in Batch 3 or in any batch.** A corrupt spreadsheet is still
-reported as a successful parse of an empty one, and the content gate still caches that result
-permanently. Evidence, all of it from the source rather than from a report:
+The 24, by the triage's own grouping, all **CLOSED**:
 
-- `git log 0407618..HEAD -- src/parsers/sheet/xlsx.ts` returns **nothing**. No batch touched
-  the module the finding is about. Batch 3 changed `src/parsers/sheet/zip.ts` — the archive
-  bound, which is F-60 — and `sheet-parser.test.ts` for that.
-- `readSheet` (`xlsx.ts:237-271`) is still the regex scanner the finding cites at `:243`,
-  `:247` and `:270`, with no validity check. A truncated, garbage or non-XML worksheet part
-  still yields zero rows and the same return shape as a genuinely empty sheet.
-- Neither half of the triage's remedy is present: no refusal for a part with no recognisable
-  root, and no warning when a present part yields zero rows.
+| Group | Findings | Closed by |
+| --- | --- | --- |
+| Ingestion completeness | F-02, F-03, F-04 | Batch 1 |
+| Backup and recovery | F-17, F-29 | Batch 2 |
+| Install integrity | F-16 | Batch 2 |
+| Credential exposure | F-30 | Batch 2 |
+| Untrusted-input bounds | F-60, F-61, F-95 | Batch 3 |
+| | F-94 | Batch 6 |
+| Answer truthfulness | F-05, F-06, F-24, F-28, F-31 | Batch 4 |
+| | F-25, F-25b, F-27 | Batch 7 (F-27's read half at `c696dac`) |
+| | F-23 | `896bcaa` |
+| Prompt-injection boundary | F-32, F-64, F-66 | Batch 5 |
+| Identity integrity | F-11 | Batch 7 |
 
-**Why the earlier evidence note was itself wrong.** The final audit at `8faa0c1` recorded
-F-23 as "closed, evidence chain broken", citing `sheet-parser.test.ts:182` — the AC-9 test
-that a missing `xl/workbook.xml` is refused by name. That test is real and passes, but it is
-**not** evidence for this finding: the finding's own text says *"Only a missing
-`xl/workbook.xml` throws (`:80-88`)"* and names that as the pre-existing behaviour the rest
-of the module fails to match. Citing it conflated the one case that already worked with the
-five that did not. Corrected here.
+3 + 2 + 1 + 1 + 4 + 9 + 3 + 1 = **24**. Rows and count agree.
 
-Severity unchanged: **P1-A, silent permanent omission.** Not fixed, and deliberately not
-fixed in this record-correction task.
-Boundary — **CLOSED in Batch 5**: **F-32** (trim cut the closing delimiter), **F-64** (containment reached top-level strings of one field only), **F-66** (notice last, under a key no other tool used). One boundary, not three patches: the fence survives truncation, containment recurses and counts, the prose/token line is drawn by shape rather than key name, and untrusted records are contained where they *enter* the pack and answer builders. Six second-order defects found by re-auditing and corrected — see `docs/evidence/FERRET-BATCH-5-PROMPT-INJECTION-BOUNDARY.md` §4.
-Enumeration — **CLOSED in Batch 6**: **F-94** (repository-controlled Git configuration
-reshapes `git log`; after Batch 3's record marker it produced *silence* — three commits in,
-zero out — rather than the fabrication first measured), **F-71** (`FERRET_DATABASE_URL` in
-every `git` subprocess). Not two longer lists: the output shape is now *verified* and an
-unreadable region makes the page incomplete, and a variable is judged a credential by what it
-is as well as by what it is called. Eight second-order defects found by re-auditing and
-corrected — a `gpg.program` execution vector, `GIT_CONFIG_GLOBAL`/`_SYSTEM` unstripped,
-unredacted stderr on `incomplete.reason`, a one-shape `redactVector`, `PWD` stripped from
-every child, two spawners with two policies, a dead barrel export and a credentialled URI in
-a shipped comment. See `docs/evidence/FERRET-BATCH-6-CREDENTIAL-AND-SAFETY-ENUMERATION.md`.
-Code intelligence and identity — **CLOSED in Batch 7**: **F-25** (a member call resolved to a
-same-file homonym at the top confidence band; the receiver now corroborates, so `this.has()`
-resolves and `map.has()` does not), **F-25b** (`line` removed from edge identity, and the
-indexer closes what a re-derived endpoint no longer asserts), **F-27** (per-file resolution
-counts persisted on the `file` entity — *persistence only*; the read-side notice on
-`ferret_neighbours` is **not** delivered — see the F-27 entry below), **F-11** (an
-address that is not an address mints no actor; the commit records `unattributedAuthor`
-instead, after the mailmap rather than before it). Six second-order defects found by
-re-auditing and corrected — see `docs/evidence/FERRET-BATCH-7-CODE-INTELLIGENCE-TRUTH.md` §4.
+Detail on each group is unchanged from the batch records: Batch 1 ingestion; Batch 2
+storage/install; Batch 3 untrusted input; Batch 4 truthfulness; Batch 5 the injection boundary
+as one defence rather than three patches; Batch 6 credential and safety enumeration judged by
+what a thing is rather than what it is called; Batch 7 code intelligence and identity. Each
+batch's evidence file records its red-first fixtures and its second-order defects.
 
-**F-27 — PARTIALLY CLOSED. Not CLOSED.** The two halves are recorded separately because they
-have different statuses and only one is done:
+**F-23 — CLOSED at `896bcaa05c889c2de6af9c67db364121bcd61217`.** It was carried as CLOSED from
+Batch 3 onwards without a line of code having changed, corrected to OPEN in the record
+correction at `8faa0c1`+, and is now closed for real. What the commit does, and the evidence:
 
-- **Persistence half — CLOSED and verified.** `FileReferenceResolution` (extracted, resolved,
-  and unresolved by reason) is written onto the `file` entity, replayed through the re-parse
-  gate so an unchanged second run writes no rows, and asserted end to end against a real
-  database by `tests/integration/indexing/reference-intervals.test.ts` — "records the file's
-  resolution counts, rather than logging and dropping them", "names the reasons, so 'refused'
-  and 'not there' stay apart", and "survives a gate skip, so a second run still writes no rows".
-- **Read / presentation half — OPEN.** `ferret_neighbours` can still return an empty inbound
-  list with no completeness caveat, so "nothing references this" and "we refused to resolve
-  the references that would have answered you" remain the same answer at the tool surface.
-  Verified at `cd3ca85`: `referenceResolution` appears nowhere under `src/mcp/`,
-  `src/retrieval/` or `src/context/`, and the depth-1 neighbours response carries
-  `count`, `truncated`, `withheld` and no resolution field.
+- `rootStructure` (`src/parsers/sheet/xlsx.ts:181-186`) checks a part is the document it claims
+  to be **before** the regex scanner reads it — opening root, and the closing tag too, so
+  *"this is not a worksheet"* (`unreadable-sheet`) and *"this worksheet did not finish
+  arriving"* (`truncated-sheet`) stay different facts. A self-closing root is the one form
+  excused from a closing tag.
+- `xl/workbook.xml` had the same hole one level up: §8.5 refused an *absent* part, and a part
+  that was present but was not a workbook walked past that refusal into a successful parse of
+  zero sheets. It now takes the existing refusal path, naming the part.
+- **The parser version moved `1.0.0` → `1.1.0`** (`src/parsers/sheet/provider.ts:39`), and that
+  is not bookkeeping: the silently-empty extractions are cached artefacts, and EPIC-031
+  re-extracts when producer identity moves. The chain is two links, both asserted —
+  `sheet-corruption.test.ts` pins the version off `1.0.0`, and `content-gate.test.ts:264`
+  ("re-reads when the parser version changed — AC-7") drives exactly `1.0.0 → 1.1.0`.
+- **Regression coverage: 15 new cases** in `tests/unit/sheet-corruption.test.ts` — not a
+  worksheet, not XML at all, empty part, cut off mid-file, the sheet named in the warning,
+  sibling sheets still read, prefixed roots accepted, and the corrupt-workbook cases through
+  the parser framework. **45 focused sheet tests green** (15 new + 30 existing
+  `sheet-parser.test.ts`), independently re-run.
+- A genuinely empty sheet stays warning-free. Zero rows is an answer, and the control asserting
+  so is what keeps the caveat meaningful.
 
-Follow-on work, not repaired here. The counts a notice would need are already persisted and
-readable, so what remains is presentation rather than measurement.
+One departure from the triage's prescribed remedy is recorded rather than glossed: it asked to
+*"refuse a part with no recognisable root; **warn when a present part yields zero rows**"*, and
+only the first shipped — a warning on every empty sheet is the always-on caveat F-66 already
+taught us not to add. The residual that the second half would also have caught is recorded
+separately as **F-102**, below.
 
-## P1-B — deferrable (15; 1 closed)
-**F-07**, **F-08**, **F-09**, **F-10**, **F-12**, **F-13**, **F-14**, **F-15**, **F-18**, **F-19**, **F-22**, **F-26**, **F-65**, **F-67**. **F-71 CLOSED in Batch 6.**
-Most are unreachable today; fix at the moment their code is wired.
+**F-27 — CLOSED. Both halves, and they were closed in two different batches.** It is recorded
+as two halves because that is how it was delivered and because the second half is the one that
+carried the harm:
+
+- **Persistence half — Batch 7 (`cd3ca85`).** `FileReferenceResolution` (extracted, resolved,
+  and unresolved by reason) written onto the `file` entity, replayed through the re-parse gate
+  so an unchanged second run writes no rows, and asserted end to end against a real database by
+  `tests/integration/indexing/reference-intervals.test.ts`.
+- **Read / presentation half — `c696dac` on this branch.** Persisting a measurement nobody reads
+  leaves the dangerous answer exactly as dangerous. `NeighbourResult` and `TraversalResult` now
+  carry a `ReferenceCompleteness`, aggregated by the store from those persisted counts, bounded
+  by the subject's repository and by the caller's scope grants; `ferret_neighbours` renders it
+  on both the depth-1 and depth>1 branches.
+
+**The false-completeness regression, and its result.** The defect was that `count: 0`,
+`truncated: false` and `withheld: 0` — three fields that between them *assert an answer is
+whole* — were returned over a graph Ferret had declined to finish resolving. That was
+reproduced before any implementation and is now green:
+
+- Tool surface (`tests/integration/mcp/tools.test.ts`): **6 of 7 assertions red**, the first
+  reading `an empty reference answer carried no completeness at all: expected undefined to be
+  defined`. The one green was the noise control — a verdict must *not* appear on a question that
+  is not about references — which correctly passes on both sides.
+- Real store, real PostgreSQL, real `git`, real grammars
+  (`tests/integration/indexing/reference-intervals.test.ts`): **2 of 4 red**, the two defect
+  cases. The other two are controls (noise, and read idempotency across a second index run) and
+  are not claimed as red-first.
+- Green after, and re-verified in the final combined run.
+
+**The five states are kept apart, which is the property the finding is really about:**
+
+| State | How the surface says it |
+| --- | --- |
+| genuinely no relationships | `count: 0` with `references.completeness: "complete"` |
+| unresolved references | `completeness: "incomplete"` + `unresolved.{total, refused, byReason}` |
+| withheld relationships | `withheld: n` — unchanged, EPIC-058 |
+| truncated results | `truncated: true` + `more` — unchanged, F-28 |
+| unmeasured completeness | `completeness: "unknown"`, `filesMeasured: 0` — never `complete` |
+
+`unknown` is a third verdict rather than a shading of `complete`: an index built before F-27, or
+one whose content stage never ran, has earned no verdict, and issuing a clean bill of health it
+never sat for would be this same finding one layer along.
+
+The verdict is derived from the **reasons**, not the total, and that is the part worth arguing.
+`ambiguous`, `receiver-unknown` and `imported` are refusals over candidates Ferret holds, so any
+one could have been the missing edge — `imported` most of all, since an import names a symbol
+the repository very probably declares and §8.4 does not follow it. Only `not-found` is a true
+absence: no declaration Ferret holds carries the name, so it cannot be a missing edge to one.
+Counting it would mark every honest index incomplete for referring to `console.log`. Every
+reason is still reported; the derivation is Ferret's and the numbers let a caller disagree.
+
+Two second-order defects found by re-auditing the fix, both corrected: a comment claiming a
+drift-guard test that did not exist (now written — `code-reference-truth.test.ts` asserts the
+duplicated edge-type strings equal the registered names, and that every `UnresolvedReason` is
+deliberately a refusal or an absence), and a verdict computed on every unfiltered traversal,
+which is the default path — now gated on the subject being an end of a reference edge.
+
+## P1-B — deferrable (15; 1 closed, 14 open)
+**F-07**, **F-08**, **F-09**, **F-10**, **F-12**, **F-13**, **F-14**, **F-15**, **F-18**,
+**F-19**, **F-22**, **F-26**, **F-65**, **F-67** — 14, all open.
+**F-71 — P1-B, CLOSED in Batch 6.** This is its single classification: the triage assigns it
+P1-B (`FERRET-POST-FORENSIC-TRIAGE.md:13`) and the §9 blocker table does not list it. It was
+previously also carried under P1-A, which double-counted it; that entry is removed and its
+severity is unchanged. 14 + 1 = **15**.
+Most of the open 14 are unreachable today; fix at the moment their code is wired.
 
 ## Infrastructure findings — kept separate, not fixed in any batch (3)
 > **None reproduced in the final audit run** — packaging ran all 34 tests, the wide-tree walk
@@ -121,9 +185,95 @@ That work is **Batch 8 — record correction, no code**, and it is unstarted. Wr
 into `PLANNED_COMMANDS` is documentation; building `ferret sync`, a session store, transport
 or client wiring is **not** in scope for it and was explicitly ruled out by the triage.
 
+## Candidates — recorded, unclassified, outside the remediation set (1)
+
+**F-102 — namespace-prefixed SpreadsheetML reads as an empty spreadsheet.** *(new; takes the
+count of recorded findings to 102.)*
+
+**Severity: unassigned. Deliberately not P1-A**, and not part of the closed set above.
+
+`rootStructure` accepts a prefixed root (`<x:worksheet>`, `<x:workbook>`) so that legitimate
+prefixed workbooks are not refused — the right call, and F-23's own test file records the
+consequence verbatim: the extractors one level down are not prefix-aware
+(`xlsx.ts:197` `/<sheet/`, `:295` `/<row/`, `:300` `/<c/`), so the structural guard says
+"this is a valid worksheet" and the extractor then reads nothing from it.
+
+**Code reachability: proved, not inferred.** Executed against the built parser at `896bcaa`:
+
+| Case | Result |
+| --- | --- |
+| `<x:workbook>`/`<x:sheet>` + `<x:worksheet>`/`<x:row>` | `{"sheets":[],"truncated":false,"warnings":[]}` |
+| `<workbook>`/`<sheet>` + `<x:worksheet>`/`<x:row>`, one real cell | `{"sheets":[{"name":"Q1","rows":[],"cellCount":0}],"truncated":false,"warnings":[]}` |
+| control — the corrupt worksheet F-23 fixes | `warnings:[{"code":"unreadable-sheet", ...}]` ✓ |
+
+The first two are F-23's exact signature — real data, zero rows, zero warnings, cached — on
+files that are **not corrupt**.
+
+**Not a regression from F-23.** The gap pre-dates it; `sheet-corruption.test.ts` documents it in
+a doc comment rather than concealing it. One asymmetry is recorded honestly: for the second case
+a *stricter* fix with no prefix tolerance would have warned, so the tolerance trades that
+hypothetical warning against refusing genuine prefixed files.
+
+**Why severity is unassigned.** Code reachability is proved; **input** reachability is not.
+Excel, SheetJS and Apache POI all emit unprefixed SpreadsheetML. Classifying it needs: (i) a
+survey of `.xlsx` producers in the target corpus — ERP/reporting exporters and XSLT pipelines
+are the plausible sources; (ii) a scan of `datasets/` and any real corpus for a prefixed root;
+(iii) a decision on whether "silently empty on a file we chose not to refuse" is acceptable at
+all — if it is not, the triage's unshipped F-23 remedy half (*warn when a present part yields
+zero rows*) is the cheaper and more general fix than prefix-aware regexes.
+
+**Not implemented, and out of scope for the integration and F-27 batch.** No XLSX file was
+touched by that work.
+
 ## P2/P3 (60)
-Note: F-101 above is new and takes the count of recorded findings to 101.
 Groups: documentation drift (highest value) · identity hardening · retention lifecycle · provider platform · audit/observability · session values · benchmark honesty · test integrity · small correctness. Detail in the triage §4.
 
 ## Key dependencies
-F-03 ⊂ F-04 · F-44 NOT closed by F-17 (per-value redaction kept the control) · F-41 masked by F-42 · F-45 moot until F-16 · F-88 latent on F-63 · F-32+F-64+F-66 one defence (all three CLOSED in Batch 5) · F-30+F-71+F-94 one enumeration (all three CLOSED: F-30 in Batch 2, F-71+F-94 in Batch 6) · F-95+F-96+F-97 one isolation story (all three CLOSED in Batch 3) · F-18+F-19+F-53 one trust story.
+F-03 ⊂ F-04 · F-44 NOT closed by F-17 (per-value redaction kept the control) · F-41 masked by F-42 · F-45 moot until F-16 · F-88 latent on F-63 · F-32+F-64+F-66 one defence (all three CLOSED in Batch 5) · F-30+F-71+F-94 one enumeration (all three CLOSED: F-30 in Batch 2, F-71+F-94 in Batch 6; F-30 and F-94 are P1-A, F-71 is P1-B — one defence, two severities) · F-95+F-96+F-97 one isolation story (all three CLOSED in Batch 3) · F-18+F-19+F-53 one trust story.
+
+## Where the remediation lives
+
+**It is not on `main`.** Until `c696dac6` it was not on any single ref either: the seven
+forensic batches and F-23 were developed as **siblings off the same base**, never integrated,
+so no tree had ever held both and neither branch's suite total described the combination.
+
+```
+main                            0407618  ← contains NONE of these fixes
+├── forensic/post-roadmap-audit  6439449  ← Batches 1-7 (22 P1-A) + evidence
+├── fix/f-23-…                   896bcaa  ← F-23 only
+└── integration/p1a-remediation  c696dac  ← 23b92c7 + 3dc8181 merges, then F-27's read half
+```
+
+`git merge-base` of the two source branches is `0407618`. Both merges were `--no-ff` and
+**conflicted in nothing**: the changed-file sets are 88 and 3 with **zero overlap**, checked
+before merging rather than discovered during it. Merges rather than cherry-picks, so each
+batch's commit and its evidence survive with its own SHA.
+
+The one semantic interaction worth naming was tested rather than assumed: F-23's new structural
+guard in `xlsx.ts` reads parts through `zip.ts`, which Batch 3 rewrote for F-60. They agree.
+
+## Validation — the combined tree
+
+**These are the first valid numbers for the remediation set.** Every earlier total is stale by
+construction: 3 513/175 was the forensic branch without F-23, 3 395/164 was F-23 without the
+batches.
+
+| | At `3dc8181` (integration) | At `c696dac6` (with F-27) |
+| --- | --- | --- |
+| Test files | 176 passed (176) | **176 passed (176)** |
+| Tests | 3 528 passed, 7 skipped | **3 542 passed, 7 skipped (3 549)** |
+| Failures | **0 failed** — exit 0 | **0 failed** — exit 0 |
+| Lint | clean | **clean** (`eslint .`) |
+| Typecheck | clean | **clean** (`tsc --noEmit`) |
+| Build / package | clean | **clean** — 13 migrations, 4 grammars, datasets; `packaging.test.ts` all 34 ran |
+
+The integration totals are **exactly additive** — 175 + 1 files, 3 513 + 15 tests — which is the
+useful result rather than the reassuring one: the two remediation sets do not interact.
+
+The 7 skips are structural and pre-existing: `docker.test.ts` (4, registry-dependent) and
+`signals.test.ts` (3, POSIX signals on Windows). No database suite skipped. **F-73, F-92 and
+F-101 did not fire** in any of these runs, which — as those findings themselves record — does
+not disprove an intermittent condition.
+
+No new migration was added by the integration or by F-27; the schema is Batch 2's `0013`.
+

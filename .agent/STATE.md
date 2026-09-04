@@ -1,15 +1,26 @@
 # STATE
 
-**Phase:** COMPLETE. Seven implementation batches, the read-only final forensic audit, and a
-documentation-only record correction. Implementation is closed; the branch awaits the owner.
-**Base:** `0407618` (main, untouched). **Worktree:** `C:\AIAgent\ferret-forensic`, branch `forensic/post-roadmap-audit`.
-**Last action:** Final forensic audit — read-only, no implementation. One clean full-suite
-pass at `cd3ca85`: **3 513 passed, 7 skipped, 0 failed** (175 files), exit 0.
-Verdict **NOT FORENSICALLY READY** — blocked by **F-23**, which was carried as CLOSED through
-five batches and the first audit and is not closed at all: no batch ever modified
-`src/parsers/sheet/xlsx.ts`. **F-27** is **partially closed** (persistence done, read half
-open) and does not block.
-Record: `docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md`.
+**Phase:** COMPLETE. Seven implementation batches, a read-only final forensic audit, the F-23
+fix, one controlled integration, F-27's read half, and this record reconciliation.
+**All 24 P1-A findings and the P0 are closed.** The combined tree awaits the owner.
+
+**Base:** `0407618` (`main`, **untouched** — it contains **none** of this remediation).
+**Tree:** `C:\AIAgent\Ferret`, branch **`integration/p1a-remediation`** at
+**`c696dacff7e9b0ea57329b5b106367764d544ff2`**. The forensic worktree
+`C:\AIAgent\ferret-forensic` (branch `forensic/post-roadmap-audit`, `6439449`) is intact and is
+now an ancestor of this branch.
+
+**Last action:** documentation and evidence reconciliation — no source or test change.
+
+**Verdict: QUALIFIED.** Technical remediation is complete and validated; release readiness is
+a different claim and is not made. See "Verdict" below.
+
+**Validation, combined tree at `c696dac6`** — the first valid numbers for the remediation set:
+**176 files, 3 542 passed, 7 skipped, 0 failed, exit 0**; lint, typecheck and build/package
+clean. Earlier totals (3 513/175 forensic-only, 3 395/164 F-23-only) are stale by construction.
+
+Records: `docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md` (the audit as taken at `cd3ca85`,
+with a supersession note), and `.agent/FINDINGS.md` for current status.
 
 ## Done
 - Forensic verification — 100 findings (`docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md`).
@@ -66,6 +77,13 @@ Record: `docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md`.
   F-27 (persistence half — see below), F-11. **The last implementation batch.**
 
 ## Changed
+F-27 read half (`c696dac`): `src/retrieval/query.ts` · `src/retrieval/index.ts` ·
+`src/storage/retrieval.ts` · `src/mcp/server.ts` · `src/index.ts`. Tests: 7 cases added to
+`tests/integration/mcp/tools.test.ts` (and the fake retrieval taught the new optional field),
+4 to `tests/integration/indexing/reference-intervals.test.ts`, 3 drift guards to
+`tests/unit/code-reference-truth.test.ts`. **No migration** — the counts were already stored.
+F-23 (`896bcaa`): `src/parsers/sheet/xlsx.ts` · `src/parsers/sheet/provider.ts`. New test:
+`tests/unit/sheet-corruption.test.ts`.
 Batch 7: `src/code/references.ts` · `src/code/index.ts` · `src/parsers/code/provider.ts` ·
 `src/providers/contracts/parser.ts` · `src/indexing/content.ts` · `src/indexing/indexer.ts` ·
 `src/indexing/ports.ts` · `src/storage/relationships.ts` · `src/git/provider.ts` ·
@@ -105,6 +123,55 @@ New tests: `tests/integration/indexing/history-completeness.test.ts`,
 `tests/unit/history-paging.test.ts`, `tests/integration/storage/backup-fidelity.test.ts`,
 `tests/integration/storage/embedding-provisioning.test.ts`, plus one case in
 `tests/unit/export.test.ts`.
+
+## Verified (combined tree, `c696dac6`)
+`npm run lint && tsc --noEmit && npm run build && npx vitest run`:
+**176 files, 3 542 passed, 7 skipped, 0 failed**, exit 0. Lint, typecheck and build clean;
+13 migrations, 4 grammars and the golden datasets copied; `packaging.test.ts` ran all 34.
+
+**These are the first valid numbers for the remediation set.** Two intermediate points are
+recorded because the arithmetic between them is the evidence, not the reassurance:
+
+| Point | Files | Tests |
+| --- | --- | --- |
+| forensic branch alone, `cd3ca85` | 175 | 3 513 passed, 7 skipped |
+| F-23 alone, `896bcaa` | 164 | 3 395 passed, 7 skipped |
+| integrated, `3dc8181` | 176 | 3 528 passed, 7 skipped |
+| with F-27's read half, `c696dac6` | **176** | **3 542 passed, 7 skipped** |
+
+175 + 1 = 176 and 3 513 + 15 = 3 528 **exactly**, which is what says the two remediation sets
+do not interact — nothing was lost or double-counted in the merge. The one semantic pairing
+worth naming was tested rather than assumed: F-23's structural guard in `xlsx.ts` reads parts
+through `zip.ts`, which Batch 3 rewrote for F-60.
+
+The 7 skips are structural and pre-existing: `docker.test.ts` (4, registry-dependent) and
+`signals.test.ts` (3, POSIX signals on Windows). No database suite skipped. F-73, F-92 and
+F-101 did not fire in any run — which does not disprove them.
+
+## Proved (F-27, the read half)
+The defect was that `count: 0`, `truncated: false` and `withheld: 0` — three fields that
+between them assert an answer is whole — came back over a graph Ferret had declined to finish
+resolving. Reproduced on both layers before any implementation change:
+
+- **Tool surface, 6 of 7 assertions red.** First message: `an empty reference answer carried no
+  completeness at all: expected undefined to be defined`. The one green is the control that a
+  verdict must *not* appear on a question that is not about references — it passes on both
+  sides, which is the only way it is worth anything.
+- **Real store, 2 of 4 red** — real PostgreSQL, real `git`, real grammars. The other two are
+  controls (noise, and read idempotency across a second index run) and are not claimed as
+  red-first.
+
+Both red sets were produced by stashing only `src/` and re-running the same assertions, so the
+red and the green differ by the implementation and by nothing else.
+
+Two second-order defects found by re-auditing the fix rather than by the finding, both
+corrected: a comment that **claimed a drift-guard test which did not exist** — storage may not
+import `src/code/` (`boundaries.test.ts`), so duplicating the edge-type strings is correct and
+the missing half was the check, now written along with a control that every
+`UnresolvedReason` is deliberately a refusal or an absence; and a verdict computed on **every**
+unfiltered traversal, which is the default path, costing two round trips to tell a commit
+about a reference graph it is not an end of — now gated on the subject being an end of a
+reference edge.
 
 ## Verified (Batch 7)
 See the final audit section below — this batch's numbers are the audit's numbers.
@@ -207,33 +274,76 @@ exclusion was carried only onto the first page — is now pinned by a unit test 
 against it. One regression found and fixed: the report's `watermark` lost the previous
 position on a resumed run (EPIC-108 AC-10).
 
+- **F-23 — a corrupt worksheet is not an empty one** (`896bcaa`, branch
+  `fix/f-23-corrupt-worksheet-silent-empty`, cut from `main`): a structural root check before
+  the regex scanner, so "this is not a worksheet" (`unreadable-sheet`) and "this worksheet did
+  not finish arriving" (`truncated-sheet`) are different facts and neither is silence; the
+  workbook part refused on the path §8.5 already used for an absent one; and
+  `SHEET_PARSER_VERSION` 1.0.0 → 1.1.0, which is what stops the cached silent-empty artefacts
+  being replayed out of the store. Closes **F-23**.
+
+- **Integration** (`23b92c7`, `3dc8181`, branch `integration/p1a-remediation` off `main`): the
+  forensic branch and F-23 merged into one tree. They had been siblings off the same base —
+  never integrated, so no ref had held both and neither branch's total described the
+  combination. Zero conflicts, predicted before merging (88 changed files against 3, no
+  overlap) rather than discovered during it. `--no-ff`, so each batch keeps its own commit.
+
+- **F-27's read half** (`c696dac`): `ReferenceCompleteness` on `NeighbourResult` and
+  `TraversalResult`, aggregated by the store from the counts Batch 7 persisted, bounded by the
+  subject's repository and by the caller's scope grants, and rendered by `ferret_neighbours`
+  beside `truncated` and `withheld` rather than folded into them. Closes **F-27**, the last
+  open P1-A.
+
 ## Constraints in force
 No new Epics. No Epic status changes. No PRs. No merge. No deploy. No changes to `main`.
 
+## Verdict — QUALIFIED
+
+Two questions, and collapsing them is how a green suite starts reading as permission to ship.
+
+**Technical remediation status: COMPLETE.** The P0 and all 24 P1-A findings are closed on one
+tree, validated together: 176 files, 3 542 passed, 7 skipped, 0 failed, exit 0, with lint,
+typecheck and build clean. Each closure names the commit that made it and the test that holds
+it — the discipline F-23 cost us. Every earlier per-branch total is superseded.
+
+**Release / readiness status: QUALIFIED — not READY.** What is closed is closed; what remains
+is that the tree has never been anywhere but this machine.
+
+- **It has run on one platform, once.** Windows, one clean pass. F-73, F-92 and F-101 are open
+  contention artefacts that did not fire — which those findings themselves say proves nothing
+  about an intermittent condition. CI has never seen this tree, and Linux is where the
+  `gpg.program` execution vector in `git-output-integrity` actually demonstrates.
+- **Nothing has reviewed it.** No push, no PR, no second pair of eyes on 46 changed source
+  files. Two of Batch 6's eight second-order defects were found by Ferret's own controls
+  rather than by re-reading a diff, which is the argument for review, not against it.
+- **The merge is untested against a moving base.** `main` has not advanced since `0407618`, but
+  local green goes stale the moment it does; the gate is re-run after a rebase, not before.
+- **F-102 is reachable and unclassified.** Proved in code, not in any corpus. It is not P1-A on
+  the evidence available, and it is not nothing either: the same silent-omission signature as
+  F-23, on files that are not corrupt.
+- **Real deployment surfaces are unexercised.** `upgrade`/`import` against an installation that
+  predates `0013`, and a repository at a scale none of these fixtures reach.
+
+None of these is a defect. They are the difference between *proven correct here* and *ready to
+release*, and the record should not blur them.
+
 ## Next action
-**Nothing. Stopped, as instructed.**
+**Nothing. Stopped, as instructed.** Nothing pushed, no PR, nothing merged, nothing deployed;
+`main` is untouched at `0407618`.
 
-**Before this branch reaches `main`, F-23 needs closing for real** — a red fixture across the
-five corruptions the finding measured, plus a check that the content gate does not cache a
-refusal as an empty result. It is P1-A and data-loss class. Not started, and out of scope for
-every task so far.
+The owner decides whether and when this reaches `main`. What would move QUALIFIED to READY, in
+the order it is cheapest to get: a CI run on the combined tree (Linux especially), review of
+the diff, a classification decision on F-102, and a re-run of the gate after any rebase.
 
-**And the process lesson is worth more than the defect.** F-23 was marked CLOSED, propagated
-through five documents, and survived a full audit without a line of code having changed. Any
-remaining CLOSED status is worth spot-checking the way F-23 finally was — against
-`git log 0407618..HEAD -- <the module the finding names>`.
+**The process lesson outlived the defect and is kept.** F-23 was marked CLOSED, propagated
+through five documents, and survived a full audit without a line of code having changed. Every
+CLOSED status in this record was re-checked the way F-23 finally was — against
+`git log 0407618..HEAD -- <the module the finding names>` — and each finding's named module is
+in the changed set. That check is the reason the current statuses are worth anything.
 
-The owner reviews the evidence and decides whether and when to open a PR. No PR was created, nothing was merged, nothing was deployed, and `main`
-is untouched at `0407618`.
-
-**Implementation is closed.** Batch 7 was the final authorized batch; the remaining work is
-the read-only final forensic audit, whose report is the deliverable.
-
-Remaining, and explicitly *not* to be implemented: **F-27's read half** — a completeness
-notice on `ferret_neighbours` for reference queries. The counts are persisted and reach any
-caller that reads the `file` entity; the tool does not yet qualify an empty inbound list.
-Batch 8 (record correction, no code) is unstarted. F-73, F-92 and F-101 remain open
-infrastructure findings.
+Still open and untouched: Batch 8 (record correction, no code); F-73, F-92, F-101 as
+infrastructure findings; the 14 open P1-B; F-20 and F-21 as documentation work; F-102 as an
+unclassified candidate.
 
 ## Open decisions for a human
 1. F-21 — is GitHub/Jira ingestion meant to be reachable in this release, or library-only?
