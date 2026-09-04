@@ -1,6 +1,12 @@
 import { Metric, Tracer, defaultMetrics, type MetricsRegistry } from '../observability/index.js';
 import { processInvocationId } from '../logging/index.js';
 import {
+  FILE_DECLARES_SYMBOL,
+  FILE_REFERENCES_SYMBOL,
+  SYMBOL_REFERENCES_SYMBOL,
+  type FileReferenceResolution,
+} from '../code/index.js';
+import {
   EntityKind,
   canonicalId,
   encodeKeyParts,
@@ -24,6 +30,24 @@ import type { ParserFramework } from '../parsing/index.js';
 
 import { runContentStage, type ContentCounts } from './content.js';
 import { ContentStageSkip } from './ports.js';
+
+/**
+ * The edge types the content stage owns, and the only ones it may close.
+ *
+ * F-25b's blast radius, written down. A sweep that could retire any edge type
+ * would be able to close history edges from a content run.
+ */
+function edgeKey(fromId: string, type: string, toId: string): string {
+  // NUL, because no id or type can contain one: with a separator that can, two
+  // different edges could share a key and one would be retired in error.
+  return [fromId, type, toId].join(String.fromCharCode(0));
+}
+
+const CONTENT_EDGE_TYPES: ReadonlySet<string> = new Set([
+  FILE_DECLARES_SYMBOL,
+  FILE_REFERENCES_SYMBOL,
+  SYMBOL_REFERENCES_SYMBOL,
+]);
 import type {
   ContentArtifactStore,
   ContentBlobWriter,
@@ -156,6 +180,14 @@ export interface IndexReport {
   readonly incremental: boolean;
   readonly entities: WriteCounts;
   readonly relationships: WriteCounts;
+  /**
+   * Reference edges closed because the code no longer contains the call — F-25b.
+   *
+   * Separate from `lifecycle.retired`, which is about *entities*. Nothing ever
+   * ended a content edge before this, so a call deleted from a file stayed
+   * asserted for ever and every impact answer kept repeating it.
+   */
+  readonly referencesRetired: number;
   readonly evidence: { readonly recorded: number; readonly deduplicated: number };
   /**
    * Conflict reconciliation over the subjects this run wrote about — EPIC-047.
@@ -219,9 +251,43 @@ export interface IndexableSource {
   }>;
   readHistory(
     repository: DiscoveredRepository,
-    request: { revision?: string; limit?: number; since?: string; withChanges?: boolean },
+    request: {
+      revision?: string;
+      limit?: number;
+      cursor?: string;
+      since?: string;
+      exclude?: readonly string[];
+      withChanges?: boolean;
+    },
     context: ProviderOperationContext,
-  ): Promise<{ commits: readonly { committedAt: string }[] }>;
+  ): Promise<{
+    commits: readonly { committedAt?: string | undefined; sha?: string }[];
+    /**
+     * Present when the page was cut short — the same signal `listBranches` and
+     * `listFiles` carry, and for the same reason.
+     *
+     * It was declared on both of those and not on this one, and the omission
+     * was not visible: the provider returned it, the port did not name it, and
+     * the run then advanced its position past commits it had never read. A
+     * bounded read whose bound the caller cannot see is a silent truncation.
+     */
+    cursor?: string | undefined;
+    /**
+     * The commit `revision` names now, when the provider can say.
+     *
+     * What the next run excludes. A position, rather than a date that happens
+     * to belong to a commit.
+     */
+    tip?: string | undefined;
+    /**
+     * Why the read stopped early, when it did.
+     *
+     * A page that could not be finished must not move the position: the commits
+     * it did not reach are still unread, and a resume that excluded them would
+     * make the gap permanent.
+     */
+    incomplete?: { readonly reason: string } | undefined;
+  }>;
   listFiles(
     repository: DiscoveredRepository,
     request: { revision?: string; limit?: number },
@@ -283,6 +349,14 @@ interface Graph {
    * some earlier run read in full.
    */
   readonly placeholderEntityIds?: readonly string[];
+  /**
+   * Records the source could not represent, and why.
+   *
+   * Optional, so a source that never skips one is unaffected. Named rather than
+   * counted: a run that returns fewer records than the source holds and cannot
+   * say which is indistinguishable from a smaller source.
+   */
+  readonly skippedRecords?: readonly { readonly id: string; readonly reason: string }[];
 }
 
 export interface IndexerDependencies {
@@ -494,7 +568,18 @@ export class RepositoryIndexer {
     const watermarkScope = watermarkScopeId(repositoryEntity.id, options.revision);
 
     const previous = options.full === true ? undefined : await this.#readWatermark(watermarkScope);
-    const since = typeof previous?.lastCommitAt === 'string' ? previous.lastCommitAt : undefined;
+    const previousTips = readTips(previous);
+    const previousCommitAt = typeof previous?.lastCommitAt === 'string' ? previous.lastCommitAt : undefined;
+    // Reachability when the last run left tips, the date otherwise. Never both:
+    // a date filter applied on top of an exclusion would reintroduce exactly
+    // the commits the exclusion exists to stop losing.
+    //
+    // `previousCommitAt` is still carried forward whichever is used. It is no
+    // longer what a run resumes *from*, but it is still what the run reports and
+    // what "how far behind" is measured from, and a resumed run that read
+    // nothing new must not report that it has read nothing at all.
+    const exclude = previousTips;
+    const since = exclude.length > 0 ? undefined : previousCommitAt;
 
     const entities = counter();
     const relationships = counter();
@@ -558,6 +643,17 @@ export class RepositoryIndexer {
     let content: ContentCounts | undefined;
     let contentStructure: ReadonlyMap<string, FileStructure> | undefined;
     let contentEdges: readonly RelationshipInput[] = [];
+    let contentResolution: ReadonlyMap<string, FileReferenceResolution> | undefined;
+    /** Endpoints the content stage re-derived this run — F-25b's retire scope. */
+    let contentSources: ReadonlySet<string> = new Set();
+    /**
+     * Reference edges this run closed — F-25b.
+     *
+     * Reported rather than kept internal, for the reason every other counter in
+     * this file is: a sweep whose effect is invisible is one nobody can tell
+     * from a sweep that never ran.
+     */
+    let referencesRetired = 0;
     if (!contentStage.run) {
       this.#logger?.info(
         {
@@ -681,6 +777,8 @@ export class RepositoryIndexer {
         );
         content = stage.counts;
         contentStructure = stage.structure;
+        contentResolution = stage.resolution;
+        contentSources = stage.sources;
         contentEdges = stage.edges;
       }
 
@@ -694,6 +792,10 @@ export class RepositoryIndexer {
           : this.#source.emitFiles(repository, listing.entries as readonly never[], {
               ...emitOptions,
               structure: contentStructure,
+              // F-27. Written onto the same `file` entity as the structure, and
+              // for the same reason it is threaded through here rather than
+              // asserted in the stage: the provider owns file identity.
+              ...(contentResolution === undefined ? {} : { referenceResolution: contentResolution }),
             });
 
       skipped.push(...graph.skipped);
@@ -711,6 +813,19 @@ export class RepositoryIndexer {
       // the first end-to-end run.
       for (const edge of contentEdges) {
         await this.#relationships.assert(edge, observedAt);
+      }
+
+      // F-25b's second half. Nothing ever ended a content edge — the indexer
+      // only asserted, and the only `retire` caller in `src/` was the entity
+      // lifecycle sweep — so a call deleted from a file stayed in the graph for
+      // ever and every impact answer kept asserting it.
+      //
+      // Scoped to the endpoints this run actually re-derived. A file the
+      // content stage did not visit contributes no `fromId`, so an incremental
+      // run cannot retire edges it was never in a position to observe: absence
+      // from `contentEdges` then means "not looked at", not "gone".
+      if (contentStage.run) {
+        referencesRetired += await this.#retireVanishedEdges(contentEdges, contentSources, observedAt);
       }
     };
 
@@ -735,32 +850,85 @@ export class RepositoryIndexer {
       await this.#tracer.span('index.files', runFileStage, { metric: Metric.INDEX_STAGE_MS });
     }
 
-    // Stage 2 — history, bounded by the watermark unless a full run was asked
-    // for.
+    // Stage 2 — history, resumed from what the last run read.
     //
-    // `--since` has second granularity and an inclusive boundary, so the
-    // watermark commit itself is re-read every run. That is deliberate: moving
-    // the boundary forward by a second to avoid it would risk skipping a sibling
-    // commit made in the same second, and silently losing history is far worse
-    // than re-reading one commit whose write is already idempotent.
+    // **Every page, not the first one.** The provider bounds a read and says so
+    // by returning a cursor; the run follows it until there is none. Reading one
+    // page and then recording a position past its end is how a repository larger
+    // than a page silently lost everything older than it (F-01), and no later
+    // run went back: the position had already moved beyond the commits that were
+    // never read.
+    //
+    // **Excluded by reachability, not filtered by date**, when a previous
+    // position is available. `--since` asks "is this commit newer than a date",
+    // which is a property of the commit rather than of what Ferret has seen: a
+    // branch merged after it was written, a rebase, an imported history and a
+    // clock an hour fast are all commits Ferret has never read whose dates say
+    // they are old. `^<tip>` asks the only question that matters — is this
+    // reachable from something already read — and Git answers it exactly.
+    //
+    // `since` remains the fallback for a position written before tips existed,
+    // so an upgrade does not force a full re-read of every repository.
     let commitsRead = 0;
-    let newestCommitAt = since;
+    let newestCommitAt = previousCommitAt;
+    let tips: readonly string[] = previousTips;
+    let incompleteHistory: string | undefined;
     if (options.withHistory !== false) {
       throwIfAborted(context.signal, 'index.history');
-      const page = await this.#source.readHistory(
-        repository,
-        {
-          ...(options.revision === undefined ? {} : { revision: options.revision }),
-          ...(options.historyLimit === undefined ? {} : { limit: options.historyLimit }),
-          ...(since === undefined ? {} : { since }),
-          withChanges: options.withChanges !== false,
-        },
-        context,
-      );
-      commitsRead = page.commits.length;
-      newestCommitAt = newest(page.commits, since);
-      const graph = this.#source.emitHistory(repository, page.commits as readonly never[], { observedAt });
-      await write(withoutRewrittenFiles(graph, writtenFiles));
+      let cursor: string | undefined;
+      let pages = 0;
+      do {
+        throwIfAborted(context.signal, 'index.history');
+        const page = await this.#source.readHistory(
+          repository,
+          {
+            ...(options.revision === undefined ? {} : { revision: options.revision }),
+            ...(options.historyLimit === undefined ? {} : { limit: options.historyLimit }),
+            ...(cursor === undefined ? {} : { cursor }),
+            // Every page, not only the first. A cursor is an offset into *this*
+            // walk; carrying the offset without the filter that defined the walk
+            // would page into a different history and skip precisely the commits
+            // the exclusion was meant to find.
+            ...(exclude.length === 0 ? {} : { exclude }),
+            ...(exclude.length > 0 || since === undefined ? {} : { since }),
+            withChanges: options.withChanges !== false,
+          },
+          context,
+        );
+        commitsRead += page.commits.length;
+        newestCommitAt = newest(page.commits, newestCommitAt);
+        if (page.incomplete !== undefined) {
+          // Read what it could, keep it, and do not move on. Recording the tip
+          // here would tell the next run that everything behind it is already
+          // known, which is the one thing this page cannot claim.
+          incompleteHistory = page.incomplete.reason;
+          skipped.push({ path: '(history)', reason: page.incomplete.reason });
+          this.#logger?.warn(
+            { operation: 'index.history', repository: repositoryEntity.id, reason: page.incomplete.reason },
+            'History could not be read to the end; the position was not advanced',
+          );
+        } else if (page.tip !== undefined) {
+          tips = rememberTip(tips, page.tip);
+        }
+        const graph = this.#source.emitHistory(repository, page.commits as readonly never[], { observedAt });
+        // Commits the provider could not represent are named, not counted. A
+        // history that quietly returns fewer commits than the repository holds
+        // is indistinguishable from a smaller repository.
+        for (const one of graph.skippedRecords ?? []) skipped.push({ path: one.id, reason: one.reason });
+        await write(withoutRewrittenFiles(graph, writtenFiles));
+        cursor = page.cursor;
+        pages += 1;
+        // A provider that returned a cursor for ever would page for ever. The
+        // bound is deliberately far above any real history at this page size,
+        // and hitting it is a provider defect rather than a large repository.
+        if (pages >= MAX_HISTORY_PAGES && cursor !== undefined) {
+          this.#logger?.warn(
+            { operation: 'index.history', repository: repositoryEntity.id, pages },
+            'History paging stopped at its bound; the read is incomplete',
+          );
+          break;
+        }
+      } while (cursor !== undefined);
     }
 
     if (!contentStage.run) {
@@ -795,14 +963,24 @@ export class RepositoryIndexer {
     // The watermark moves only after everything above succeeded. A run that
     // failed halfway must be repeated, not resumed from a position it never
     // reached — Governance §6, never claim to know something you did not.
-    await this.#writeWatermark(watermarkScope, newestCommitAt, observedAt);
+    // A read that could not be finished leaves the position exactly where it
+    // was. `newestCommitAt` would otherwise carry the newest commit of a partial
+    // page, and the legacy date resume would skip everything behind it.
+    await this.#writeWatermark(
+      watermarkScope,
+      incompleteHistory === undefined ? newestCommitAt : previousCommitAt,
+      tips,
+      observedAt,
+    );
 
     const report: IndexReport = {
       repositoryId: repositoryEntity.id,
       repositoryKey: repository.identityKey,
-      incremental: since !== undefined,
+      incremental: since !== undefined || exclude.length > 0,
       entities: entities.counts,
       relationships: relationships.counts,
+      // F-25b. Reference edges closed because the call is no longer in the file.
+      referencesRetired,
       evidence: { recorded, deduplicated },
       conflicts,
       commitsRead,
@@ -832,6 +1010,49 @@ export class RepositoryIndexer {
     );
 
     return report;
+  }
+
+  /**
+   * Closes reference edges the file no longer has — F-25b.
+   *
+   * Nothing ever ended a content edge. The indexer only asserted, and the sole
+   * `retire` caller in `src/` was the entity lifecycle sweep, so a call deleted
+   * from a file stayed open for ever and every impact answer kept asserting it.
+   *
+   * **Scoped to endpoints this run re-derived.** `sources` is every file the
+   * content stage resolved and every symbol it built, whether or not it produced
+   * an edge — which is the distinction that makes this safe. For a file the
+   * stage skipped at the gate, an absent edge means "not looked at"; for one in
+   * `sources`, it means the call is gone. Retiring on the first would delete a
+   * correct graph on every incremental run.
+   *
+   * A tombstone, not a delete: the interval closes so "when did this stop being
+   * true" stays answerable.
+   */
+  async #retireVanishedEdges(
+    asserted: readonly RelationshipInput[],
+    sources: ReadonlySet<string>,
+    at: Date,
+  ): Promise<number> {
+    const open = this.#relationships.openOutgoingOfTypes?.bind(this.#relationships);
+    const retire = this.#relationships.retire?.bind(this.#relationships);
+    // Both, or neither. Half of this pair would read every edge and close none,
+    // which is the shape of a control that reports success having done nothing.
+    if (open === undefined || retire === undefined || sources.size === 0) return 0;
+
+    const kept = new Set(
+      asserted
+        .filter((edge) => CONTENT_EDGE_TYPES.has(edge.type))
+        .map((edge) => edgeKey(edge.fromId, edge.type, edge.toId)),
+    );
+
+    let closed = 0;
+    for (const edge of await open([...sources], [...CONTENT_EDGE_TYPES])) {
+      if (kept.has(edgeKey(edge.fromId, edge.type, edge.toId))) continue;
+      await retire(edge.fromId, edge.type, edge.toId, at, at);
+      closed += 1;
+    }
+    return closed;
   }
 
   /**
@@ -1056,10 +1277,18 @@ export class RepositoryIndexer {
   async #writeWatermark(
     repositoryId: string,
     lastCommitAt: string | undefined,
+    tips: readonly string[],
     now: Date,
   ): Promise<void> {
+    // `lastCommitAt` is no longer what the next run resumes from — `tips` is —
+    // but it is still what "how far behind is this source" is measured from, so
+    // it is clamped to now. A commit dated in the future is a repository's
+    // mistake, and carrying it into the position made that mistake Ferret's:
+    // the stored date outran every real commit and the source went quiet.
+    const clamped = clampToNow(lastCommitAt, now);
     const position = {
-      ...(lastCommitAt === undefined ? {} : { lastCommitAt }),
+      ...(clamped === undefined ? {} : { lastCommitAt: clamped }),
+      ...(tips.length === 0 ? {} : { tips: [...tips] }),
       indexedAt: now.toISOString(),
     };
     if (this.#cursors !== undefined) {
@@ -1076,10 +1305,7 @@ export class RepositoryIndexer {
         scopeId: repositoryId,
         producer: INDEXER_PRODUCER,
         producerVersion: VERSION,
-        metadata: {
-          ...(lastCommitAt === undefined ? {} : { lastCommitAt }),
-          indexedAt: now.toISOString(),
-        },
+        metadata: position,
       },
       now,
     );
@@ -1150,6 +1376,58 @@ function counter(): { record(outcome: string): void; readonly counts: WriteCount
 }
 
 /**
+ * How many pages one history read will follow.
+ *
+ * At the provider's page size this is far more history than any repository has,
+ * and it exists only so a provider that returned a cursor for ever could not
+ * make a run unbounded. Hitting it is a provider defect, and the run says so
+ * rather than reporting a complete read.
+ */
+const MAX_HISTORY_PAGES = 10_000;
+
+/** How many tips a position carries. Well above one per branch anyone indexes. */
+const MAX_TIPS = 64;
+
+/**
+ * The commits a stored position says were already read.
+ *
+ * Absent on a position written before tips existed, and on one written by a run
+ * that read no history. Both mean the same thing to the caller — there is no
+ * exclusion to apply — and neither is an error.
+ */
+function readTips(position: Readonly<Record<string, unknown>> | undefined): readonly string[] {
+  const tips = position?.['tips'];
+  if (!Array.isArray(tips)) return [];
+  return tips.filter((tip): tip is string => typeof tip === 'string' && /^[0-9a-f]{7,64}$/.test(tip));
+}
+
+/**
+ * The tip set, with this run's tip in it.
+ *
+ * Newest first and bounded, so indexing many branches in turn cannot grow a
+ * position without limit. Dropping the oldest tip costs a re-read of commits
+ * that are already written — idempotent — rather than a gap.
+ */
+function rememberTip(tips: readonly string[], tip: string): readonly string[] {
+  return [tip, ...tips.filter((existing) => existing !== tip)].slice(0, MAX_TIPS);
+}
+
+/**
+ * A commit instant, never later than the instant it was observed.
+ *
+ * The stored date is a fact about how far Ferret has read, and a commit dated
+ * in 2035 is not evidence that Ferret has read 2035. Clamping keeps "how far
+ * behind is this source" answerable; it is no longer load-bearing for
+ * *resuming*, which is why the clamp is safe to apply at all.
+ */
+function clampToNow(instant: string | undefined, now: Date): string | undefined {
+  if (instant === undefined) return undefined;
+  const parsed = Date.parse(instant);
+  if (Number.isNaN(parsed)) return undefined;
+  return parsed > now.getTime() ? now.toISOString() : instant;
+}
+
+/**
  * The newest commit instant seen, never moving backwards.
  *
  * A repository can contain a commit dated before one Ferret has already seen —
@@ -1157,9 +1435,15 @@ function counter(): { record(outcome: string): void; readonly counts: WriteCount
  * back would make the next run re-read everything between. Taking the maximum
  * costs nothing and removes the whole class.
  */
-function newest(commits: readonly { committedAt: string }[], previous: string | undefined): string | undefined {
+function newest(
+  commits: readonly { committedAt?: string | undefined }[],
+  previous: string | undefined,
+): string | undefined {
   let best = previous;
   for (const commit of commits) {
+    // A commit Git could not date carries no instant. It is skipped rather than
+    // parsed into `NaN`, which is the same outcome by a longer route.
+    if (commit.committedAt === undefined) continue;
     const at = Date.parse(commit.committedAt);
     if (Number.isNaN(at)) continue;
     if (best === undefined || at > Date.parse(best)) best = commit.committedAt;
@@ -1198,6 +1482,10 @@ function toEvidenceInput(record: CanonicalEvidence): Parameters<EvidenceWriter['
     ...(record.observedAt === undefined ? {} : { observedAt: record.observedAt }),
     derivedFrom: [...record.derivedFrom],
     ...(record.permissionScope === undefined ? {} : { permissionScope: record.permissionScope }),
+    // Carried through, because this function is where an emitted record becomes
+    // a write again — and dropping it here is how a collection field emitted
+    // through the SDK would still have been collapsed to its last member.
+    ...(record.cardinality === undefined ? {} : { cardinality: record.cardinality }),
   };
 }
 

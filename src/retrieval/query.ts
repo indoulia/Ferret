@@ -170,6 +170,21 @@ export interface TraversalResult {
   readonly depthReached: number;
   /** What the caller was not permitted to see — EPIC-058. Counts only. */
   readonly withheld: WithheldReport;
+  /**
+   * How whole the reference graph behind this walk is — F-27.
+   *
+   * On the multi-hop branch for the same reason as the one-hop one, and it
+   * matters more here: an unresolved reference at hop 1 removes everything that
+   * was only reachable *through* it, so a depth-3 walk understates by more than
+   * the missing edge.
+   *
+   * Declared on `ReferenceCompleteness`, whose scope is the subject's
+   * repository — not the union of every scope the walk wandered into. A walk
+   * that leaves the repository is bounded by the count it was given, and saying
+   * so precisely is better than widening the claim to cover ground it cannot
+   * measure.
+   */
+  readonly references?: ReferenceCompleteness | undefined;
 }
 
 export interface Neighbour {
@@ -327,6 +342,121 @@ export interface SearchResult {
 }
 
 /**
+ * What an exact lookup found, and what it could not show.
+ *
+ * A result object rather than a bare array, for the reason `SearchResult` is
+ * one — and it was missing here, which is the whole of F-31. `findEntities`
+ * filtered permission-withheld rows *after* the `LIMIT`, into a tally it
+ * constructed inline and threw away, so a caller received a shorter array and
+ * nothing else. `ferret_find` then derived "is there more" from that array's
+ * length and reported `truncated: false` over an answer that had been cut.
+ *
+ * The two facts are separate and both are reported. `more` means the store
+ * holds further matches; `withheld` means rows were removed because this caller
+ * may not see them. Collapsing them would make "you are not allowed to see it"
+ * indistinguishable from "there is nothing there", which is the distinction
+ * EPIC-058 exists to keep.
+ */
+export interface EntityResult {
+  readonly entities: readonly CanonicalEntity[];
+  readonly withheld: WithheldReport;
+  /** Further matches exist beyond the ones returned. */
+  readonly more: boolean;
+}
+
+/**
+ * Whether the reference graph behind this answer is whole — F-27.
+ *
+ * The counts exist: EPIC-035 §12's per-file `referenceResolution` is persisted
+ * on the `file` entity. What was missing is that no read surface consulted them,
+ * so an inbound reference list came back with `truncated: false` and
+ * `withheld: 0` — an affirmative claim of completeness — over a graph from which
+ * Ferret had *refused* to resolve references. "Nothing references this" and "we
+ * declined to resolve the references that would have answered you" were the same
+ * bytes.
+ *
+ * **Reported, never repaired.** This says how much of the graph is missing. It
+ * does not guess at edges, and no count here becomes a neighbour.
+ *
+ * `completeness` is derived rather than stored, from the reasons rather than
+ * from the total, because the reasons do not mean the same thing:
+ *
+ * - `ambiguous`, `receiver-unknown`, `imported` are **refusals**. Ferret holds
+ *   declarations that could be the target and declined to choose, so any one of
+ *   them could have been an edge into the entity being asked about. `imported`
+ *   belongs here and it is the easy one to get wrong: `import { foo } from
+ *   './bar.js'` names a symbol Ferret very likely *does* hold, and §8.4 does not
+ *   follow the import — so the edge is missing, not absent.
+ * - `not-found` is an **absence**. No declaration Ferret holds carries the name,
+ *   so it cannot be an edge to a held symbol; the target is a built-in, another
+ *   repository, or nothing. Counting it as incompleteness would mark every real
+ *   index incomplete for referring to `console.log`, and a caveat that is always
+ *   on is one a reader learns to skip — the F-66 lesson, earned once already.
+ *
+ * Every reason is still reported. The verdict is derived from the refusals; the
+ * numbers let a caller disagree with that derivation.
+ */
+export interface ReferenceCompleteness {
+  /**
+   * `complete` — every reference in scope resolved or was a true absence.
+   * `incomplete` — references were refused, so this answer may be short.
+   * `unknown` — nothing in scope recorded resolution counts, so completeness is
+   * not merely unproven but unmeasured. Distinct from `complete` on purpose: an
+   * index built before F-27, or one whose content stage never ran, must not be
+   * able to claim a clean bill of health it never earned.
+   */
+  readonly completeness: 'complete' | 'incomplete' | 'unknown';
+  /** References the parser found across the scope. */
+  readonly extracted: number;
+  /** References that became an edge. */
+  readonly resolved: number;
+  /**
+   * What did not resolve, and why. `total` counts every reason; `refused` counts
+   * only those that could have hidden an edge to a held symbol, and is what
+   * `completeness` is derived from.
+   */
+  readonly unresolved: {
+    readonly total: number;
+    readonly refused: number;
+    readonly byReason: Readonly<Record<string, number>>;
+  };
+  /**
+   * Files in scope carrying resolution counts.
+   *
+   * Zero is what makes the verdict `unknown`. Counted rather than inferred from
+   * `extracted === 0`, because a scope of genuinely reference-free files is a
+   * measured scope and must report `complete`, not `unknown`.
+   */
+  readonly filesMeasured: number;
+}
+
+/** One hop's neighbours, what was withheld, and whether the hop was cut short. */
+export interface NeighbourResult {
+  readonly neighbours: readonly Neighbour[];
+  readonly withheld: WithheldReport;
+  /**
+   * How whole the reference graph behind this answer is — F-27.
+   *
+   * Present only when the query could have returned reference edges. Absent
+   * means the question was not about references, not that the answer is
+   * complete: a commit's neighbours have no reference graph to be short of, and
+   * attaching a resolution verdict to them would be noise asserting a
+   * relationship that does not exist.
+   */
+  readonly references?: ReferenceCompleteness | undefined;
+  /**
+   * The bound cut this hop.
+   *
+   * Reported because a traversal cannot see it otherwise: the limit is applied
+   * in SQL and the walk counts rows in TypeScript, so a frontier node whose
+   * neighbours were cut in the database looked to the walk exactly like a node
+   * that had no more — and a truncated traversal was returned as an exhaustive
+   * one.
+   */
+  readonly more: boolean;
+}
+
+/**
  * Every read Ferret can be asked to perform, and the authorization it is
  * performed under.
  *
@@ -339,9 +469,9 @@ export interface SearchResult {
  * code a reviewer can grep for.
  */
 export interface RetrievalPort {
-  findEntities(query: EntityQuery, access: AccessContext): Promise<readonly CanonicalEntity[]>;
+  findEntities(query: EntityQuery, access: AccessContext): Promise<EntityResult>;
   getEntity(id: string, access: AccessContext): Promise<CanonicalEntity | undefined>;
-  neighbours(query: TraversalQuery, access: AccessContext): Promise<readonly Neighbour[]>;
+  neighbours(query: TraversalQuery, access: AccessContext): Promise<NeighbourResult>;
   /**
    * Multi-hop traversal — EPIC-050.
    *

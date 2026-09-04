@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 
 import { VERSION } from '../version.js';
 import { ENTITY_SCHEMA_VERSION } from '../domain/index.js';
+import { redactString } from '../errors/index.js';
 import { redactSecrets } from '../security/index.js';
 
 import type { FerretDatabase } from './entities.js';
@@ -90,6 +91,16 @@ export async function generatedColumns(
 export interface ColumnFacts {
   readonly generated: ReadonlySet<string>;
   readonly json: ReadonlySet<string>;
+  /**
+   * Every column the target actually has, keyed `table.column`.
+   *
+   * The allowlist an importer writes against. A column name in a document is
+   * *input* — the document may have been written anywhere, by anything — and it
+   * reaches the statement as an identifier, which no parameter can carry. The
+   * catalogue is the only authority on what a column may be called, so it is
+   * read once here rather than trusted per row.
+   */
+  readonly known: ReadonlySet<string>;
 }
 
 export async function columnFacts(reader: Pick<FerretDatabase, 'execute'>): Promise<ColumnFacts> {
@@ -107,12 +118,14 @@ export async function columnFacts(reader: Pick<FerretDatabase, 'execute'>): Prom
 
   const generated = new Set<string>();
   const json = new Set<string>();
+  const known = new Set<string>();
   for (const row of rows.rows) {
     const key = `${row.table_name}.${row.column_name}`;
+    known.add(key);
     if (row.is_generated === 'ALWAYS') generated.add(key);
     if (row.data_type === 'jsonb' || row.data_type === 'json') json.add(key);
   }
-  return { generated, json };
+  return { generated, json, known };
 }
 
 /**
@@ -264,15 +277,24 @@ export class ExportService {
         const carried = Object.fromEntries(
           Object.entries(row).filter(([column]) => !generated.has(`${spec.table}.${column}`)),
         );
-        const line = JSON.stringify({ table: spec.table, row: carried } satisfies ExportRow);
-        // EPIC-091's redactor over the assembled line, as EPIC-085 §8.3 does:
-        // the second line of defence, not the first. §8.4's first line is that
-        // a `${env:...}` reference is stored as the reference and never
-        // resolved, so there is nothing to resolve on the way out.
-        const safe = redactSecrets(line).text;
-        hash.update(safe);
+        // The second line of defence, over each *value* rather than over the
+        // assembled line. §8.4's first line is that a `${env:...}` reference is
+        // stored as the reference and never resolved, and every producer that
+        // carries untrusted text redacts before it writes.
+        //
+        // Over the line it was not a second line of defence but a way to lose a
+        // backup. `redactSecrets` fails closed on size, replacing its whole
+        // input with a sentence — and `JSON.stringify` costs six characters for
+        // one stored byte of a control character, so a row far inside every
+        // storage bound serialized past the scan limit, stopped being JSON, and
+        // was written with a digest computed over the replacement. The trailer
+        // then verified a document `ferret import` refuses as damaged.
+        //
+        // Per value, the framing can never be what is replaced.
+        const line = JSON.stringify({ table: spec.table, row: redactRow(carried) } satisfies ExportRow);
+        hash.update(line);
         hash.update('\n');
-        await sink(safe);
+        await sink(line);
         written += 1;
         total += 1;
       }
@@ -451,8 +473,50 @@ export function readExportDocument(text: string): {
   };
 }
 
-/** The command an operator wants for a real backup — §8.1, AC-14. */
+/** How deep a JSON value is walked when redacting. Beyond this it is left alone. */
+const MAX_REDACTION_DEPTH = 12;
+
+/**
+ * A row with every string in it scanned for credentials.
+ *
+ * Walks into objects and arrays, because `attributes` and `metadata` are
+ * `jsonb`: a secret in a nested field is a secret. Structure is preserved
+ * exactly — only string leaves can change — so whatever this returns still
+ * serializes to the same shape the importer expects.
+ */
+function redactRow(row: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, redactValues(value, 1)]));
+}
+
+function redactValues(value: unknown, depth = 0): unknown {
+  if (typeof value === 'string') return redactSecrets(value).text;
+  if (depth >= MAX_REDACTION_DEPTH || value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((item) => redactValues(item, depth + 1));
+  // Anything that is not a plain object is carried through untouched. No column
+  // is binary today, and walking a `Buffer` with `Object.entries` would turn it
+  // into a map of numeric keys — an export that silently rewrote the value it
+  // was copying, which is the failure this whole function exists to end.
+  if (value instanceof Date || Buffer.isBuffer(value) || ArrayBuffer.isView(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, redactValues(item, depth + 1)]),
+  );
+}
+
+/**
+ * The command an operator wants for a real backup — §8.1, AC-14.
+ *
+ * The URL is redacted, because this string is *printed* — to a terminal, into a
+ * CI log, and inside a `--json` envelope that says `ok: true` at exit 0, which
+ * is not output anything treats as sensitive. A PostgreSQL URL conventionally
+ * carries the password, so passing `FERRET_DATABASE_URL` through unchanged
+ * published it (EPIC-106 §11 says the opposite, and EPIC-003 and EPIC-091 both
+ * require the redaction).
+ *
+ * The operator loses nothing: `pg_dump` reads `PGPASSWORD` and `~/.pgpass`, and
+ * the host, port and database — everything needed to identify the target — are
+ * still there.
+ */
 export function backupCommandFor(databaseUrl: string | undefined): string {
-  const target = databaseUrl ?? '$FERRET_DATABASE_URL';
+  const target = redactString(databaseUrl ?? '$FERRET_DATABASE_URL');
   return `pg_dump --format=custom --schema=ferret --file=ferret-backup.dump "${target}"`;
 }

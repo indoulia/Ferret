@@ -44,6 +44,22 @@ export interface NormalizedIdentity {
   readonly domain: string;
   /** The login recovered from a GitHub noreply address, when it is one. */
   readonly login: string | undefined;
+  /**
+   * Whether `email` was an address at all — F-11.
+   *
+   * The opaque form below is kept so a `.mailmap` can still map it, and for two
+   * Epics that was the *only* consequence: everything downstream treated the raw
+   * string as an identity, so every commit authored `unknown` — what
+   * `git filter-branch`, `cvs2git` and hand-written commit objects emit — became
+   * one developer. Two people merged at derivation time, where
+   * `IdentityStore.merge` cannot see it and no evidence records it.
+   *
+   * A flag rather than `domain.length === 0`, because that is a coincidence of
+   * the representation and this is the claim. A consumer deciding whether it may
+   * mint an identity is asking exactly this question, and should not have to
+   * know how the absence happens to be spelled.
+   */
+  readonly addressed: boolean;
 }
 
 /**
@@ -111,9 +127,14 @@ export function normalizeGitIdentity(name: string, email: string): NormalizedIde
   const lowered = trimmedEmail.toLowerCase();
   const at = lowered.lastIndexOf('@');
   if (at <= 0 || at === lowered.length - 1) {
-    // Not an address. Kept as an opaque identity rather than discarded: Git
-    // permits it, and a commit that has one is still attributable to whatever
-    // it says.
+    // Not an address. Kept rather than discarded, because a `.mailmap` maps
+    // exactly these — repairing imported history is what mailmaps are for — and
+    // discarding here would put the refusal before the repair.
+    //
+    // It is **not** an identity, and `addressed: false` is what says so. A
+    // caller that mints an entity from this is merging every author the
+    // repository could not name into one person; see F-11 and the guard in
+    // `GitSourceProvider.emitHistory`.
     return {
       name: name.trim(),
       email: trimmedEmail,
@@ -121,6 +142,7 @@ export function normalizeGitIdentity(name: string, email: string): NormalizedIde
       localPart: lowered,
       domain: '',
       login: undefined,
+      addressed: false,
     };
   }
 
@@ -141,6 +163,7 @@ export function normalizeGitIdentity(name: string, email: string): NormalizedIde
     localPart,
     domain,
     login: noreply?.[2],
+    addressed: true,
   };
 }
 

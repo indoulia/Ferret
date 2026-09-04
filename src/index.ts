@@ -418,6 +418,7 @@ export {
   boundedLimit,
   type EntityQuery,
   type Neighbour,
+  type ReferenceCompleteness,
   type RetrievalPort,
   type SearchHit,
   type SearchQuery,

@@ -305,6 +305,34 @@ describe('the ZIP reader', () => {
     expect(readZip(bytes).get('big.bin')?.byteLength).toBe(payload.byteLength);
   });
 
+  it('refuses an entry that inflates past the bound however small it declares — F-60', () => {
+    // The test above proves the bound reads the declared size. This one proves
+    // the declared size is a *claim*: the same payload, with the central
+    // directory saying one byte. A bound checked against the attacker's own
+    // number is the attacker's bound.
+    const payload = new Uint8Array(1024 * 1024);
+    const bytes = deflatedZip('big.bin', payload, 8, 1);
+
+    expect(() => readZip(bytes, { maxInflatedBytes: 1024 })).toThrow(/exceed/u);
+  });
+
+  it('never hands back more inflated bytes than the bound allows — F-60', () => {
+    // The property behind the refusal, asserted separately: a reader could
+    // refuse the lying entry *after* allocating it, which is not a bound.
+    const payload = new Uint8Array(1024 * 1024);
+    const bytes = deflatedZip('big.bin', payload, 8, 1);
+
+    let total = 0;
+    try {
+      for (const entry of readZip(bytes, { maxInflatedBytes: 64 * 1024 }).values()) {
+        total += entry.byteLength;
+      }
+    } catch {
+      total = 0;
+    }
+    expect(total).toBeLessThanOrEqual(64 * 1024);
+  });
+
   it('refuses a compression method it does not recognise', () => {
     const bytes = deflatedZip('x.bin', encoder.encode('hello'), 99);
     expect(() => readZip(bytes)).toThrow(/compression method 99/u);
@@ -359,7 +387,17 @@ describe('column arithmetic', () => {
 });
 
 /** A ZIP with one deflated entry, for the bounds tests. */
-function deflatedZip(name: string, content: Uint8Array, method = 8): Uint8Array {
+/**
+ * @param declared What the headers claim the uncompressed size is. Defaults to
+ * the truth; a caller passes something else to write an archive that lies,
+ * which a generator that could only be honest was unable to express.
+ */
+function deflatedZip(
+  name: string,
+  content: Uint8Array,
+  method = 8,
+  declared = content.length,
+): Uint8Array {
   const encodedName = encoder.encode(name);
   const data = method === 8 ? new Uint8Array(deflateRawSync(content)) : content;
   const crc = 0; // Not verified by the reader; the bound is what is under test.
@@ -370,7 +408,7 @@ function deflatedZip(name: string, content: Uint8Array, method = 8): Uint8Array 
   local.writeUInt16LE(method, 8);
   local.writeUInt32LE(crc, 14);
   local.writeUInt32LE(data.length, 18);
-  local.writeUInt32LE(content.length, 22);
+  local.writeUInt32LE(declared, 22);
   local.writeUInt16LE(encodedName.length, 26);
   Buffer.from(encodedName).copy(local, 30);
   Buffer.from(data).copy(local, 30 + encodedName.length);
@@ -380,7 +418,7 @@ function deflatedZip(name: string, content: Uint8Array, method = 8): Uint8Array 
   central.writeUInt16LE(method, 10);
   central.writeUInt32LE(crc, 16);
   central.writeUInt32LE(data.length, 20);
-  central.writeUInt32LE(content.length, 24);
+  central.writeUInt32LE(declared, 24);
   central.writeUInt16LE(encodedName.length, 28);
   central.writeUInt32LE(0, 42);
   Buffer.from(encodedName).copy(central, 46);

@@ -10,6 +10,7 @@ import {
   Direction,
   HitSource,
   DEFAULT_LIMIT,
+  SCOPE_SEPARATOR,
   WithheldTally,
   WithholdReason,
   boundedLimit,
@@ -22,7 +23,10 @@ import {
   withholds,
   type AccessContext,
   type EntityQuery,
+  type EntityResult,
   type Neighbour,
+  type NeighbourResult,
+  type ReferenceCompleteness,
   type RetrievalPort,
   type SearchHit,
   type SearchQuery,
@@ -214,6 +218,78 @@ function abbreviatedObjectId(text: string): string | undefined {
   return /^[0-9a-f]{7,40}$/i.test(text) ? text.toLowerCase() : undefined;
 }
 
+/**
+ * The edges a reference answer is made of — F-27.
+ *
+ * Named here rather than imported from `src/code/`: `code_symbol` is a
+ * *registered* kind, and storage may not depend on the module that registers it
+ * — the boundary `src/code/entity.ts` documents and `boundaries.test.ts`
+ * enforces. So the strings are duplicated on purpose, and duplication that
+ * cannot be checked is how a constant goes quietly stale: `code-reference-truth`
+ * asserts this set equals `{SYMBOL,FILE}_REFERENCES_SYMBOL` as registered, so
+ * renaming an edge there fails here rather than silently switching the verdict
+ * off.
+ *
+ * Exported for that test alone, and deliberately **not** added to
+ * `storage/index.ts` — a barrel export no production path reaches is the dead
+ * control `control-reachability.test.ts` exists to catch.
+ */
+export const REFERENCE_EDGE_TYPES: ReadonlySet<string> = new Set([
+  'symbol_references_symbol',
+  'file_references_symbol',
+]);
+
+/**
+ * Entity kinds that can be an end of a reference edge.
+ *
+ * `file_references_symbol` and `symbol_references_symbol`, so: a file or a
+ * symbol. Nothing else can be short of references, and this is what keeps the
+ * verdict off the traversals that are not about them — a commit's neighbours, a
+ * branch's, a developer's. Without it an unfiltered query, which is the default
+ * every caller takes, paid two extra round trips to be told about a graph it was
+ * never asking after.
+ */
+export const REFERENCE_ENDPOINT_KINDS: ReadonlySet<string> = new Set(['code_symbol', 'file']);
+
+/**
+ * Unresolved reasons that could have hidden an edge to a symbol Ferret holds.
+ *
+ * Everything except `not-found`, and the exclusion is the whole judgement: if no
+ * declaration Ferret holds carries the name, the reference cannot have been an
+ * edge to one. The other three are refusals over candidates that *do* exist —
+ * including `imported`, which is the one it would be easy to wave through, since
+ * an import names a symbol the repository very probably declares.
+ *
+ * A **derived rule needs a control against its own reach** — Batch 6's lesson,
+ * bought by stripping `PWD` from every child process. Here the reach is the
+ * other way: a new `UnresolvedReason` added later would be silently treated as
+ * an absence and quietly shrink the verdict. `code-reference-truth` enumerates
+ * `UnresolvedReason` against this set and fails when one appears in neither
+ * half, so the next reason is classified deliberately rather than by default.
+ */
+export const REFUSAL_REASONS: ReadonlySet<string> = new Set([
+  'ambiguous',
+  'receiver-unknown',
+  'imported',
+]);
+
+/**
+ * Whether this query is asking something a reference verdict answers.
+ *
+ * Two gates, and both are needed. A type filter that names a reference edge is
+ * an explicit ask and settles it. With no filter — the default — the subject's
+ * kind decides: only a file or a symbol is an end of a reference edge, so a
+ * commit's neighbours get no verdict and pay nothing for it.
+ */
+function namesReferenceType(types: readonly string[] | undefined): boolean {
+  return types !== undefined && types.some((type) => REFERENCE_EDGE_TYPES.has(type));
+}
+
+function excludesReferences(types: readonly string[] | undefined): boolean {
+  // An empty array is not a filter — `#neighbours` reads it as "every type".
+  return types !== undefined && types.length > 0 && !namesReferenceType(types);
+}
+
 export class RetrievalStore implements RetrievalPort {
   readonly #db: FerretDatabase;
   /**
@@ -238,7 +314,7 @@ export class RetrievalStore implements RetrievalPort {
    * be worse than returning nothing — a caller cannot tell the difference
    * between "these are the files" and "these are probably the files".
    */
-  async findEntities(query: EntityQuery, access: AccessContext): Promise<readonly CanonicalEntity[]> {
+  async findEntities(query: EntityQuery, access: AccessContext): Promise<EntityResult> {
     const limit = boundedLimit(query.limit);
     const offset = query.offset ?? 0;
 
@@ -268,14 +344,26 @@ export class RetrievalStore implements RetrievalPort {
     }
 
     try {
+      // One more than asked, so "is there another" is answered by the database
+      // rather than inferred from the length of a list permission filtering has
+      // already shortened. That inference is what reported `truncated: false`
+      // over a cut answer.
       const rows = await this.#db.execute<EntityRowShape>(sql`
         SELECT ${ENTITY_COLUMNS}
           FROM ferret.entity e
          WHERE ${sql.join(conditions, sql` AND `)}
          ORDER BY e.kind, e.source_id
-         LIMIT ${limit} OFFSET ${offset}
+         LIMIT ${limit + 1} OFFSET ${offset}
       `);
-      return visibleEntities(rows.rows.map(toEntity), (entity) => entity, access, new WithheldTally());
+      const more = rows.rows.length > limit;
+      const tally = new WithheldTally();
+      const entities = visibleEntities(
+        rows.rows.slice(0, limit).map(toEntity),
+        (entity) => entity,
+        access,
+        tally,
+      );
+      return { entities, withheld: tally.report, more };
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.findEntities');
     }
@@ -377,18 +465,140 @@ export class RetrievalStore implements RetrievalPort {
    * convention EPIC-007 uses everywhere, and mixing the two is how a worktree
    * appears to be on two branches for one instant.
    */
-  async neighbours(query: TraversalQuery, access: AccessContext): Promise<readonly Neighbour[]> {
-    // The public one-hop read. The tally is discarded here because this
-    // signature has never carried one; `traverse` supplies its own so a node
-    // dropped at hop three is still counted — EPIC-050 AC-11.
-    return this.#neighbours(query, access, new WithheldTally());
+  async neighbours(query: TraversalQuery, access: AccessContext): Promise<NeighbourResult> {
+    // The public one-hop read, and it now carries what it drops. The tally used
+    // to be constructed here and discarded, so a caller at depth 1 — the
+    // default, and every existing caller — learned neither that rows had been
+    // withheld nor that the bound had cut the hop.
+    const tally = new WithheldTally();
+    const page = await this.#neighbours(query, access, tally);
+    // F-27. `truncated: false` and `withheld: 0` over a reference query was an
+    // affirmative claim of completeness across a graph Ferret had refused to
+    // finish resolving. Only asked when the query could return a reference edge,
+    // so the common traversal pays nothing.
+    const references = await this.#referenceCompleteness(query, access);
+    return {
+      neighbours: page.neighbours,
+      withheld: tally.report,
+      more: page.more,
+      ...(references === undefined ? {} : { references }),
+    };
+  }
+
+  /**
+   * How much of the reference graph in this subject's repository resolved — F-27.
+   *
+   * Reads the counts EPIC-035 §12 persists on each `file` entity and aggregates
+   * them over the subject's repository. Per-file is where they live and it is the
+   * only place they *can* live: an unresolved reference has no target by
+   * definition, so it cannot be attributed to the symbol whose inbound list is
+   * being asked for. The honest scope is therefore "the repository this answer
+   * came from", and the honest statement is that any of those refusals could
+   * have been an edge here.
+   *
+   * Under the caller's scope grants, so a caller restricted to one repository is
+   * not told how much of another failed to resolve.
+   */
+  async #referenceCompleteness(
+    query: TraversalQuery,
+    access: AccessContext,
+  ): Promise<ReferenceCompleteness | undefined> {
+    // A type filter that names no reference edge settles it without touching the
+    // database at all — the cheapest gate, and the one most queries take.
+    if (excludesReferences(query.types)) return undefined;
+
+    const subject = await this.#subjectScopeOf(query.from);
+    if (subject === undefined) return undefined;
+    // With no filter the subject's kind decides. Only a file or a symbol is an
+    // end of a reference edge, so a commit's neighbours are not asked after one.
+    // An explicit ask is honoured whatever the subject is: the caller named the
+    // edge type, and answering "no verdict" to that would be its own small lie.
+    if (!namesReferenceType(query.types) && !REFERENCE_ENDPOINT_KINDS.has(subject.kind)) {
+      return undefined;
+    }
+    const root = subject.root;
+
+    const rows = await this.#db.execute<{
+      files: number | string;
+      extracted: number | string | null;
+      resolved: number | string | null;
+      by_reason: Record<string, number | string> | null;
+    }>(sql`
+      WITH measured AS (
+        SELECT e.attributes->'referenceResolution' AS resolution
+          FROM ferret.entity e
+         WHERE e.kind = 'file'
+           AND (e.source_scope = ${root} OR e.source_scope LIKE ${scopeDescendantPattern(root)})
+           AND e.attributes->'referenceResolution' IS NOT NULL
+           AND ${scopePredicate(access)}
+      )
+      SELECT
+        (SELECT count(*) FROM measured) AS files,
+        (SELECT coalesce(sum((resolution->>'extracted')::bigint), 0) FROM measured) AS extracted,
+        (SELECT coalesce(sum((resolution->>'resolved')::bigint), 0) FROM measured) AS resolved,
+        (SELECT coalesce(jsonb_object_agg(reason, tally), '{}'::jsonb)
+           FROM (SELECT pair.key AS reason, sum(pair.value::bigint) AS tally
+                   FROM measured,
+                        LATERAL jsonb_each_text(coalesce(resolution->'unresolved', '{}'::jsonb)) AS pair
+                  GROUP BY pair.key) reasons) AS by_reason
+    `);
+
+    const row = rows.rows[0];
+    if (row === undefined) return undefined;
+
+    const filesMeasured = Number(row.files ?? 0);
+    const byReason: Record<string, number> = {};
+    let total = 0;
+    let refused = 0;
+    // Sorted, so two reads of the same index compare equal — the idiom
+    // `WithheldTally` already sets for the same reason.
+    for (const reason of Object.keys(row.by_reason ?? {}).sort()) {
+      const count = Number((row.by_reason ?? {})[reason] ?? 0);
+      if (count <= 0) continue;
+      byReason[reason] = count;
+      total += count;
+      if (REFUSAL_REASONS.has(reason)) refused += count;
+    }
+
+    return Object.freeze({
+      // Zero measured files is `unknown`, not `complete`: an index built before
+      // F-27, or one whose content stage never ran, has earned no verdict.
+      completeness: filesMeasured === 0 ? 'unknown' : refused > 0 ? 'incomplete' : 'complete',
+      extracted: Number(row.extracted ?? 0),
+      resolved: Number(row.resolved ?? 0),
+      unresolved: Object.freeze({ total, refused, byReason: Object.freeze(byReason) }),
+      filesMeasured,
+    } satisfies ReferenceCompleteness);
+  }
+
+  /**
+   * What an entity is, and which repository it belongs to.
+   *
+   * One row for both, because both gates need it and two lookups for one row
+   * would be the round trip this narrowing exists to save.
+   *
+   * A `file`'s `source_scope` *is* the repository id; a `code_symbol`'s is
+   * `` `${repositoryScope}:${path}` `` (`symbolScope`, EPIC-034), so the first
+   * segment is the repository either way. An entity with no scope is its own —
+   * a repository is the case that matters.
+   */
+  async #subjectScopeOf(id: string): Promise<{ kind: string; root: string } | undefined> {
+    const rows = await this.#db.execute<{ kind: string; source_scope: string | null }>(
+      sql`SELECT kind, source_scope FROM ferret.entity WHERE id = ${id} LIMIT 1`,
+    );
+    const row = rows.rows[0];
+    if (row === undefined) return undefined;
+    if (row.source_scope === null) return { kind: row.kind, root: id };
+    const [root] = row.source_scope.split(SCOPE_SEPARATOR);
+    if (root === undefined || root.length === 0) return undefined;
+    return { kind: row.kind, root };
   }
 
   async #neighbours(
     query: TraversalQuery,
     access: AccessContext,
     tally: WithheldTally,
-  ): Promise<readonly Neighbour[]> {
+  ): Promise<{ neighbours: readonly Neighbour[]; more: boolean }> {
     const limit = boundedLimit(query.limit);
     const direction = query.direction ?? Direction.BOTH;
     const at = query.at ?? new Date().toISOString();
@@ -435,10 +645,15 @@ export class RetrievalStore implements RetrievalPort {
           rel_metadata: Record<string, unknown> | null;
         }
       >(
-        sql`SELECT * FROM (${body}) neighbours ORDER BY rel_type, valid_from DESC, source_id LIMIT ${limit}`,
+        // One more than the bound, so the cut is a fact rather than an
+        // inference. The limit is applied here in SQL and the walk counts rows
+        // in TypeScript, so without this a frontier node whose neighbours were
+        // cut in the database was indistinguishable from one that had no more.
+        sql`SELECT * FROM (${body}) neighbours ORDER BY rel_type, valid_from DESC, source_id LIMIT ${limit + 1}`,
       );
 
-      const reached = rows.rows.map((row) => ({
+      const more = rows.rows.length > limit;
+      const reached = rows.rows.slice(0, limit).map((row) => ({
         entity: toEntity(row),
         relationshipType: row.rel_type,
         direction: row.rel_direction,
@@ -450,7 +665,10 @@ export class RetrievalStore implements RetrievalPort {
       // not add one, so an edge is as visible as the entity it reaches. Filtering
       // on the reached entity is therefore the whole control available, and §4 of
       // this Epic's specification declines to add the column.
-      return visibleEntities(reached, (neighbour) => neighbour.entity, access, tally);
+      return {
+        neighbours: visibleEntities(reached, (neighbour) => neighbour.entity, access, tally),
+        more,
+      };
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.neighbours');
     }
@@ -510,7 +728,15 @@ export class RetrievalStore implements RetrievalPort {
     this.#metrics?.observe(Metric.RETRIEVAL_TRAVERSE_HOPS, hops);
     // The tally is filled by the hops above, so it can only be read once they
     // have run — which is why it is attached here rather than passed in.
-    return { ...result, withheld: tally.report };
+    //
+    // F-27, and it bites harder here than at one hop: an unresolved reference at
+    // hop 1 also removes everything reachable only through it.
+    const references = await this.#referenceCompleteness(query, access);
+    return {
+      ...result,
+      withheld: tally.report,
+      ...(references === undefined ? {} : { references }),
+    };
   }
 
   /**

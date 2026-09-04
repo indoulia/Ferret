@@ -7,6 +7,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  NOTHING_WITHHELD,
   PUBLIC_ACCESS,
   Direction,
   ErrorCode,
@@ -141,7 +142,7 @@ describe('query bounds', () => {
 
 describeRetrieval('exact structured retrieval', () => {
   it('finds every entity of a kind', async () => {
-    const files = await retrieval.findEntities({ kind: 'file', limit: MAX_LIMIT }, PUBLIC_ACCESS);
+    const { entities: files } = await retrieval.findEntities({ kind: 'file', limit: MAX_LIMIT }, PUBLIC_ACCESS);
     expect(files.length).toBeGreaterThanOrEqual(4);
     expect(files.every((entity) => entity.kind === 'file')).toBe(true);
   });
@@ -149,7 +150,7 @@ describeRetrieval('exact structured retrieval', () => {
   it('finds an entity by an exact attribute', async () => {
     // Deterministic: there is one file at this path, and "probably that one" is
     // not an answer.
-    const found = await retrieval.findEntities({
+    const { entities: found } = await retrieval.findEntities({
       kind: 'file',
       attributes: { path: 'src/connection-pool.ts' },
     }, PUBLIC_ACCESS);
@@ -158,18 +159,21 @@ describeRetrieval('exact structured retrieval', () => {
   });
 
   it('finds the files identified within one repository', async () => {
-    const scoped = await retrieval.findEntities({ kind: 'file', scope: repositoryId, limit: MAX_LIMIT }, PUBLIC_ACCESS);
+    const { entities: scoped } = await retrieval.findEntities({ kind: 'file', scope: repositoryId, limit: MAX_LIMIT }, PUBLIC_ACCESS);
     expect(scoped.length).toBeGreaterThanOrEqual(4);
   });
 
   it('returns nothing rather than everything for a filter that matches nothing', async () => {
-    expect(await retrieval.findEntities({ kind: 'file', attributes: { path: 'no/such/file' } }, PUBLIC_ACCESS)).toStrictEqual(
-      [],
-    );
+    // Nothing found, nothing withheld, nothing further — three separate facts,
+    // and the point of asserting all three is that "there is nothing there"
+    // must not be reachable by any other route.
+    expect(
+      await retrieval.findEntities({ kind: 'file', attributes: { path: 'no/such/file' } }, PUBLIC_ACCESS),
+    ).toStrictEqual({ entities: [], withheld: NOTHING_WITHHELD, more: false });
   });
 
   it('reads one entity with its external identifiers', async () => {
-    const [file] = await retrieval.findEntities({ kind: 'file', limit: 1 }, PUBLIC_ACCESS);
+    const { entities: [file] } = await retrieval.findEntities({ kind: 'file', limit: 1 }, PUBLIC_ACCESS);
     const full = await retrieval.getEntity(file?.id ?? '', PUBLIC_ACCESS);
     expect(full?.id).toBe(file?.id);
     expect(Array.isArray(full?.externalIds)).toBe(true);
@@ -183,19 +187,19 @@ describeRetrieval('exact structured retrieval', () => {
     // The attribute *key* is a bind parameter too. A name reaching the query as
     // interpolated text would be an injection through a field nobody thinks of
     // as user input.
-    const hostile = await retrieval.findEntities({
+    const { entities: hostile } = await retrieval.findEntities({
       kind: 'file',
       attributes: { "path'; DROP TABLE ferret.entity; --": 'x' },
     }, PUBLIC_ACCESS);
     expect(hostile).toStrictEqual([]);
     // Still there.
-    expect((await retrieval.findEntities({ kind: 'file', limit: 1 }, PUBLIC_ACCESS)).length).toBe(1);
+    expect((await retrieval.findEntities({ kind: 'file', limit: 1 }, PUBLIC_ACCESS)).entities).toHaveLength(1);
   });
 });
 
 describeRetrieval('traversal', () => {
   it('finds what a repository contains', async () => {
-    const out = await retrieval.neighbours({
+    const { neighbours: out } = await retrieval.neighbours({
       from: repositoryId,
       direction: Direction.OUT,
       limit: MAX_LIMIT,
@@ -209,11 +213,11 @@ describeRetrieval('traversal', () => {
   });
 
   it('finds what points at a file', async () => {
-    const [file] = await retrieval.findEntities({
+    const { entities: [file] } = await retrieval.findEntities({
       kind: 'file',
       attributes: { path: 'src/retry-policy.ts' },
     }, PUBLIC_ACCESS);
-    const inbound = await retrieval.neighbours({
+    const { neighbours: inbound } = await retrieval.neighbours({
       from: file?.id ?? '',
       direction: Direction.IN,
       types: [RelationshipType.COMMIT_MODIFIES_FILE],
@@ -225,11 +229,11 @@ describeRetrieval('traversal', () => {
   });
 
   it('follows both directions when the question has none', async () => {
-    const [file] = await retrieval.findEntities({
+    const { entities: [file] } = await retrieval.findEntities({
       kind: 'file',
       attributes: { path: 'src/retry-policy.ts' },
     }, PUBLIC_ACCESS);
-    const both = await retrieval.neighbours({ from: file?.id ?? '', limit: MAX_LIMIT }, PUBLIC_ACCESS);
+    const { neighbours: both } = await retrieval.neighbours({ from: file?.id ?? '', limit: MAX_LIMIT }, PUBLIC_ACCESS);
     const directions = new Set(both.map((neighbour) => neighbour.direction));
 
     // A file is contained *by* a repository and modified *by* commits, and has
@@ -242,8 +246,8 @@ describeRetrieval('traversal', () => {
     // The reason relationships carry valid time at all, and the question Ferret
     // exists for: *what was this like last Tuesday*.
     const before = new Date(Date.now() - 86_400_000).toISOString();
-    const past = await retrieval.neighbours({ from: repositoryId, at: before, limit: MAX_LIMIT }, PUBLIC_ACCESS);
-    const now = await retrieval.neighbours({ from: repositoryId, limit: MAX_LIMIT }, PUBLIC_ACCESS);
+    const { neighbours: past } = await retrieval.neighbours({ from: repositoryId, at: before, limit: MAX_LIMIT }, PUBLIC_ACCESS);
+    const { neighbours: now } = await retrieval.neighbours({ from: repositoryId, limit: MAX_LIMIT }, PUBLIC_ACCESS);
 
     // Structural edges were observed today, so yesterday Ferret knew nothing.
     expect(now.length).toBeGreaterThan(past.length);
@@ -252,7 +256,7 @@ describeRetrieval('traversal', () => {
   it('excludes an interval that ended exactly at the instant asked about', async () => {
     // Half-open, the same convention EPIC-007 uses everywhere. Mixing the two is
     // how a worktree appears to be on two branches for one instant.
-    const open = await retrieval.neighbours({
+    const { neighbours: open } = await retrieval.neighbours({
       from: repositoryId,
       types: [RelationshipType.REPOSITORY_CONTAINS_FILE],
       limit: 1,
@@ -260,7 +264,7 @@ describeRetrieval('traversal', () => {
     const edge = open[0];
     expect(edge).toBeDefined();
 
-    const atStart = await retrieval.neighbours({
+    const { neighbours: atStart } = await retrieval.neighbours({
       from: repositoryId,
       types: [RelationshipType.REPOSITORY_CONTAINS_FILE],
       at: edge?.validFrom,
@@ -273,7 +277,7 @@ describeRetrieval('traversal', () => {
   it('returns nothing for an entity nothing is connected to', async () => {
     expect(
       await retrieval.neighbours({ from: '00000000-0000-0000-0000-000000000000' }, PUBLIC_ACCESS),
-    ).toStrictEqual([]);
+    ).toStrictEqual({ neighbours: [], withheld: NOTHING_WITHHELD, more: false });
   });
 });
 
@@ -383,7 +387,7 @@ describeRetrieval('full-text retrieval', () => {
     const hostile = "'; DROP TABLE ferret.entity; --";
     await expect(retrieval.search({ text: hostile }, PUBLIC_ACCESS)).resolves.toBeDefined();
     // Still there.
-    expect((await retrieval.findEntities({ kind: 'file', limit: 1 }, PUBLIC_ACCESS)).length).toBe(1);
+    expect((await retrieval.findEntities({ kind: 'file', limit: 1 }, PUBLIC_ACCESS)).entities).toHaveLength(1);
   });
 
   it('never returns more than the maximum, whatever it is asked for', async () => {
@@ -501,7 +505,7 @@ describeRetrieval(`traversing more than one hop (${runnable ? 'real PostgreSQL' 
   it('returns exactly what neighbours returns at depth 1 — AC-2', async () => {
     const { repositoryId: root } = await originOf();
 
-    const hop = await retrieval.neighbours({ from: root, limit: 50 }, PUBLIC_ACCESS);
+    const { neighbours: hop } = await retrieval.neighbours({ from: root, limit: 50 }, PUBLIC_ACCESS);
     const walk = await retrieval.traverse({ from: root, depth: 1, limit: 50 }, PUBLIC_ACCESS);
 
     expect(walk.paths.map((one) => one.entity.id).sort()).toStrictEqual(
@@ -633,7 +637,7 @@ describeRetrieval(`traversing more than one hop (${runnable ? 'real PostgreSQL' 
     for (const path of walk.paths) {
       let previous = repositoryId;
       for (const step of path.steps) {
-        const hop = await retrieval.neighbours({ from: previous, limit: 500 }, PUBLIC_ACCESS);
+        const { neighbours: hop } = await retrieval.neighbours({ from: previous, limit: 500 }, PUBLIC_ACCESS);
         expect(hop.map((one) => one.entity.id)).toContain(step.entityId);
         previous = step.entityId;
       }

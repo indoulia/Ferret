@@ -38,6 +38,7 @@ function reference(
   name: string,
   enclosing: readonly string[] = [],
   qualified = false,
+  receiver?: string,
 ): CodeReference {
   return {
     kind: 'call',
@@ -45,6 +46,7 @@ function reference(
     qualified,
     enclosing,
     span: { startByte: 0, endByte: 1, startLine: 2, endLine: 2 },
+    ...(receiver === undefined ? {} : { receiver }),
   };
 }
 
@@ -227,11 +229,18 @@ describe('a member call does not reach the repository rule — AC-6a', () => {
     expect(unresolved[0]?.reason).toBe(UnresolvedReason.RECEIVER_UNKNOWN);
   });
 
-  it('still resolves a member call to a declaration in the same file', () => {
+  it('still resolves a member call on `this` to a declaration in the same file', () => {
     // Bounded by the file, which is the case a language's own scoping makes
     // reasonable: `this.total()` in a class that declares `total`.
+    //
+    // **This test named the right case and did not test it — F-25.** It passed
+    // no receiver, so what it actually asserted was that *any* member call
+    // resolves to a same-file homonym — which is the defect. `map.has(k)` in a
+    // file declaring `has` got an edge at STRONG, and on Ferret's own index all
+    // eight inbound edges on `ProviderRegistry.has` were `Map`/`Set` calls. The
+    // receiver is given now, so the assertion is the one the comment claimed.
     const { resolved } = resolveReferences(
-      [reference('total', ['Invoice', 'render'], true)],
+      [reference('total', ['Invoice', 'render'], true, 'this')],
       [symbol('Invoice.total', 'sym-total'), symbol('Invoice.render', 'sym-render')],
       nothing,
     );
@@ -239,6 +248,20 @@ describe('a member call does not reach the repository rule — AC-6a', () => {
     expect(resolved).toHaveLength(1);
     expect(resolved[0]?.toSymbolId).toBe('sym-total');
     expect(resolved[0]?.rule).toBe(ResolutionRule.SAME_FILE);
+  });
+
+  it('refuses the same call on any other receiver', () => {
+    // The half that was missing, and the reason the test above could pass while
+    // the defect shipped: same file, same homonym, a receiver whose type Ferret
+    // does not know.
+    const { resolved, unresolved } = resolveReferences(
+      [reference('total', ['Invoice', 'render'], true, 'line')],
+      [symbol('Invoice.total', 'sym-total'), symbol('Invoice.render', 'sym-render')],
+      nothing,
+    );
+
+    expect(resolved).toStrictEqual([]);
+    expect(unresolved[0]?.reason).toBe(UnresolvedReason.RECEIVER_UNKNOWN);
   });
 
   it('never asks the repository about a member call at all', () => {

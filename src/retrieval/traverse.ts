@@ -32,7 +32,18 @@ import { NOTHING_WITHHELD, type WithheldReport } from './access.js';
  */
 
 /** One hop from a node, already filtered for the caller's access. */
-export type HopReader = (from: string, limit: number) => Promise<readonly Neighbour[]>;
+/**
+ * One hop, and whether the bound cut it.
+ *
+ * The `more` flag is the whole of F-28: the limit is applied in SQL and the walk
+ * counts rows here, so a frontier node whose neighbours were cut in the database
+ * looked identical to one that had no more — and a truncated traversal was
+ * returned as an exhaustive one, with `truncated: undefined`.
+ */
+export type HopReader = (
+  from: string,
+  limit: number,
+) => Promise<{ readonly neighbours: readonly Neighbour[]; readonly more: boolean }>;
 
 export interface TraverseOptions {
   readonly from: string;
@@ -67,6 +78,8 @@ export async function traverseFrom(
     { id: options.from, steps: [] },
   ];
   let truncated: TraversalBound | undefined;
+  /** The result set is full, which is the only reason to stop walking. */
+  let atCapacity = false;
   let depthReached = 0;
 
   for (let level = 1; level <= depth && frontier.length > 0; level += 1) {
@@ -74,11 +87,17 @@ export async function traverseFrom(
 
     for (const node of frontier) {
       const reached = await hop(node.id, limit);
+      // The hop itself was cut. Recorded before the loop below, because that
+      // loop can only see the rows it was given: a node with eighty neighbours
+      // and a limit of fifty yields fifty rows and no sign that thirty were
+      // left in the database.
+      if (reached.more) truncated = TraversalBound.LIMIT;
 
-      for (const neighbour of reached) {
+      for (const neighbour of reached.neighbours) {
         if (visited.has(neighbour.entity.id)) continue;
         if (paths.length >= limit) {
           truncated = TraversalBound.LIMIT;
+          atCapacity = true;
           break;
         }
         visited.add(neighbour.entity.id);
@@ -99,15 +118,23 @@ export async function traverseFrom(
         });
         next.push({ id: neighbour.entity.id, steps });
       }
-      if (truncated !== undefined) break;
+      if (atCapacity) break;
     }
 
     depthReached = level;
-    if (truncated !== undefined) break;
+    // Stop only when there is no room for another path. A hop that was cut
+    // still leaves room to walk the rows it did return, and stopping there
+    // would discard reachable paths for a reason the caller did not ask for.
+    if (atCapacity) break;
     // Reached the bound with somewhere left to go: the graph continues and
     // Ferret stopped looking, which §8.4 requires it to say. Without this a
     // caller cannot tell "nothing further exists" from "I stopped".
-    if (level === depth && next.length > 0) truncated = TraversalBound.DEPTH;
+    // Only when nothing more specific already applies. The limit is the more
+    // useful answer when both hold — raising the depth would not help — and an
+    // unconditional assignment here overwrote a cut hop's `limit` with `depth`.
+    if (truncated === undefined && level === depth && next.length > 0) {
+      truncated = TraversalBound.DEPTH;
+    }
     frontier = next;
   }
 

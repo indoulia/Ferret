@@ -582,7 +582,7 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
     });
 
     it('hides an entity from another repository in an exact query', async () => {
-      const found = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, onlyA());
+      const { entities: found } = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, onlyA());
       expect(found.map((entity) => entity.id)).not.toContain(fileInB);
       expect(found.length).toBeGreaterThan(0);
     });
@@ -619,7 +619,7 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
       const hits = await retrieval.byIdentifier('secrets/keys.txt', excluded);
       expect(hits).toStrictEqual([]);
 
-      const found = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, excluded);
+      const { entities: found } = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, excluded);
       expect(found.map((entity) => entity.attributes['path'])).not.toContain('secrets/keys.txt');
     });
 
@@ -629,7 +629,7 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
       // context's predicate, so a supplied scope can only ever narrow. Asserted
       // rather than reasoned about, because "it can only narrow" is exactly the
       // kind of claim that stops being true after a refactor.
-      const found = await retrieval.findEntities(
+      const { entities: found } = await retrieval.findEntities(
         { kind: EntityKind.FILE, scope: repositoryB, limit: 50 },
         excluded,
       );
@@ -637,7 +637,7 @@ describeDb(`permission-aware retrieval (${databaseAvailable() ? 'real PostgreSQL
     });
 
     it('leaves an unexcluded path alone', async () => {
-      const found = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, excluded);
+      const { entities: found } = await retrieval.findEntities({ kind: EntityKind.FILE, limit: 50 }, excluded);
       expect(found.map((entity) => entity.attributes['path'])).toContain('src/open.ts');
     });
   });

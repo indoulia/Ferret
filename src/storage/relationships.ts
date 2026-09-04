@@ -1,4 +1,4 @@
-import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 
 import {
   createRelationship,
@@ -81,6 +81,15 @@ export interface AssertResult {
   /** Relationships closed to make room, when the type is exclusive. */
   readonly closed: readonly string[];
 }
+
+/**
+ * Endpoints asked about in one open-edge query.
+ *
+ * A bound on bind parameters rather than a tuning knob: PostgreSQL accepts
+ * 65 535 of them, and a sweep over a large repository would otherwise build one
+ * query per run whose size is the repository's.
+ */
+const OPEN_EDGE_CHUNK = 500;
 
 export interface TraversalOptions {
   /** Restrict to one relationship type. */
@@ -466,6 +475,41 @@ export class RelationshipStore {
   /** Relationships leaving an entity. */
   async outgoing(fromId: string, options: TraversalOptions = {}): Promise<CanonicalRelationship[]> {
     return this.#traverse(eq(relationship.fromId, fromId), options);
+  }
+
+  /**
+   * Open relationships of the given types from any of the given endpoints.
+   *
+   * One query rather than one per endpoint — F-25b. The retire sweep asks about
+   * every file and symbol a content run re-derived, and on a first index of a
+   * ten-thousand-symbol repository that would be ten thousand round trips to
+   * learn that a symbol created moments ago has nothing to close.
+   *
+   * Chunked, because a query carrying a hundred thousand bind parameters is a
+   * different failure from the one this avoids. `validTo IS NULL` is in the
+   * predicate rather than applied afterwards: the caller wants what is open, and
+   * filtering in the database is what keeps closed intervals off the wire.
+   */
+  async openOutgoingOfTypes(
+    fromIds: readonly string[],
+    types: readonly string[],
+  ): Promise<CanonicalRelationship[]> {
+    if (fromIds.length === 0 || types.length === 0) return [];
+    const found: CanonicalRelationship[] = [];
+    for (let at = 0; at < fromIds.length; at += OPEN_EDGE_CHUNK) {
+      const rows = await this.#db
+        .select()
+        .from(relationship)
+        .where(
+          and(
+            inArray(relationship.fromId, fromIds.slice(at, at + OPEN_EDGE_CHUNK)),
+            inArray(relationship.type, [...types]),
+            isNull(relationship.validTo),
+          ),
+        );
+      found.push(...rows.map(toCanonical));
+    }
+    return found;
   }
 
   /** Relationships arriving at an entity. */

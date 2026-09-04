@@ -1,6 +1,6 @@
-import { ErrorCode, FerretError } from '../errors/index.js';
+import { ErrorCode, FerretError, redactString } from '../errors/index.js';
 
-import { runGit, type GitRunOptions } from './runner.js';
+import { firstLine, runGit, type GitRunOptions } from './runner.js';
 
 /**
  * Reading commit history.
@@ -66,10 +66,19 @@ export interface CommitRecord {
   readonly parents: readonly string[];
   readonly authorName: string;
   readonly authorEmail: string;
-  readonly authoredAt: string;
+  /**
+   * When the commit says it was authored, when Git could say.
+   *
+   * Absent rather than wrong. Git emits the literal `%aI` for a date it cannot
+   * parse and `+999:99` for an out-of-range timezone, and storing either would
+   * put a string that is not an instant into a field every consumer reads as
+   * one — which is how `"%aI"` reached the graph as a file path.
+   */
+  readonly authoredAt: string | undefined;
   readonly committerName: string;
   readonly committerEmail: string;
-  readonly committedAt: string;
+  /** When the commit says it was committed, when Git could say. */
+  readonly committedAt: string | undefined;
   readonly subject: string;
   readonly body: string;
   /**
@@ -86,6 +95,17 @@ export interface HistoryPage {
   readonly commits: readonly CommitRecord[];
   /** True when the range holds more commits than were read. */
   readonly truncated: boolean;
+  /**
+   * Why this read stopped early, when it did.
+   *
+   * Distinct from `truncated`, which means "ask for the next page". This means
+   * "Git could not finish, and these are the commits it managed" — a corrupt or
+   * missing object part-way through a traversal being the case that matters.
+   * Git streams what it has already walked to stdout and *then* exits non-zero,
+   * and that output used to be discarded: the result was an empty, untruncated
+   * page, which a caller cannot tell from a repository with no history at all.
+   */
+  readonly incomplete?: { readonly reason: string };
 }
 
 export interface ReadHistoryOptions extends GitRunOptions {
@@ -97,12 +117,47 @@ export interface ReadHistoryOptions extends GitRunOptions {
   readonly skip?: number;
   /** Only commits after this instant, for an incremental read. */
   readonly since?: string;
+  /**
+   * Commits already read, and everything they reach, excluded from the walk.
+   *
+   * This is what an incremental read should be, and `since` is not. A date is a
+   * value the repository chooses and it does not order the commit graph: a
+   * branch merged after being written, a rebase, an imported history and a
+   * wrong clock are all commits Ferret has never seen whose dates say
+   * otherwise. Reachability has none of those cases — a commit is either
+   * reachable from something already read, or it is new — and it is the
+   * question Git is built to answer.
+   *
+   * Every value must be an object id, and each is passed as `^<oid>`. A `^`
+   * prefix cannot be read as an option, which `--not` before a caller-supplied
+   * list could be.
+   */
+  readonly exclude?: readonly string[];
   /** Include per-commit file changes. Costs Git a diff per commit. */
   readonly withChanges?: boolean;
 }
 
+/**
+ * What every record begins with, so a boundary is not a guess.
+ *
+ * Records used to be found by recognising their *contents* — a token that looks
+ * like a hash, followed by fields that look like dates. That works until Git
+ * hands back something its own format does not promise: a commit whose date it
+ * cannot parse emits the literal `%aI`, and one with an out-of-range timezone
+ * emits `+999:99`. Neither is a date, so the boundary was not recognised, the
+ * header was consumed as file-change entries, and the reader walked out of step
+ * for the rest of the page — losing every commit after it and inventing files
+ * named after the header fields it had misread.
+ *
+ * A marker Git writes and content cannot forge removes the guess. `%x01` is a
+ * byte no path and no commit message a repository can hold will place here, and
+ * the check is equality rather than inference.
+ */
+const RECORD_MARKER = '\u0001ferret\u0001';
+
 /** Field order in the format string. Kept adjacent to the parser that reads it. */
 const FORMAT = [
+  '%x01ferret%x01', // record marker, not a field
   '%H', // 0 commit
   '%T', // 1 tree
   '%P', // 2 parents, space-separated
@@ -138,6 +193,27 @@ export async function readHistory(options: ReadHistoryOptions): Promise<HistoryP
   const revision = options.revision ?? 'HEAD';
   assertSafeRevision(revision);
 
+  // Validated for the same reason `revision` is, and with the same result when
+  // it is not: Git does not refuse an unparseable `--since`, it *ignores* it —
+  // so a malformed position silently turned an incremental read into a full one
+  // and nothing said so. Refusing names the caller's mistake instead.
+  if (options.since !== undefined && !isInstantInput(options.since)) {
+    throw new FerretError(ErrorCode.USAGE, 'A history "since" must be an ISO-8601 instant', {
+      details: { since: options.since },
+      remediation: 'Pass the instant a previous read reported, or omit it for a full read.',
+    });
+  }
+
+  const exclude = options.exclude ?? [];
+  for (const oid of exclude) {
+    if (!SHA.test(oid)) {
+      throw new FerretError(ErrorCode.USAGE, 'An excluded commit must be an object id', {
+        details: { exclude: oid },
+        remediation: 'Pass the commit ids a previous read returned.',
+      });
+    }
+  }
+
   const args = [
     'log',
     '-z',
@@ -149,6 +225,7 @@ export async function readHistory(options: ReadHistoryOptions): Promise<HistoryP
     ...(options.since === undefined ? [] : [`--since=${options.since}`]),
     ...(options.withChanges === true ? ['--name-status', '--find-renames'] : []),
     revision,
+    ...exclude.map((oid) => `^${oid}`),
     // Everything after this is a path, never an option. Nothing follows, which
     // is the point: it closes the argument list.
     '--',
@@ -156,16 +233,97 @@ export async function readHistory(options: ReadHistoryOptions): Promise<HistoryP
 
   const result = await runGit(args, { ...options, allowFailure: true });
   if (result.exitCode !== 0) {
-    // An empty repository has no HEAD, and a ref that does not exist is a
-    // question with the answer "nothing" rather than a failure.
-    return { commits: [], truncated: false };
+    // One exit code, three different answers, and they must not be collapsed.
+    //
+    // With **no output**, Git got nowhere: an empty repository has no HEAD and a
+    // ref that does not exist is a question whose answer is "nothing" rather
+    // than a failure. That stays as it was.
+    //
+    // With output, Git walked part of the history and then hit something it
+    // could not read — a corrupt or missing object. Those commits are real and
+    // were being thrown away, leaving a result identical to an empty repository.
+    // They are returned, and the page says it is incomplete, because the one
+    // thing a caller must not do is treat this as "there is nothing more".
+    if (result.stdout.length === 0) return { commits: [], truncated: false };
+    return {
+      commits: parseHistoryOutput(result.stdout, options.withChanges === true).commits,
+      truncated: false,
+      // Git's stderr is text from a repository Ferret does not trust, and it is
+      // about to be stored on a page, logged, and reported as a skipped path.
+      // Through the same redaction as every other string that leaves the
+      // process — F-71. Redaction preserves the diagnostic; a reason that says
+      // nothing would be its own defect.
+      incomplete: { reason: redactString(firstLine(result.stderr)) },
+    };
   }
 
-  const commits = parseLog(result.stdout, options.withChanges === true);
+  const parsed = parseHistoryOutput(result.stdout, options.withChanges === true);
+  const commits = parsed.commits;
+  if (parsed.unreadable > 0) {
+    // F-94's general case. Git exited zero, so nothing failed — but part of its
+    // output was not the record format Ferret asked for, which means something
+    // reshaped the stream. The commits that *were* read are returned, and the
+    // page says it is incomplete so the watermark does not advance over the gap.
+    return {
+      commits: commits.slice(0, limit),
+      truncated: commits.length > limit,
+      incomplete: {
+        reason:
+          `Git produced ${String(parsed.unreadable)} region(s) of output Ferret could not read; ` +
+          'the repository or the environment may be overriding how Git formats its output.',
+      },
+    };
+  }
   return {
     commits: commits.slice(0, limit),
     truncated: commits.length > limit,
   };
+}
+
+/**
+ * The commit a revision names, or `undefined` when it names none.
+ *
+ * The position an incremental read resumes from. An empty repository, a ref
+ * that was deleted and a revision that never existed all answer `undefined`
+ * rather than failing: none of them is an error, and each means the same thing
+ * to a caller — there is no tip here to remember.
+ */
+export async function resolveCommit(
+  options: GitRunOptions & { readonly revision?: string },
+): Promise<string | undefined> {
+  const revision = options.revision ?? 'HEAD';
+  assertSafeRevision(revision);
+
+  const result = await runGit(['rev-parse', '--verify', '--quiet', `${revision}^{commit}`], {
+    ...options,
+    allowFailure: true,
+  });
+  if (result.exitCode !== 0) return undefined;
+  const oid = result.stdout.trim();
+  return SHA.test(oid) ? oid : undefined;
+}
+
+/**
+ * The subset of `oids` this repository still holds as commits.
+ *
+ * A stored position can name a commit that is no longer here — a rewritten
+ * history, a deleted branch, a pruned object. Excluding it would make `git log`
+ * fail, and a failed read here returns "no commits" (an empty repository and a
+ * broken argument are the same exit code), so a stale position would look
+ * exactly like a repository with nothing new in it. Dropping what is gone
+ * degrades to reading more, which is the safe direction.
+ */
+export async function knownCommits(
+  options: GitRunOptions,
+  oids: readonly string[],
+): Promise<readonly string[]> {
+  const known: string[] = [];
+  for (const oid of oids) {
+    if (!SHA.test(oid)) continue;
+    const resolved = await resolveCommit({ ...options, revision: oid });
+    if (resolved !== undefined) known.push(oid);
+  }
+  return known;
 }
 
 /**
@@ -182,7 +340,37 @@ export async function readHistory(options: ReadHistoryOptions): Promise<HistoryP
  * named like a hash.
  */
 export function parseLog(stdout: string, withChanges: boolean): readonly CommitRecord[] {
-  if (stdout.length === 0) return [];
+  return parseHistoryOutput(stdout, withChanges).commits;
+}
+
+/** What {@link parseHistoryOutput} made of Git's output, and what it could not. */
+export interface ParsedHistory {
+  readonly commits: readonly CommitRecord[];
+  /**
+   * Tokens outside any record.
+   *
+   * Zero for every healthy `git log`, because the format Ferret asks for is
+   * entirely marker-delimited records. Anything else is Git having produced
+   * output Ferret did not ask for and cannot read — a re-encoded stream, a
+   * signature block, a key nobody has found yet — and {@link readHistory} turns
+   * it into an incomplete page rather than silently reporting fewer commits.
+   *
+   * This is the half of F-94 that does not depend on knowing the key. The
+   * `-c` pins in the runner close the two encodings that were measured; this
+   * closes the class, by *effect* rather than by name.
+   */
+  readonly unreadable: number;
+}
+
+/**
+ * {@link parseLog}, with what it could not read reported rather than dropped.
+ *
+ * Separate entry point rather than a changed return type, because several
+ * callers want only the commits and a tuple at each of them would be noise. The
+ * counting happens once, here.
+ */
+export function parseHistoryOutput(stdout: string, withChanges: boolean): ParsedHistory {
+  if (stdout.length === 0) return { commits: [], unreadable: 0 };
 
   // `git log -z` terminates each *record*, so a trailing NUL is expected. With
   // `--name-status` the last change entry is terminated too.
@@ -191,20 +379,27 @@ export function parseLog(stdout: string, withChanges: boolean): readonly CommitR
 
   const commits: CommitRecord[] = [];
   let index = 0;
+  let unreadable = 0;
 
   while (index < tokens.length) {
-    const header = tokens.slice(index, index + 11);
-    if (header.length < 11) break;
-
-    const sha = (header[0] ?? '').replace(/^\n+/, '');
-    if (!SHA.test(sha)) {
-      // Not a commit boundary. Skip one token rather than abandoning the whole
-      // read: a malformed region should cost the commits it touches, not the
-      // ninety-nine thousand after it.
+    if (!isRecordStart(tokens, index)) {
+      // Not a record boundary. Skip one token rather than abandoning the read:
+      // a malformed region should cost the commits it touches, not the
+      // ninety-nine thousand after it — and count it, so "cost" is a fact the
+      // caller is told rather than one it has to infer from a short page.
       index += 1;
+      unreadable += 1;
       continue;
     }
-    index += 11;
+    // The marker is not a field; the eleven that follow it are.
+    const header = tokens.slice(index + 1, index + 12);
+    if (header.length < 11) {
+      // A record that begins and then stops: the output was cut, which is a
+      // thing to report and not a page that simply ends here.
+      unreadable += tokens.length - index;
+      break;
+    }
+    index += 12;
 
     const changes: CommitChange[] = [];
     if (withChanges) {
@@ -212,9 +407,8 @@ export function parseLog(stdout: string, withChanges: boolean): readonly CommitR
       // NUL, because `git log -z` NUL-terminates the *format*, then emits the
       // diff. The leading newline belongs to neither.
       while (index < tokens.length) {
-        const token = tokens[index] ?? '';
-        const trimmed = token.replace(/^\n+/, '');
-        if (SHA.test(trimmed) && looksLikeCommitStart(tokens, index)) break;
+        if (isRecordStart(tokens, index)) break;
+        const trimmed = (tokens[index] ?? '').replace(/^\n+/, '');
         index += 1;
         const change = readChange(trimmed, tokens, () => index, (next) => (index = next));
         if (change !== undefined) changes.push(change);
@@ -224,28 +418,41 @@ export function parseLog(stdout: string, withChanges: boolean): readonly CommitR
     commits.push(buildCommit(header, changes));
   }
 
-  return commits;
+  return { commits, unreadable };
 }
 
 /**
- * Whether the token at `at` begins a commit record rather than being a path.
+ * Whether the token at `at` is the marker that begins a record.
  *
- * A file can legitimately be named like a commit hash, so the hash alone is not
- * enough. Checking that the fields which should be dates *are* dates is cheap
- * and removes the whole class of confusion.
+ * Equality against a marker Git wrote, not inference from what the fields look
+ * like. The hash that follows is checked too — cheap, and it means a lone
+ * marker byte inside content cannot start a record on its own — but nothing
+ * here depends on a *date* being well formed, which is what previously decided
+ * whether the reader stayed in step with the stream.
  */
-function looksLikeCommitStart(tokens: readonly string[], at: number): boolean {
-  const authored = tokens[at + 5];
-  const committed = tokens[at + 8];
-  const tree = tokens[at + 1];
-  return (
-    tree !== undefined &&
-    SHA.test(tree) &&
-    authored !== undefined &&
-    committed !== undefined &&
-    isInstant(authored) &&
-    isInstant(committed)
-  );
+function isRecordStart(tokens: readonly string[], at: number): boolean {
+  const marker = (tokens[at] ?? '').replace(/^\n+/, '');
+  if (marker !== RECORD_MARKER) return false;
+  const sha = (tokens[at + 1] ?? '').replace(/^\n+/, '');
+  return SHA.test(sha);
+}
+
+/** A field kept only when it is actually an instant. */
+function instantOrAbsent(value: string): string | undefined {
+  return isInstant(value) ? value : undefined;
+}
+
+/**
+ * An instant, as a caller supplies one.
+ *
+ * Wider than {@link isInstant} by exactly one thing: fractional seconds.
+ * `Date.prototype.toISOString` emits them and Git's `%aI` does not, so a
+ * validator written for Git's output refuses the value every JavaScript caller
+ * naturally produces — which is a rule that fails the honest caller and stops
+ * no dishonest one.
+ */
+function isInstantInput(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)$/.test(value.trim());
 }
 
 function isInstant(value: string): boolean {
@@ -335,10 +542,10 @@ function buildCommit(header: readonly string[], changes: readonly CommitChange[]
     parents,
     authorName: field(3),
     authorEmail: field(4),
-    authoredAt: field(5),
+    authoredAt: instantOrAbsent(field(5)),
     committerName: field(6),
     committerEmail: field(7),
-    committedAt: field(8),
+    committedAt: instantOrAbsent(field(8)),
     subject: field(9),
     body: bounded(header[10] ?? '', MAX_BODY).replace(/\n+$/, ''),
     changes,

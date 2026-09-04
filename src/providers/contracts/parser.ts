@@ -178,6 +178,23 @@ export interface CodeReference {
    * EPIC-035 §8.3 uses this to refuse that inference.
    */
   readonly qualified: boolean;
+  /**
+   * The receiver's source text, when the callee was a member access — F-25.
+   *
+   * `map.has(k)` reports `map`; `this.#providers.has(k)` reports
+   * `this.#providers`; `this.has(k)` reports `this`. Absent for a bare call, and
+   * absent when the receiver is not a simple expression — a call on a call's
+   * result names no receiver worth reporting.
+   *
+   * `qualified` alone was not enough. It says the receiver's *type* is unknown,
+   * which is true of `map.has()` and false of `this.has()`: the enclosing
+   * declaration is exactly what `this` is, and it is the one receiver Ferret
+   * does know. Without this field the resolver could only choose between
+   * resolving every member call — which gave `ProviderRegistry.has` eight
+   * inbound edges that were all `Map.has` — and resolving none, which would
+   * discard most of what a call graph inside a class is.
+   */
+  readonly receiver?: string;
   readonly enclosing: readonly string[];
   readonly span: ContentSpan;
 }

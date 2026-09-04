@@ -69,6 +69,22 @@ export interface ImportOptions {
 /** How many orphan ids a report names before it stops listing them. */
 export const MAX_REPORTED_ORPHANS = 20;
 
+/**
+ * A quoted SQL identifier, with any quote character in it doubled.
+ *
+ * Defence in depth behind the allowlist in `#row`, never instead of it: an
+ * allowlist decides *whether* a name may be used and this decides how it is
+ * written. Both, because the two fail differently — an allowlist that gained a
+ * hole would meet an escape that still holds.
+ */
+function quoteIdentifier(name: string): string {
+  return `"${name.replaceAll('"', '""')}"`;
+}
+
+function identifier(name: string): ReturnType<typeof sql.raw> {
+  return sql.raw(quoteIdentifier(name));
+}
+
 function refuse(message: string, details: Record<string, unknown> = {}): FerretError {
   return new FerretError(ErrorCode.SCHEMA_UNSUPPORTED, message, {
     details,
@@ -286,13 +302,31 @@ export class ImportService {
     tableName: string,
   ): Promise<ImportOutcome> {
     const columns = Object.keys(row);
+    // §11 — the document is untrusted input, and a column name is the one part
+    // of it that cannot be a bound parameter: it reaches the statement as an
+    // identifier. Checked against the target's own catalogue *before* any
+    // statement is built, because quoting is not a substitute for an allowlist —
+    // a name containing a quote character breaks out of it, and the crafted
+    // statement then runs as Ferret's database role.
+    //
+    // Refused rather than dropped. Silently discarding a column would turn a
+    // hostile document into a partial restore that looks like a complete one,
+    // which is the failure EPIC-090 exists to prevent in the other direction.
+    const unknown = columns.filter((column) => !facts.known.has(`${tableName}.${column}`));
+    if (unknown.length > 0) {
+      throw refuse(
+        `Row names ${String(unknown.length)} column(s) "${table}" does not have, so the document does not match this schema.`,
+        { table, columns: unknown },
+      );
+    }
+
     const where = sql.join(
-      key.map((column) => sql`${sql.raw(`"${column}"`)} = ${row[column] ?? null}`),
+      key.map((column) => sql`${identifier(column)} = ${row[column] ?? null}`),
       sql` AND `,
     );
 
     const existing = await tx.execute<Record<string, unknown>>(
-      sql`SELECT * FROM ferret.${sql.raw(`"${table}"`)} WHERE ${where} LIMIT 1`,
+      sql`SELECT * FROM ferret.${identifier(table)} WHERE ${where} LIMIT 1`,
     );
     const present = existing.rows[0];
 
@@ -313,7 +347,7 @@ export class ImportService {
     await tx.execute(sql`SAVEPOINT ${sql.raw(savepoint)}`);
     try {
       await tx.execute(
-        sql`INSERT INTO ferret.${sql.raw(`"${table}"`)} (${sql.raw(columns.map((c) => `"${c}"`).join(', '))})
+        sql`INSERT INTO ferret.${identifier(table)} (${sql.raw(columns.map(quoteIdentifier).join(', '))})
             VALUES (${sql.join(
               columns.map((column) => sql`${normalise(row[column], facts.json.has(`${tableName}.${column}`))}`),
               sql`, `,

@@ -20,9 +20,17 @@ import {
   type Principal,
 } from '../authorization/index.js';
 import type { AuditWriter } from '../audit/index.js';
-import { ContentSafety, NO_CONTENT_SAFETY, containAttributes } from '../security/index.js';
+import {
+  ContentSafety,
+  NO_CONTENT_SAFETY,
+  containAttributes,
+  containEntityContent,
+  containEvidenceContent,
+  containUntrusted,
+} from '../security/index.js';
 import {
   EvidenceState,
+  LifecycleState,
   integrityHashOf,
   type CanonicalEntity,
   type CanonicalEvidence,
@@ -32,10 +40,12 @@ import {
   MAX_LIMIT,
   MAX_TRAVERSAL_DEPTH,
   PUBLIC_ACCESS,
+  describeStanding,
   explainQuery,
   renderExplanation,
   type AccessContext,
   type QueryPlanner,
+  type ReferenceCompleteness,
   type RetrievalPort,
   type SearchHit,
 } from '../retrieval/index.js';
@@ -489,11 +499,14 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             // Reported, not inferred. Without it a caller cannot tell "nothing
             // further exists" from "Ferret stopped looking".
             ...(walk.truncated === undefined ? {} : { truncated: walk.truncated }),
+            // F-27, on the multi-hop branch too — an unresolved reference at hop
+            // one also removes what was reachable only through it.
+            ...referenceCompletenessOf(walk.references),
             reached: walk.paths.map((path) => ({
               id: path.entity.id,
               kind: path.entity.kind,
               lifecycle: path.entity.lifecycle,
-              attributes: containAttributes(path.entity.attributes, safety),
+              ...containedContentOf(path.entity, safety),
               depth: path.depth,
               // The path is the answer to "how". A caller handed a release
               // cannot otherwise tell whether Ferret walked the edge it expected
@@ -503,30 +516,50 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
                 direction: step.direction,
                 id: step.entityId,
               })),
-              ...(Object.keys(path.metadata).length === 0 ? {} : { metadata: path.metadata }),
+              // F-64. What the *source* said about the edge, validated by
+              // nothing and contained by nothing until now.
+              ...(Object.keys(path.metadata).length === 0
+                ? {}
+                : { metadata: containAttributes(path.metadata, safety) }),
             })),
             withheld: walk.withheld.total,
             contentSafety: safety.report,
           };
         }
 
-        const neighbours = await retrieval.neighbours(query, access);
+        const reached = await retrieval.neighbours(query, access);
         return {
           notice: CONTENT_NOTICE,
           asOf: includeHistorical === true ? 'all time' : (at ?? 'now'),
-          count: neighbours.length,
-          neighbours: neighbours.map((neighbour) => ({
+          count: reached.neighbours.length,
+          // The depth-1 branch carried neither of these, and it is the default
+          // and every existing caller. A hop cut by the bound came back looking
+          // exactly like an exhaustive one, and rows this caller may not see
+          // were dropped without a word — so "nothing is connected" and "you
+          // cannot see what is connected" were the same answer.
+          ...(reached.more
+            ? {
+                truncated: true,
+                more: `More neighbours exist than the limit returned. Raise \`limit\` (max ${String(MAX_LIMIT)}).`,
+              }
+            : { truncated: false }),
+          withheld: reached.withheld.total,
+          // F-27. `truncated: false` and `withheld: 0` said this answer was
+          // whole; for a reference question it was not entitled to.
+          ...referenceCompletenessOf(reached.references),
+          neighbours: reached.neighbours.map((neighbour) => ({
             id: neighbour.entity.id,
             kind: neighbour.entity.kind,
             lifecycle: neighbour.entity.lifecycle,
-            attributes: containAttributes(neighbour.entity.attributes, safety),
+            ...containedContentOf(neighbour.entity, safety),
             relationship: neighbour.relationshipType,
             direction: neighbour.direction,
             // What the source said about the edge itself — including whether a
             // commit added, modified or deleted the file it touched.
+            // F-64, as on the depth > 1 branch.
             ...(Object.keys(neighbour.metadata).length === 0
               ? {}
-              : { metadata: neighbour.metadata }),
+              : { metadata: containAttributes(neighbour.metadata, safety) }),
             validFrom: neighbour.validFrom,
             validTo: neighbour.validTo,
           })),
@@ -560,7 +593,14 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           ...(kinds === undefined ? {} : { kinds }),
           ...(withNeighbours === undefined ? {} : { withNeighbours }),
         });
-        return format === 'text' ? { notice: CONTENT_NOTICE, rendered: renderPack(pack) } : pack;
+        if (format === 'text') return { notice: CONTENT_NOTICE, rendered: renderPack(pack) };
+        // F-66. Returning `pack` put the notice last, under a key no other tool
+        // uses, in the default response of the one tool built to be pasted into
+        // a prompt. Renamed rather than duplicated: `contentNotice` is the pack
+        // *format*'s field and `packs.build` still returns it, while what
+        // crosses MCP is the same key every other tool leads with.
+        const { contentNotice, ...rest } = pack;
+        return { notice: contentNotice, ...rest };
       }),
   );
 
@@ -596,25 +636,38 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
         // is a wrong answer wearing a right one's clothes — the caller has no
         // way to tell, and "every file in this repository" is precisely the
         // question people ask this tool.
-        const entities = await retrieval.findEntities({
+        const found = await retrieval.findEntities({
           ...(kind === undefined ? {} : { kind }),
           ...(attributes === undefined ? {} : { attributes }),
           ...(scope === undefined ? {} : { scope }),
           ...(lifecycle === undefined ? {} : { lifecycle }),
-          limit: Math.min(requested + 1, MAX_LIMIT),
+          limit: requested,
         }, access);
-        const truncated = entities.length > requested;
-        const page = truncated ? entities.slice(0, requested) : entities;
+        // Two separate facts, and both are reported. The store says whether
+        // further matches exist; the store also says how many rows this caller
+        // may not see. Deriving either from the length of the array left was
+        // how `truncated: false` came to be asserted over an answer permission
+        // filtering had already shortened — and it made "there is nothing
+        // there" indistinguishable from "you are not allowed to see it".
+        const page = found.entities;
         const safety = new ContentSafety();
         const described = page.map((entity) => describeEntity(entity, safety));
         return {
           notice: CONTENT_NOTICE,
           count: page.length,
           contentSafety: safety.report,
-          ...(truncated
+          withheld: found.withheld.total,
+          ...(found.more || found.withheld.total > 0
             ? {
                 truncated: true,
-                more: `More than ${requested} entities match. This is a partial answer — raise \`limit\` (max ${MAX_LIMIT}) or narrow the query.`,
+                more:
+                  (found.more
+                    ? `More than ${String(requested)} entities match. `
+                    : '') +
+                  (found.withheld.total > 0
+                    ? `${String(found.withheld.total)} row(s) were withheld from this caller. `
+                    : '') +
+                  `This is a partial answer — raise \`limit\` (max ${String(MAX_LIMIT)}) or narrow the query.`,
               }
             : { truncated: false }),
           // `results`, the same key `ferret_search` uses. It was `entities`, and
@@ -672,7 +725,10 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             question,
             ...(budget === undefined ? {} : { budget }),
           });
-          return format === 'text' ? { notice: CONTENT_NOTICE, rendered: renderAnswer(pack) } : pack;
+          if (format === 'text') return { notice: CONTENT_NOTICE, rendered: renderAnswer(pack) };
+          // F-66, as for `ferret_context_pack`.
+          const { contentNotice, ...rest } = pack;
+          return { notice: contentNotice, ...rest };
         }),
     );
   }
@@ -732,11 +788,23 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           // Absence is an answer, not an error — EPIC-065 AC-20. Said in words
           // as well as in an empty array, because a client that treats `[]` as a
           // failure and a client that treats it as "nothing known" both exist.
+          // The subject's own standing, read once and reported either way.
+          // `ferret_why` is the surface a caller uses to check an answer rather
+          // than trust it, and it answered `held: true, integrity: verified`
+          // about entities Ferret had itself tombstoned — a citation to a file
+          // that is not there, presented as verified.
+          const subject = await retrieval.getEntity(id, access);
+          const standing =
+            subject === undefined || subject.lifecycle === LifecycleState.ACTIVE
+              ? undefined
+              : describeStanding(subject);
+
           if (held.length === 0) {
             return {
               notice: CONTENT_NOTICE,
               id,
               held: false,
+              ...(standing === undefined ? {} : { standing }),
               detail:
                 'Ferret holds no current evidence for this entity. That is what is recorded, ' +
                 'not a failure to look — an answer about it cannot be traced to a source.',
@@ -769,6 +837,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             notice: CONTENT_NOTICE,
             id,
             held: true,
+            // Beside `held`, so a caller reading the two together cannot miss
+            // that the evidence is real and the subject is gone.
+            ...(standing === undefined ? {} : { standing }),
             count: described.length,
             evidence: described,
             conflicts: conflicts.map((group) => ({
@@ -824,7 +895,7 @@ function describeHit(hit: SearchHit, safety: ContentSafety): Record<string, unkn
     kind: hit.entity.kind,
     lifecycle: hit.entity.lifecycle,
     source: hit.entity.source,
-    attributes: containAttributes(hit.entity.attributes, safety),
+    ...containedContentOf(hit.entity, safety),
     matchedIn: hit.source,
     highlight: hit.highlight === undefined ? undefined : safety.contain(hit.highlight),
     score: hit.score,
@@ -853,7 +924,71 @@ function describeHit(hit: SearchHit, safety: ContentSafety): Record<string, unkn
  * where content starts is the same defect as having no boundary at all.
  */
 function describeEntity(entity: CanonicalEntity, safety: ContentSafety): Record<string, unknown> {
-  return { ...entity, attributes: containAttributes(entity.attributes, safety) };
+  return { ...containEntityContent(entity, safety) };
+}
+
+/**
+ * How whole the reference graph behind a neighbours answer is — F-27.
+ *
+ * `count`, `truncated` and `withheld` between them said an answer was short for
+ * a bound or for a permission — and said nothing at all when it was short
+ * because Ferret had declined to resolve the references that would have filled
+ * it. So `count: 0, truncated: false, withheld: 0` read as "nothing references
+ * this", which is the answer a dead-code or impact question acts on. The counts
+ * were already persisted; nothing carried them to a caller.
+ *
+ * Absent when the question was not about references — a commit's neighbours have
+ * no reference graph to be short of, and a completeness verdict on them would be
+ * a caveat that is always there, which is a caveat nobody reads.
+ *
+ * `caveat` is written for `complete` too, and deliberately not for `unknown`
+ * alone: a reader who sees the field only when something is wrong learns to read
+ * its *presence* rather than its contents, and then a `complete` that appears
+ * for a new reason is misread. The sentence says which of the three it is.
+ */
+function referenceCompletenessOf(
+  report: ReferenceCompleteness | undefined,
+): Record<string, unknown> {
+  if (report === undefined) return {};
+  const { completeness, unresolved, extracted } = report;
+  const caveat =
+    completeness === 'incomplete'
+      ? `Incomplete: ${String(unresolved.refused)} of ${String(extracted)} references in this ` +
+        'repository were not resolved, so a reference list here may be short by up to that many. ' +
+        'Ferret does not guess at a reference’s target — `unresolved.byReason` says why each was ' +
+        'declined. Absence of a reference is not evidence that none exists.'
+      : completeness === 'unknown'
+        ? 'Unknown: no file in this repository recorded reference-resolution counts, so Ferret ' +
+          'cannot say whether a reference list here is whole. Content indexing may not have run.'
+        : 'Complete: every reference in this repository either resolved or named something ' +
+          'Ferret does not hold, so a reference list here is not short for want of resolution.';
+  return { references: { ...report, caveat } };
+}
+
+/**
+ * The untrusted parts of an entity, contained, for a surface that projects
+ * fields rather than spreading the whole record.
+ *
+ * `ferret_search`, `ferret_neighbours` and the traversal branch each build their
+ * own object and each named `attributes` alone, so `unknownFields` — source data
+ * nothing validates — was either omitted (search, neighbours) or handed over raw
+ * (`ferret_get_entity`, the pack, the answer). One helper, so a surface cannot
+ * contain one field and forget the next: whichever of the three a surface
+ * chooses to emit, it emits contained.
+ */
+function containedContentOf(
+  entity: CanonicalEntity,
+  safety: ContentSafety,
+): Record<string, unknown> {
+  return {
+    attributes: containAttributes(entity.attributes, safety),
+    ...(Object.keys(entity.unknownFields).length === 0
+      ? {}
+      : { unknownFields: containAttributes(entity.unknownFields, safety) }),
+    ...(entity.externalIds.length === 0
+      ? {}
+      : { externalIds: containUntrusted(entity.externalIds, safety) }),
+  };
 }
 
 /**
@@ -876,16 +1011,26 @@ function describeEvidence(
   maxDepth: number,
   safety: ContentSafety,
 ): Record<string, unknown> {
+  // Contained from a view, so `integrityHashOf(record)` below still runs
+  // against the record as stored. `field`, `locator`, `sourceUrl` and the
+  // producer identity travelled raw until F-64's re-audit: each is a
+  // `z.string()` a provider supplies, and this response is read by a model.
+  //
+  // `statement` is held out of the view deliberately. This surface emits it
+  // JSON-serialized — EPIC-048's shape, so a structured observation is
+  // readable as one value — and containing it twice would both inflate the
+  // safety counts and, worse, neutralise the first fence inside the second.
+  const view = containEvidenceContent({ ...record, statement: undefined }, safety);
   return {
     id: record.id,
-    field: record.field,
+    field: view.field,
     statement: safety.contain(JSON.stringify(record.statement)),
     // How Ferret came to believe it, and how much that is worth.
     method: record.method,
-    producer: `${record.producer}@${record.producerVersion}`,
-    sourceSystem: record.sourceSystem,
-    sourceUrl: record.sourceUrl,
-    locator: record.locator,
+    producer: `${String(view.producer)}@${String(view.producerVersion)}`,
+    sourceSystem: view.sourceSystem,
+    sourceUrl: view.sourceUrl,
+    locator: view.locator,
     authority: record.authority,
     confidence: record.confidence,
     completeness: record.completeness,
@@ -895,12 +1040,15 @@ function describeEvidence(
     // a citation can be shown untampered without a round trip per record. A
     // tool whose job is checking answers should not itself be taken on trust.
     integrity: integrityHashOf(record) === record.integrityHash ? 'verified' : 'tampered',
-    derivedFrom: lineage.map((ancestor) => ({
-      id: ancestor.id,
-      method: ancestor.method,
-      producer: `${ancestor.producer}@${ancestor.producerVersion}`,
-      locator: ancestor.locator,
-    })),
+    derivedFrom: lineage.map((ancestor) => {
+      const seen = containEvidenceContent(ancestor, safety);
+      return {
+        id: ancestor.id,
+        method: ancestor.method,
+        producer: `${String(seen.producer)}@${String(seen.producerVersion)}`,
+        locator: seen.locator,
+      };
+    }),
     truncated: lineage.length >= maxDepth,
   };
 }

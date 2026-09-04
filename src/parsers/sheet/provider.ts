@@ -28,7 +28,15 @@ import { readXlsx, type Sheet, type SheetRow } from './xlsx.js';
  */
 
 export const SHEET_PARSER_ID = 'ferret.parser.sheet';
-export const SHEET_PARSER_VERSION = '1.0.0';
+/**
+ * 1.1.0 — F-23.
+ *
+ * Not cosmetic. Until this version a corrupt worksheet part was extracted as a
+ * sheet with no rows, and that artefact is cached. EPIC-031 re-extracts when the
+ * producer identity moves, so moving it is what stops a silently-empty sheet
+ * from being replayed out of the store for the life of the content.
+ */
+export const SHEET_PARSER_VERSION = '1.1.0';
 
 export const XLSX_MEDIA_TYPE =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

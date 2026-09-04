@@ -292,10 +292,33 @@ describe('package contents', () => {
     // reader has no dependency at all — 33 kB of Ferret's own code replacing a
     // library with an unlicensed transitive. That trade is the reason this
     // directory is the largest of the three and is still the cheapest.
+    //
+    // **2026-09-03, Batch 6 of the post-roadmap audit — the bound moved a fourth
+    // time**, and the same way: measured first, on both sides. The non-grammar
+    // output reached 2 854 257, 0.50% over, and the batch accounts for 29 207
+    // bytes of it — measured by building the tree with the changes stashed
+    // (2 788 627 in `dist/`) and again with them applied (2 817 834). Nothing
+    // else grew, and the growth is where the fix is:
+    //
+    //     +9 919  dist/security/credentials.js   (F-71: four derived rules)
+    //     +4 581  dist/security/subprocess.js    (new: the child-environment policy)
+    //     +3 804  dist/security/credentials.d.ts
+    //     +2 349  dist/git/runner.js             (F-94: output-shape pins)
+    //     +2 140  dist/security/secrets.js       (isSecretKey moved here)
+    //     +2 067  dist/git/history.js            (F-94: the unreadable counter)
+    //       -848  dist/errors/redact.js          (isSecretKey moved out)
+    //
+    // It is the largest single-batch growth in this list, and most of it is
+    // comment rather than code — which is this repository's style and is why
+    // `security/credentials.js` alone is 10 kB for four predicates. No
+    // dependency was added and nothing improper ships, both re-measured rather
+    // than assumed. The headroom is 3.4%, deliberately tighter than the 12% of
+    // the earlier raises: this batch added no product surface, so the next
+    // crossing should be a decision sooner rather than later.
     const grammarBytes = pack.files
       .filter((file) => file.path.startsWith('dist/parsers/code/grammars/'))
       .reduce((total, file) => total + file.size, 0);
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_840_000);
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(2_950_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {

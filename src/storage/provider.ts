@@ -15,7 +15,13 @@ import {
   type ProviderContext,
 } from '../providers/index.js';
 
-import { probeExtensions, ExtensionState, type ExtensionStatus } from './capabilities.js';
+import {
+  probeExtensions,
+  provisionExtensions,
+  ExtensionState,
+  type ExtensionProvisionResult,
+  type ExtensionStatus,
+} from './capabilities.js';
 import {
   classifyDatabaseError,
   createPool,
@@ -26,6 +32,7 @@ import {
   type ServerVersion,
 } from './connection.js';
 import {
+  applyRepairs,
   migrate,
   readSchemaStatus,
   type MigrationPolicy,
@@ -56,6 +63,21 @@ export interface StorageProviderOptions {
    */
   readonly policy?: MigrationPolicy;
   readonly lockTimeoutMs?: number;
+  /**
+   * Install the optional extensions before migrating. `ferret init` asks for it.
+   *
+   * Off by default, deliberately: `CREATE EXTENSION` needs a privilege an
+   * everyday connection has no reason to hold, so an ordinary start must not
+   * attempt it. `ferret init` *is* the request to provision, which is why the
+   * request comes from the caller rather than from a default.
+   *
+   * **Before** migrating, because migration `0008` is conditional on pgvector
+   * being present. Provisioning afterwards left that conditional taking its
+   * "not installed" branch and then being recorded as applied — a migration
+   * marked done whose effect never happened, on every fresh install, with no
+   * later run able to correct it.
+   */
+  readonly provisionExtensions?: boolean;
 }
 
 /** Everything the provider learned about the database while starting. */
@@ -65,6 +87,14 @@ export interface StorageReport {
   readonly schema: SchemaStatus;
   readonly migration: MigrationReport;
   readonly extensions: readonly ExtensionStatus[];
+  /**
+   * What provisioning did, when the caller asked for it.
+   *
+   * Absent on every run that did not provision, which is most of them. It
+   * carries `created`, and a probe taken afterwards cannot recover that: an
+   * extension this run installed and one installed last year look identical.
+   */
+  readonly provisioned?: readonly ExtensionProvisionResult[];
 }
 
 /**
@@ -191,6 +221,12 @@ export class PostgresStorageProvider extends BaseProvider {
 
     try {
       const server = await this.#verifyServer(pool);
+      // Before `migrate`, and this order is the whole of EPIC-054's table
+      // existing: `0008` asks `to_regtype('vector')` and skips itself when the
+      // answer is NULL.
+      const provisioned = this.#options.provisionExtensions === true
+        ? await provisionExtensions(pool, logger)
+        : undefined;
       const policy = this.#options.policy ?? config.database.migrate;
       const migration = await migrate(pool, {
         logger,
@@ -198,11 +234,25 @@ export class PostgresStorageProvider extends BaseProvider {
         ...(this.#options.lockTimeoutMs === undefined ? {} : { lockTimeoutMs: this.#options.lockTimeoutMs }),
         signal: context.signal,
       });
+      // After the migrations, because the repair's precondition is the
+      // extension this run may have just installed, and a conditional migration
+      // that ran before it existed is already spent.
+      if (provisioned !== undefined) await applyRepairs(pool, logger);
+
       const schema = await readSchemaStatus(pool);
-      const extensions = await probeExtensions(pool).catch(() => []);
+      // What provisioning did, when it ran: it carries `created`, which a probe
+      // afterwards cannot recover. Probed otherwise, which is every other run.
+      const extensions = provisioned ?? (await probeExtensions(pool).catch(() => []));
 
       this.#db = drizzle(pool);
-      this.#report = { connection, server, schema, migration, extensions };
+      this.#report = {
+        connection,
+        server,
+        schema,
+        migration,
+        extensions,
+        ...(provisioned === undefined ? {} : { provisioned }),
+      };
 
       logger.info(
         {

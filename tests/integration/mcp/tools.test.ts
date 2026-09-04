@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { CONTENT_CLOSE, CONTENT_OPEN } from '../../../src/security/index.js';
 import {
@@ -22,6 +22,7 @@ import {
   NOTHING_WITHHELD,
   type EvidenceState,
   type Neighbour,
+  type ReferenceCompleteness,
   type StatedEvidence,
   type WithheldReport,
   type RetrievalPort,
@@ -118,6 +119,7 @@ class FakeRetrieval implements RetrievalPort {
       truncated: undefined,
       depthReached: 1,
       withheld: NOTHING_WITHHELD,
+      ...(this.references === undefined ? {} : { references: this.references }),
     });
   }
 
@@ -128,27 +130,71 @@ class FakeRetrieval implements RetrievalPort {
   /** Entities the next find returns. More than the limit proves truncation. */
   findResult: readonly CanonicalEntity[] = [FILE];
 
-  findEntities(query: EntityQuery): Promise<readonly CanonicalEntity[]> {
+  /** Rows this caller may not see, so F-31's distinction is assertable. */
+  withhold = 0;
+
+  findEntities(query: EntityQuery): Promise<{
+    entities: readonly CanonicalEntity[];
+    withheld: WithheldReport;
+    more: boolean;
+  }> {
     this.lastFind = query;
-    return Promise.resolve(this.findResult.slice(0, query.limit ?? this.findResult.length));
+    const limit = query.limit ?? this.findResult.length;
+    return Promise.resolve({
+      entities: this.findResult.slice(0, limit),
+      withheld:
+        this.withhold === 0 ? NOTHING_WITHHELD : { total: this.withhold, byReason: { scope: this.withhold } },
+      more: this.findResult.length > limit,
+    });
   }
+
+  /** Overridden by a test that needs the subject to be gone. */
+  entityFor: (id: string) => CanonicalEntity | undefined = (id) =>
+    id === COMMIT.id ? COMMIT : undefined;
 
   getEntity(id: string): Promise<CanonicalEntity | undefined> {
-    return Promise.resolve(id === COMMIT.id ? COMMIT : undefined);
+    return Promise.resolve(this.entityFor(id));
   }
 
-  neighbours(query: TraversalQuery): Promise<readonly Neighbour[]> {
+  /** Set by a test that needs the hop to have been cut by the bound. */
+  neighboursMore = false;
+
+  /**
+   * What the store says about the reference graph — F-27.
+   *
+   * `undefined` is the shape for a question that is not about references, and it
+   * is the default because most of this file's traversals are not.
+   */
+  references: ReferenceCompleteness | undefined = undefined;
+
+  /** Set by a test that needs the answer to be genuinely empty. */
+  neighboursEmpty = false;
+
+  neighbours(query: TraversalQuery): Promise<{
+    neighbours: readonly Neighbour[];
+    withheld: WithheldReport;
+    more: boolean;
+    references?: ReferenceCompleteness | undefined;
+  }> {
     this.lastTraversal = query;
-    return Promise.resolve([
-      {
-        entity: FILE,
-        relationshipType: 'commit_modifies_file',
-        direction: 'out',
-        validFrom: '2026-01-01T00:00:00.000Z',
-        validTo: null,
-        metadata: { change: 'deleted' },
-      },
-    ]);
+    return Promise.resolve({
+      withheld:
+        this.withhold === 0 ? NOTHING_WITHHELD : { total: this.withhold, byReason: { scope: this.withhold } },
+      more: this.neighboursMore,
+      ...(this.references === undefined ? {} : { references: this.references }),
+      neighbours: this.neighboursEmpty
+        ? []
+        : [
+            {
+              entity: FILE,
+              relationshipType: 'commit_modifies_file',
+              direction: 'out',
+              validFrom: '2026-01-01T00:00:00.000Z',
+              validTo: null,
+              metadata: { change: 'deleted' },
+            },
+          ],
+    });
   }
 
   /** Counts calls, so EPIC-068's "refused before the handler ran" is assertable. */
@@ -375,6 +421,187 @@ describe('traversal', () => {
 
   it('refuses an instant that is not one', async () => {
     expect((await callRaw('ferret_neighbours', { id: COMMIT.id, at: 'last tuesday' })).isError).toBe(true);
+  });
+
+  it('says when the bound cut the hop, at depth one — F-28', async () => {
+    // Depth 1 is the default and every existing caller. The limit is applied in
+    // SQL, so a node with eighty neighbours and a limit of twenty returned
+    // twenty rows and nothing at all to say that sixty were left behind.
+    retrieval.neighboursMore = true;
+    try {
+      const result = await call('ferret_neighbours', { id: COMMIT.id });
+      expect(result['truncated']).toBe(true);
+      expect(String(result['more'])).toMatch(/limit/iu);
+    } finally {
+      retrieval.neighboursMore = false;
+    }
+  });
+
+  it('says it was not cut when it was not — the control', async () => {
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+    expect(result['truncated']).toBe(false);
+  });
+});
+
+/**
+ * **An empty reference list is not proof that nothing references it — F-27.**
+ *
+ * Batch 7 persisted the per-file resolution counts EPIC-035 §12 asks for, and
+ * stopped there. No read surface consulted them, so `ferret_neighbours` answered
+ * a reference question with `count: 0`, `truncated: false` and `withheld: 0` —
+ * three fields that between them assert *this answer is whole* — over a graph
+ * Ferret had declined to finish resolving. "Nothing references this" and "we
+ * refused to resolve the references that would have answered you" were the same
+ * bytes, and the first is what a dead-code or impact question acts on.
+ *
+ * The five states have to stay apart, which is why each has its own assertion
+ * here rather than one flag standing for several: *nothing is connected*, *we
+ * would not resolve*, *you may not see it*, *the bound cut it*, and *we never
+ * measured*.
+ */
+describe('a reference answer that may be short says so — F-27', () => {
+  const REFUSED: ReferenceCompleteness = {
+    completeness: 'incomplete',
+    extracted: 12,
+    resolved: 8,
+    unresolved: { total: 4, refused: 3, byReason: { 'receiver-unknown': 2, imported: 1, 'not-found': 1 } },
+    filesMeasured: 2,
+  };
+
+  afterEach(() => {
+    retrieval.references = undefined;
+    retrieval.neighboursEmpty = false;
+    retrieval.neighboursMore = false;
+    retrieval.withhold = 0;
+  });
+
+  it('does not present an empty reference list as complete', async () => {
+    // The defect exactly: nothing came back, and every field that could have
+    // qualified it said the answer was whole.
+    retrieval.references = REFUSED;
+    retrieval.neighboursEmpty = true;
+
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+
+    expect(result['count']).toBe(0);
+    expect(result['truncated']).toBe(false);
+    expect(result['withheld']).toBe(0);
+    const references = result['references'] as Record<string, unknown> | undefined;
+    expect(references, 'an empty reference answer carried no completeness at all').toBeDefined();
+    expect(references?.['completeness']).toBe('incomplete');
+    expect(String(references?.['caveat'])).toMatch(/not resolved/iu);
+  });
+
+  it('names the reasons, so a refusal and an absence stay apart', async () => {
+    retrieval.references = REFUSED;
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+    const unresolved = (result['references'] as Record<string, unknown>)['unresolved'] as Record<
+      string,
+      unknown
+    >;
+
+    expect(unresolved['total']).toBe(4);
+    // `not-found` is in the total and out of the refusals: no declaration Ferret
+    // holds carries the name, so it cannot be a missing edge to one. Three of
+    // the four could be.
+    expect(unresolved['refused']).toBe(3);
+    expect(Object.keys(unresolved['byReason'] as Record<string, number>)).toContain('not-found');
+  });
+
+  it('says complete when nothing was refused — the control', async () => {
+    // Without this the fix is unfalsifiable: a caveat on every answer is worth
+    // no more than a caveat on none.
+    retrieval.references = {
+      completeness: 'complete',
+      extracted: 12,
+      resolved: 11,
+      unresolved: { total: 1, refused: 0, byReason: { 'not-found': 1 } },
+      filesMeasured: 2,
+    };
+
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+    const references = result['references'] as Record<string, unknown>;
+
+    expect(references['completeness']).toBe('complete');
+    expect(String(references['caveat'])).toMatch(/^Complete:/u);
+  });
+
+  it('says unknown when nothing measured, rather than complete', async () => {
+    // An index built before F-27, or one whose content stage never ran, has
+    // earned no verdict. Reporting `complete` for it would be the same class of
+    // false assurance the finding is about.
+    retrieval.references = {
+      completeness: 'unknown',
+      extracted: 0,
+      resolved: 0,
+      unresolved: { total: 0, refused: 0, byReason: {} },
+      filesMeasured: 0,
+    };
+
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+    const references = result['references'] as Record<string, unknown>;
+
+    expect(references['completeness']).toBe('unknown');
+    expect(references['completeness']).not.toBe('complete');
+  });
+
+  it('is absent when the question was not about references', async () => {
+    // A commit's neighbours have no reference graph to be short of. A verdict
+    // on every traversal is a caveat a reader learns to skip — F-66's lesson,
+    // and it is not going to be re-learned here.
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+    expect(result['references']).toBeUndefined();
+  });
+
+  it('keeps truncation and withholding as their own separate facts', async () => {
+    // Four reasons an answer can be short, and each must survive the other
+    // three. Collapsing any pair is the defect F-28, F-31 and this one all are.
+    retrieval.references = REFUSED;
+    retrieval.neighboursMore = true;
+    retrieval.withhold = 3;
+
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+
+    expect(result['truncated']).toBe(true);
+    expect(result['withheld']).toBe(3);
+    expect(result['count']).toBe(1);
+    expect((result['references'] as Record<string, unknown>)['completeness']).toBe('incomplete');
+  });
+
+  it('carries the verdict on the multi-hop branch too', async () => {
+    // An unresolved reference at hop one also removes everything reachable only
+    // through it, so the deeper walk needs this more, not less.
+    retrieval.references = REFUSED;
+    const result = await call('ferret_neighbours', { id: COMMIT.id, depth: 2 });
+    expect((result['references'] as Record<string, unknown> | undefined)?.['completeness']).toBe(
+      'incomplete',
+    );
+  });
+});
+
+describe('an exact lookup that could not show everything', () => {
+  it('distinguishes rows withheld from rows that are not there — F-31', async () => {
+    // Permission filtering ran *after* the `LIMIT`, into a tally that was
+    // constructed inline and discarded — so a caller received a shorter list and
+    // `truncated: false`, and "there is nothing there" was indistinguishable
+    // from "you may not see it". EPIC-058 exists to keep those apart.
+    retrieval.withhold = 3;
+    try {
+      const result = await call('ferret_find', { kind: 'file' });
+
+      expect(result['withheld']).toBe(3);
+      expect(result['truncated']).toBe(true);
+      expect(String(result['more'])).toMatch(/withheld/iu);
+    } finally {
+      retrieval.withhold = 0;
+    }
+  });
+
+  it('reports nothing withheld when nothing was — the control', async () => {
+    const result = await call('ferret_find', { kind: 'file' });
+
+    expect(result['withheld']).toBe(0);
+    expect(result['truncated']).toBe(false);
   });
 });
 
@@ -652,6 +879,27 @@ describe('tracing why Ferret believes something', () => {
     // source of confidently wrong answers rather than a check on them.
     await trace('ferret_why', { id: COMMIT.id });
     expect(evidence.lastQuery?.state).toBe('current');
+  });
+
+  it('names the standing of a subject the source no longer has — F-05', async () => {
+    // The evidence is real and stays cited; what was missing is that the thing
+    // it describes is gone. Live on Ferret's own index this returned
+    // `held: true`, `integrity: "verified"` and a locator naming a path that
+    // does not exist, with nothing anywhere in the payload saying so.
+    retrieval.entityFor = (id) => (id === COMMIT.id ? { ...COMMIT, lifecycle: 'deleted' } : undefined);
+    try {
+      const result = await trace('ferret_why', { id: COMMIT.id });
+
+      expect(result['held']).toBe(true);
+      expect(String(result['standing'])).toMatch(/removed/iu);
+    } finally {
+      retrieval.entityFor = (id) => (id === COMMIT.id ? COMMIT : undefined);
+    }
+  });
+
+  it('says nothing about standing for a live subject — the control', async () => {
+    const result = await trace('ferret_why', { id: COMMIT.id });
+    expect(result['standing']).toBeUndefined();
   });
 
   it('says so when it holds nothing, rather than returning an empty silence — AC-3', async () => {

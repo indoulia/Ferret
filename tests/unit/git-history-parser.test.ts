@@ -17,6 +17,16 @@ import { ChangeKind, assertSafeRevision, parseLog } from '../../src/git/index.js
 
 const NUL = '\0';
 
+/**
+ * The marker Git writes at the head of every record.
+ *
+ * The parser finds boundaries by this rather than by recognising a hash
+ * followed by fields that look like dates: Git does not always emit a date
+ * where a date belongs, and a boundary test that reads content walks out of
+ * step the moment the content is not what it expected.
+ */
+const MARKER = '\u0001ferret\u0001';
+
 interface CommitFields {
   sha?: string;
   tree?: string;
@@ -34,6 +44,7 @@ interface CommitFields {
 /** Builds one commit record in the exact field order Git emits. */
 function commit(fields: CommitFields = {}): string {
   return [
+    MARKER,
     fields.sha ?? 'a'.repeat(40),
     fields.tree ?? 'b'.repeat(40),
     fields.parents ?? '',

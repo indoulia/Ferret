@@ -1093,3 +1093,114 @@ describeDb(`conflict state (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REA
     });
   });
 });
+
+describeDb(`a field that holds several facts at once — F-06 (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REASON})`, () => {
+  /**
+   * Supersession asked one question — has this source restated this field? —
+   * and applied the answer to every field alike. Three shipping producers use
+   * `field` as a *collection*: one row per resolved reference, one per closing
+   * reference in a pull request body. Every member after the first was marked
+   * `superseded`, which says "a newer observation replaced it", and the
+   * discarded rows were then rendered to a caller as "a current record covers
+   * `references`" — a positive claim that was false.
+   *
+   * The fix is that a producer says which kind of field it is writing. These
+   * assert both kinds, because getting the collection right by breaking
+   * single-valued supersession would be no fix at all.
+   */
+  let db: TestDatabase;
+  let store: EvidenceStore;
+  let symbol: string;
+  /** An inferred row must name what it came from — the declaration's own record. */
+  let basis: string;
+
+  const member = (from: string) => ({
+    subjectId: symbol,
+    field: 'references',
+    statement: { from, name: 'invalid', rule: 'same-file' },
+    method: EvidenceMethod.INFERRED,
+    producer: 'ferret.content',
+    producerVersion: '1.0.0',
+    sourceSystem: 'git',
+    sourceId: 'src/domain/evidence.ts',
+    derivedFrom: [basis],
+    cardinality: 'collection' as const,
+  });
+
+  beforeAll(async () => {
+    db = await createTestDatabase('cardinality');
+    await migrate(db.pool, { logger });
+    const handle = drizzle(db.pool);
+    store = new EvidenceStore(handle);
+    symbol = (
+      await new EntityStore(handle).upsert({
+        kind: EntityKind.FILE,
+        source: { system: 'git', id: 'src/domain/evidence.ts' },
+        attributes: { path: 'src/domain/evidence.ts' },
+      })
+    ).entity.id;
+    basis = (
+      await store.record({
+        subjectId: symbol,
+        field: 'attributes.declaration',
+        statement: 'invalid',
+        method: EvidenceMethod.PARSED,
+        producer: 'ferret.content',
+        producerVersion: '1.0.0',
+        sourceSystem: 'git',
+        sourceId: 'src/domain/evidence.ts',
+      })
+    ).evidence.id;
+  }, 180_000);
+
+  afterAll(async () => {
+    await db.drop();
+  });
+
+  it('keeps every member of a collection current', async () => {
+    const first = await store.record(member('caller-at-292'));
+    const second = await store.record(member('caller-at-305'));
+    const third = await store.record(member('caller-at-410'));
+
+    const states = await Promise.all(
+      [first, second, third].map(async (one) => (await store.stateOf(one.evidence.id))?.state),
+    );
+    expect(states).toStrictEqual([
+      EvidenceState.CURRENT,
+      EvidenceState.CURRENT,
+      EvidenceState.CURRENT,
+    ]);
+  });
+
+  it('shows every member to a caller, not the last one written', async () => {
+    const held = await store.forSubject(symbol, { field: 'references', state: EvidenceState.CURRENT });
+
+    // Three call sites were recorded; three must be answerable. One is the
+    // shape that makes "where is this used" quietly wrong.
+    expect(held.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('still supersedes a single-valued field — the control', async () => {
+    const older = await store.record({
+      subjectId: symbol,
+      field: 'attributes.path',
+      statement: 'src/old.ts',
+      method: EvidenceMethod.OBSERVED,
+      producer: 'ferret.source.git',
+      producerVersion: '1.0.0',
+      sourceSystem: 'git',
+    });
+    const newer = await store.record({
+      subjectId: symbol,
+      field: 'attributes.path',
+      statement: 'src/new.ts',
+      method: EvidenceMethod.OBSERVED,
+      producer: 'ferret.source.git',
+      producerVersion: '1.0.0',
+      sourceSystem: 'git',
+    });
+
+    expect((await store.stateOf(older.evidence.id))?.state).toBe(EvidenceState.SUPERSEDED);
+    expect((await store.stateOf(newer.evidence.id))?.state).toBe(EvidenceState.CURRENT);
+  });
+});

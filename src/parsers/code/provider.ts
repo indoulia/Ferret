@@ -248,6 +248,7 @@ export class CodeParserProvider extends BaseProvider implements Provider, Conten
               kind: reference,
               name: callee.name,
               qualified: callee.qualified,
+              ...(callee.receiver === undefined ? {} : { receiver: callee.receiver }),
               enclosing,
               span: spanOf(child),
             });
@@ -479,7 +480,9 @@ function identifiersIn(node: Node): readonly string[] {
  * A callee that is not ultimately an identifier — an immediately-invoked
  * function, a call on a call's result — yields nothing rather than a guess.
  */
-function calleeOf(node: Node): { readonly name: string; readonly qualified: boolean } | undefined {
+function calleeOf(
+  node: Node,
+): { readonly name: string; readonly qualified: boolean; readonly receiver?: string } | undefined {
   const callee = node.childForFieldName('function') ?? node.childForFieldName('constructor');
   if (callee === null || callee === undefined) return undefined;
   if (callee.type === 'identifier' || callee.type === 'property_identifier') {
@@ -487,9 +490,24 @@ function calleeOf(node: Node): { readonly name: string; readonly qualified: bool
   }
 
   const property = callee.childForFieldName('property') ?? callee.childForFieldName('attribute');
-  if (property !== null && property !== undefined) return { name: property.text, qualified: true };
+  if (property !== null && property !== undefined) {
+    // F-25. The receiver as written, so the resolver can tell `this.has()` —
+    // whose type *is* the enclosing declaration — from `map.has()`, whose type
+    // Ferret does not know. Bounded: the one thing this field is read for is an
+    // equality test against `this`, and a receiver spanning half a line
+    // corroborates nothing.
+    const object = callee.childForFieldName('object') ?? callee.childForFieldName('value');
+    const receiver =
+      object === null || object === undefined || object.text.length > MAX_RECEIVER_TEXT
+        ? undefined
+        : object.text;
+    return { name: property.text, qualified: true, ...(receiver === undefined ? {} : { receiver }) };
+  }
   return undefined;
 }
+
+/** Longest receiver text kept. Anything longer is not a name and not evidence. */
+const MAX_RECEIVER_TEXT = 128;
 
 /**
  * The kind a node declares by virtue of its value, or `undefined`.

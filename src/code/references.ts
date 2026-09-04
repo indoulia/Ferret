@@ -106,6 +106,39 @@ export interface SymbolCandidate {
 }
 
 /**
+ * Receivers whose type Ferret knows.
+ *
+ * `this` and `self` name the enclosing declaration, which is the one type this
+ * resolver has without a type checker. `cls` is deliberately absent: a Python
+ * classmethod's `cls` is the class *or a subclass of it*, and resolving it to
+ * the enclosing declaration would be the guess this module refuses.
+ */
+const SELF_RECEIVERS: ReadonlySet<string> = new Set(['this', 'self']);
+
+/**
+ * The member of the enclosing declaration a `this.x()` call means — F-25.
+ *
+ * `undefined` for every other receiver, which is what leaves a member call
+ * unresolved. Three conditions, all required: the receiver is exactly `this` or
+ * `self` (not `this.items`, which is a different object of a type Ferret does
+ * not know), the reference sits inside a declaration that has an owner, and the
+ * owner declares this name in this file.
+ */
+function selfMemberTarget(
+  reference: CodeReference,
+  byQualifiedName: ReadonlyMap<string, CodeSymbol>,
+): CodeSymbol | undefined {
+  const receiver = reference.receiver;
+  if (receiver === undefined || !SELF_RECEIVERS.has(receiver)) return undefined;
+  // The declaration containing the call, minus the call's own frame: for
+  // `Registry.check` the owner is `Registry`. Top-level code has no owner, and
+  // `this` there is not the enclosing declaration.
+  if (reference.enclosing.length < 2) return undefined;
+  const owner = reference.enclosing.slice(0, -1).join('.');
+  return byQualifiedName.get(`${owner}.${reference.name}`);
+}
+
+/**
  * Resolves a file's references.
  *
  * `declaredHere` is the symbols this file declares — the same list
@@ -141,6 +174,39 @@ export function resolveReferences(
     const from = byQualifiedName.get(reference.enclosing.join('.'));
     const fromSymbolId = from?.id;
 
+    // §8.3, and F-25. A member call is scoped by the receiver's type, and the
+    // guard for that sat in front of the *repository* rule only — so the
+    // `same-file` rule below ran first and resolved `map.has(k)` to whatever
+    // `has` the file happened to declare, at the highest confidence band this
+    // resolver has. Measured on Ferret's own index before the fix:
+    // `ProviderRegistry.has` had eight inbound edges, every one
+    // `rule: "same-file"`, and every one a `Map`/`Set` `.has()` call on a
+    // private field.
+    //
+    // A check rather than a blanket refusal, because `this.helper()` is a real
+    // edge and is most of what a call graph inside a class *is*. `this` and
+    // `self` are the receivers whose type Ferret knows — it is the enclosing
+    // declaration — so those corroborate, and nothing else does.
+    if (reference.qualified) {
+      const target = selfMemberTarget(reference, byQualifiedName);
+      if (target === undefined) {
+        unresolved.push({ reference, reason: UnresolvedReason.RECEIVER_UNKNOWN, candidates: 0 });
+        continue;
+      }
+      // Resolved to *that* member, not to whatever the file's only `has` is.
+      // Going through the by-name lookup below would call a file holding
+      // `Registry.has` and `Cache.has` ambiguous, when `this.has()` inside
+      // `Registry.check` is not ambiguous at all.
+      resolved.push({
+        reference,
+        fromSymbolId,
+        toSymbolId: target.id,
+        rule: ResolutionRule.SAME_FILE,
+        confidence: RULE_CONFIDENCE[ResolutionRule.SAME_FILE],
+      });
+      continue;
+    }
+
     const local = localByName.get(reference.name) ?? [];
     if (local.length === 1) {
       const target = local[0];
@@ -172,14 +238,11 @@ export function resolveReferences(
       continue;
     }
 
-    // §8.3. A member call does not reach the repository rule. A bare identifier
-    // is resolved by the language's own scoping to something in scope; a member
-    // name is scoped by the receiver's type, which Ferret does not know, and
-    // guessing it is the manufactured certainty this Epic refuses.
-    if (reference.qualified) {
-      unresolved.push({ reference, reason: UnresolvedReason.RECEIVER_UNKNOWN, candidates: 0 });
-      continue;
-    }
+    // §8.3's guard against the repository rule used to sit here. It has moved
+    // *above* the same-file rule, which is F-25: placed here it never ran,
+    // because a member call that matched a same-file homonym had already
+    // resolved. Every qualified reference now leaves the loop before this
+    // point, so a second copy here would be dead code claiming to be a control.
 
     const candidates = repositoryCache.get(reference.name) ?? candidatesFor(reference.name);
     repositoryCache.set(reference.name, candidates);
@@ -206,4 +269,18 @@ export function resolveReferences(
   }
 
   return { resolved, unresolved };
+}
+
+/**
+ * How much of one file's code Ferret resolved — F-27.
+ *
+ * The subset of {@link ReferenceCounts} that belongs on the `file` entity: what
+ * was found, what became an edge, and what was refused and why. The rule and
+ * evidence counters stay in the run report, because they are about the indexer
+ * rather than about the file.
+ */
+export interface FileReferenceResolution {
+  readonly extracted: number;
+  readonly resolved: number;
+  readonly unresolved: Readonly<Record<string, number>>;
 }
