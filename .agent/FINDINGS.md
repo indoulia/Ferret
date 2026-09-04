@@ -7,11 +7,17 @@ All 100 findings were re-verified against `0407618` before being recorded.
 ## P0 (1) — CLOSED in Batch 1
 - **F-01** *(fixed)* history capped at 1 000 commits, watermark advanced to the newest of a newest-first page → permanent silent loss on any larger repository; `--full` cannot recover.
 
-## P1-A — production blockers (24; 24 closed)
+## P1-A — production blockers (24; 23 closed, 1 partial)
+> Re-verified at `cd3ca85` with every batch present — see
+> `docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md` §3.
 Ingestion — **CLOSED in Batch 1**: **F-02** (all branches share one watermark), **F-03** (future-dated commit stalls ingestion for ever), **F-04** (back-dated merge -> parentless stub commits).
 Storage/install — **CLOSED in Batch 2**: **F-16** (migrate before pgvector; unrepairable, version lies), **F-17** (backup that import refuses), **F-29** (document-supplied column names interpolated into SQL), **F-30** (DB password to stdout, exit 0).
 Untrusted input — **CLOSED**: **F-60** (zip bound trusts the declared size), **F-61** (docx bypasses the bounded reader), **F-95** (undatable commit desyncs the parser, fabricates file entities) in Batch 3; **F-94** (`i18n.logOutputEncoding` reshapes `git log`) in Batch 6.
-Truthfulness — **F-05, F-06, F-23, F-24, F-28, F-31 CLOSED** (F-23 in Batch 3, rest in Batch 4).
+Truthfulness — **F-05, F-06, F-24, F-28, F-31 CLOSED** (Batch 4). **F-23** *(closure asserted,
+evidence incomplete)*: recorded CLOSED in Batch 3, but the Batch 3 report does not mention it
+and no test cites it. The protective code is present and `sheet-parser.test.ts:182` asserts the
+refusal; the "warn when a present part yields zero rows" half could not be verified. Reported
+in the final audit §6, not repaired.
 Boundary — **CLOSED in Batch 5**: **F-32** (trim cut the closing delimiter), **F-64** (containment reached top-level strings of one field only), **F-66** (notice last, under a key no other tool used). One boundary, not three patches: the fence survives truncation, containment recurses and counts, the prose/token line is drawn by shape rather than key name, and untrusted records are contained where they *enter* the pack and answer builders. Six second-order defects found by re-auditing and corrected — see `docs/evidence/FERRET-BATCH-5-PROMPT-INJECTION-BOUNDARY.md` §4.
 Enumeration — **CLOSED in Batch 6**: **F-94** (repository-controlled Git configuration
 reshapes `git log`; after Batch 3's record marker it produced *silence* — three commits in,
@@ -38,6 +44,9 @@ re-auditing and corrected — see `docs/evidence/FERRET-BATCH-7-CODE-INTELLIGENC
 Most are unreachable today; fix at the moment their code is wired.
 
 ## Infrastructure findings — kept separate, not fixed in any batch (3)
+> **None reproduced in the final audit run** — packaging ran all 34 tests, the wide-tree walk
+> passed, and `scale.test.ts` passed. All three stay **OPEN**: a passing run does not disprove
+> an intermittent condition.
 - **F-73** packaging's `beforeAll` exceeds its 300 s hook timeout under contention, skipping all 34 tests inside a single aggregate `skipped` figure. Did not fire in Batch 5's run.
 - **F-92** `discovery.test.ts > walks a wide tree within budget` exceeds its 30 s ceiling under full-suite contention; passes in isolation. Did not fire in Batch 5's run.
 - **F-101** *(new, Batch 5's run)* `scale.test.ts > scans rather than indexes when the whole table is wanted` — PostgreSQL chose `Index Only Scan using entity_lifecycle_idx` over a sequential scan for `SELECT count(*)` after a full-suite run; passes in isolation both with Batch 5's changes and with them stashed. A visibility-map and statistics artifact, F-92's class. The test asserts a *planner choice*, which is the questionable part: an index-only scan of the whole table is not a wrong plan.
