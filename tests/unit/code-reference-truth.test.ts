@@ -10,6 +10,8 @@ import {
 import { createCodeParserProvider } from '../../src/parsers/index.js';
 import { ParserFramework } from '../../src/index.js';
 import { createTestOperationContext } from '../../src/providers/sdk/testing.js';
+import { FILE_REFERENCES_SYMBOL, SYMBOL_REFERENCES_SYMBOL } from '../../src/code/index.js';
+import { REFERENCE_EDGE_TYPES, REFUSAL_REASONS } from '../../src/storage/retrieval.js';
 
 /**
  * **A member call does not resolve to a homonym because they share a file — F-25.**
@@ -228,5 +230,51 @@ function plain(key: string): boolean {
 
     expect(selfCall, 'self.has() was not reported with its receiver').toBeDefined();
     expect(memberCall, 'self._items.has() was not reported with its receiver').toBeDefined();
+  });
+});
+
+/**
+ * **The duplicated constants cannot drift — F-27's read half.**
+ *
+ * `src/storage/retrieval.ts` names the reference edge types and the unresolved
+ * reasons as string literals. That is not laziness: `code_symbol` is a
+ * *registered* kind and storage may not import `src/code/`, which
+ * `boundaries.test.ts` enforces. But a duplicated constant nobody checks is how
+ * a control goes quietly stale — rename an edge in the registration and the
+ * verdict silently switches itself off, with every test still green because
+ * nothing asserts the two agree.
+ *
+ * So this is the check the comment in that file promises. It belongs here rather
+ * than beside the storage code because only a test may import both sides.
+ */
+describe('the reference verdict is wired to the edges that exist — F-27', () => {
+  it('names exactly the reference edge types the code model registers', () => {
+    expect([...REFERENCE_EDGE_TYPES].sort()).toStrictEqual(
+      [FILE_REFERENCES_SYMBOL, SYMBOL_REFERENCES_SYMBOL].sort(),
+    );
+  });
+
+  it('classifies every unresolved reason as a refusal or an absence', () => {
+    // The control against the derived rule's own reach — Batch 6's lesson, and
+    // here the reach runs the other way: a reason added later would be treated
+    // as an absence by default and quietly shrink the verdict. Adding one now
+    // fails this until somebody decides which half it belongs in.
+    const ABSENCES = new Set(['not-found']);
+    for (const reason of Object.values(UnresolvedReason)) {
+      expect(
+        REFUSAL_REASONS.has(reason) || ABSENCES.has(reason),
+        `${reason} is classified as neither a refusal nor an absence`,
+      ).toBe(true);
+    }
+    expect(REFUSAL_REASONS.size + ABSENCES.size).toBe(Object.values(UnresolvedReason).length);
+  });
+
+  it('keeps an import on the refusal side, where the missing edge lives', () => {
+    // The one it would be easiest to get wrong. `import { foo } from './bar.js'`
+    // names a symbol the repository very probably declares, and §8.4 does not
+    // follow the import — so the edge is missing, not absent. Treating it as an
+    // absence would report `complete` over exactly the graph that is short.
+    expect(REFUSAL_REASONS.has(UnresolvedReason.IMPORTED)).toBe(true);
+    expect(REFUSAL_REASONS.has(UnresolvedReason.NOT_FOUND)).toBe(false);
   });
 });

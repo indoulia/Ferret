@@ -45,6 +45,7 @@ import {
   renderExplanation,
   type AccessContext,
   type QueryPlanner,
+  type ReferenceCompleteness,
   type RetrievalPort,
   type SearchHit,
 } from '../retrieval/index.js';
@@ -498,6 +499,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
             // Reported, not inferred. Without it a caller cannot tell "nothing
             // further exists" from "Ferret stopped looking".
             ...(walk.truncated === undefined ? {} : { truncated: walk.truncated }),
+            // F-27, on the multi-hop branch too — an unresolved reference at hop
+            // one also removes what was reachable only through it.
+            ...referenceCompletenessOf(walk.references),
             reached: walk.paths.map((path) => ({
               id: path.entity.id,
               kind: path.entity.kind,
@@ -540,6 +544,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
               }
             : { truncated: false }),
           withheld: reached.withheld.total,
+          // F-27. `truncated: false` and `withheld: 0` said this answer was
+          // whole; for a reference question it was not entitled to.
+          ...referenceCompletenessOf(reached.references),
           neighbours: reached.neighbours.map((neighbour) => ({
             id: neighbour.entity.id,
             kind: neighbour.entity.kind,
@@ -918,6 +925,44 @@ function describeHit(hit: SearchHit, safety: ContentSafety): Record<string, unkn
  */
 function describeEntity(entity: CanonicalEntity, safety: ContentSafety): Record<string, unknown> {
   return { ...containEntityContent(entity, safety) };
+}
+
+/**
+ * How whole the reference graph behind a neighbours answer is — F-27.
+ *
+ * `count`, `truncated` and `withheld` between them said an answer was short for
+ * a bound or for a permission — and said nothing at all when it was short
+ * because Ferret had declined to resolve the references that would have filled
+ * it. So `count: 0, truncated: false, withheld: 0` read as "nothing references
+ * this", which is the answer a dead-code or impact question acts on. The counts
+ * were already persisted; nothing carried them to a caller.
+ *
+ * Absent when the question was not about references — a commit's neighbours have
+ * no reference graph to be short of, and a completeness verdict on them would be
+ * a caveat that is always there, which is a caveat nobody reads.
+ *
+ * `caveat` is written for `complete` too, and deliberately not for `unknown`
+ * alone: a reader who sees the field only when something is wrong learns to read
+ * its *presence* rather than its contents, and then a `complete` that appears
+ * for a new reason is misread. The sentence says which of the three it is.
+ */
+function referenceCompletenessOf(
+  report: ReferenceCompleteness | undefined,
+): Record<string, unknown> {
+  if (report === undefined) return {};
+  const { completeness, unresolved, extracted } = report;
+  const caveat =
+    completeness === 'incomplete'
+      ? `Incomplete: ${String(unresolved.refused)} of ${String(extracted)} references in this ` +
+        'repository were not resolved, so a reference list here may be short by up to that many. ' +
+        'Ferret does not guess at a reference’s target — `unresolved.byReason` says why each was ' +
+        'declined. Absence of a reference is not evidence that none exists.'
+      : completeness === 'unknown'
+        ? 'Unknown: no file in this repository recorded reference-resolution counts, so Ferret ' +
+          'cannot say whether a reference list here is whole. Content indexing may not have run.'
+        : 'Complete: every reference in this repository either resolved or named something ' +
+          'Ferret does not hold, so a reference list here is not short for want of resolution.';
+  return { references: { ...report, caveat } };
 }
 
 /**

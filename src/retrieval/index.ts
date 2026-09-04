@@ -24,6 +24,7 @@ export {
   type SearchQuery,
   type EntityResult,
   type NeighbourResult,
+  type ReferenceCompleteness,
   type SearchResult,
   type TraversalPath,
   type TraversalQuery,

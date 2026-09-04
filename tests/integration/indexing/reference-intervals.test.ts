@@ -7,6 +7,8 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
 
 import {
+  Direction,
+  PUBLIC_ACCESS,
   ParserFramework,
   ProviderRegistry,
   RepositoryIndexer,
@@ -25,6 +27,7 @@ import {
   IndexLifecycleStore,
   MigrationPolicy,
   RelationshipStore,
+  RetrievalStore,
   SymbolStore,
   migrate,
   type FerretDatabase,
@@ -314,5 +317,142 @@ describeIndex('what could not be resolved is written down — F-27', () => {
     // absence. Collapsing them into one number is what made the answer
     // dangerous.
     expect(Object.keys(resolution?.unresolved ?? {})).toContain('receiver-unknown');
+  }, 180_000);
+});
+
+/**
+ * **And what was written down reaches the reader — F-27's read half.**
+ *
+ * Batch 7 persisted the counts and stopped. Nothing under `src/mcp/`,
+ * `src/retrieval/` or `src/context/` mentioned `referenceResolution`, so the
+ * tool surface answered a reference question with `truncated: false` and
+ * `withheld: 0` — an affirmative claim to be whole — over a graph Ferret had
+ * refused to finish resolving. Persisting a measurement nobody reads leaves the
+ * dangerous answer exactly as dangerous.
+ *
+ * Against the real store rather than the fake, because the aggregate is a query:
+ * the reasons live in a nested JSONB object across many `file` rows, and a fake
+ * would agree with this code rather than with PostgreSQL.
+ */
+describeIndex('an incomplete reference answer says so — F-27, the read half', () => {
+  /** The `file` entity for a path — an end of `file_references_symbol`. */
+  async function fileId(repositoryId: string, path: string): Promise<string> {
+    const rows = await handle.execute<{ id: string }>(sql`
+      SELECT id FROM "ferret"."entity"
+       WHERE kind = 'file' AND source_scope = ${repositoryId} AND attributes->>'path' = ${path}
+       LIMIT 1
+    `);
+    const id = rows.rows[0]?.id;
+    if (id === undefined) throw new Error(`no file entity for ${path} was indexed`);
+    return id;
+  }
+
+  /** The `code_symbol` a "who references this" question would be asked about. */
+  async function symbolId(repositoryId: string, name: string): Promise<string> {
+    const rows = await handle.execute<{ id: string }>(sql`
+      SELECT id FROM "ferret"."entity"
+       WHERE kind = 'code_symbol'
+         AND attributes->>'name' = ${name}
+         AND (source_scope = ${repositoryId} OR source_scope LIKE ${`${repositoryId}:%`})
+       LIMIT 1
+    `);
+    const id = rows.rows[0]?.id;
+    if (id === undefined) throw new Error(`no code_symbol named ${name} was indexed`);
+    return id;
+  }
+
+  it('does not report an inbound reference list as complete when references were refused', async () => {
+    const fixture = await repository('read-half');
+    await commit(fixture, 'src/mod.ts', source(0));
+    const report = await index(fixture);
+
+    const retrieval = new RetrievalStore(handle);
+    const answer = await retrieval.neighbours(
+      {
+        from: await symbolId(report.repositoryId, 'helper'),
+        direction: Direction.IN,
+        types: ['symbol_references_symbol', 'file_references_symbol'],
+        limit: 20,
+      },
+      PUBLIC_ACCESS,
+    );
+
+    // The three fields that used to be the whole answer still say what they
+    // always said, and on their own they still read as "this is complete".
+    expect(answer.more, 'the bound did not cut this hop').toBe(false);
+    expect(answer.withheld.total, 'nothing was withheld from this caller').toBe(0);
+
+    expect(answer.references, 'a reference answer carried no completeness at all').toBeDefined();
+    expect(answer.references?.completeness).toBe('incomplete');
+    // `values.map(...)` — a member call whose receiver's type Ferret does not
+    // know. It is a refusal over candidates Ferret holds, so it could have been
+    // an edge here, and that is what makes the answer short rather than empty.
+    expect(answer.references?.unresolved.refused ?? 0).toBeGreaterThan(0);
+    expect(Object.keys(answer.references?.unresolved.byReason ?? {})).toContain('receiver-unknown');
+    expect(answer.references?.filesMeasured ?? 0).toBeGreaterThan(0);
+  }, 180_000);
+
+  it('leaves a question that is not about references unqualified — the control', async () => {
+    // A commit's neighbours have no reference graph to be short of, and a
+    // verdict attached to every traversal is one a reader stops seeing. F-66
+    // was that lesson and it is not being re-learned.
+    const fixture = await repository('not-references');
+    await commit(fixture, 'src/mod.ts', source(0));
+    const report = await index(fixture);
+
+    const retrieval = new RetrievalStore(handle);
+    const answer = await retrieval.neighbours(
+      { from: report.repositoryId, types: ['repository_contains_file'], limit: 20 },
+      PUBLIC_ACCESS,
+    );
+
+    expect(answer.references, 'a containment question was given a resolution verdict').toBeUndefined();
+  }, 180_000);
+
+  it('counts the same answer the same way twice — a second run adds nothing', async () => {
+    // The counts are replayed through the gate on an unchanged second run
+    // (AC-6), so an aggregate that double-counted a replayed file would drift
+    // upwards on every index. Idempotency of the *read*, over the idempotency
+    // Batch 7 established for the write.
+    const fixture = await repository('read-idempotent');
+    await commit(fixture, 'src/mod.ts', source(0));
+    const report = await index(fixture);
+    const retrieval = new RetrievalStore(handle);
+    const query = {
+      from: await symbolId(report.repositoryId, 'helper'),
+      direction: Direction.IN,
+      types: ['symbol_references_symbol', 'file_references_symbol'],
+      limit: 20,
+    };
+
+    const first = await retrieval.neighbours(query, PUBLIC_ACCESS);
+    await index(fixture);
+    const second = await retrieval.neighbours(query, PUBLIC_ACCESS);
+
+    expect(second.references).toStrictEqual(first.references);
+  }, 180_000);
+
+  it('reports unknown, not complete, when no file recorded a count', async () => {
+    // An index whose content stage never ran has earned no verdict. Reporting
+    // `complete` for it would be the same false assurance one layer along.
+    const fixture = await repository('no-content');
+    await commit(fixture, 'src/mod.ts', source(0));
+    const report = await new RepositoryIndexer(dependencies()).index(
+      fixture.discovered,
+      { withContent: false },
+      context,
+    );
+
+    // Asked of the `file` itself, because a file is an end of
+    // `file_references_symbol` and a repository is an end of nothing — the
+    // narrowing that keeps this verdict off traversals it has no bearing on.
+    const retrieval = new RetrievalStore(handle);
+    const answer = await retrieval.neighbours(
+      { from: await fileId(report.repositoryId, 'src/mod.ts'), limit: 20 },
+      PUBLIC_ACCESS,
+    );
+
+    expect(answer.references?.completeness).toBe('unknown');
+    expect(answer.references?.filesMeasured).toBe(0);
   }, 180_000);
 });
