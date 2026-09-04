@@ -17,15 +17,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   # Cancel a superseded *pull request* run; never cancel one on `main`.
   #
-  # Windows moved off the PR gate and onto the push to `main`, which made this
-  # setting load-bearing in a way it had not been: two merges in quick
-  # succession cancelled the first one's run, and with it the only Windows
-  # check that commit would ever get. Observed — `f4e0c39` was cancelled that
-  # way, minutes after the arrangement was introduced.
-  #
   # A superseded PR run is genuinely redundant, because the next one covers the
   # same branch. A superseded `main` run is not: each commit on `main` is a
-  # squash that nothing else verifies on Windows.
+  # squash, and cancelling its run leaves that commit with no verification of
+  # its own. Observed — `f4e0c39` was cancelled exactly that way by two merges
+  # in quick succession.
+  #
+  # This was load-bearing when Windows ran *only* on the push to `main`, since
+  # a cancelled run meant the sole Windows check for that commit was lost.
+  # Windows now also gates every pull request (see the matrix below), so a
+  # cancelled `main` run is less costly than it was — but the rule stands on
+  # its own reasoning above, and `main` is the branch a release is cut from.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -35,37 +37,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # **macOS is measured here for the first time — EPIC-105.**
+        # **Windows only, by owner decision, 2026-09-05.** Ubuntu and macOS are
+        # dropped from this matrix, and Windows now runs on every event
+        # including a pull request.
         #
-        # It was deliberately absent, and the reason was correct: "no macOS host
-        # was available to validate against… claiming macOS support here without
-        # measuring it would be false." Nineteen validation records carried that
-        # gap. A hosted macOS runner exists, so the reason has expired, and
-        # EPIC-105 §8.1 records that this workflow *is* that Epic's validation
-        # environment — there is no local macOS host, which was the premise.
+        # This reverses two earlier arrangements that were made on measurement,
+        # so the measurements are kept rather than deleted — a later reader
+        # should be able to see what the change cost:
         #
-        # It runs on the pull request that introduces it (§8.2), because
-        # deciding where it belongs before measuring its cost would be the same
-        # guess this Epic exists to end. Windows was moved off the PR gate on
-        # measured evidence; macOS gets the same treatment on its own.
+        # - **Windows was moved *off* the PR gate** because it was the whole of
+        #   the wait: measured over one working session, Ubuntu verify took
+        #   1m52s-2m55s and Windows 6m41s-11m54s, on every one of six PRs. It
+        #   now blocks every pull request again, and that cost returns.
+        # - **macOS was added by EPIC-105** to close a gap nineteen validation
+        #   records carried — "no macOS host was available to validate
+        #   against… claiming macOS support here without measuring it would be
+        #   false." Dropping it re-opens that gap. Per Governance §17 that is a
+        #   skip, not a pass: **this workflow no longer measures macOS, and no
+        #   record should claim it does.** The same now applies to Linux for
+        #   everything except the `storage` job below.
         #
-        # **Windows does not run on a pull request.** Measured over one working
-        # session: Ubuntu verify took 1m52s-2m55s and Windows 6m41s-11m54s, so
-        # Windows was the whole of the wait on every one of six PRs.
-        #
-        # It is *not* dropped, because this repository has real Windows-only
-        # history: a digest that failed only there, and a CRLF regression test
-        # that failed on the one platform it existed for. Both would have
-        # shipped if Windows were merely deleted. So it runs on every push to
-        # `main` — after a merge rather than before it — plus nightly and on
-        # demand. The signal is kept; what changes is that it no longer blocks
-        # the author of every pull request.
-        #
-        # The trade, stated: a Windows-only break is now found minutes *after*
-        # a merge instead of minutes before. On a repository where every merge
-        # is a squash onto `main` with a green Ubuntu run behind it, that is a
-        # revert rather than an outage.
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest", "macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        # What is kept is the reason Windows was never merely deleted: this
+        # repository has real Windows-only history — a digest that failed only
+        # there, and a CRLF regression test that failed on the one platform it
+        # existed for. Windows is now the platform that gates, which is the
+        # platform Ferret is developed on.
+        os: ['windows-latest']
         node: ['22']
 
     steps:
@@ -90,11 +87,15 @@ jobs:
 
       # Database suites are deliberately skipped here and owned by the
       # `storage` job below, which pins a PostgreSQL service container.
-      # GitHub's Windows *and macOS* runners cannot run Linux containers, so
-      # attempting it in this matrix would produce coverage on Linux and a
-      # silent skip on the other two — an asymmetry that is easy to mistake for
-      # a passing gate. EPIC-105 §8.3 records the same rule for macOS: a skip is
-      # recorded as a skip, never as a pass.
+      # GitHub's Windows runners cannot run Linux containers, so attempting it
+      # here would be a silent skip rather than coverage — and a skip that
+      # reads as a pass is the thing Governance §17 forbids.
+      #
+      # This is why the `storage` job stays on `ubuntu-latest` even though the
+      # matrix above is Windows only: a Linux service container is the only way
+      # to get a real PostgreSQL 17 + pgvector in CI, so "Windows only" applied
+      # to that job would mean no database coverage at all rather than database
+      # coverage on Windows.
       - name: Test (unit and integration, including packaging)
         run: npm test
         env:
