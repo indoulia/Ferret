@@ -30,8 +30,8 @@ not yet do. `src/cli/commands/planned.ts` names them, exits `5` with
 | Priority | Epic | Classification | Status | Evidence | Dependencies | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | EPIC-109 — Session & Memory Persistence | CONTINUATION | **COMPLETE** | 28 integration cases against real PostgreSQL; migration `0015`; latent hashing defect fixed | EPIC-039–043, EPIC-086 | Done — see EPIC-109 |
-| 2 | EPIC-110 — `ferret session` command surface | CONTINUATION | TODO | `planned.ts` session entry; README planned row | EPIC-109 | Wire CLI once the store lands |
-| 3 | EPIC-111 — Session recall over MCP | CONTINUATION | TODO | MCP tool catalogue exists; session domain unreachable from it | EPIC-109, EPIC-110 | Add recall tool to existing MCP surface |
+| 2 | EPIC-110 — `ferret session` command surface | CONTINUATION | **COMPLETE** | 20 integration cases driving the built binary; planned entry retired | EPIC-109 | Done — see EPIC-110 |
+| 3 | EPIC-111 — Session recall over MCP | CONTINUATION | NEXT | MCP tool catalogue exists; session domain unreachable from it | EPIC-109, EPIC-110 | Expose `session recall`/`show`/`list` as MCP tools |
 | 4 | EPIC-112 — Session retention & redaction | HARDENING | TODO | `retention.ts` (EPIC-088) covers no session table; captures hold transcripts | EPIC-109, EPIC-082, EPIC-088 | Extend prune/retention to session rows |
 | 5 | EPIC-113 — Provider sync transport (`ferret sync`) | PRODUCT DECISION REQUIRED | BLOCKED | `planned.ts` sync entry; EPIC-021/071/072 each excluded transport by name; `cursors.ts` exists | EPIC-075, EPIC-021, EPIC-071 | See "Decisions required" |
 | 6 | EPIC-114 — PostgreSQL version coverage | HARDENING | TODO | EPIC-002 validation: minimum supported major is 14, **only 17 measured** | EPIC-002 | Add a CI matrix major |
@@ -184,4 +184,5 @@ Filled in as Epics land.
 
 | Epic | Commit | PR | Merge | Status |
 | --- | --- | --- | --- | --- |
-| EPIC-109 | `pending` | — | — | IMPLEMENTED |
+| EPIC-109 | `452980d` | [#156](https://github.com/indoulia/Ferret/pull/156) | `ec0a376` | COMPLETE |
+| EPIC-110 | `pending` | — | — | IMPLEMENTED |

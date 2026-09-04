@@ -145,7 +145,7 @@ describe('planned commands', () => {
     // The parameterised cases below now run, which is the point of the pin.
     const named = PLANNED_COMMANDS.map((spec) => spec.name).sort();
 
-    expect(named).toStrictEqual(['session', 'sync']);
+    expect(named).toStrictEqual(['sync']);
     for (const spec of PLANNED_COMMANDS) {
       // An entry with no owner is a roadmap promise nobody made.
       expect(spec.owners.length, `${spec.name} names no owning Epic`).toBeGreaterThan(0);
