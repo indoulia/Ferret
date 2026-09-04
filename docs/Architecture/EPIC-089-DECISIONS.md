@@ -4,15 +4,146 @@ Decisions required on the backup and export contract, and the engineering
 evidence that makes them concrete. Recorded per Governance §22 so a later reader
 can tell a considered choice from an accident.
 
-**D1 and D2 are open and require the product owner.** Everything under
-"Measured" is settled fact, taken from a round trip through the real CLI against
-PostgreSQL 17 + pgvector on 2026-09-04. Nothing in the code was changed for
-either finding: the engineering work here was to make the decision answerable,
-not to pre-empt it.
+**D1 and D2 were decided by the product owner on 2026-09-04 and are
+implemented.** The decisions, the contract each now carries, and what remains
+outside it are in **§Decided** below. The brief and the evidence beneath it are
+left as they were written — they are the record of what the decision was taken
+on, and rewriting them would destroy that.
+
+Everything under "Measured" is settled fact from a round trip through the real
+CLI against PostgreSQL 17 + pgvector on 2026-09-04, taken **before** the
+implementation. It is the description of the defect, not of current behaviour.
+
+---
+
+# Decided — the contract as implemented
+
+> Recorded 2026-09-04, after the owner's decision. Supersedes the "OPEN" status
+> in the brief and the D1/D2 sections below, which are kept as written.
+
+## D1 (F-44) — export fidelity
+
+**Decision.** A normal export preserves faithful data and never silently emits a
+value that export-time redaction has modified. A strict path refuses loudly when
+the fidelity contract cannot be satisfied. Insert-time redaction is untouched.
+
+**Current contract.**
+
+| | |
+| --- | --- |
+| `ferret export` | Carries every value **as stored**. `content_hash` therefore continues to describe the row it labels. The credential scanner still runs over every string value — EPIC-089 §11 requires it — and when it fires the row is exported unchanged and the finding is recorded in the trailer's `credentialShaped` and printed by the CLI. The document is never silently modified, and never silently *un*modified either. |
+| `ferret export --strict` | Refuses with `E_EXPORT_REFUSED`, naming the table, the column and the row. Writes no trailer, and the CLI removes the partial file, so there is nothing on disk rather than a document `ferret import` would refuse. |
+| Insert-time redaction | Unchanged. EPIC-087 §8.2 remains the primary control: redacted before it lands, never on the way out. |
+
+**Rationale.** Four records already required this direction and one appeared to
+require the opposite; the apparent conflict dissolves once "the redactor
+applies" is separated from "the redactor rewrites". Governance §6 forbids
+silently rewriting source evidence. EPIC-087 §8.2 puts redaction before the
+insert. EPIC-089 §8.5 exports content as content. EPIC-090 §8.7 needs an
+unfiltered document so that an external filter is auditable. EPIC-089 §8.4/§11
+require a redactor at export — and it is still there, as a **detector and a
+gate**. Nothing was weakened: the scanner runs on exactly the values it ran on
+before, and now reports instead of corrupting.
+
+This is option **A** from the brief, with **C** available as `--strict`. Option
+**D** — universal insert-time redaction — remains the standing improvement and
+is not blocked by this.
+
+**Implementation.**
+
+| Change | Where |
+| --- | --- |
+| `findCredentials` / `scanValue` replace `redactRow` / `redactValues`: detect, never rewrite | `src/storage/export.ts` |
+| `CredentialFinding`, `ExportTrailer.credentialShaped`, `ExportResult.credentialShaped` | `src/storage/export.ts` |
+| `ExportOptions.strict` and `strictRefusal` | `src/storage/export.ts` |
+| `E_EXPORT_REFUSED`, mapped to the generic error exit | `src/errors/codes.ts`, `src/cli/exit-codes.ts` |
+| `--strict`, the disclosure block, partial-file removal on failure | `src/cli/commands/export.ts` |
+| Regression coverage — 9 tests | `tests/integration/storage/export-fidelity.test.ts` |
+
+**Limitations, stated.**
+
+- **A faithful export of an index holding a credential contains that
+  credential.** That is the trade the decision makes, and it is why the trailer
+  records it, the CLI prints it and `--strict` exists. The document was already
+  "everything Ferret knows, in cleartext, in one file" (§4).
+- **A finding does not prove a credential.** The scanner matches shapes; an
+  `AKIA`-shaped filename is a false positive, which is precisely why refusal is
+  not the default — it would block the recovery path on a filename.
+- **The strict refusal is mid-stream.** It cannot know about row 40 000 before
+  row 1 is written, because §8.6 forbids a second pass. The partial file is
+  removed and no trailer is written, so nothing downstream can mistake it for a
+  document.
+- **`redactSecrets` remains the oracle**, so the export reports exactly what
+  every other surface would redact — and only values a producer failed to
+  redact at insert reach a finding at all, because it is idempotent.
+
+## D2 (F-45) — vectors and instance identity
+
+**Decision.** Vectors are **not** backup payload, and the export, manifest and
+restore path say so explicitly and name the regeneration path. A restored
+installation receives a **new** identity; the source identity is preserved as
+explicit provenance. Two independently existing installations never share an
+identity.
+
+**Current contract.**
+
+| | |
+| --- | --- |
+| Vectors | Not carried. `ExportManifest.excluded` declares `embedding` with a reason and a recovery in the document's **first line**, `ferret export` prints it, and `ferret import` repeats it on the restore. Never fabricated, never zero-filled. |
+| Regeneration | Re-index with an embedding provider configured. Stated plainly in the manifest: **Ferret ships no embedding provider**, so until one is wired there is nothing to regenerate and semantic retrieval reports itself unavailable. No command is implied that does not exist. |
+| Instance identity | The target keeps the identity its own `ferret init` minted. `ferret.instance` is in `EXPORT_EXCLUSIONS`, so no document can carry an identity into a target. |
+| Provenance | `ExportManifest.sourceInstanceId` carries the source identity; an applied import records it in `ferret.instance_restore` (migration 0014) with the document digest, the source version, the export instant and the row count. `ferret import` prints both identities, always. Surfaced on the schema report as `restoredFrom`. |
+| Completeness | Every table in the live schema must be in `EXPORT_TABLES` or `EXPORT_EXCLUSIONS`, asserted against `information_schema` — the control that stops the next `embedding` being dropped by nobody noticing. |
+
+**Rationale.** This is option **B** for both halves — the only option that
+invents no new backup semantic. EPIC-089 §3's scope is a closed list omitting
+both tables and §8.1 assigns full fidelity to `pg_dump`, so excluding them is
+already within contract; the defect was the silence, and declaring the behaviour
+is what the existing requirements support. Identity is **B** rather than **A**
+because a restore creates a second installation, and two installations
+answering to one identity is a correctness problem that outranks a restored
+index naming itself — which provenance solves without the collision.
+Append-only rather than columns on `ferret.instance`, because Governance §6
+makes provenance append-only and a second restore must not erase the first.
+
+**Implementation.**
+
+| Change | Where |
+| --- | --- |
+| `ExcludedTable`, `EXPORT_EXCLUSIONS` (all five non-exported tables, each with a reason and a recovery) | `src/storage/export.ts` |
+| `ExportManifest.excluded`, `ExportManifest.sourceInstanceId`, `#instanceId` | `src/storage/export.ts` |
+| `ferret.instance_restore` — append-only provenance | `src/storage/migrations/0014_instance_restore.sql` |
+| `ImportProvenance`, `ImportReport.excluded`, `#recordProvenance` | `src/storage/import.ts` |
+| `readLatestRestore`, `SchemaReport.restoredFrom` | `src/storage/bookkeeping.ts`, `src/storage/migrator.ts` |
+| Exclusion and identity reporting on the restore | `src/cli/commands/import.ts` |
+| Regression coverage — 10 tests | `tests/integration/storage/backup-contract.test.ts` |
+
+**Limitations, stated.**
+
+- **A restored index has no vectors and cannot regain them today**, because no
+  embedding provider exists. The manifest says this rather than implying a
+  command. When a provider lands, option **C** — exporting the vectors' inputs
+  so a restore knows what to re-embed and with which model — becomes worth
+  taking, and this is the note that says so.
+- **Provenance needs schema 14.** Importing into a database at 13 or earlier
+  succeeds and reports that provenance could not be recorded, naming
+  `ferret upgrade`. The restore is not failed for it: the rows are already
+  committed, and rolling back a successful restore over a bookkeeping row would
+  be the worse outcome.
+- **A pre-D2 document cannot declare anything.** `ferret import` reports it as
+  *not saying* what it omits, never as omitting nothing — vectors were absent
+  from that format too, and the two are different claims.
+- **Identity is not de-duplicated across installations by anything but minting.**
+  If an operator clones a database with `pg_dump` and then imports, both copies
+  carry the same id, because `pg_dump` copied it. That is `pg_dump`'s semantic,
+  not the export's, and §8.1 is where it belongs.
 
 ---
 
 # Decision-ready brief
+
+> Written before the decision, kept as the record of what it was taken on. The
+> "OPEN" markers below are historical; §Decided above is current.
 
 One page. The evidence for every claim here is below; the tables in the body are
 the long form of the same two decisions. **Nothing is implemented pending these
