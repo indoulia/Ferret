@@ -3,6 +3,13 @@
 Read-only. No implementation, no PR, no merge, no deploy, no Epic touched. This record
 establishes the evidence-based final state of the forensic branch; it does not improve it.
 
+> **Corrected after first issue — the verdict changed.** The first version of this audit
+> recorded F-23 as closed with a broken evidence chain, and returned FORENSICALLY READY. On
+> re-examination F-23 is **not closed at all**: no batch ever modified the module it is about,
+> and the test the audit cited proves a different, pre-existing behaviour. The verdict is now
+> **NOT FORENSICALLY READY**, blocked by F-23. §3, §6 and §9 are corrected; the test results in
+> §2 are unchanged and were never in question. The correction is documentation only.
+
 ## 1. Baseline
 
 | | |
@@ -79,7 +86,7 @@ all still green **with every other batch's changes present**.
 | F-30 | Database password to stdout, exit 0 | 2 | `export.test.ts` | **CLOSED** |
 | F-60 | ZIP bound trusts the archive's declared size | 3 | `sheet-parser` | **CLOSED** |
 | F-61 | `.docx` bypasses the bounded reader | 3 | `docx-parser` | **CLOSED** |
-| F-23 | Corrupt spreadsheet parses as a successful empty one | 3 | `sheet-parser.test.ts:182` (asserts the refusal names `xl/workbook.xml`) | **CLOSED — with a caveat, §6** |
+| F-23 | Corrupt spreadsheet parses as a successful empty one | **none** | none — see §6 | **OPEN** |
 | F-95 | Undatable commit desyncs `parseLog`, fabricates file entities | 3 | `malformed-history` | **CLOSED** |
 | F-96 | A malformed commit costs the page | 3 | `malformed-history` | **CLOSED** |
 | F-97 | Streamed-then-failed history discarded | 3 | `malformed-history` | **CLOSED** |
@@ -97,7 +104,7 @@ all still green **with every other batch's changes present**.
 | F-27 | Unresolved references counted and discarded | 7 | `reference-intervals` | **PARTIALLY CLOSED — §6** |
 | F-11 | Non-address author strings merge distinct humans | 7 | `identity-collapse` | **CLOSED** |
 
-**P0: 1 of 1 closed. P1-A: 23 fully closed, 1 partially closed (F-27).**
+**P0: 1 of 1 closed. P1-A: 22 fully closed, 1 partially closed (F-27), 1 open (F-23).**
 
 Cross-batch interactions specifically checked and green in the same run: Batch 3's record
 marker with Batch 6's encoding pins (`git-output-integrity` + `malformed-history`); Batch 5's
@@ -114,7 +121,9 @@ Batch 2's export redaction with Batch 6's value-based redaction (`export` + `cre
   past it, export/import round trip verified against a real database. **Sound.**
 - **Untrusted-input safety** — ZIP bound enforced on real bytes, `.docx` through a bounded
   reader, git records found by a marker, hostile `.git/config` cannot reshape output or run a
-  program. **Sound.**
+  program. **Sound at the archive and Git boundaries; not sound inside the worksheet reader** —
+  F-23 is open, so a corrupt `.xlsx` worksheet part is still indistinguishable from an empty
+  one and the result is still cached permanently.
 - **Answer truthfulness** — Ferret now distinguishes *none* / *unknown* / *withheld* /
   *truncated* / *incomplete* / *stale*. **One gap:** *unresolved* is persisted but not
   surfaced on reference reads (§6, F-27). Everything else is sound.
@@ -133,9 +142,21 @@ Batch 2's export redaction with Batch 6's value-based redaction (`export` + `cre
 
 Reported as the evidence supports, and nothing was implemented to close a gap.
 
-- **`PLANNED_COMMANDS` is an empty array** (`src/cli/commands/planned.ts:49`). The triage's
-  remedy for F-21 — a registry note plus `PLANNED_COMMANDS`/README entries — is **Batch 8**
-  and is **unstarted**. Fourteen commands are reachable; no command advertises a planned one.
+- **`PLANNED_COMMANDS` is an empty array** (`src/cli/commands/planned.ts:49`), so
+  `program.ts:96` adds nothing and no command advertises a capability as forthcoming. What
+  the evidence establishes:
+  - **Shipped and reachable:** fourteen commands registered at `program.ts:82-95` —
+    `version`, `config`, `doctor`, `env`, `index`, `init`, `mcp`, `status`, `verify`,
+    `prune`, `export`, `import`, `reconcile`, `upgrade`. All exercised by the suite.
+  - **Library-only by design:** the GitHub and Jira providers, project modelling, event and
+    webhook verification, and the session/memory modules. Each is real and tested as a module;
+    none has transport, persistence or a client surface, and each Epic excluded those by name.
+    These are not half-built features — they are the scope their Epics declared.
+  - **The gap is a missing statement, not missing code.** Nothing tells an operator which
+    capabilities are library-only, because the mechanism for saying so is empty and the
+    registry notes were never written. That is **Batch 8, documentation only** and unstarted.
+    Writing those entries is in scope for it; building `ferret sync`, a session store,
+    transport or client wiring is not, and was ruled out by the triage.
 - **F-21 (GitHub/Jira ingestion unreachable) and F-20 (Session & Agent Memory unreachable)**
   remain true and remain **documentation findings**. Every Epic in those clusters excludes
   transport and persistence by name; the modules deliver their stated scope. Building a
@@ -155,16 +176,43 @@ Nothing below was fixed, and nothing below should be read as fixed.
 
 | ID | Severity | Reachable today | Production-blocking | Needs code | Belongs in | Priority |
 | --- | --- | --- | --- | --- | --- | --- |
-| **F-27 (read half)** | P1-A | Yes | **Judgement call** — the counts exist and reach any caller that reads the `file` entity; `ferret_neighbours` does not yet qualify an empty inbound list | Yes | A code-intelligence Epic | **Highest of what remains** |
-| **F-23 (evidence gap)** | P1-A | n/a | No | No | Record correction | Medium |
+| **F-23** | P1-A | **Yes — ordinary content triggers it** | **Yes** — silent permanent omission | Yes | An untrusted-input Epic | **Blocker** |
+| **F-27 (read half)** | P1-A | Yes | No — the counts exist and reach any caller that reads the `file` entity; only the tool surface lacks the caveat | Yes | A code-intelligence Epic | Highest of the non-blocking remainder |
 
-**F-23 needs stating precisely.** `.agent/FINDINGS.md` records it CLOSED in Batch 3, but the
-Batch 3 evidence report does not mention it and no test cites it. The protective code *is*
-present (`xlsx.ts` refuses a missing `xl/workbook.xml` with "empty and unreadable must not be
-the same answer") and a test does assert that refusal. So the behaviour is right and the
-**chain of evidence is broken**: a closure asserted in the index that its own batch report does
-not support. The second half of the triage's remedy — *warn when a present part yields zero
-rows* — could not be verified in the source. Reported, not repaired.
+### F-23 — open, and the earlier record of it was wrong
+
+The first version of this audit called F-23 closed-with-a-broken-evidence-chain. That was too
+generous by one step, and the step matters. The evidence, taken from the source rather than
+from any report:
+
+- `git log 0407618..HEAD -- src/parsers/sheet/xlsx.ts` returns **nothing**. No batch modified
+  the module the finding is about. Batch 3 changed `src/parsers/sheet/zip.ts` — the archive
+  bound, which is F-60 — and `sheet-parser.test.ts` for that, which is why a keyword search
+  made Batch 3 look like the closer.
+- `readSheet` (`xlsx.ts:237-271`) is still the regex scanner the finding cites at `:243`,
+  `:247` and `:270`, with no validity check anywhere in it. A truncated, garbage or non-XML
+  worksheet part still produces zero rows and the same return shape as a genuinely empty
+  sheet, and the content gate still caches that result permanently.
+- **The test cited before proves something else.** `sheet-parser.test.ts:182` asserts that a
+  missing `xl/workbook.xml` is refused by name — AC-9. Real, passing, and not this finding:
+  the finding's own text says *"Only a missing `xl/workbook.xml` throws (`:80-88`)"* and
+  names that as the pre-existing behaviour the rest of the module fails to match. Citing it
+  conflated the one case that already worked with the five measured cases that did not.
+- Neither half of the triage's remedy is present: no refusal for a part with no recognisable
+  root, and no warning when a present part yields zero rows.
+
+**Status: OPEN.** Severity unchanged at P1-A, data-loss class. Not fixed here, and this task
+forbade fixing it.
+
+### F-27 — partially closed, and recorded that way
+
+- **Persistence half — closed and verified.** The counts are written onto the `file` entity,
+  replayed through the re-parse gate, and asserted end to end against a real database by
+  `reference-intervals.test.ts` (three cases, including the gate-skip regression).
+- **Read half — open.** Verified at `cd3ca85`: `referenceResolution` appears nowhere under
+  `src/mcp/`, `src/retrieval/` or `src/context/`, and the depth-1 `ferret_neighbours`
+  response carries `count`, `truncated` and `withheld` with no resolution field. An empty
+  inbound list still arrives without a completeness caveat.
 
 ### P1-B (14 open)
 
@@ -261,39 +309,53 @@ No production data was touched. All verification ran against throwaway container
 
 ## 9. Verdict
 
-### FORENSICALLY READY — with one qualification the owner should read before merging
+### NOT FORENSICALLY READY — blocked by F-23
 
-Everything the audit can verify is verified: `main` untouched, one clean full-suite pass at
-`cd3ca85` with 3 513 tests passing and nothing failing, the P0 closed, 23 of 24 P1-A findings
-fully closed and each still closed with every other batch present, and all eight contract
-boundaries sound.
+Most of what the audit set out to establish is established: `main` untouched, one clean
+full-suite pass at `cd3ca85` with 3 513 tests passing and nothing failing, the P0 closed,
+22 of 24 P1-A findings fully closed and each still closed with every other batch present, and
+seven of the eight contract boundaries sound.
 
-The qualification is **F-27**. Its persistence half is delivered and tested; its read half is
-not. "Nothing references this" is still returned by `ferret_neighbours` without a completeness
-qualifier, so a caller asking an impact or dead-code question can still receive an empty list
-that means "we refused to resolve the references that would have answered you". That is the
-finding's own stated danger, and it is narrower than it was — the counts now exist and are
-readable — but it is not gone. It is recorded as **partially closed** in `.agent/FINDINGS.md`
-rather than counted as a win.
+**What blocks readiness is F-23, and only F-23.** A corrupt `.xlsx` worksheet part is still
+parsed as a successful empty spreadsheet, and the content gate still caches that result
+permanently — so the file is never re-read and its contents are silently and permanently
+absent from the index. It is P1-A, data-loss class, reachable with ordinary content, and it
+was carried as CLOSED through five batches and the first version of this audit on the strength
+of a test that proves a different behaviour. No batch ever touched the module.
 
-Nothing here blocks the branch from being reviewed or merged; F-27's remaining half is a
-scoped piece of follow-on work, not an unresolved defect in what was shipped.
+That last part is the more useful finding. The defect is one module; the *process* failure is
+that a finding could be marked closed, propagate through five documents, and survive an audit,
+without a single line of code having changed. The remedy for the class is the same one this
+audit applies to itself: a closure claim names the commit that made it and the test that holds
+it, or it is not a closure claim.
+
+**F-27 does not block.** Its persistence half is delivered and tested; its read half is
+follow-on work at the tool surface, with the data it needs already stored. It is recorded as
+**partially closed**, not as a win and not as a blocker.
+
+**Recommendation.** The branch is worth reviewing and the seven batches are worth keeping —
+nothing in them is undone by this. But F-23 should be closed for real, with its own red
+fixture, before this reaches `main`; and every remaining CLOSED status should be spot-checked
+the way F-23 finally was, against `git log -- <the module the finding names>`.
 
 ## 10. Recommended future Epics — recommendations only
 
-1. **Reference completeness at the answer surface** — F-27's read half. Attach the persisted
-   counts to reference reads so an empty inbound list carries its own caveat. Smallest
-   remaining piece of P1-A work and the one with the clearest user-visible payoff.
-2. **Record correction (Batch 8, no code)** — F-74, F-75, F-87, the EPIC-028/035/090 record
-   corrections, the F-20/F-21 registry notes and `PLANNED_COMMANDS`. Cheap, and it is the
-   group most likely to prevent the next round of this.
-3. **Backup fidelity** — F-45 then F-44. Silent vector loss on restore outranks a misleading
+1. **F-23 — the blocker.** Refuse a worksheet part with no recognisable root, and warn when a
+   present part yields zero rows. Needs a red fixture across the five corruptions the finding
+   measured, and a check that the content gate does not cache a refusal as an empty result.
+2. **Reference completeness at the answer surface** — F-27's read half. Attach the persisted
+   counts to reference reads so an empty inbound list carries its own caveat. The data is
+   already stored, so this is presentation rather than measurement.
+3. **Record correction (Batch 8, no code)** — F-74, F-75, F-87, the EPIC-028/035/090 record
+   corrections, the F-20/F-21 registry notes and `PLANNED_COMMANDS`. Cheap, and — on the
+   evidence of F-23 — the group most likely to prevent the next round of this.
+4. **Backup fidelity** — F-45 then F-44. Silent vector loss on restore outranks a misleading
    `unchanged` counter.
-4. **Markdown line endings** — F-22. A one-line defect with a measured loss on every CRLF
+5. **Markdown line endings** — F-22. A one-line defect with a measured loss on every CRLF
    repository.
-5. **Identity merge completeness** — F-12, with F-33/F-34. `IdentityStore.merge` should move
+6. **Identity merge completeness** — F-12, with F-33/F-34. `IdentityStore.merge` should move
    relationships and should not record a merge that failed.
-6. **Test-infrastructure stability** — F-73, F-92, F-101 as one piece of work. All three are
+7. **Test-infrastructure stability** — F-73, F-92, F-101 as one piece of work. All three are
    contention artefacts, and F-101 additionally asserts a *planner choice*, which is the part
    worth revisiting: an index-only scan of a whole table is not a wrong plan.
 

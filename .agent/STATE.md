@@ -1,11 +1,14 @@
 # STATE
 
-**Phase:** COMPLETE. Seven implementation batches, then the read-only final forensic audit.
-Implementation is closed; the branch awaits the owner.
+**Phase:** COMPLETE. Seven implementation batches, the read-only final forensic audit, and a
+documentation-only record correction. Implementation is closed; the branch awaits the owner.
 **Base:** `0407618` (main, untouched). **Worktree:** `C:\AIAgent\ferret-forensic`, branch `forensic/post-roadmap-audit`.
 **Last action:** Final forensic audit — read-only, no implementation. One clean full-suite
 pass at `cd3ca85`: **3 513 passed, 7 skipped, 0 failed** (175 files), exit 0.
-Verdict **FORENSICALLY READY**, qualified by F-27's undelivered read half.
+Verdict **NOT FORENSICALLY READY** — blocked by **F-23**, which was carried as CLOSED through
+five batches and the first audit and is not closed at all: no batch ever modified
+`src/parsers/sheet/xlsx.ts`. **F-27** is **partially closed** (persistence done, read half
+open) and does not block.
 Record: `docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md`.
 
 ## Done
@@ -208,8 +211,19 @@ position on a resumed run (EPIC-108 AC-10).
 No new Epics. No Epic status changes. No PRs. No merge. No deploy. No changes to `main`.
 
 ## Next action
-**Nothing. Stopped, as instructed.** The owner reviews the evidence and decides whether and
-when to open a PR. No PR was created, nothing was merged, nothing was deployed, and `main`
+**Nothing. Stopped, as instructed.**
+
+**Before this branch reaches `main`, F-23 needs closing for real** — a red fixture across the
+five corruptions the finding measured, plus a check that the content gate does not cache a
+refusal as an empty result. It is P1-A and data-loss class. Not started, and out of scope for
+every task so far.
+
+**And the process lesson is worth more than the defect.** F-23 was marked CLOSED, propagated
+through five documents, and survived a full audit without a line of code having changed. Any
+remaining CLOSED status is worth spot-checking the way F-23 finally was — against
+`git log 0407618..HEAD -- <the module the finding names>`.
+
+The owner reviews the evidence and decides whether and when to open a PR. No PR was created, nothing was merged, nothing was deployed, and `main`
 is untouched at `0407618`.
 
 **Implementation is closed.** Batch 7 was the final authorized batch; the remaining work is
