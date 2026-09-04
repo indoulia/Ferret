@@ -157,6 +157,31 @@ export const fileAttributes = z
     classificationReason: z.string().min(1).optional(),
     isGenerated: z.boolean().optional(),
     isVendored: z.boolean().optional(),
+    /**
+     * How much of this file's code Ferret could actually resolve — F-27.
+     *
+     * EPIC-035 §12 says "the unresolved count is the number that matters". It
+     * was computed, aggregated into a `logger.debug` line, and discarded —
+     * nothing was written against the symbol, the file or the run. So "nothing
+     * references this" and "we refused to resolve 64% of the references" were
+     * the same answer, which is what makes a dead-code or impact answer
+     * dangerous rather than merely incomplete.
+     *
+     * Measured on Ferret's own source when the finding was raised:
+     * `registry.ts` 141 extracted / 51 resolved, `content.ts` 88 / 16,
+     * `references.ts` 22 / 0.
+     */
+    referenceResolution: z
+      .object({
+        /** References the parser found in this file. */
+        extracted: z.number().int().nonnegative(),
+        /** References that became an edge. */
+        resolved: z.number().int().nonnegative(),
+        /** Counts by `UnresolvedReason`. Counts only — never a guessed target. */
+        unresolved: z.record(z.string(), z.number().int().nonnegative()),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -193,6 +218,28 @@ export const commitAttributes = z
     parents: z.array(z.string().min(1)).default([]),
     /** Tree hash, when the source reports one. */
     tree: z.string().min(1).optional(),
+    /**
+     * What the source said about an author Ferret would not identify — F-11.
+     *
+     * Present only when the author's address was absent, or was not an address
+     * at all: `unknown`, `(no author)`, `root` — what `git filter-branch`,
+     * `cvs2git` and hand-written commit objects emit. Ferret mints no actor for
+     * those, because a display name is not an identity and deriving one merges
+     * every unnamed author in a repository into a single person.
+     *
+     * Recorded rather than dropped: refusing to *identify* is not licence to
+     * lose the observation, and a `.mailmap` added later repairs the history
+     * from exactly these strings.
+     */
+    unattributedAuthor: z
+      .object({
+        name: z.string(),
+        email: z.string(),
+        /** Why no identity was derived. A reason, never a value. */
+        reason: z.string().min(1),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

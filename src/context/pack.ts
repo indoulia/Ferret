@@ -2,7 +2,9 @@ import {
   CONTENT_CLOSE,
   CONTENT_OPEN,
   ContentSafety,
-  containAttributes,
+  containEntityContent,
+  containEvidenceContent,
+  truncateContained,
   type ContentSafetyReport,
 } from '../security/index.js';
 import type { CanonicalEntity, CanonicalEvidence } from '../domain/index.js';
@@ -31,6 +33,7 @@ import {
   type EvidenceSelection,
   type ExcludedEvidence,
 } from './evidence-selection.js';
+import type { StatedEvidence } from '../domain/index.js';
 
 /**
  * Assembling what Ferret knows into something that fits a context window.
@@ -339,6 +342,12 @@ export class ContextPackBuilder {
     }
 
     return {
+      // First, and the reason is F-66. A model reads in order, and an
+      // instruction that arrives after the content it governs has already lost
+      // — which is what this field did when it sat last in the literal. Key
+      // order is JSON serialization order, so this line is the fix and not a
+      // preference.
+      contentNotice: CONTENT_NOTICE,
       formatVersion: PACK_FORMAT_VERSION,
       producer: 'ferret.context',
       producerVersion: VERSION,
@@ -349,20 +358,23 @@ export class ContextPackBuilder {
       contentSafety: safety.report,
       estimatedTokens: budget.spent,
       budget: budget.total,
-      contentNotice: CONTENT_NOTICE,
       withheld,
     };
   }
 
   async #toItem(hit: SearchHit, withNeighbours: boolean, safety: ContentSafety): Promise<PackItem> {
-    const selection = await this.#evidenceFor(hit);
+    const selection = await this.#evidenceFor(hit, safety);
+    // Already contained: `#evidenceFor` wraps every candidate before the
+    // selection sees it, so `selection.selected`, `selection.excluded` and the
+    // sentences the selection writes about them all describe contained values.
     const evidence = selection.selected.map((entry) => entry.evidence);
-    const neighbours = withNeighbours
+    const reached = withNeighbours
       ? await this.#retrieval.neighbours(
           { from: hit.entity.id, direction: Direction.BOTH, limit: 10 },
           this.#access,
         )
-      : [];
+      : undefined;
+    const neighbours = reached?.neighbours ?? [];
 
     let reason =
       hit.source === HitSource.EVIDENCE
@@ -373,20 +385,32 @@ export class ContextPackBuilder {
     // read, and an answer built on a contested fact should say so where it will
     // be seen. Field names are Ferret's own canonical keys, not repository text.
     if (selection.disputedFields.length > 0) {
-      reason += `; disputed: ${selection.disputedFields.map((field) => (field === '' ? 'the subject itself' : field)).join(', ')}`;
+      // The field names are already contained — `#evidenceFor` wrapped them
+      // before the selection derived this list. The comment that stood here
+      // asserted they were "Ferret's own canonical keys", which is true of the
+      // git provider and not of the schema, where `field` is a bare
+      // `z.string()`. A real field name is a token and comes back unchanged, so
+      // the sentence reads as it did.
+      const disputed = selection.disputedFields.map((field) =>
+        field === '' ? 'the subject itself' : field,
+      );
+      reason += `; disputed: ${disputed.join(', ')}`;
     }
 
     // Contained here rather than at the response boundary, so a pack handed
     // straight to a model — which is what a pack is for — carries the boundary
     // with it. `reason` is Ferret's own sentence and is not contained.
-    const entity: CanonicalEntity = {
-      ...hit.entity,
-      attributes: containAttributes(hit.entity.attributes, safety),
-    };
+    const entity: CanonicalEntity = containEntityContent(hit.entity, safety);
 
     return {
       entity,
-      reason: neighbours.length === 0 ? reason : `${reason}; ${String(neighbours.length)} connected`,
+      reason:
+        neighbours.length === 0
+          ? reason
+          : `${reason}; ${String(neighbours.length)}${reached?.more === true ? ' or more' : ''} connected` +
+            (reached !== undefined && reached.withheld.total > 0
+              ? `, ${String(reached.withheld.total)} withheld`
+              : ''),
       score: hit.score,
       evidence,
       evidenceOmitted: selection.excluded.length,
@@ -424,12 +448,12 @@ export class ContextPackBuilder {
    * nine" from "the best five of who knows how many" makes the stronger claim by
    * accident.
    */
-  async #evidenceFor(hit: SearchHit): Promise<EvidenceSelection> {
+  async #evidenceFor(hit: SearchHit, safety: ContentSafety): Promise<EvidenceSelection> {
     if (this.#evidence === undefined) {
       // No reader wired. The matching record is all there is, and its state was
       // never read — so it is offered as unassessed rather than as current,
       // which is what it is.
-      return selectEvidence(hit.evidence === undefined ? [] : [{ evidence: hit.evidence }], {
+      return selectEvidence(contained(hit.evidence === undefined ? [] : [{ evidence: hit.evidence }], safety), {
         limit: MAX_EVIDENCE_PER_ITEM,
       });
     }
@@ -442,7 +466,7 @@ export class ContextPackBuilder {
       permittedScopes: this.#access.permittedScopes,
     });
     if (held.length > 0) {
-      return selectEvidence(held.slice(0, EVIDENCE_CANDIDATE_WINDOW), {
+      return selectEvidence(contained(held.slice(0, EVIDENCE_CANDIDATE_WINDOW), safety), {
         limit: MAX_EVIDENCE_PER_ITEM,
         windowTruncated: held.length > EVIDENCE_CANDIDATE_WINDOW,
       });
@@ -451,7 +475,7 @@ export class ContextPackBuilder {
     // The matching record still counts when the store holds nothing under this
     // entity's id — evidence about a subject Ferret models differently should
     // not vanish from the answer just because the lookup missed.
-    return selectEvidence(hit.evidence === undefined ? [] : [{ evidence: hit.evidence }], {
+    return selectEvidence(contained(hit.evidence === undefined ? [] : [{ evidence: hit.evidence }], safety), {
       limit: MAX_EVIDENCE_PER_ITEM,
     });
   }
@@ -562,7 +586,11 @@ function trimItem(item: PackItem, room: number): PackItem | undefined {
         left -= value.length;
         continue;
       }
-      attributes[key] = `${value.slice(0, Math.max(MINIMUM_KEPT_CHARS, left))}${TRIM_MARKER}`;
+      // F-32. `truncateContained` cuts inside the fence and closes it again;
+      // the plain `slice` this replaces kept the opening delimiter and dropped
+      // the closing one, so every field after this one — `reason`, `omitted`,
+      // the safety report itself — fell inside the quoted region.
+      attributes[key] = truncateContained(value, Math.max(MINIMUM_KEPT_CHARS, left), TRIM_MARKER);
       left = 0;
     }
 
@@ -604,6 +632,37 @@ function trimItem(item: PackItem, room: number): PackItem | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Contains every candidate observation before the selection reasons about it.
+ *
+ * **Where the boundary belongs, and F-64's re-audit is the argument.** The first
+ * fix contained the records the pack *emitted*. Two payloads still escaped,
+ * because a selection emits more than the records: it emits `excluded[].field`
+ * — a provider-supplied `z.string()` — and it writes sentences that interpolate
+ * that field name and the producer's, and those sentences are built in
+ * `evidence-selection.ts`, which is pure and has no accumulator to contain
+ * with. Patching each emit site would have left the next one to whoever adds it.
+ *
+ * So untrusted values are contained where they *enter*, and everything
+ * downstream — the selection, its reasons, its disputed-field list, the pack's
+ * own `reason`, the rendered text — is built from contained values by
+ * construction. `selectEvidence` stays pure and needs to know nothing about
+ * containment; a field name used as a grouping key still groups, because
+ * `contain` is deterministic.
+ *
+ * `integrityHash` and the rest of Ferret's own account of a record are left
+ * alone, so a caller can still verify a citation against the store.
+ */
+function contained(
+  candidates: readonly StatedEvidence[],
+  safety: ContentSafety,
+): readonly StatedEvidence[] {
+  return candidates.map((candidate) => ({
+    ...candidate,
+    evidence: containEvidenceContent(candidate.evidence, safety),
+  }));
 }
 
 function summarizeNeighbour(neighbour: Neighbour): Record<string, unknown> {

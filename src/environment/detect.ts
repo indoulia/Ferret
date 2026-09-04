@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { withoutCredentials } from '../security/credentials.js';
+import { scrubEnvironment } from '../security/subprocess.js';
 import { SUPPORTED_NODE_RANGE, VERSION } from '../version.js';
 
 const execFileAsync = promisify(execFile);
@@ -52,6 +52,13 @@ function nodeMajor(version: string): number {
  * runner applies. It is `git --version` and reads nothing, which is exactly why
  * it was missed: the least consequential subprocess in the codebase was the one
  * handing on the most.
+ *
+ * Through the runner's `scrubEnvironment` rather than `withoutCredentials`
+ * alone, since Batch 6. Two spawners with two environment policies is the
+ * divergence F-71 is an instance of, and the weaker of the two is the one
+ * nobody looks at: this call still inherited `GIT_DIR`, `GIT_CONFIG_GLOBAL` and
+ * the rest. There is no cost to it reading exactly what every other `git`
+ * Ferret starts reads.
  */
 export async function detectGit(timeoutMs = 5_000): Promise<GitInfo> {
   try {
@@ -60,7 +67,7 @@ export async function detectGit(timeoutMs = 5_000): Promise<GitInfo> {
       windowsHide: true,
       shell: false,
       encoding: 'utf8',
-      env: withoutCredentials(process.env),
+      env: scrubEnvironment(process.env),
     });
     const version = /(\d+\.\d+\.\d+)/.exec(stdout)?.[1];
     return version === undefined ? { available: true } : { available: true, version };

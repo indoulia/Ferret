@@ -164,3 +164,73 @@ export function isSecretPath(path: string): boolean {
     return name === bare;
   });
 }
+
+/**
+ * The key-name half of credential detection.
+ *
+ * It lives beside the value patterns, and not in `errors/redact.ts` where it
+ * was written, because two policies now need the same vocabulary: redaction,
+ * where a false positive is cosmetic, and `security/credentials.ts`, which
+ * decides whether an environment variable reaches a child process. Copying it
+ * would have let them drift, and drift between two credential lists is F-71.
+ */
+/**
+ * Key name fragments that mark a value as sensitive. Matched against the
+ * tokenized key, so `apiKey`, `api_key`, `API-KEY` and `apikey` all match.
+ */
+const SECRET_TOKENS: ReadonlySet<string> = new Set([
+  'apikey',
+  'accesskey',
+  'accesstoken',
+  'auth',
+  'authorization',
+  'bearer',
+  'certificate',
+  'connectionstring',
+  'cookie',
+  'credential',
+  'credentials',
+  'dsn',
+  'key',
+  'passphrase',
+  'passwd',
+  'password',
+  'privatekey',
+  'pwd',
+  'refreshtoken',
+  'secret',
+  'secrets',
+  'session',
+  'sessionid',
+  'signature',
+  'token',
+]);
+
+/** Key names that look sensitive but are safe and useful to keep. */
+const ALLOWED_KEYS: ReadonlySet<string> = new Set(['keys', 'keyword', 'keywords', 'public_key_id']);
+
+function tokenizeKey(key: string): string[] {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.toLowerCase());
+}
+
+/** True when a property name indicates the value must not be disclosed. */
+export function isSecretKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (ALLOWED_KEYS.has(key.toLowerCase()) || ALLOWED_KEYS.has(normalized)) return false;
+  if (SECRET_TOKENS.has(normalized)) return true;
+
+  const tokens = tokenizeKey(key);
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (token !== undefined && SECRET_TOKENS.has(token)) return true;
+    const next = tokens[i + 1];
+    if (token !== undefined && next !== undefined && SECRET_TOKENS.has(`${token}${next}`)) {
+      return true;
+    }
+  }
+  return false;
+}

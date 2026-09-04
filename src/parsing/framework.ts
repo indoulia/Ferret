@@ -18,7 +18,7 @@ import {
 import type { ProviderRegistry } from '../providers/registry.js';
 import type { ProviderOperationContext } from '../providers/sdk/operation.js';
 
-import { detectContent } from './detect.js';
+import { detectContent, type ContentDetection } from './detect.js';
 
 /** `Array.isArray` widens a typed value to `any[]`; this keeps the element unknown. */
 function isUnknownArray(value: unknown): value is readonly unknown[] {
@@ -275,11 +275,23 @@ export class ParserFramework {
 
     let redactedSecrets = 0;
     const segments = output.segments.map((segment) => {
-      if (!this.#redact) return segment;
-      const result = redactSecrets(segment.text);
+      const placed = place(segment, detection);
+      if (!this.#redact) return placed;
+      const result = redactSecrets(placed.text);
       redactedSecrets += result.redacted;
-      return result.redacted === 0 ? segment : { ...segment, text: result.text };
+      return result.redacted === 0 ? placed : { ...placed, text: result.text };
     });
+
+    const warnings = [...(output.warnings ?? [])];
+    // Stated rather than left to be noticed. A span covering the whole file is a
+    // truthful "somewhere in here", and a reader deserves to know why it is not
+    // narrower.
+    if (!detection.byteAddressable && detection.text !== undefined && output.segments.length > 0) {
+      warnings.push({
+        code: 'span-not-byte-addressable',
+        detail: `Content is ${detection.encoding}, so a byte span cannot be derived; spans cover the whole file.`,
+      });
+    }
 
     return {
       parsed: true,
@@ -293,11 +305,49 @@ export class ParserFramework {
       references: output.references ?? [],
       imports: output.imports ?? [],
       attributes: output.attributes ?? {},
-      warnings: output.warnings ?? [],
+      warnings,
       truncated: output.truncated ?? false,
       redactedSecrets,
     };
   }
+}
+
+/**
+ * Puts a segment's span where it belongs in the *file*.
+ *
+ * A parser measures its offsets against the text it was handed, and that text
+ * is not always the file: a byte-order mark is stripped when decoding, so every
+ * offset was short by the mark's length — three bytes for UTF-8, pointing one
+ * character into the token before the one the span meant to quote. `validate`
+ * cannot catch it, because a span that is wrong but inside the file is still
+ * inside the file.
+ *
+ * When the offsets cannot be converted at all — UTF-16, where the decoded string
+ * is two bytes per code unit and the parser measured with a UTF-8 encoder — the
+ * span is widened to the whole file rather than left pointing at unrelated
+ * bytes. That is EPIC-024 §8's contract kept honestly: a span must name the
+ * bytes it quotes, and a parser that cannot say which bytes those are must not
+ * pretend to. Line numbers are untouched; they come from the decoded text and
+ * are correct either way.
+ */
+function place(segment: ContentSegment, detection: ContentDetection): ContentSegment {
+  if (!detection.byteAddressable) {
+    if (segment.span.startByte === 0 && segment.span.endByte === detection.sizeBytes) return segment;
+    return {
+      ...segment,
+      span: { ...segment.span, startByte: 0, endByte: detection.sizeBytes },
+    };
+  }
+  if (detection.textByteOffset === 0) return segment;
+  const shift = detection.textByteOffset;
+  return {
+    ...segment,
+    span: {
+      ...segment.span,
+      startByte: Math.min(segment.span.startByte + shift, detection.sizeBytes),
+      endByte: Math.min(segment.span.endByte + shift, detection.sizeBytes),
+    },
+  };
 }
 
 /**

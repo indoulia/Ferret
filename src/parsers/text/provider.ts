@@ -114,17 +114,28 @@ export class TextParserProvider extends BaseProvider implements Provider, Conten
     let line = 1;
     let truncated = false;
 
-    for (const paragraph of text.split(/\n\s*\n/)) {
-      const bytes = encoder.encode(paragraph).length;
-      const lineCount = paragraph.split('\n').length;
-      if (paragraph.trim().length > 0) {
+    // A *capturing* split, so the separator's real width is known rather than
+    // assumed. Advancing by a constant two bytes drifted on every gap wider
+    // than one blank line and on every CRLF file — and a drifting span still
+    // passes every check, because it is inside the file. It just does not
+    // quote what it says it quotes.
+    for (const [index, part] of text.split(/(\n\s*\n)/).entries()) {
+      if (index % 2 === 1) {
+        // The separator itself: measured, not estimated.
+        byte += encoder.encode(part).length;
+        line += part.split('\n').length - 1;
+        continue;
+      }
+      const bytes = encoder.encode(part).length;
+      const lineCount = part.split('\n').length;
+      if (part.trim().length > 0) {
         if (segments.length >= MAX_MARKDOWN_SEGMENTS) {
           truncated = true;
           break;
         }
         segments.push({
           kind: SegmentKind.TEXT,
-          text: paragraph,
+          text: part,
           span: {
             startByte: byte,
             endByte: byte + bytes,
@@ -133,11 +144,8 @@ export class TextParserProvider extends BaseProvider implements Provider, Conten
           },
         });
       }
-      // The blank line that separated them. Approximate by one, which keeps
-      // spans monotonic; exact offsets for a format with no structure would be
-      // precision nobody reads.
-      byte += bytes + 2;
-      line += lineCount + 1;
+      byte += bytes;
+      line += lineCount - 1;
     }
 
     return {

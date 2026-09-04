@@ -248,6 +248,22 @@ describe('a backup is pg_dump, and Ferret does not wrap it — AC-14, AC-15', ()
     expect(backupCommandFor(undefined)).toContain('$FERRET_DATABASE_URL');
   });
 
+  it('never prints the password the URL carries — F-30', () => {
+    // A PostgreSQL URL conventionally carries the password, and this command is
+    // printed to stdout inside an `ok: true` envelope at exit 0 — into terminal
+    // scrollback, into CI logs, and into anything that records the `--json`
+    // output. EPIC-106 §11 states that no credential appears in the plan; the
+    // passwordless URL the test above uses is the one shape that cannot show
+    // whether that is true.
+    const command = backupCommandFor('postgresql://ferret:hunter2@db.internal:5432/ferret');
+
+    expect(command).not.toContain('hunter2');
+    expect(command).toContain('[redacted]');
+    // Everything an operator needs in order to run it is still there.
+    expect(command).toContain('db.internal:5432/ferret');
+    expect(command).toContain('--schema=ferret');
+  });
+
   it('spawns no process — the command is printed, not run', async () => {
     // §8.1 and Governance §5: the right amount of backup code to write is none.
     // A wrapper would add a version-matching failure mode and subtract nothing.

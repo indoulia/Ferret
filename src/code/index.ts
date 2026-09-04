@@ -52,6 +52,7 @@ export {
   RULE_CONFIDENCE as REFERENCE_RULE_CONFIDENCE,
   UnresolvedReason,
   resolveReferences,
+  type FileReferenceResolution,
   type ReferenceResolution,
   type ResolvedReference,
   type SymbolCandidate,

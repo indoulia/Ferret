@@ -47,15 +47,19 @@ function neighbour(id: string, type = 'commit_parent_of_commit'): Neighbour {
 
 /** A graph as an adjacency list, read one hop at a time. */
 function graph(edges: Readonly<Record<string, readonly string[]>>): {
-  hop: (from: string, limit: number) => Promise<readonly Neighbour[]>;
+  hop: (from: string, limit: number) => Promise<{ neighbours: readonly Neighbour[]; more: boolean }>;
   calls: string[];
 } {
   const calls: string[] = [];
   return {
     calls,
-    hop: (from) => {
+    // A real hop reads one more row than the limit so it can say whether the
+    // bound cut it. The fake does the same, because a fake that always reports
+    // "nothing more" cannot express the case F-28 is about.
+    hop: (from, limit) => {
       calls.push(from);
-      return Promise.resolve((edges[from] ?? []).map((id) => neighbour(id)));
+      const all = (edges[from] ?? []).map((id) => neighbour(id));
+      return Promise.resolve({ neighbours: all.slice(0, limit), more: all.length > limit });
     },
   };
 }

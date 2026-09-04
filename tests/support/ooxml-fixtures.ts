@@ -4,10 +4,16 @@
  * The same argument as `pdf-fixtures.ts`: a binary fixture is unreviewable, and
  * building the file is the only way to produce a *deliberately* malformed one.
  *
- * The ZIP is written with stored (uncompressed) entries, which every OOXML
- * reader accepts and which keeps this file to arithmetic rather than to a
- * compressor.
+ * `buildZip` writes stored (uncompressed) entries, which every OOXML reader
+ * accepts and which keeps most of this file to arithmetic rather than to a
+ * compressor. `buildDeflatedZip` exists because stored entries cannot express a
+ * decompression attack at all — neither an entry that expands enormously nor a
+ * central directory that lies about how far it expands — and a generator that
+ * can only produce well-formed archives is why a bound checked against the
+ * archive's own declared size passed every test.
  */
+
+import { deflateRawSync } from 'node:zlib';
 
 /** CRC-32, the one thing a ZIP entry cannot be written without. */
 const CRC_TABLE = (() => {
@@ -89,6 +95,82 @@ export function buildZip(entries: readonly ZipEntry[]): Uint8Array {
   end.writeUInt32LE(offset, 16);
 
   return new Uint8Array(Buffer.concat([...locals, directory, end]));
+}
+
+/**
+ * A ZIP with **deflated** entries and a declared size the caller chooses.
+ *
+ * `declared` overrides the uncompressed size written into both headers. Left
+ * out, it is the truth — so the same helper writes an honest archive and a
+ * lying one, and a test can show which of the two a bound is reading.
+ */
+export function buildDeflatedZip(
+  entries: readonly (ZipEntry & { readonly declared?: number })[],
+): Uint8Array {
+  const encoder = new TextEncoder();
+  const locals: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const name = encoder.encode(entry.name);
+    const raw = encoder.encode(entry.content);
+    const data = new Uint8Array(deflateRawSync(raw));
+    const crc = crc32(raw);
+    const declared = entry.declared ?? raw.length;
+
+    const local = Buffer.alloc(30 + name.length + data.length);
+    local.writeUInt32LE(0x04_03_4b_50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(8, 8); // deflated
+    local.writeUInt16LE(0x21, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(declared, 22);
+    local.writeUInt16LE(name.length, 26);
+    Buffer.from(name).copy(local, 30);
+    Buffer.from(data).copy(local, 30 + name.length);
+    locals.push(local);
+
+    const header = Buffer.alloc(46 + name.length);
+    header.writeUInt32LE(0x02_01_4b_50, 0);
+    header.writeUInt16LE(20, 4);
+    header.writeUInt16LE(20, 6);
+    header.writeUInt16LE(8, 10); // deflated
+    header.writeUInt16LE(0x21, 14);
+    header.writeUInt32LE(crc, 16);
+    header.writeUInt32LE(data.length, 20);
+    header.writeUInt32LE(declared, 24);
+    header.writeUInt16LE(name.length, 28);
+    header.writeUInt32LE(offset, 42);
+    Buffer.from(name).copy(header, 46);
+    central.push(header);
+
+    offset += local.length;
+  }
+
+  const directory = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06_05_4b_50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+
+  return new Uint8Array(Buffer.concat([...locals, directory, end]));
+}
+
+/** A `.docx` whose `word/document.xml` inflates to `body`, deflated on disk. */
+export function buildDeflatedDocx(body: string): Uint8Array {
+  const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>${body}</w:body>
+</w:document>`;
+  return buildDeflatedZip([
+    { name: '[Content_Types].xml', content: CONTENT_TYPES },
+    { name: '_rels/.rels', content: PACKAGE_RELS },
+    { name: 'word/document.xml', content: document },
+  ]);
 }
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

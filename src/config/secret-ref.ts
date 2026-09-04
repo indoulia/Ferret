@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import { ErrorCode, FerretError } from '../errors/index.js';
+import { registerCredentialValue, registerCredentialVariable } from '../security/credentials.js';
 
 /**
  * Secret references.
@@ -129,6 +130,10 @@ registerSecretResolver({
         },
       );
     }
+    // F-71. The operator chose this variable's name, so no list in
+    // `security/credentials.ts` can contain it; recording it here is the only
+    // way the subprocess scrub can know to remove it.
+    registerCredentialVariable(target);
     return value;
   },
 });
@@ -251,10 +256,15 @@ export function resolveSecretRef(
     );
   }
 
-  return resolver.resolve(body.target, {
+  const resolved = resolver.resolve(body.target, {
     env,
     readFile,
   });
+  // Every source, not only the two registered here — F-71. A resolver added
+  // later hands back a credential the same way, and registering at the seam
+  // rather than inside each arm is what stops the next one being forgotten.
+  registerCredentialValue(resolved);
+  return resolved;
 }
 
 export interface ResolveSecretsOptions {

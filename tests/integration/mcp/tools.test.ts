@@ -128,18 +128,45 @@ class FakeRetrieval implements RetrievalPort {
   /** Entities the next find returns. More than the limit proves truncation. */
   findResult: readonly CanonicalEntity[] = [FILE];
 
-  findEntities(query: EntityQuery): Promise<readonly CanonicalEntity[]> {
+  /** Rows this caller may not see, so F-31's distinction is assertable. */
+  withhold = 0;
+
+  findEntities(query: EntityQuery): Promise<{
+    entities: readonly CanonicalEntity[];
+    withheld: WithheldReport;
+    more: boolean;
+  }> {
     this.lastFind = query;
-    return Promise.resolve(this.findResult.slice(0, query.limit ?? this.findResult.length));
+    const limit = query.limit ?? this.findResult.length;
+    return Promise.resolve({
+      entities: this.findResult.slice(0, limit),
+      withheld:
+        this.withhold === 0 ? NOTHING_WITHHELD : { total: this.withhold, byReason: { scope: this.withhold } },
+      more: this.findResult.length > limit,
+    });
   }
+
+  /** Overridden by a test that needs the subject to be gone. */
+  entityFor: (id: string) => CanonicalEntity | undefined = (id) =>
+    id === COMMIT.id ? COMMIT : undefined;
 
   getEntity(id: string): Promise<CanonicalEntity | undefined> {
-    return Promise.resolve(id === COMMIT.id ? COMMIT : undefined);
+    return Promise.resolve(this.entityFor(id));
   }
 
-  neighbours(query: TraversalQuery): Promise<readonly Neighbour[]> {
+  /** Set by a test that needs the hop to have been cut by the bound. */
+  neighboursMore = false;
+
+  neighbours(query: TraversalQuery): Promise<{
+    neighbours: readonly Neighbour[];
+    withheld: WithheldReport;
+    more: boolean;
+  }> {
     this.lastTraversal = query;
-    return Promise.resolve([
+    return Promise.resolve({
+      withheld: NOTHING_WITHHELD,
+      more: this.neighboursMore,
+      neighbours: [
       {
         entity: FILE,
         relationshipType: 'commit_modifies_file',
@@ -148,7 +175,8 @@ class FakeRetrieval implements RetrievalPort {
         validTo: null,
         metadata: { change: 'deleted' },
       },
-    ]);
+    ],
+    });
   }
 
   /** Counts calls, so EPIC-068's "refused before the handler ran" is assertable. */
@@ -375,6 +403,51 @@ describe('traversal', () => {
 
   it('refuses an instant that is not one', async () => {
     expect((await callRaw('ferret_neighbours', { id: COMMIT.id, at: 'last tuesday' })).isError).toBe(true);
+  });
+
+  it('says when the bound cut the hop, at depth one — F-28', async () => {
+    // Depth 1 is the default and every existing caller. The limit is applied in
+    // SQL, so a node with eighty neighbours and a limit of twenty returned
+    // twenty rows and nothing at all to say that sixty were left behind.
+    retrieval.neighboursMore = true;
+    try {
+      const result = await call('ferret_neighbours', { id: COMMIT.id });
+      expect(result['truncated']).toBe(true);
+      expect(String(result['more'])).toMatch(/limit/iu);
+    } finally {
+      retrieval.neighboursMore = false;
+    }
+  });
+
+  it('says it was not cut when it was not — the control', async () => {
+    const result = await call('ferret_neighbours', { id: COMMIT.id });
+    expect(result['truncated']).toBe(false);
+  });
+});
+
+describe('an exact lookup that could not show everything', () => {
+  it('distinguishes rows withheld from rows that are not there — F-31', async () => {
+    // Permission filtering ran *after* the `LIMIT`, into a tally that was
+    // constructed inline and discarded — so a caller received a shorter list and
+    // `truncated: false`, and "there is nothing there" was indistinguishable
+    // from "you may not see it". EPIC-058 exists to keep those apart.
+    retrieval.withhold = 3;
+    try {
+      const result = await call('ferret_find', { kind: 'file' });
+
+      expect(result['withheld']).toBe(3);
+      expect(result['truncated']).toBe(true);
+      expect(String(result['more'])).toMatch(/withheld/iu);
+    } finally {
+      retrieval.withhold = 0;
+    }
+  });
+
+  it('reports nothing withheld when nothing was — the control', async () => {
+    const result = await call('ferret_find', { kind: 'file' });
+
+    expect(result['withheld']).toBe(0);
+    expect(result['truncated']).toBe(false);
   });
 });
 
@@ -652,6 +725,27 @@ describe('tracing why Ferret believes something', () => {
     // source of confidently wrong answers rather than a check on them.
     await trace('ferret_why', { id: COMMIT.id });
     expect(evidence.lastQuery?.state).toBe('current');
+  });
+
+  it('names the standing of a subject the source no longer has — F-05', async () => {
+    // The evidence is real and stays cited; what was missing is that the thing
+    // it describes is gone. Live on Ferret's own index this returned
+    // `held: true`, `integrity: "verified"` and a locator naming a path that
+    // does not exist, with nothing anywhere in the payload saying so.
+    retrieval.entityFor = (id) => (id === COMMIT.id ? { ...COMMIT, lifecycle: 'deleted' } : undefined);
+    try {
+      const result = await trace('ferret_why', { id: COMMIT.id });
+
+      expect(result['held']).toBe(true);
+      expect(String(result['standing'])).toMatch(/removed/iu);
+    } finally {
+      retrieval.entityFor = (id) => (id === COMMIT.id ? COMMIT : undefined);
+    }
+  });
+
+  it('says nothing about standing for a live subject — the control', async () => {
+    const result = await trace('ferret_why', { id: COMMIT.id });
+    expect(result['standing']).toBeUndefined();
   });
 
   it('says so when it holds nothing, rather than returning an empty silence — AC-3', async () => {

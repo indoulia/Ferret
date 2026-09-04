@@ -36,11 +36,13 @@ export {
   ChangeKind,
   MAX_COMMITS_PER_READ,
   assertSafeRevision,
+  parseHistoryOutput,
   parseLog,
   readHistory,
   type CommitChange,
   type CommitRecord,
   type HistoryPage,
+  type ParsedHistory,
   type ReadHistoryOptions,
 } from './history.js';
 export {

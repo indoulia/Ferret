@@ -22,6 +22,8 @@ export {
   type RetrievalPort,
   type SearchHit,
   type SearchQuery,
+  type EntityResult,
+  type NeighbourResult,
   type SearchResult,
   type TraversalPath,
   type TraversalQuery,

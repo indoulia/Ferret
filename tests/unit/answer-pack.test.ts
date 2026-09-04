@@ -118,14 +118,14 @@ class FakeRetrieval implements RetrievalPort {
   searched: string[] = [];
   constructor(private readonly entities: readonly CanonicalEntity[]) {}
 
-  findEntities(_query: EntityQuery): Promise<readonly CanonicalEntity[]> {
-    return Promise.resolve([]);
+  findEntities(_query: EntityQuery): Promise<{ entities: readonly CanonicalEntity[]; withheld: typeof NOTHING_WITHHELD; more: boolean }> {
+    return Promise.resolve({ entities: [], withheld: NOTHING_WITHHELD, more: false });
   }
   getEntity(id: string): Promise<CanonicalEntity | undefined> {
     return Promise.resolve(this.entities.find((candidate) => candidate.id === id));
   }
-  neighbours(_query: TraversalQuery): Promise<readonly Neighbour[]> {
-    return Promise.resolve([]);
+  neighbours(_query: TraversalQuery): Promise<{ neighbours: readonly Neighbour[]; withheld: typeof NOTHING_WITHHELD; more: boolean }> {
+    return Promise.resolve({ neighbours: [], withheld: NOTHING_WITHHELD, more: false });
   }
   search(query: { text: string }): Promise<{ hits: readonly SearchHit[]; withheld: typeof NOTHING_WITHHELD }> {
     this.searched.push(query.text);
@@ -621,5 +621,53 @@ describe('rendering an answer', () => {
     });
 
     expect(renderAnswer(pack)).toContain('nothing was found to be missing');
+  });
+});
+
+describe('a subject the source no longer has', () => {
+  const DELETED = Object.freeze({ ...FILE, lifecycle: 'deleted' }) as CanonicalEntity;
+  const PATH_EVIDENCE = { subjectId: OTHER_ID, field: 'attributes.path', statement: 'src/parser.ts' };
+
+  it('does not answer in the present tense about a deleted subject — F-05', async () => {
+    // Reproduced live against Ferret's own index before this: a file removed
+    // months earlier answered `verdict: answered`, its claim `[current]`, its
+    // citation `integrity: verified`, and `unknowns: []`. Each of those is a
+    // statement about a file that is not there.
+    //
+    // Lifecycle was consulted by *ranking* and by nothing else, so the one
+    // surface whose contract is truthful absence never saw it.
+    const pack = await builder(
+      [DELETED],
+      [stated(EvidenceState.CURRENT, PATH_EVIDENCE)],
+      planner({ exact: [DELETED] }),
+    ).answer({ question: 'src/parser.ts' });
+
+    expect({
+      completeness: pack.completeness,
+      names: pack.unknowns.some((unknown) => /removed|deleted/iu.test(unknown)),
+      // The evidence is real and stays cited: the record was never the lie.
+      // What was missing is the qualifier.
+      claimsSomething: pack.claims.length > 0,
+    }).toStrictEqual({ completeness: AnswerCompleteness.PARTIAL, names: true, claimsSomething: true });
+  });
+
+  it('renders the standing where a reader will see it — F-05', async () => {
+    const pack = await builder(
+      [DELETED],
+      [stated(EvidenceState.CURRENT, PATH_EVIDENCE)],
+      planner({ exact: [DELETED] }),
+    ).answer({ question: 'src/parser.ts' });
+    const rendered = renderAnswer(pack);
+
+    expect(rendered).toMatch(/removed|deleted/iu);
+    expect(rendered).not.toContain('nothing was found to be missing');
+  });
+
+  it('still answers an active subject without qualification — the control', async () => {
+    const pack = await builder([COMMIT], [stated(EvidenceState.CURRENT)], planner({ exact: [COMMIT] })).answer({
+      question: 'b9559ab',
+    });
+
+    expect(pack.completeness).toBe(AnswerCompleteness.ANSWERED);
   });
 });

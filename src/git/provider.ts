@@ -19,6 +19,7 @@ import {
   type Mailmap,
 } from '../identity/index.js';
 import { fileAttributesFrom, fileVersionAttributesFrom, type FileStructure } from '../files/index.js';
+import type { FileReferenceResolution } from '../code/index.js';
 import { isSecretPath, redactSecrets } from '../security/index.js';
 import { VERSION } from '../version.js';
 import {
@@ -62,7 +63,7 @@ import {
   readBlob,
   type TreeEntry,
 } from './files.js';
-import { ChangeKind, readHistory, type CommitRecord } from './history.js';
+import { ChangeKind, knownCommits, readHistory, resolveCommit, type CommitRecord } from './history.js';
 import { listBranches, listWorktrees } from './refs.js';
 import { RepositoryIdentitySource, maskRemote, normalizeRemote, repositoryIdentity } from './identity.js';
 import { runGit } from './runner.js';
@@ -484,23 +485,56 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
    *
    * Paged by offset. `git log --skip` walks the history to reach the offset, so
    * this is O(offset) on a deep repository — acceptable for the first pages and
-   * wrong for the ten-thousandth. The read that actually matters for a running
-   * Ferret is the *incremental* one, `since`, which walks only what is new; a
-   * better deep-paging strategy belongs with the Epic that schedules indexing.
+   * wrong for the ten-thousandth. A caller reading a whole history follows
+   * `cursor` until it is absent; a caller resuming passes `exclude`, which
+   * makes the walk proportional to what is new rather than to what exists.
+   *
+   * `tip` is the commit `revision` names *now*. It is the position a later
+   * incremental read excludes, and it is reported whether or not this page was
+   * the first: a caller that read nothing new still needs to know where the
+   * ref stands.
    */
   async readHistory(
     repository: DiscoveredRepository,
-    request: { revision?: string; limit?: number; skip?: number; since?: string; withChanges?: boolean },
+    request: {
+      revision?: string;
+      limit?: number;
+      skip?: number;
+      cursor?: string;
+      since?: string;
+      exclude?: readonly string[];
+      withChanges?: boolean;
+    },
     context: ProviderOperationContext,
-  ): Promise<{ commits: readonly CommitRecord[]; cursor: string | undefined }> {
-    const skip = request.skip ?? 0;
+  ): Promise<{
+    commits: readonly CommitRecord[];
+    cursor: string | undefined;
+    tip: string | undefined;
+    incomplete: { readonly reason: string } | undefined;
+  }> {
+    const options = this.#gitOptions(repository, context);
+    const skip = request.cursor === undefined ? (request.skip ?? 0) : this.#decodeHistoryCursor(request.cursor);
+    // Dropped rather than passed through: an id this repository no longer holds
+    // makes `git log` fail, and a failed read here is indistinguishable from an
+    // empty one. Reading more than necessary is the safe direction.
+    const exclude =
+      request.exclude === undefined || request.exclude.length === 0
+        ? []
+        : await knownCommits(options, request.exclude);
+
     const page = await readHistory({
-      ...this.#gitOptions(repository, context),
+      ...options,
       ...(request.revision === undefined ? {} : { revision: request.revision }),
       ...(request.limit === undefined ? {} : { limit: request.limit }),
       ...(request.since === undefined ? {} : { since: request.since }),
+      ...(exclude.length === 0 ? {} : { exclude }),
       ...(request.withChanges === undefined ? {} : { withChanges: request.withChanges }),
       skip,
+    });
+
+    const tip = await resolveCommit({
+      ...options,
+      ...(request.revision === undefined ? {} : { revision: request.revision }),
     });
 
     return {
@@ -508,7 +542,23 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       cursor: page.truncated
         ? encodeCursor(this.id, Capability.SOURCE_REPOSITORY, { skip: skip + page.commits.length })
         : undefined,
+      // Not reported when the read was cut short by a failure. A tip is the
+      // position a later run excludes, and recording one for history that was
+      // never read would turn a recoverable gap into a permanent one.
+      ...(page.incomplete === undefined ? { tip } : { tip: undefined }),
+      incomplete: page.incomplete,
     };
+  }
+
+  #decodeHistoryCursor(cursor: string): number {
+    return decodeCursor(this.id, Capability.SOURCE_REPOSITORY, cursor, (state) => {
+      if (typeof state !== 'object' || state === null) throw new Error('not a history cursor');
+      const { skip } = state as { skip?: unknown };
+      if (typeof skip !== 'number' || !Number.isInteger(skip) || skip < 0) {
+        throw new Error('not a history cursor');
+      }
+      return skip;
+    });
   }
 
   /**
@@ -565,6 +615,13 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
      * entities are placeholders and the writer declines to regress them.
      */
     placeholderEntityIds: readonly string[];
+    /**
+     * Commits this page could not represent, and why.
+     *
+     * Never silently empty: a history read that returns fewer commits than it
+     * was given is indistinguishable from a smaller repository.
+     */
+    skippedRecords: readonly { readonly id: string; readonly reason: string }[];
   } {
     const emitter = this.#requireEmitter();
     const observedAt = options.observedAt ?? new Date();
@@ -574,6 +631,12 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     const placeholders = new Set<string>();
     const relationships = new Map<string, CanonicalRelationship>();
     const evidence: CanonicalEvidence[] = [];
+    /** Records an observation, and how to take it back. */
+    const observe = (...rows: readonly CanonicalEvidence[]): void => {
+      const mark = evidence.length;
+      undo.push(() => evidence.splice(mark));
+      evidence.push(...rows);
+    };
 
     // `placeholder` marks a record emitted only so that an edge has an
     // endpoint — a parent commit Ferret has not read yet. It fills a gap and
@@ -583,15 +646,34 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     // Without the distinction, `git log`'s newest-first order guarantees that
     // every commit which is a parent of a newer one is stored as its stub: the
     // right shape, and empty.
+    // Every mutation records how to undo itself, so one commit that cannot be
+    // represented costs that commit and not the page — EPIC-019 AC-9. Without
+    // it a single invalid field threw out of the middle of the loop and the
+    // whole read produced nothing, which is the failure §13 describes as
+    // "breaking what it knows" rather than reducing it.
+    let undo: (() => void)[] = [];
+
     const add = (entity: CanonicalEntity, placeholder = false): CanonicalEntity => {
       const existing = entities.get(entity.id);
       if (existing !== undefined && (placeholder || !placeholders.has(entity.id))) return existing;
+      const wasPlaceholder = placeholders.has(entity.id);
+      undo.push(() => {
+        if (existing === undefined) entities.delete(entity.id);
+        else entities.set(entity.id, existing);
+        if (wasPlaceholder) placeholders.add(entity.id);
+        else placeholders.delete(entity.id);
+      });
       entities.set(entity.id, entity);
       if (placeholder) placeholders.add(entity.id);
       else placeholders.delete(entity.id);
       return entity;
     };
     const link = (relationship: CanonicalRelationship): void => {
+      const existing = relationships.get(relationship.id);
+      undo.push(() => {
+        if (existing === undefined) relationships.delete(relationship.id);
+        else relationships.set(relationship.id, existing);
+      });
       relationships.set(relationship.id, relationship);
     };
 
@@ -609,6 +691,34 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     /** Actors already given identity evidence on this page — one row each. */
     const actorEvidence = new Set<string>();
 
+    /**
+     * What Git said about an author Ferret will not identify — F-11.
+     *
+     * Refusing to mint an identity is not licence to lose the observation. The
+     * commit keeps what the repository claimed, marked as unattributed, so "who
+     * wrote this" answers *"Git said `Alice Ainsworth <unknown>`, which is not
+     * an address"* rather than answering nothing — and a later `.mailmap` can
+     * still repair it, because the raw strings are still there.
+     *
+     * A separate pure predicate rather than a second return channel from
+     * `actorFor`, so that the commit entity — built before the author is
+     * resolved — can carry the attribute without reordering the emission.
+     */
+    const unattributedAuthorFor = (
+      name: string,
+      email: string,
+    ): { name: string; email: string; reason: string } | undefined => {
+      const raw = normalizeGitIdentity(name, email);
+      const identity =
+        raw === undefined || options.mailmap === undefined ? raw : applyMailmap(options.mailmap, raw);
+      if (identity !== undefined && identity.addressed) return undefined;
+      return {
+        name: name.trim(),
+        email: email.trim(),
+        reason: raw === undefined ? 'the commit records no author address' : 'the author address is not an address',
+      };
+    };
+
     const actorFor = (
       name: string,
       email: string,
@@ -618,6 +728,20 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       // merge every "unknown" author in the repository into one person.
       if (raw === undefined) return undefined;
       const identity = options.mailmap === undefined ? raw : applyMailmap(options.mailmap, raw);
+
+      // F-11. The comment above stated this guarantee and the code delivered it
+      // for the empty string alone: `unknown`, `(no author)`, `root` and every
+      // other non-address were kept as opaque identities whose `comparable` is
+      // the raw string, so the entity id derived from it and two people became
+      // one. Measured on a three-commit fixture: Alice and Bob, both authored
+      // `unknown`, emitted **one** developer — and which display name survived
+      // depended on the order Git returned the commits.
+      //
+      // After the mailmap, not before: a `.mailmap` exists to give imported
+      // history real addresses, and refusing first would disable it on exactly
+      // the repositories that need it. The caller records what Git said.
+      if (!identity.addressed) return undefined;
+
       const { actorClass, reason } = classifyIdentity(identity);
 
       const display = identity.name.length === 0 ? identity.comparable : identity.name;
@@ -667,7 +791,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         actorEvidence.add(actor.id);
         const rewritten = identity.comparable !== raw.comparable;
         const emails = actor.attributes['emails'] ?? [identity.comparable];
-        evidence.push(
+        observe(
           rewritten
             ? emitter.parsed({
                 subjectId: actor.id,
@@ -702,7 +826,12 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     /** The earliest instant each file was observed to exist, across this page. */
     const firstSeen = new Map<string, { at: Date; file: CanonicalEntity }>();
 
+    const skippedRecords: { id: string; reason: string }[] = [];
+
     for (const commit of commits) {
+      undo = [];
+      try {
+      const unattributed = unattributedAuthorFor(commit.authorName, commit.authorEmail);
       const commitEntity = add(
         emitter.entity({
           kind: 'commit',
@@ -714,6 +843,10 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
             committedAt: commit.committedAt,
             parents: [...commit.parents],
             ...(commit.tree === undefined ? {} : { tree: commit.tree }),
+            // F-11. Present only when Ferret declined to identify the author,
+            // so an ordinary commit's attributes are unchanged and a query for
+            // unattributed history is a single predicate.
+            ...(unattributed === undefined ? {} : { unattributedAuthor: unattributed }),
           },
           sourceObservedAt: commit.committedAt,
         }),
@@ -734,8 +867,9 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
 
       // A commit's valid time is a fact Git *does* know, unlike a branch's
       // containment: the commit came into being when it was committed.
-      const committedAt = new Date(commit.committedAt);
-      const commitTime = Number.isNaN(committedAt.getTime()) ? observedAt : committedAt;
+      const committedAt = commit.committedAt === undefined ? undefined : new Date(commit.committedAt);
+      const commitTime =
+        committedAt === undefined || Number.isNaN(committedAt.getTime()) ? observedAt : committedAt;
 
       for (const parent of commit.parents) {
         const parentEntity = add(
@@ -775,7 +909,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
             commitTime,
           ),
         );
-        evidence.push(
+        observe(
           emitter.about(commitEntity, 'attributes.authoredAt', commit.authoredAt, {
             observedAt: commit.authoredAt,
           }),
@@ -810,6 +944,11 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
         if (change.kind !== ChangeKind.DELETED) {
           const earliest = firstSeen.get(file.id);
           if (earliest === undefined || commitTime < earliest.at) {
+            const previousFirst = firstSeen.get(file.id);
+            undo.push(() => {
+              if (previousFirst === undefined) firstSeen.delete(file.id);
+              else firstSeen.set(file.id, previousFirst);
+            });
             firstSeen.set(file.id, { at: commitTime, file });
           }
         }
@@ -851,6 +990,18 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
             ),
           );
         }
+      }
+      } catch (error) {
+        // This commit, and only this commit. Everything it had already emitted
+        // is taken back, so the page never carries half of a record Ferret
+        // could not finish — and the run is told which commit was lost and why,
+        // because a silently shorter history is the failure EPIC-019 §12 exists
+        // to prevent.
+        for (const step of undo.reverse()) step();
+        skippedRecords.push({
+          id: commit.sha,
+          reason: error instanceof Error ? error.message : 'the commit could not be represented',
+        });
       }
     }
 
@@ -898,6 +1049,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
       // real commit, so it is a genuine gap-filler rather than one this batch
       // went on to describe properly.
       placeholderEntityIds: [...placeholders],
+      skippedRecords,
     };
   }
 
@@ -996,6 +1148,14 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
        * from the map is emitted exactly as it was before EPIC-030.
        */
       structure?: ReadonlyMap<string, FileStructure>;
+      /**
+       * How much of each file's code the caller could resolve — F-27.
+       *
+       * Optional, and by path, exactly like `structure`: nothing here parses,
+       * and a caller that did not run the content stage supplies none. A path
+       * absent from the map is emitted as it was before.
+       */
+      referenceResolution?: ReadonlyMap<string, FileReferenceResolution>;
     } = {},
   ): {
     entities: readonly CanonicalEntity[];
@@ -1035,6 +1195,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
 
       const extension = extensionOf(entry.path);
       const structure = options.structure?.get(entry.path);
+      const resolution = options.referenceResolution?.get(entry.path);
       const file = emitter.entity({
         kind: 'file',
         source: { id: entry.path, scope: repositoryEntity.id },
@@ -1042,6 +1203,10 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
           path: entry.path,
           ...(extension === undefined ? {} : { extension }),
           ...(structure === undefined ? {} : fileAttributesFrom(structure)),
+          // F-27. Present only for a file this run actually resolved
+          // references in, so "not measured" and "measured, none unresolved"
+          // stay apart — the distinction the counters lost by being logged.
+          ...(resolution === undefined ? {} : { referenceResolution: { ...resolution } }),
         },
       });
       entities.push(file);

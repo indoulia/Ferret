@@ -70,6 +70,28 @@ export interface RelationshipWriteResult {
 
 export interface RelationshipWriter {
   assert(input: RelationshipInput, now?: Date): Promise<RelationshipWriteResult>;
+  /**
+   * Open relationships from one endpoint — F-25b.
+   *
+   * Optional, and paired with {@link RelationshipWriter.retire}: a composition
+   * supplying neither keeps the behaviour it had, which was to assert and never
+   * end anything. The indexer then reports the sweep as *not run* rather than as
+   * having found nothing — "this store cannot tell me" and "there was nothing to
+   * close" are different facts, and collapsing them is how a stale call graph
+   * looks healthy.
+   */
+  openOutgoingOfTypes?(
+    fromIds: readonly string[],
+    types: readonly string[],
+  ): Promise<readonly CanonicalRelationship[]>;
+  /** Records that a relationship stopped being true. A tombstone, not a delete. */
+  retire?(
+    fromId: string,
+    type: string,
+    toId: string,
+    at?: Date,
+    now?: Date,
+  ): Promise<CanonicalRelationship | undefined>;
 }
 
 export interface EvidenceWriteResult {

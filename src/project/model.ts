@@ -326,6 +326,8 @@ function addResolutions(
     // test caught. Recording the quotation is also what makes the inference
     // answerable: "why do you believe this" ends at a sentence somebody wrote.
     const observed = emitter.about(entity, 'body.reference', reference.text, {
+      // A set: one row per reference found in the body — F-06.
+      cardinality: 'collection',
       ...(pull.number === undefined
         ? {}
         : { locator: { kind: 'pull-request', start: pull.number, detail: input.project } }),
@@ -335,6 +337,8 @@ function addResolutions(
     const inferred = emitter.inferred({
       subjectId: entity.id,
       field: 'resolves',
+      // A set: one row per closing reference in the body — F-06.
+      cardinality: 'collection',
       statement: { issue: issue.id, keyword: reference.keyword, quoted: reference.text },
       derivedFrom: [observed.id],
       sourceContentHash: entity.contentHash,
@@ -438,7 +442,17 @@ function actorEntity(state: Accumulator, actor: ProjectActor, emitter: Emitter):
   // disagree with it eventually. An actor with no address at all is classified
   // on its name, which is all there is.
   const classification = classifyIdentity(
-    normalized ?? { name, email: '', comparable: '', localPart: '', domain: '', login: undefined },
+    normalized ?? {
+      name,
+      email: '',
+      comparable: '',
+      localPart: '',
+      domain: '',
+      login: undefined,
+      // F-11's flag. This stand-in exists to classify a *name* when there is no
+      // address at all, which is exactly what the flag reports.
+      addressed: false,
+    },
   );
 
   const entity = emitter.entity({
