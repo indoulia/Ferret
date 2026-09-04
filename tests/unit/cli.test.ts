@@ -129,11 +129,28 @@ describe('planned commands', () => {
     expect(command.description()).toContain('EPIC-999');
   });
 
-  it('has no planned commands left, which is the point', () => {
-    // A deliberate assertion rather than an absence. If a command is added to
-    // the planned list, the parameterised cases above start running again and
-    // this line says why.
-    expect(PLANNED_COMMANDS).toStrictEqual([]);
+  it('says which capabilities exist as libraries and are not wired — F-20, F-21', () => {
+    // This asserted `PLANNED_COMMANDS` was empty, as a deliberate review moment:
+    // "if a command is added to the planned list, the parameterised cases above
+    // start running again and this line says why." It fired, and this is why.
+    //
+    // F-21 and F-20 are not missing features. The GitHub and Jira providers, and
+    // the session and memory domain, are real, tested and reachable as libraries;
+    // every Epic that built them excluded transport, persistence and a client
+    // surface *by name* and delivered the scope it declared. What was missing was
+    // any way for an operator to learn that — `ferret sync` answered with an
+    // unknown-command error indistinguishable from a typo, because the one
+    // mechanism Ferret has for saying "this is coming" was empty.
+    //
+    // The parameterised cases below now run, which is the point of the pin.
+    const named = PLANNED_COMMANDS.map((spec) => spec.name).sort();
+
+    expect(named).toStrictEqual(['session', 'sync']);
+    for (const spec of PLANNED_COMMANDS) {
+      // An entry with no owner is a roadmap promise nobody made.
+      expect(spec.owners.length, `${spec.name} names no owning Epic`).toBeGreaterThan(0);
+      expect(spec.summary.length, `${spec.name} has no summary`).toBeGreaterThan(0);
+    }
   });
 
   it('does nothing silently — every planned command reports its status', async () => {
