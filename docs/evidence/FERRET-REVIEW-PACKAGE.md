@@ -33,7 +33,19 @@ three of F-73 release-gate work.
 | `429de14` | docs(readme): list the two planned commands in the command table | F-21 |
 | `fecfffc` | test(packaging): the suite packs what the suite built, not what a build left | **F-72** |
 | `4a5fecb` | test(harness): a packaging gate that did not run cannot report a green run | **F-73** |
-| `50eb9c1` | docs(evidence,decisions): the F-73 cycle, and the backup decision it did not take | F-44 / F-45 briefs |
+| `c1aa6c9` | docs(evidence,decisions): the F-73 cycle, the backup decision, and the review package | F-44 / F-45 briefs |
+
+**This commit was rewritten once, and the reason is worth a reviewer's
+attention.** Its first version quoted the fixture's filename literally — an
+AWS-key-shaped string — in the commit message. `tests/unit/secrets.test.ts`
+scans this repository's last 400 commit messages for exactly that shape, and it
+failed: `expected [ 'aws-access-key-id' ] to strictly equal []`. The message now
+describes the filename instead of quoting it, and the corpus is clean again
+(24/24). The tree content is unchanged between the two versions; only the
+message differs. Two things follow. The commit was **force-pushed**, so anyone
+holding `50eb9c1` should reset to `c1aa6c9`. And the test worked — it caught a
+credential-shaped string entering the repository, from the one source nobody
+lints.
 
 **One correction worth stating.** `0ae5328` recorded F-73 as "re-verified as
 already closed" on the strength of a passing run. It was not closed. It
@@ -176,8 +188,9 @@ F-78, F-86, F-84, F-87, F-20/F-21, F-72.
 
 ## 8. Validation evidence
 
-All on `50eb9c1`, this machine, against a real PostgreSQL 17 + pgvector
-container except where noted.
+All on this branch's tip, this machine, against a real PostgreSQL 17 + pgvector
+container except where noted. The normal-conditions figure below was re-measured
+on the final commit after the message rewrite, not carried over.
 
 | Gate | Result |
 | --- | --- |
