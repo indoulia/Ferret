@@ -8,7 +8,7 @@ types added; no entity kind, no schema change, no migration.
 
 | | |
 | --- | --- |
-| Tree | `533c396` (`main`) + this Epic |
+| Tree | `533c396` (`main`) + this Epic, merged as `5b7c6fd` |
 | Host | Windows 11, Node v22.23.2, vitest 4.1.11 |
 | Database | PostgreSQL 17 + pgvector, container started by `tests/support/postgres.ts` |
 | Live source consulted | `nymi-inc.atlassian.net`, read-only, for wire shapes only |
@@ -211,6 +211,12 @@ EPIC-119's 35, EPIC-120's 24, EPIC-121's 26 and EPIC-122's 26 stay green.
   is not claimed.
 - **No blog posts, attachments, page comments, permissions mirror, CQL surface,
   webhooks or scheduling.**
+
+## Post-merge verification
+
+Re-verified on merged `main` at `5b7c6fd`: the four connector suites, the
+EPIC-119 contract suite, the boundary suite and the conformance harness —
+**271 passed**. Build clean. Working tree clean.
 
 ## Not applicable
 
