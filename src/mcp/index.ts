@@ -45,3 +45,9 @@ export {
   type HealthToolDependencies,
   type IndexCounts,
 } from './health-tools.js';
+export {
+  MAX_SESSION_LIST,
+  registerSessionTools,
+  type SessionAccess,
+  type SessionToolDependencies,
+} from './session-tools.js';

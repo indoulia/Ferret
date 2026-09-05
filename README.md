@@ -245,6 +245,9 @@ secret out of one more file.
 | `ferret_providers` | "Why can't you search semantically?" — every provider, its state, and which of three things is wrong |
 | `ferret_provider_recover` | Retry a provider that failed to start — **confirmed** |
 | `ferret_health` | "Is Ferret working, and is there anything in it?" — before concluding a search found nothing |
+| `ferret_session_recall` | "What did the last session decide?" — the checkpoint and the memories, not the transcript |
+| `ferret_session_list` | "Which sessions are on record?" — to find the id a recall needs |
+| `ferret_session_show` | One session and everything it recorded, superseded memories included |
 
 Every knowledge tool is **read-only**, and indexing is still a command a person
 runs. The three tools that write are the only ones, and they are governed rather

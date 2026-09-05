@@ -53,6 +53,7 @@ import { VERSION } from '../version.js';
 
 import { registerConfigTools, type ConfigurationAccess } from './config-tools.js';
 import { registerHealthTools, type HealthAccess } from './health-tools.js';
+import { registerSessionTools, type SessionAccess } from './session-tools.js';
 import { registerProviderTools, type ProviderAdministration } from './provider-tools.js';
 import { createToolGuard } from './guards.js';
 
@@ -200,6 +201,16 @@ export interface McpServerDependencies {
    * dependency here.
    */
   readonly health?: HealthAccess;
+  /**
+   * Session recall — EPIC-111.
+   *
+   * A port for the same reason `health` is one: `SessionStore` lives in
+   * `src/storage/` and `boundaries.test.ts` refuses an MCP module that reaches
+   * it. The store satisfies EPIC-043's `SessionRecoveryPort` already, so the
+   * composition root passes it straight through. Absent means the tools are
+   * not registered, as with every other optional dependency here.
+   */
+  readonly sessions?: SessionAccess;
   readonly logger: Logger;
 }
 
@@ -266,6 +277,18 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
   if (dependencies.health !== undefined) {
     registerHealthTools(server, {
       health: dependencies.health,
+      principal,
+      logger,
+      ...(dependencies.audit === undefined ? {} : { audit: dependencies.audit }),
+    });
+  }
+
+  // EPIC-111. `ferret session recall` reached an operator with a shell and
+  // nobody else — and an AI client, the caller the whole domain exists for, is
+  // usually a process with neither a shell nor `ferret` on its path.
+  if (dependencies.sessions !== undefined) {
+    registerSessionTools(server, {
+      sessions: dependencies.sessions,
       principal,
       logger,
       ...(dependencies.audit === undefined ? {} : { audit: dependencies.audit }),
