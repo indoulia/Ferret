@@ -22,7 +22,10 @@ export {
 } from './ingest.js';
 
 export {
+  PROJECT_COMMENT_RECORD,
   PROJECT_ISSUE_RECORD,
+  PROJECT_PULL_REQUEST_RECORD,
+  PROJECT_REVIEW_RECORD,
   projectSourceConnector,
   type ProjectConnectorOptions,
 } from './project-connector.js';

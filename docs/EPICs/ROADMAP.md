@@ -9,12 +9,13 @@ decision taken beside the options it was choosing between, because a decision
 read without its alternatives is indistinguishable from a default.
 
 **Epics were directed after the queue was exhausted.** EPIC-118 — Ferret
-Self-Dogfood — EPIC-119 — Universal Source Connector Contract — and EPIC-120 —
-Repository Connector, the first source connected through that boundary. None
-came from this document and none is an entry invented to keep it alive; all were
-directed by the owner. See [after the queue](#after-the-queue--epic-118),
-[EPIC-119](#after-the-queue--epic-119) and
-[EPIC-120](#after-the-queue--epic-120).
+Self-Dogfood — EPIC-119 — Universal Source Connector Contract — EPIC-120 —
+Repository Connector — and EPIC-121 — GitHub Connector. None came from this
+document and none is an entry invented to keep it alive; all were directed by
+the owner. See [after the queue](#after-the-queue--epic-118),
+[EPIC-119](#after-the-queue--epic-119),
+[EPIC-120](#after-the-queue--epic-120) and
+[EPIC-121](#after-the-queue--epic-121).
 
 **Nothing implementation-ready remains.** What is left is listed under
 [not in this queue](#not-in-this-queue), and every item there needs a decision,
@@ -634,6 +635,42 @@ and 201 of 201 commits, with the 14-entity difference between the file count and
 `git ls-files` accounted for exactly by the 14 paths deleted over Ferret's
 history.
 
+## After the queue — EPIC-121
+
+**GitHub Connector**, directed by the owner on 2026-09-05.
+
+EPIC-119 read *issues* from the GitHub provider and said why it stopped:
+widening "would mean paging three collections against one cursor". EPIC-120
+paged five collections of a repository behind one staged cursor without the
+ingestor changing, so the reason expired and this Epic widened it to issues,
+pull requests, reviews and comments.
+
+The gap underneath was larger than the widening. **`listComments` has been
+implemented by every project provider since EPIC-021 and nothing had ever called
+it.** The capability was declared, the transport was written, the suites passed,
+and not one comment had ever reached the graph — which for a context layer means
+the issue was indexed and the discussion on it, where the reasoning actually
+lives, was thrown away.
+
+Both defects it found came from running against the **live GitHub API**, and
+both are the same shape: *a fixture that agrees with the code cannot test it.*
+
+- Every comment was an orphan. The provider addresses comments by number and
+  synthesises `parentId` as `owner/repo#123`; it identifies the same issue by
+  its GraphQL `node_id`. Twenty-five acquired, twenty-five skipped. A fixture
+  without a `node_id` falls back to exactly the synthesised form, so every
+  fixture in the repository agreed with the bug.
+- `Fixes #N` linked to a phantom. Found the moment the fixtures were given the
+  `node_id` the real API sends: a closing reference minted a placeholder issue
+  even when the real issue was in the same batch, producing two entities for one
+  issue and hanging the `resolves` edge off the stub. That one was in
+  `modelProject`, so `ferret sync` had it too.
+
+No canonical model change was needed. A comment is a `document` and the edge to
+its parent is `DOCUMENT_DESCRIBES_ENTITY` — both already in the model, for the
+reason EPIC-119 gave when it scoped sources to `repository` rather than minting
+a `source` kind.
+
 ## Not in this queue
 
 - **[#138](https://github.com/indoulia/Ferret/issues/138) — three limitation rows
@@ -680,6 +717,7 @@ Filled in as Epics land.
 | EPIC-118 | `4aa5fae` | [#173](https://github.com/indoulia/Ferret/pull/173) | `f4e5997` | [record](validation/EPIC-118-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-119 | `1aeffcc` | [#176](https://github.com/indoulia/Ferret/pull/176) | `1aeffcc` | [record](validation/EPIC-119-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-120 | `6c810c8` | [#178](https://github.com/indoulia/Ferret/pull/178) | `6c810c8` | [record](validation/EPIC-120-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-121 | `PENDING` | [#PENDING](https://github.com/indoulia/Ferret/pull/PENDING) | `PENDING` | [record](validation/EPIC-121-VALIDATION.md) | COMPLETE — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:
