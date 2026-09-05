@@ -180,7 +180,11 @@ including `client_connection_check_interval` (D-006). pgvector requires 13+.
 Reporting rather than only enforcing lets `ferret doctor` say "your PostgreSQL is
 too old" instead of failing to start and saying nothing.
 
-**Gap.** Only PostgreSQL 17 is measured. Recorded in the validation evidence.
+**Gap — closed 2026-09-05 by EPIC-114.** Only PostgreSQL 17 was measured, and
+the floor was a claim in code with nothing behind it. A scheduled compatibility
+lane now runs the full suite against 14, 15 and 16; all three pass. See
+[EPIC-114's record](../EPICs/validation/EPIC-114-VALIDATION.md). The decision
+itself is unchanged: the minimum is still 14.
 
 ---
 
