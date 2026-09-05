@@ -418,7 +418,19 @@ describe('Jira provider — failures', () => {
 describe('Jira provider — what it will not do', () => {
   it('has no method that writes', () => {
     const client = new JiraClient({ baseUrl: BASE, fetch: new Transport([]).fetch });
-    const methods = new Set(Object.getOwnPropertyNames(Object.getPrototypeOf(client) as object));
+    // The whole prototype chain, not just the instance's own prototype. The
+    // transport moved to `AtlassianClient` in EPIC-123 and `JiraClient` binds
+    // it, so `get` lives one level up — and a write method added to the shared
+    // base would be just as much of a breach as one added here. Walking the
+    // chain is what the guarantee always meant.
+    const methods = new Set<string>();
+    for (
+      let proto: object | null = Object.getPrototypeOf(client) as object | null;
+      proto !== null && proto !== Object.prototype;
+      proto = Object.getPrototypeOf(proto) as object | null
+    ) {
+      for (const name of Object.getOwnPropertyNames(proto)) methods.add(name);
+    }
     expect(methods.has('get')).toBe(true);
     for (const forbidden of ['post', 'put', 'patch', 'delete', 'request', 'transition']) {
       expect(methods.has(forbidden)).toBe(false);

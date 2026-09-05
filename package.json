@@ -48,6 +48,10 @@
       "types": "./dist/jira/index.d.ts",
       "default": "./dist/jira/index.js"
     },
+    "./confluence": {
+      "types": "./dist/confluence/index.d.ts",
+      "default": "./dist/confluence/index.js"
+    },
     "./mcp": {
       "types": "./dist/mcp/index.d.ts",
       "default": "./dist/mcp/index.js"
