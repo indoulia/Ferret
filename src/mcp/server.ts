@@ -634,7 +634,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       description:
         'Exact, unranked lookup by kind and attribute — "every file in this ' +
         'repository", "the branch named main". Use this when the question has ' +
-        'a right answer; use ferret_search when it does not. ' + CONTENT_NOTICE,
+        'a right answer; use ferret_search when it does not. A result larger ' +
+        'than one page reports `nextOffset`; pass it back as `offset` to read ' +
+        'the next page, and repeat until `truncated` is false. ' + CONTENT_NOTICE,
       inputSchema: z.strictObject({
         kind: z.string().min(1).optional(),
         attributes: z.record(z.string(), z.string()).optional(),
@@ -644,16 +646,29 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           .optional()
           .describe('Restrict to a lifecycle state. Omitted returns every state, deleted included.'),
         limit: z.number().int().min(1).max(MAX_LIMIT).optional(),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('Entities to skip. Use the `nextOffset` of the previous page; do not compute one.'),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ kind, attributes, scope, lifecycle, limit }) =>
+    async ({ kind, attributes, scope, lifecycle, limit, offset }) =>
       guard('find', Permission.READ, async () => {
         // Bounded by `MAX_LIMIT`, which is what the schema advertises — not by
         // the smaller cap the ranked tools use. Accepting a limit of 500 and
         // then quietly returning 50 makes the declared schema a lie, and this is
         // the tool whose stated purpose is "every file in this repository".
         const requested = Math.min(limit ?? 20, MAX_LIMIT);
+        // EPIC-118. `MAX_LIMIT` is a page size, not a ceiling on what Ferret can
+        // describe, and until this tool carried an offset those were the same
+        // number: a repository with more than 500 entities of a kind could not
+        // be enumerated at all, and Ferret's own — 830 tracked files — was one.
+        // The offset already existed on `EntityQuery` and in the SQL; nothing
+        // reached it, so the store could page and no client could ask it to.
+        const from = offset ?? 0;
         // One more than asked for, purely to learn whether there were more. An
         // exact lookup that silently returns the first page of a larger answer
         // is a wrong answer wearing a right one's clothes — the caller has no
@@ -665,6 +680,7 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           ...(scope === undefined ? {} : { scope }),
           ...(lifecycle === undefined ? {} : { lifecycle }),
           limit: requested,
+          offset: from,
         }, access);
         // Two separate facts, and both are reported. The store says whether
         // further matches exist; the store also says how many rows this caller
@@ -683,6 +699,17 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           ...(found.more || found.withheld.total > 0
             ? {
                 truncated: true,
+                // Only when the *store* says more rows follow. Withheld rows are
+                // not a next page — they are rows this caller will never see, and
+                // offering an offset for them would loop a client for ever over
+                // an answer that cannot grow.
+                //
+                // Advanced by the page size rather than by `count`. The database
+                // applies `OFFSET`/`LIMIT` before permission filtering removes
+                // rows, so `from + count` would rewind by exactly the number
+                // withheld and return rows already delivered. F-31's shape:
+                // deriving a fact from a list something else had shortened.
+                ...(found.more ? { nextOffset: from + requested } : {}),
                 more:
                   (found.more
                     ? `More than ${String(requested)} entities match. `
@@ -690,7 +717,10 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
                   (found.withheld.total > 0
                     ? `${String(found.withheld.total)} row(s) were withheld from this caller. `
                     : '') +
-                  `This is a partial answer — raise \`limit\` (max ${String(MAX_LIMIT)}) or narrow the query.`,
+                  (found.more
+                    ? `This is a partial answer — pass \`offset: ${String(from + requested)}\` for the next page, ` +
+                      `or raise \`limit\` (max ${String(MAX_LIMIT)}).`
+                    : `This is a partial answer — raise \`limit\` (max ${String(MAX_LIMIT)}) or narrow the query.`),
               }
             : { truncated: false }),
           // `results`, the same key `ferret_search` uses. It was `entities`, and

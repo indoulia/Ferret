@@ -140,11 +140,16 @@ class FakeRetrieval implements RetrievalPort {
   }> {
     this.lastFind = query;
     const limit = query.limit ?? this.findResult.length;
+    // The offset is honoured, so a paging test pages rather than asking for
+    // page one twice. The store applies it before permission filtering — hence
+    // `withheld` being independent of the slice, which is what makes the
+    // "a withheld row is not a next page" case assertable.
+    const offset = query.offset ?? 0;
     return Promise.resolve({
-      entities: this.findResult.slice(0, limit),
+      entities: this.findResult.slice(offset, offset + limit),
       withheld:
         this.withhold === 0 ? NOTHING_WITHHELD : { total: this.withhold, byReason: { scope: this.withhold } },
-      more: this.findResult.length > limit,
+      more: this.findResult.length > offset + limit,
     });
   }
 
@@ -786,6 +791,107 @@ describe('a tool never answers a question it was not asked', () => {
     expect(result['count']).toBe(1);
     expect(result['truncated']).toBe(false);
     expect(result['more']).toBeUndefined();
+  });
+});
+
+/**
+ * Paging an answer larger than one page — EPIC-118.
+ *
+ * `MAX_LIMIT` was a ceiling on what Ferret could describe rather than a page
+ * size: a repository with more than 500 files of a kind could not be
+ * enumerated, and Ferret's own — 830 tracked files — was one. The failure was
+ * not a short answer but a confidently wrong one, because the tool's stated
+ * purpose is "every file in this repository" and 487 of 830 looks exactly like
+ * all of them.
+ */
+describe('reading an answer that outgrows one page', () => {
+  const many = Array.from({ length: 25 }, (_, i) =>
+    entity(`44444444-4444-4444-8444-${String(i).padStart(12, '0')}`, 'file', {
+      path: `src/file-${String(i).padStart(3, '0')}.ts`,
+    }),
+  );
+
+  afterEach(() => {
+    retrieval.findResult = [FILE];
+    retrieval.withhold = 0;
+  });
+
+  it('offers the next page, and reaches every entity exactly once', async () => {
+    retrieval.findResult = many;
+
+    const seen: string[] = [];
+    let offset: number | undefined = 0;
+    let pages = 0;
+    while (offset !== undefined) {
+      const page: Record<string, unknown> = await call('ferret_find', {
+        kind: 'file',
+        limit: 10,
+        ...(offset === 0 ? {} : { offset }),
+      });
+      pages += 1;
+      for (const row of page['results'] as { attributes: { path: string } }[]) {
+        seen.push(row.attributes.path);
+      }
+      offset = page['nextOffset'] as number | undefined;
+      // A page that does not advance would loop for ever.
+      expect(pages).toBeLessThanOrEqual(5);
+    }
+
+    expect(pages).toBe(3);
+    expect(seen).toEqual(many.map((e) => e.attributes['path']));
+    expect(new Set(seen).size).toBe(many.length);
+  });
+
+  it('advances by the page size, not by the rows that survived filtering', async () => {
+    // The store applies OFFSET and LIMIT in SQL, before permission filtering
+    // removes rows in TypeScript. A cursor derived from `count` would rewind by
+    // exactly the number withheld and hand back rows already delivered — the
+    // shape of issue #31, where a fact was inferred from a list something else
+    // had shortened.
+    retrieval.findResult = many;
+    retrieval.withhold = 4;
+
+    const page = await call('ferret_find', { kind: 'file', limit: 10 });
+
+    expect(page['nextOffset']).toBe(10);
+    expect(String(page['more'])).toContain('offset: 10');
+  });
+
+  it('offers no next page when the only shortfall is what was withheld', async () => {
+    // Withheld rows are not a next page: they are rows this caller will never
+    // see. Offering an offset for them loops a client for ever over an answer
+    // that cannot grow.
+    retrieval.withhold = 3;
+
+    const page = await call('ferret_find', { kind: 'file', limit: 10 });
+
+    expect(page['truncated']).toBe(true);
+    expect(page['withheld']).toBe(3);
+    expect(page['nextOffset']).toBeUndefined();
+  });
+
+  it('offers no next page on the last one', async () => {
+    retrieval.findResult = many;
+
+    const last = await call('ferret_find', { kind: 'file', limit: 10, offset: 20 });
+
+    expect(last['count']).toBe(5);
+    expect(last['truncated']).toBe(false);
+    expect(last['nextOffset']).toBeUndefined();
+  });
+
+  it('passes the offset through to retrieval rather than dropping it', async () => {
+    await call('ferret_find', { kind: 'file', limit: 10, offset: 20 });
+
+    expect(retrieval.lastFind).toMatchObject({ offset: 20, limit: 10 });
+  });
+
+  it('refuses a negative offset rather than reading from the start', async () => {
+    // Silently clamping would answer a question the client did not ask, and it
+    // would do so with a full page that looks correct.
+    const result = await callRaw('ferret_find', { kind: 'file', offset: -1 });
+
+    expect(result.isError).toBe(true);
   });
 });
 

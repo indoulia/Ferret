@@ -217,6 +217,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-099 — Provider Conformance Harness** — P0 — VALIDATED ([spec](EPIC-099-Provider-Conformance-Harness.md), [evidence](validation/EPIC-099-VALIDATION.md))
 - **EPIC-100 — Security Regression Suite** — P0 — VALIDATED ([spec](EPIC-100-Security-Regression-Suite.md), [evidence](validation/EPIC-100-VALIDATION.md))
 - **EPIC-101 — Performance & Scale Benchmarks** — P1 — VALIDATED ([spec](EPIC-101-Performance-And-Scale-Benchmarks.md), [evidence](validation/EPIC-101-VALIDATION.md))
+- **EPIC-118 — Ferret Self-Dogfood** — P1 — VALIDATED ([spec](EPIC-118-Ferret-Self-Dogfood.md), [evidence](validation/EPIC-118-VALIDATION.md))
 
 ### Distribution & Developer Experience
 

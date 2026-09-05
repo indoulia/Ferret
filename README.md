@@ -249,7 +249,7 @@ secret out of one more file.
 | Tool | Answers |
 | --- | --- |
 | `ferret_search` | "Where did we discuss connection timeouts?" |
-| `ferret_find` | "Every file in this repository." — exact, unranked |
+| `ferret_find` | "Every file in this repository." — exact, unranked, paged by `offset` |
 | `ferret_get_entity` | One commit, file or branch, with its identifiers |
 | `ferret_neighbours` | "What touched this file?" — and, with `at`, "what was I working on last Tuesday?" |
 | `ferret_context_pack` | A bounded pack of relevant knowledge for a question |
@@ -730,6 +730,15 @@ and eighteen indexed files included thirteen that had not existed for months,
 each reported `active`, and each with a `change: deleted` record already in the
 graph. Running Ferret and reading the output would have shown neither. Comparing
 its output to `git ls-files` showed both immediately.
+
+It found a third the same way. `ferret_find` — the tool whose stated purpose is
+"every file in this repository" — had no offset and returns at most 500 rows, and
+this repository tracks 830 files. The oracle read 487 and reported the other 343
+as **tracked files absent from the index**: the index was complete, the retrieval
+was truncated, and from the call site those are indistinguishable. Every fixture
+in the tree is smaller than one page, so no test could have caught it. Fixed in
+[EPIC-118](docs/EPICs/EPIC-118-Ferret-Self-Dogfood.md); the tool now reports a
+`nextOffset` and the oracle pages until there is none.
 
 It needs a configured database, like any other Ferret run:
 
