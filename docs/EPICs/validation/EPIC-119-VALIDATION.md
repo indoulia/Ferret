@@ -210,6 +210,22 @@ Existing suites re-run for the refactor and the capability addition:
 `project-sync`, `boundaries`, `capabilities`, `providers`, `github-provider`,
 `jira-provider`, `provider-conformance` — 289 passed.
 
+## Stated rather than claimed
+
+**No registered provider declares `source.connector` yet.** The capability is
+defined, versioned and in the catalogue; `projectSourceConnector` produces a
+`SourceConnector` from a provider that declares `source.project`, and the
+ingestor is driven by the connector object directly rather than by capability
+selection through the registry. So the capability is *declared and unclaimed* —
+the state `source.project` itself was in from EPIC-013 until EPIC-021 gave it a
+contract and a provider.
+
+That is the correct state for this Epic and not an oversight: making the GitHub
+provider declare `source.connector` would mean asserting it implements
+`identify`/`acquire`/`normalize`, which it does not — the adapter does. The first
+provider to declare it is EPIC-120's, and nothing here is stubbed in advance of
+it.
+
 ## Not applicable
 
 **Performance benchmarks** — N/A. The Epic adds no query, no index and no hot

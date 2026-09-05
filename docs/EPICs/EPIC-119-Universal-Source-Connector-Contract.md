@@ -119,6 +119,13 @@ list.
 | `writeContribution` | `src/connectors/write.ts` | The one write path, shared with `ferret sync` |
 | `projectSourceConnector` | `src/connectors/project-connector.ts` | The real adapter over `ProjectSource` |
 
+**The capability is declared and not yet claimed.** No registered provider
+advertises `source.connector`; the adapter produces a connector from a provider
+that declares `source.project`, and the ingestor is driven by the connector
+directly. Declaring it on the GitHub provider would assert that provider
+implements the three verbs, which it does not. The first provider to declare it
+is EPIC-120's.
+
 ## Acceptance criteria
 
 1. A concrete source implements the contract with no bespoke ingestion
