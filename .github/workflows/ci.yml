@@ -5,7 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # Windows runs here rather than on every pull request — see the matrix below.
+  # A nightly run on `main`. The reason it was added no longer holds: it existed
+  # because Windows ran *only* here and not on pull requests, and the 2026-09-05
+  # matrix change put Windows on every event. Kept anyway, for the thing a
+  # per-commit run cannot do — a run against a tree nobody touched that day,
+  # which is where a time- or environment-dependent break shows up.
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
