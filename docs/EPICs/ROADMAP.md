@@ -206,9 +206,15 @@ proceed first.
 
 Filled in as Epics land.
 
-| Epic | Commit | PR | Merge | Status |
-| --- | --- | --- | --- | --- |
-| EPIC-109 | `452980d` | [#156](https://github.com/indoulia/Ferret/pull/156) | `ec0a376` | COMPLETE |
-| EPIC-110 | `2e7ce50` | [#157](https://github.com/indoulia/Ferret/pull/157) | `533b603` | COMPLETE |
-| EPIC-111 | `818fdfc` | [#158](https://github.com/indoulia/Ferret/pull/158) | `39a23ca` | COMPLETE |
-| EPIC-112 | `b137094` | [#159](https://github.com/indoulia/Ferret/pull/159) | `5faab0c` | COMPLETE |
+| Epic | Commit | PR | Merge | Evidence | Status |
+| --- | --- | --- | --- | --- | --- |
+| EPIC-109 | `452980d` | [#156](https://github.com/indoulia/Ferret/pull/156) | `ec0a376` | [record](validation/EPIC-109-VALIDATION.md) | COMPLETE |
+| EPIC-110 | `2e7ce50` | [#157](https://github.com/indoulia/Ferret/pull/157) | `533b603` | [record](validation/EPIC-110-VALIDATION.md) | COMPLETE |
+| EPIC-111 | `818fdfc` | [#158](https://github.com/indoulia/Ferret/pull/158) | `39a23ca` | [record](validation/EPIC-111-VALIDATION.md) | COMPLETE |
+| EPIC-112 | `b137094` | [#159](https://github.com/indoulia/Ferret/pull/159) | `5faab0c` | [record](validation/EPIC-112-VALIDATION.md) | COMPLETE |
+
+All four merged **without** a validation record and without a registry catalog
+entry; both were added on 2026-09-05 and every cited suite re-run to confirm the
+evidence still holds. The reconciliation, and the fact that the records were
+written after the merges rather than alongside them, is recorded in
+[the registry](README.md#catalog-reconciliation--2026-09-05).
