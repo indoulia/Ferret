@@ -100,6 +100,26 @@ interface EntityRowShape {
  */
 const RANK_NORMALIZATION = sql.raw('32');
 
+/**
+ * A full-text query that matches any term, where that rewrite is provably safe.
+ *
+ * Extracted so the merger's candidate search (EPIC-126) shares this expression
+ * rather than carrying a second copy of it. It is subtle and it has been wrong
+ * before — F-65, recorded at the call site above — and Governance §5 is exactly
+ * about not having two of it.
+ *
+ * A shape carrying negation, alternation or grouping keeps the strict query,
+ * which narrows what relaxation applies to rather than widening it.
+ */
+export function relaxedTsQuery(text: string): SQL {
+  return sql`(SELECT CASE
+                 WHEN strict.query::text ~ '[!|()]' THEN strict.query
+                 ELSE replace(strict.query::text, ' & ', ' | ')::tsquery
+               END
+                 FROM (SELECT websearch_to_tsquery('english', ${text}) AS query) strict)`;
+}
+
+
 function instant(value: unknown): string | undefined {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'string' && value.length > 0) return new Date(value).toISOString();
@@ -827,11 +847,7 @@ export class RetrievalStore implements RetrievalPort {
     // matched too much, for the wrong reason, and said nothing about it.
     const tsquery =
       query.relax === true
-        ? sql`(SELECT CASE
-                 WHEN strict.query::text ~ '[!|()]' THEN strict.query
-                 ELSE replace(strict.query::text, ' & ', ' | ')::tsquery
-               END
-                 FROM (SELECT websearch_to_tsquery('english', ${text}) AS query) strict) AS q(query)`
+        ? sql`${relaxedTsQuery(text)} AS q(query)`
         : sql`(SELECT websearch_to_tsquery('english', ${text})) AS q(query)`;
 
     const entityMatches = sql`

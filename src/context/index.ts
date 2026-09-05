@@ -82,3 +82,34 @@ export {
   type CrossSourceReport,
   type ResolvedLink,
 } from './cross-source.js';
+
+// EPIC-126. Durable context: the statement Ferret holds, keyed on what is said
+// rather than on who said it, which is the whole of the merge.
+export {
+  CONTEXT_CONCERNS_ENTITY,
+  CONTEXT_CONTRADICTS_CONTEXT,
+  CONTEXT_KINDS,
+  CONTEXT_RELATES_TO_CONTEXT,
+  ContextKind,
+  DURABLE_CONTEXT_KIND,
+  DURABLE_CONTEXT_SYSTEM,
+  MAX_CANDIDATES,
+  MergeVerdict,
+  NEAR_DUPLICATE_SIMILARITY,
+  classifyPair,
+  contradicts,
+  createDurableContext,
+  durableContextAttributes,
+  durableContextOf,
+  durableContextSourceId,
+  MEMORY_CONTEXT_KINDS,
+  isContextKind,
+  normalizeStatement,
+  registerDurableContextKind,
+  similarity,
+  statementTokens,
+  type DurableContext,
+  type DurableContextAttributes,
+  type DurableContextInput,
+  type PairVerdict,
+} from './durable.js';

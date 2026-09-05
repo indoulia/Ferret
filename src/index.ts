@@ -397,6 +397,36 @@ export {
   type SelectionOptions,
 } from './context/index.js';
 
+// EPIC-126. Durable context, and the merge that is a property of its identifier.
+export {
+  CONTEXT_CONCERNS_ENTITY,
+  CONTEXT_CONTRADICTS_CONTEXT,
+  CONTEXT_KINDS,
+  CONTEXT_RELATES_TO_CONTEXT,
+  ContextKind,
+  DURABLE_CONTEXT_KIND,
+  DURABLE_CONTEXT_SYSTEM,
+  MAX_CANDIDATES,
+  MergeVerdict,
+  NEAR_DUPLICATE_SIMILARITY,
+  classifyPair,
+  contradicts,
+  createDurableContext,
+  durableContextAttributes,
+  durableContextOf,
+  durableContextSourceId,
+  MEMORY_CONTEXT_KINDS,
+  isContextKind,
+  normalizeStatement,
+  registerDurableContextKind,
+  similarity,
+  statementTokens,
+  type DurableContext,
+  type DurableContextAttributes,
+  type DurableContextInput,
+  type PairVerdict,
+} from './context/index.js';
+
 // EPIC-124. The cross-source join a connector cannot make.
 export {
   DEFAULT_EXAMINE_LIMIT,

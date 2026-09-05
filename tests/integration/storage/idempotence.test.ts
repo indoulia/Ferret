@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  ContextKind,
   EntityKind,
   EvidenceMethod,
   RelationshipType,
@@ -19,6 +20,7 @@ import {
 import {
   CompatibilityService,
   ContentStore,
+  DurableContextStore,
   EntityStore,
   EvidenceStore,
   RelationshipStore,
@@ -177,6 +179,7 @@ describeDb(`idempotent ingestion (${databaseAvailable() ? 'real PostgreSQL' : SK
         'sessions.ts:save',
         'sessions.ts:saveCheckpoint',
         'sessions.ts:recordMemory',
+        'durable-context.ts:record',
       ]);
 
       for (const { key } of writeMethods()) {
@@ -413,6 +416,38 @@ describeDb(`idempotent ingestion (${databaseAvailable() ? 'real PostgreSQL' : SK
 
       expect(await count('engineering_memory')).toBe(before);
       expect(await sessions.memoriesFor('idem-2')).toHaveLength(1);
+    });
+
+    it('recording the same durable context twice adds no row — EPIC-126', async () => {
+      const context = new DurableContextStore(handle);
+      const input = {
+        statement: 'Idempotence is a property of the identifier, not of the caller',
+        contextKind: ContextKind.DECISION,
+        scope: repositoryId,
+        provenance: { producer: 'idem', producerVersion: '1.0.0', sourceSystem: 'ferret' },
+      } as const;
+
+      const first = await context.record(input);
+      const before = { entity: await count('entity'), evidence: await count('evidence') };
+
+      // The same input again writes nothing at all.
+      const replay = await context.record(input);
+      expect(first.outcome).toBe('created');
+      expect(replay.outcome).toBe('merged');
+      expect(replay.evidenceId).toBe(first.evidenceId);
+      expect(await count('entity')).toBe(before.entity);
+      expect(await count('evidence')).toBe(before.evidence);
+
+      // A *different wording* of the same statement merges onto the same record
+      // and adds one observation — which is correct rather than a leak: the
+      // record holds what Ferret settled on, the evidence what was said.
+      const variant = await context.record({
+        ...input,
+        statement: 'idempotence is a property of the identifier,  not of the caller.',
+      });
+      expect(variant.context.entity.id).toBe(first.context.entity.id);
+      expect(await count('entity')).toBe(before.entity);
+      expect(await count('evidence')).toBe(before.evidence + 1);
     });
 
     it('a checkpoint replayed at a taken sequence writes nothing new', async () => {
