@@ -58,6 +58,34 @@ export const Permission = {
   MUTATE: 'mutate',
   /** Administer providers — EPIC-067's permission. */
   PROVIDER_ADMIN: 'provider.admin',
+  /**
+   * Open, continue and close a recording of an agent's own work — EPIC-117.
+   *
+   * **An amendment to a closed set, raised as one.** EPIC-068 declared this
+   * vocabulary closed, and the value of a closed set is that adding to it is a
+   * visible decision rather than a convenience. The alternative was to overload
+   * an existing grant, and both candidates were worse in the same way:
+   *
+   * - `INDEX` means "may cause Ferret to ingest sources". Recording what a
+   *   session decided is not ingestion, and an operator granting one would have
+   *   been granting the other without being told.
+   * - `MUTATE` and `CONFIG_WRITE` conflate recording a decision with changing
+   *   what Ferret believes or how it is configured, which is the strictly worse
+   *   version of the same conflation.
+   *
+   * What this grants is narrow and says so: create, continue and terminate a
+   * *recording* — a session, its checkpoints and the memories it produced. It
+   * confers no ability to read anything, ingest anything, or change any
+   * configuration, and `READ` is still required to recall what was recorded.
+   *
+   * **Deny by default applies.** A principal configured before this permission
+   * existed does not hold it, which is the only safe direction: an operator who
+   * granted `index` did not thereby ask for an agent to be able to write into
+   * Ferret's own record of its reasoning. The local operator's default grant
+   * includes it — see {@link LOCAL_OPERATOR_PRINCIPAL} — so nothing an operator
+   * could already do from their own machine changes.
+   */
+  RECORD: 'record',
 } as const;
 
 export type Permission = (typeof Permission)[keyof typeof Permission];
@@ -167,7 +195,13 @@ export const ANONYMOUS_PRINCIPAL: Principal = Object.freeze({
 export const LOCAL_OPERATOR_PRINCIPAL: Principal = Object.freeze({
   id: 'ferret.local-operator',
   class: PrincipalClass.OPERATOR,
-  permissions: Object.freeze([Permission.INDEX, Permission.READ]),
+  // `RECORD` joins the default with EPIC-117, for this constant's own reason:
+  // `ferret session start` has been an ordinary local command since EPIC-110,
+  // and splitting its permission out of `INDEX` must not take a capability away
+  // from an operator at their own machine. It is *not* added to
+  // `ANONYMOUS_PRINCIPAL`: a client that arrived over a transport and configured
+  // nothing gets `READ`, and recording is a write.
+  permissions: Object.freeze([Permission.INDEX, Permission.READ, Permission.RECORD]),
   permittedScopes: Object.freeze([]),
   scope: Object.freeze({ include: [], exclude: [] }),
 });

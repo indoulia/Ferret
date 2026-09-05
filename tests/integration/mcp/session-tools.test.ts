@@ -126,15 +126,21 @@ afterEach(async () => {
 });
 
 describe('the tools are offered — AC-1', () => {
-  it('registers all three, and every one is read-only', async () => {
+  it('registers the three recall tools, and every one is read-only', async () => {
     const { client } = await harness(accessOf({}));
     const { tools } = await client.listTools();
-    const names = tools.map((tool) => tool.name).sort();
+    const recall = tools
+      .filter((tool) => tool.annotations?.readOnlyHint === true)
+      .map((tool) => tool.name)
+      .sort();
 
-    expect(names).toStrictEqual(['ferret_session_list', 'ferret_session_recall', 'ferret_session_show']);
-    // EPIC-111 is a recall surface. A write here would need EPIC-117's answer
-    // to who owns a session's lifetime, which does not exist yet.
-    for (const tool of tools) expect(tool.annotations?.readOnlyHint, tool.name).toBe(true);
+    // EPIC-111's surface, still read-only. EPIC-117 adds four writing tools
+    // beside it rather than changing any of these — asserted below.
+    expect(recall).toStrictEqual([
+      'ferret_session_list',
+      'ferret_session_recall',
+      'ferret_session_show',
+    ]);
   });
 });
 
@@ -320,5 +326,343 @@ describe('the guards apply — AC-6', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain('limit');
+  });
+});
+
+/**
+ * EPIC-117 — recording over MCP.
+ *
+ * The write half, against the same in-memory port the read half uses. The three
+ * decisions are asserted one at a time, because each one is a property somebody
+ * could reasonably have implemented the other way:
+ *
+ * - **D-117.1** the server mints the identity, and the schema offers no way to
+ *   supply one;
+ * - **D-117.2** closing the transport does not end a session;
+ * - **D-117.3** every writing tool needs `RECORD`, and `INDEX` is not enough.
+ */
+
+const RECORDER: Principal = {
+  ...GRANTED,
+  id: 'test.recorder',
+  permissions: [Permission.READ, Permission.RECORD],
+};
+
+/** A port that remembers what it was asked to write. */
+function writableAccess(): SessionAccess & {
+  readonly written: Session[];
+  readonly checkpoints: SessionCheckpoint[];
+  readonly memories: EngineeringMemory[];
+} {
+  const written: Session[] = [];
+  const checkpoints: SessionCheckpoint[] = [];
+  const memories: EngineeringMemory[] = [];
+  const current = (sessionId: string): Session | undefined =>
+    [...written].reverse().find((one) => one.sessionId === sessionId);
+
+  return {
+    written,
+    checkpoints,
+    memories,
+    getSession: (sessionId) => Promise.resolve(current(sessionId)),
+    latestCheckpoint: (sessionId) =>
+      Promise.resolve(
+        [...checkpoints].reverse().find((one) => one.sessionId === sessionId),
+      ),
+    memoriesFor: (sessionId) =>
+      Promise.resolve(memories.filter((one) => one.sessionId === sessionId)),
+    sessionsFor: (actorId, limit) =>
+      Promise.resolve(written.filter((one) => one.actorId === actorId).slice(0, limit)),
+    save: (value) => {
+      written.push(value);
+      return Promise.resolve();
+    },
+    saveCheckpoint: (value) => {
+      checkpoints.push(value);
+      return Promise.resolve();
+    },
+    recordMemory: (value) => {
+      memories.push(value);
+      return Promise.resolve();
+    },
+  };
+}
+
+describe('the recording tools are offered — EPIC-117 AC-1', () => {
+  it('registers all seven, and annotates the four that write', async () => {
+    const { client } = await harness(writableAccess(), RECORDER);
+    const { tools } = await client.listTools();
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+
+    expect([...byName.keys()].sort()).toStrictEqual([
+      'ferret_session_checkpoint',
+      'ferret_session_end',
+      'ferret_session_list',
+      'ferret_session_recall',
+      'ferret_session_remember',
+      'ferret_session_show',
+      'ferret_session_start',
+    ]);
+
+    // Additive, not destructive — MCP's own distinction, and the reason a
+    // client is asked not to prompt per remembered sentence.
+    for (const name of [
+      'ferret_session_start',
+      'ferret_session_remember',
+      'ferret_session_checkpoint',
+      'ferret_session_end',
+    ]) {
+      expect(byName.get(name)?.annotations?.readOnlyHint, name).toBe(false);
+      expect(byName.get(name)?.annotations?.destructiveHint, name).toBe(false);
+    }
+  });
+
+  it('offers no way for a client to choose a session identifier — D-117.1', async () => {
+    const { client } = await harness(writableAccess(), RECORDER);
+    const { tools } = await client.listTools();
+    const start = tools.find((tool) => tool.name === 'ferret_session_start');
+    const properties = Object.keys(
+      (start?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
+    );
+
+    // The absence is the assertion. A field a client could fill would make
+    // session ids a shared namespace whatever the handler then did with it.
+    expect(properties).not.toContain('sessionId');
+    expect(properties).not.toContain('id');
+    expect(properties.sort()).toStrictEqual([
+      'branch',
+      'parentSessionId',
+      'provider',
+      'repositoryId',
+      'worktreeId',
+    ]);
+  });
+});
+
+describe('the server owns the identity — EPIC-117 AC-2, D-117.1', () => {
+  it('mints an identifier and returns it', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, RECORDER);
+
+    const { body } = await call(client, 'ferret_session_start', { branch: 'feat/x' });
+
+    expect(body['sessionId']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(access.written).toHaveLength(1);
+    expect(access.written[0]?.sessionId).toBe(body['sessionId']);
+    // The actor is the principal, never something the client asserted.
+    expect(access.written[0]?.actorId).toBe(RECORDER.id);
+    expect(access.written[0]?.branch).toBe('feat/x');
+  });
+
+  it('mints a different identifier every time', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, RECORDER);
+
+    const first = await call(client, 'ferret_session_start');
+    const second = await call(client, 'ferret_session_start');
+
+    expect(first.body['sessionId']).not.toBe(second.body['sessionId']);
+  });
+
+  it('refuses a field the schema does not declare', async () => {
+    const { client } = await harness(writableAccess(), RECORDER);
+
+    const result = (await client.callTool({
+      name: 'ferret_session_start',
+      arguments: { sessionId: 'chosen-by-the-client' },
+    })) as { content: { text: string }[]; isError?: boolean };
+
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('a session records what it decided — EPIC-117 AC-3', () => {
+  it('records a memory, a checkpoint, and reads them back', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, RECORDER);
+    const sessionId = (await call(client, 'ferret_session_start')).body['sessionId'] as string;
+
+    const remembered = await call(client, 'ferret_session_remember', {
+      sessionId,
+      kind: 'decision',
+      statement: 'the server mints the session id',
+      rationale: 'a client-supplied id would be a shared namespace',
+    });
+    expect(remembered.body['statement']).toBe('the server mints the session id');
+    expect(remembered.body['redactedSecrets']).toBe(0);
+
+    const checkpointed = await call(client, 'ferret_session_checkpoint', {
+      sessionId,
+      summary: 'decided the identity question',
+      continuationState: { next: 'the lifetime question' },
+    });
+    expect(checkpointed.body['sequence']).toBe(1);
+
+    const again = await call(client, 'ferret_session_checkpoint', {
+      sessionId,
+      summary: 'decided the lifetime question too',
+    });
+    // Numbered by Ferret, not by the caller — EPIC-041's monotonic progression,
+    // which a client cannot be asked to track.
+    expect(again.body['sequence']).toBe(2);
+
+    const recalled = await call(client, 'ferret_session_recall', { sessionId });
+    expect((recalled.body['memories'] as { statement: string }[])[0]?.statement).toBe(
+      'the server mints the session id',
+    );
+  });
+
+  it('removes a credential a client pasted into a statement — EPIC-112', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, RECORDER);
+    const sessionId = (await call(client, 'ferret_session_start')).body['sessionId'] as string;
+
+    const { body } = await call(client, 'ferret_session_remember', {
+      sessionId,
+      kind: 'gotcha',
+      statement: 'the deploy needs AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGbPxRfiCY set',
+    });
+
+    expect(body['statement']).not.toContain('wJalrXUtnFEMIK7MDENGbPxRfiCY');
+    expect(body['redactedSecrets']).toBe(1);
+  });
+
+  it('refuses to record against a session that is not on record', async () => {
+    const { client } = await harness(writableAccess(), RECORDER);
+
+    const result = (await client.callTool({
+      name: 'ferret_session_remember',
+      arguments: { sessionId: 'never-opened', kind: 'decision', statement: 'x' },
+    })) as { content: { text: string }[]; isError?: boolean };
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('never-opened');
+  });
+});
+
+describe('a closed transport is not an ended session — EPIC-117 AC-4, D-117.2', () => {
+  it('leaves a session active when the connection closes', async () => {
+    const access = writableAccess();
+    const first = await harness(access, RECORDER);
+    const sessionId = (await call(first.client, 'ferret_session_start')).body['sessionId'] as string;
+
+    await first.close();
+
+    // The whole decision, in one assertion: an editor restarting is not a user
+    // finishing their work, and nothing on the transport path may decide it is.
+    const still = await access.getSession(sessionId);
+    expect(still?.status).toBe('active');
+    expect(still?.endedAt).toBeNull();
+
+    // And a new connection continues the same session rather than fragmenting it.
+    const second = await harness(access, RECORDER);
+    const shown = await call(second.client, 'ferret_session_show', { sessionId });
+    expect((shown.body['session'] as { status: string }).status).toBe('active');
+  });
+
+  it('ends only when an explicit call says so', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, RECORDER);
+    const sessionId = (await call(client, 'ferret_session_start')).body['sessionId'] as string;
+
+    const { body } = await call(client, 'ferret_session_end', { sessionId });
+
+    expect(body['status']).toBe('completed');
+    expect(body['endedAt']).toEqual(expect.any(String));
+    expect((await access.getSession(sessionId))?.status).toBe('completed');
+  });
+
+  it('records an abandoned session as abandoned', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, RECORDER);
+    const sessionId = (await call(client, 'ferret_session_start')).body['sessionId'] as string;
+
+    const { body } = await call(client, 'ferret_session_end', { sessionId, abandoned: true });
+    expect(body['status']).toBe('abandoned');
+  });
+
+  it('refuses to end a session twice rather than silently re-ending it', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, RECORDER);
+    const sessionId = (await call(client, 'ferret_session_start')).body['sessionId'] as string;
+    await call(client, 'ferret_session_end', { sessionId });
+
+    const result = (await client.callTool({
+      name: 'ferret_session_end',
+      arguments: { sessionId },
+    })) as { content: { text: string }[]; isError?: boolean };
+
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('recording needs its own permission — EPIC-117 AC-5, D-117.3', () => {
+  it('refuses every writing tool to a principal holding only READ', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, GRANTED);
+
+    for (const [name, args] of [
+      ['ferret_session_start', {}],
+      ['ferret_session_remember', { sessionId: 's', kind: 'decision', statement: 'x' }],
+      ['ferret_session_checkpoint', { sessionId: 's', summary: 'x' }],
+      ['ferret_session_end', { sessionId: 's' }],
+    ] as const) {
+      const result = (await client.callTool({ name, arguments: args })) as {
+        content: { text: string }[];
+        isError?: boolean;
+      };
+      expect(result.isError, name).toBe(true);
+      expect(result.content[0]?.text, name).toContain('record');
+    }
+    expect(access.written).toStrictEqual([]);
+  });
+
+  it('is not satisfied by INDEX — the overload D-117.3 refused', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, {
+      ...GRANTED,
+      id: 'test.indexer',
+      permissions: [Permission.READ, Permission.INDEX],
+    });
+
+    const result = (await client.callTool({
+      name: 'ferret_session_start',
+      arguments: {},
+    })) as { content: { text: string }[]; isError?: boolean };
+
+    expect(result.isError).toBe(true);
+    expect(access.written).toStrictEqual([]);
+  });
+
+  it('still requires READ to recall what was recorded', async () => {
+    const access = writableAccess();
+    const { client } = await harness(access, {
+      ...GRANTED,
+      id: 'test.writer-only',
+      permissions: [Permission.RECORD],
+    });
+
+    const sessionId = (await call(client, 'ferret_session_start')).body['sessionId'] as string;
+    const result = (await client.callTool({
+      name: 'ferret_session_recall',
+      arguments: { sessionId },
+    })) as { content: { text: string }[]; isError?: boolean };
+
+    // The grant is narrow in both directions: recording confers no reading.
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('a server with no writer says so — EPIC-117 AC-6', () => {
+  it('reports that recording is unavailable rather than throwing a TypeError', async () => {
+    const { client } = await harness(accessOf({}), RECORDER);
+
+    const result = (await client.callTool({
+      name: 'ferret_session_start',
+      arguments: {},
+    })) as { content: { text: string }[]; isError?: boolean };
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('cannot open a session');
   });
 });

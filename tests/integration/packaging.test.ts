@@ -392,7 +392,29 @@ describe('package contents', () => {
     const grammarBytes = pack.files
       .filter((file) => file.path.startsWith('dist/parsers/code/grammars/'))
       .reduce((total, file) => total + file.size, 0);
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_132_000);
+    //
+    // **2026-09-05, EPIC-117 — the non-grammar bound moved a sixth time.** The
+    // output reached 3 141 965 against a 3 132 000 ceiling: 0.32% over.
+    // Measured on both sides, by building the branch this one sits on
+    // (EPIC-116, 3 124 094 in `dist/`) and again with the change applied
+    // (3 141 965), so the 17 871 bytes are a measurement rather than a
+    // subtraction:
+    //
+    //     +11 584  dist/mcp/session-tools.js       (the four recording tools)
+    //      +2 140  dist/authorization/authorization.js  (the RECORD amendment)
+    //      +2 004  dist/mcp/session-tools.d.ts
+    //      +1 680  dist/authorization/authorization.d.ts
+    //        +463  dist/cli/commands/session.js    (four call sites, one note)
+    //
+    // Two thirds of `session-tools.js` is the tools' own descriptions, which are
+    // read by a model rather than by a person and are the only documentation an
+    // MCP client ever sees — so they are the one kind of comment that is also a
+    // product surface. No dependency was added and nothing improper ships,
+    // re-measured rather than assumed.
+    //
+    // The headroom is 3%, as every raise here has been, and for the reason every
+    // raise here has given.
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_230_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {

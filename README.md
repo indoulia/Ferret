@@ -269,10 +269,17 @@ secret out of one more file.
 | `ferret_session_recall` | "What did the last session decide?" — the checkpoint and the memories, not the transcript |
 | `ferret_session_list` | "Which sessions are on record?" — to find the id a recall needs |
 | `ferret_session_show` | One session and everything it recorded, superseded memories included |
+| `ferret_session_start` | Open a session to record work in — Ferret mints the identifier |
+| `ferret_session_remember` | Record one thing this session decided, constrained or learned |
+| `ferret_session_checkpoint` | Record where this session has got to, so a later one can resume |
+| `ferret_session_end` | Close a session. What it recorded stays readable |
 
 Every knowledge tool is **read-only**, and indexing is still a command a person
-runs. The three tools that write are the only ones, and they are governed rather
-than trusted:
+runs. Seven tools write, in two groups that are governed differently because
+they do different things.
+
+The **three configuration tools** change what Ferret is and how it behaves, and
+they are governed rather than trusted:
 
 - They require a granted permission (`config.write`), which no installation has by
   default. So does *reading* configuration (`config.read`) — the subtree holds
@@ -283,6 +290,27 @@ than trusted:
   value will not change another.
 - **They cannot grant themselves anything.** No tool can write any `authorization`
   path, so a client granted `config.write` cannot widen its own permissions.
+
+The **four session tools** record an agent's own work, and they are additive:
+they add a row and destroy nothing. They are governed differently on purpose.
+
+- They require `record`, a permission of their own. Not `index` — that means
+  "may cause Ferret to ingest sources", and an operator granting it did not
+  thereby ask an agent to write into Ferret's record of its reasoning. No
+  installation holds `record` by default over MCP; the local CLI operator does,
+  because `ferret session` has been an ordinary local command since it shipped.
+- **They complete on one call.** Requiring a human confirmation per remembered
+  sentence would remove the capability these tools exist to provide. They
+  declare `destructiveHint: false`, which is the protocol's own word for a tool
+  that only adds, so a conforming client knows not to prompt.
+- **Ferret owns the session identifier.** `ferret_session_start` returns one the
+  client did not choose, and there is no field it could supply one in. A client
+  participates in a session by naming the id it was given, so no client can
+  collide with — or write into — another's.
+- **Closing the connection does not end a session.** An editor restarting is not
+  a user finishing their work. A session ends when `ferret_session_end` says so,
+  and a crashed client's session is reclaimed by `ferret prune --sessions` on an
+  age an operator supplies.
 - **Credentials do not travel.** A password is refused as a literal value; store it
   in an environment variable and set a `{"$secret":{"env":"…"}}` reference instead.
   Configuration read back through any tool returns `[redacted]`.

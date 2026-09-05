@@ -192,7 +192,13 @@ export function sessionCommand(output: (json: boolean) => OutputOptions): Comman
         command: Command,
       ) => {
         const globals = command.optsWithGlobals<Globals>();
-        const started = await withStore(globals, Permission.INDEX, 'session.start', async (store, operator) => {
+        // EPIC-117 — `RECORD`, not `INDEX`. The four writing subcommands moved
+        // together, because the CLI and the MCP surface read their grant from the
+        // same configuration and a session write that needed different
+        // permissions depending on how it arrived would be two rules wearing one
+        // name. The local operator's default includes it, so nothing an operator
+        // could already do at their own machine changed.
+        const started = await withStore(globals, Permission.RECORD, 'session.start', async (store, operator) => {
           const value = createSession({
             sessionId: options.id ?? randomUUID(),
             provider: options.provider,
@@ -218,7 +224,7 @@ export function sessionCommand(output: (json: boolean) => OutputOptions): Comman
     .addOption(new Option('--abandoned', 'Record it as abandoned rather than completed').default(false))
     .action(async (id: string, options: { abandoned: boolean }, command: Command) => {
       const globals = command.optsWithGlobals<Globals>();
-      const ended = await withStore(globals, Permission.INDEX, 'session.end', async (store) => {
+      const ended = await withStore(globals, Permission.RECORD, 'session.end', async (store) => {
         const value = endSession(await mustFind(store, id), options.abandoned ? 'abandoned' : 'completed', new Date());
         await store.save(value);
         return value;
@@ -242,7 +248,7 @@ export function sessionCommand(output: (json: boolean) => OutputOptions): Comman
           throw usage('--through must be a non-negative whole number', 'It is a turn number, or 0 when unknown.');
         }
 
-        const checkpoint = await withStore(globals, Permission.INDEX, 'session.checkpoint', async (store) => {
+        const checkpoint = await withStore(globals, Permission.RECORD, 'session.checkpoint', async (store) => {
           const owner = await mustFind(store, id);
           // The next sequence, read rather than asked for: a caller who has to
           // supply it can only get it wrong, and EPIC-041 makes the progression
@@ -281,7 +287,7 @@ export function sessionCommand(output: (json: boolean) => OutputOptions): Comman
         const globals = command.optsWithGlobals<Globals>();
         const kind = asMemoryKind(options.kind);
 
-        const memory = await withStore(globals, Permission.INDEX, 'session.remember', async (store) => {
+        const memory = await withStore(globals, Permission.RECORD, 'session.remember', async (store) => {
           await mustFind(store, id);
           const value = createEngineeringMemory({
             sessionId: id,

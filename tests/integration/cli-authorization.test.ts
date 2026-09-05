@@ -216,6 +216,39 @@ describeDb(`CLI authorization (${databaseAvailable() ? 'real PostgreSQL' : SKIP_
     expect(result.stderr).not.toContain('E_NOT_PERMITTED');
   });
 
+  it('refuses to record a session when configuration withholds record — EPIC-117 AC-7', async () => {
+    // `index` is deliberately not enough. That is the whole of D-117.3: an
+    // operator who granted ingestion did not thereby grant an agent the ability
+    // to write into Ferret's record of its own reasoning.
+    const result = await runCli(['session', 'start'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read', 'index']) },
+    });
+
+    expect(result.code).toBe(ExitCode.NOT_PERMITTED);
+    expect(result.stderr).toContain('E_NOT_PERMITTED');
+    expect(result.stderr).toContain('record');
+  });
+
+  it('records a session when configuration grants record — EPIC-117, the control', async () => {
+    const result = await runCli(['session', 'start', '--json'], {
+      env: { ...db.env, FERRET_CONFIG: configGranting(['read', 'record']) },
+    });
+
+    expect(result.stderr).not.toContain('E_NOT_PERMITTED');
+    expect(result.code).toBe(ExitCode.OK);
+  });
+
+  it('records a session with no authorization configured at all — the default', async () => {
+    // `LOCAL_OPERATOR_PRINCIPAL` gains `record` with EPIC-117, so splitting the
+    // permission out of `index` took nothing away from an operator at their own
+    // machine. Asserted, because that is the half of the amendment that is easy
+    // to get wrong and impossible to notice.
+    const result = await runCli(['session', 'start', '--json'], { env: db.env });
+
+    expect(result.stderr).not.toContain('E_NOT_PERMITTED');
+    expect(result.code).toBe(ExitCode.OK);
+  });
+
   it('refuses to apply an upgrade when configuration withholds index — EPIC-106 AC-11', async () => {
     // The plan is a read; applying changes the schema, so it takes the grant
     // `index` needs. A read-only grant must not be a way to migrate.

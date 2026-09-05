@@ -265,3 +265,42 @@ makes the AI client the primary interface, so denying reads out of the box would
 cost every user something and protect nobody. A deployment indexing private
 sources through a provider should narrow it, and EPIC-058's permission scopes are
 how.
+
+## 17. Amendment — 2026-09-05, `record` (EPIC-117)
+
+**The permission set is amended, not silently widened.** This Epic declared its
+vocabulary closed, and the value of a closed set is that adding to it is a
+visible decision. EPIC-117 needed one and this section is it.
+
+**What was added.** `Permission.RECORD` — `record` — the ability to create,
+continue and terminate a *recording*: a session, its checkpoints, and the
+memories it produced. It confers nothing else. `READ` is still required to
+recall what was recorded, so a principal granted only `record` can write into
+Ferret's memory and cannot read it back.
+
+**Why not an existing grant.** Both candidates conflated two things an operator
+should be able to grant separately:
+
+- `INDEX` means "may cause Ferret to ingest sources". Recording what an agent
+  decided is not ingestion, and an operator granting one would have been granting
+  the other without being told.
+- `MUTATE` and `CONFIG_WRITE` conflate recording a decision with changing what
+  Ferret believes or how it is configured — the strictly worse version of the
+  same conflation, since both are grants this Epic deliberately withholds by
+  default.
+
+**What it costs.** Deny-by-default applies, and it is the right direction: a
+principal configured before this amendment does not hold `record`, so an
+installation whose `authorization.permissions` grants `index` alone loses
+`ferret session start`, `end`, `checkpoint` and `remember` until `record` is
+added. That is a real upgrade note and it is stated rather than smoothed over.
+`LOCAL_OPERATOR_PRINCIPAL` — the CLI's default when nothing is configured —
+gains `record`, so an operator who never wrote an `authorization` block sees no
+change. `ANONYMOUS_PRINCIPAL` does not: a client that arrived over a transport
+and configured nothing still gets `READ`, and recording is a write.
+
+**Where it is enforced.** At every call site, through the same
+`assertPermitted` and the same `guards.ts` seam as every other permission — the
+CLI's four session subcommands and the four MCP recording tools. No new
+authorization mechanism was introduced, which was the constraint the amendment
+was granted under.
