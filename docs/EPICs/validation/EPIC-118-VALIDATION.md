@@ -13,7 +13,7 @@ failing itself on.
 | Host | Windows 11, Node v22.23.2, vitest 4.1.11 |
 | Protocol | Real MCP over `InMemoryTransport` for the surface; real stdio for the oracle |
 | Database | PostgreSQL 17.11 + pgvector 0.8.6; per-file test databases, and the persistent dogfood container for the oracle |
-| Repository under test | This one — 830 tracked files at `69d97e9` |
+| Repository under test | This one — 830 tracked files at `69d97e9`, 834 with this Epic's four |
 | Date | 2026-09-05 |
 
 ## What the Epic does
@@ -50,7 +50,7 @@ a client: not a short answer but a confident claim that 343 files are missing.
 `ferret_find` returned 500 rows — 487 `active` and 13 tombstones — and had no
 way to be asked for the rest.
 
-After, on the same index:
+After, against the **same index** — only the build under test differs:
 
 ```
   ok    the file list is complete  (844 entities over 2 page(s))
@@ -62,6 +62,21 @@ After, on the same index:
 
 `830 active` against `830 tracked`, and `457` source files carrying EPIC-030
 structure where the truncated read had seen 145. Exit 0.
+
+And again after committing this Epic, re-indexing the tree it produced — the run
+that validates what actually ships:
+
+```
+  ok    the file list is complete  (848 entities over 2 page(s))
+  ok    no phantom files  (834 active)
+  ok    structure recorded  (459 source files)
+  ok    no missing files  (834 tracked)
+  ok    commits carry content  (feat(retrieval): Ferret could no…)
+  Ferret agrees with the repository on every question asked.
+```
+
+`834` because this Epic adds four files. Every check `ok`, exit 0, and the HEAD
+commit it reads back is this Epic's own.
 
 ## The second defect, and why its test is source-level
 
