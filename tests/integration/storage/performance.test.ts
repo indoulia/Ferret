@@ -218,11 +218,43 @@ describeDb(`storage performance (${databaseAvailable() ? 'real PostgreSQL' : SKI
     // A pool that is not closed shows up as a session that never goes away.
     // Left unchecked, an AI client that restarts Ferret per session would
     // exhaust `max_connections` within an afternoon.
-    const sessions = await db.pool.query<{ count: string }>(
-      `SELECT count(*)::text AS count FROM pg_stat_activity
-        WHERE datname = $1 AND application_name LIKE '@indoulia/ferret%'`,
-      [db.database],
-    );
-    expect(Number(sessions.rows[0]?.count ?? '0')).toBe(0);
+    //
+    // **This asserted the count was zero *immediately*, and that is a race.**
+    // It failed once on CI — `expected 1 to be +0` — and the cause is not a
+    // leak: `PostgresStorageProvider.onShutdown` awaits `pool.end()`, and
+    // `pool.end()` resolves when the *client* has closed its sockets. The
+    // PostgreSQL backend leaves `pg_stat_activity` when its process exits,
+    // which it does after observing that close. Nothing synchronises the two.
+    //
+    // Measured rather than assumed: 25 end-and-count cycles against a local
+    // `pgvector/pgvector:pg17` never saw a lingering backend, which is exactly
+    // the shape of a race an idle machine wins and a loaded CI runner
+    // occasionally loses.
+    //
+    // So the assertion waits, bounded, for the guarantee it actually cares
+    // about — that the connections are *reclaimed* — and reports the count it
+    // last saw if they are not. What is not done is widen the assertion to
+    // "few enough": a leak and a slow teardown are different failures, and only
+    // one of them drains.
+    const remaining = async (): Promise<number> => {
+      const sessions = await db.pool.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM pg_stat_activity
+          WHERE datname = $1 AND application_name LIKE '@indoulia/ferret%'`,
+        [db.database],
+      );
+      return Number(sessions.rows[0]?.count ?? '0');
+    };
+
+    const deadline = Date.now() + 10_000;
+    let count = await remaining();
+    while (count > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      count = await remaining();
+    }
+
+    expect(
+      count,
+      'connections opened by the provider were still listed in pg_stat_activity ten seconds after shutdown, which is a leak rather than a slow teardown',
+    ).toBe(0);
   }, 30_000);
 });
