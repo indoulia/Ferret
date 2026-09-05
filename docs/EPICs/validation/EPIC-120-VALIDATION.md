@@ -8,7 +8,7 @@ suite. Both fixed here. No schema change and no migration.
 
 | | |
 | --- | --- |
-| Tree | `1aeffcc` (`main`) + this Epic |
+| Tree | `1aeffcc` (`main`) + this Epic, merged as `6c810c8` |
 | Host | Windows 11, Node v22.23.2, vitest 4.1.11 |
 | Git | the `git` executable on PATH |
 | Database | PostgreSQL 17 + pgvector, container started by `tests/support/postgres.ts` |
@@ -304,6 +304,24 @@ Epics measure idempotence with one definition rather than two that drift.
   absence from a bounded page.
 - **No reasoning, no autonomous action, no scheduling, no webhooks.**
 - **No new entity kind and no schema change.**
+
+## Post-merge verification
+
+Re-run on merged `main` at `6c810c8`, against Ferret's own repository. The counts
+moved with the merge — five files and one commit were added by it — and the
+reconciliation still closes exactly:
+
+```
+head                6c810c8
+pages / records     8 / 1064        truncated false   skipped 0
+files   git/ingest  849 / 863       MISSING 0
+commits git/ingest  202 / 202       MISSING 0
+deleted paths       14   →  tracked 849 + deleted 14 = 863 file entities
+repository rows     1                rooted at source entity: true
+```
+
+`tests/integration/connectors`, `boundaries` and `source-connector` re-run on
+merged main: **179 passed**. Build clean. Working tree clean.
 
 ## Not applicable
 
