@@ -60,6 +60,29 @@ D-116.2 asked for. The last assertion is the one that makes D-116.3 true rather
 than merely stated: the memory's cited capture id equals the id of the capture
 that arrived with it, in an installation that has never seen the original.
 
+## Dogfooded — 2026-09-05
+
+`ferret export --session <id>` was run against the dogfood installation, on a
+session created through the CLI. The document carried the session, its checkpoint
+and its memory; `sessionScope` reported one requested, one resolved, none
+unresolved; and `memoryEvidenceGaps` was `[]`.
+
+**It also carried the whole index** — 4 006 entities, 14 144 evidence rows,
+38 865 lines. That is the design working as specified: `--session` narrows the
+*session* dimension and says nothing about entities, and their independence is
+what stops an entity scope being read as a claim about which sessions belong to
+it (D-116.1's whole point).
+
+What was wrong was the **wording**. The README's example was named
+`one-session.ndjson` and the option's help said nothing about the entity
+dimension, so both promised a session-only document. Corrected: the example is
+renamed, the help text says it narrows one dimension, and the README shows the
+`--scope --session` pair that narrows both.
+
+Deliberately not changed: there is no way to export sessions with *no* entities.
+A memory cites evidence, and a document carrying the claims without the graph
+they refer to would restore into something that cannot answer why.
+
 ## Known limitations
 
 - A transcript is exported as it is stored. EPIC-112's limitation travels with

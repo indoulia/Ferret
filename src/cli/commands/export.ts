@@ -43,10 +43,21 @@ export function exportCommand(output: (json: boolean) => OutputOptions): Command
     // scope happens to look like its `repository_id` — which is free text and
     // relates to nothing an entity scope can be compared against. Repeatable,
     // because moving one piece of work usually means moving its lineage.
+    //
+    // **It narrows the session dimension and nothing else**, which the help text
+    // now says because dogfooding showed it needed to: `--session <id>` alone
+    // produced a 38 865-row document — the whole index, plus that one session —
+    // and the README's example was named `one-session.ndjson`, which promised the
+    // opposite. The behaviour is right; the wording was not. The two dimensions
+    // are independent by construction, and that independence is exactly what
+    // stops an entity scope being read as a claim about which sessions belong
+    // to it.
     .addOption(
       new Option(
         '--session <id...>',
-        'Export these sessions, their transcripts, checkpoints and memories. A full export carries every session.',
+        'Export these sessions, their transcripts, checkpoints and memories. Narrows the ' +
+          'session dimension only — pass --scope as well to narrow entities. A full export ' +
+          'carries every session.',
       ),
     )
     .addOption(
