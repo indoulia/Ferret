@@ -1,6 +1,6 @@
 # Ferret — Reconstructed Engineering Roadmap
 
-**Status: PROPOSED** · Base: `9bae9f2` · Reconstructed: 2026-09-05
+**Status: IN PROGRESS** · Base: `9bae9f2` · Reconstructed: 2026-09-05 · Four Epics landed; every remaining item is blocked
 
 ## Why this document exists
 
@@ -211,4 +211,4 @@ Filled in as Epics land.
 | EPIC-109 | `452980d` | [#156](https://github.com/indoulia/Ferret/pull/156) | `ec0a376` | COMPLETE |
 | EPIC-110 | `2e7ce50` | [#157](https://github.com/indoulia/Ferret/pull/157) | `533b603` | COMPLETE |
 | EPIC-111 | `818fdfc` | [#158](https://github.com/indoulia/Ferret/pull/158) | `39a23ca` | COMPLETE |
-| EPIC-112 | `pending` | — | — | IMPLEMENTED |
+| EPIC-112 | `b137094` | [#159](https://github.com/indoulia/Ferret/pull/159) | `5faab0c` | COMPLETE |
