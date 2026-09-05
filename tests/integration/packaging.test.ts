@@ -412,9 +412,33 @@ describe('package contents', () => {
     // product surface. No dependency was added and nothing improper ships,
     // re-measured rather than assumed.
     //
+    // **2026-09-05, EPIC-120 — the non-grammar bound moved a seventh time.**
+    // The output reached 3 242 087 against a 3 230 000 ceiling: 0.37% over.
+    // Measured on both sides by building this branch with `src/` stashed
+    // (9 042 877 bytes in `dist/`) and again with it restored (9 075 748), so
+    // the 32 871 bytes are a measurement rather than a subtraction — and the
+    // per-file deltas below sum to exactly that total, which is how it is known
+    // that nothing else moved:
+    //
+    //    +20 849  dist/connectors/repository-connector.js   (the connector)
+    //     +8 965  dist/connectors/repository-connector.d.ts
+    //     +1 340  dist/git/provider.js      (emitter override, listFiles cursor)
+    //       +929  dist/git/provider.d.ts
+    //       +272  dist/connectors/index.d.ts
+    //       +227  dist/index.d.ts
+    //       +167  dist/connectors/index.js
+    //       +122  dist/index.js
+    //
+    // The connector's own source is 24 KB of which most is prose: `tsc` keeps
+    // JSDoc in the emitted `.js`, so the comments ship. That is the same trade
+    // EPIC-117 recorded and it is accepted for the same reason — the reasoning
+    // behind a boundary is worth more in the file than in a commit message. No
+    // dependency was added and nothing improper ships, re-measured rather than
+    // assumed.
+    //
     // The headroom is 3%, as every raise here has been, and for the reason every
     // raise here has given.
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_230_000);
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_339_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {

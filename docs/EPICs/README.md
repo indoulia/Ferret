@@ -188,6 +188,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-080 — Idempotent Ingestion** — P0 — VALIDATED ([spec](EPIC-080-Idempotent-Ingestion.md), [evidence](validation/EPIC-080-VALIDATION.md))
 - **EPIC-113 — Provider Sync Transport (`ferret sync`)** — P1 — VALIDATED ([spec](EPIC-113-Provider-Sync-Transport.md), [evidence](validation/EPIC-113-VALIDATION.md))
 - **EPIC-119 — Universal Source Connector Contract** — P1 — VALIDATED ([spec](EPIC-119-Universal-Source-Connector-Contract.md), [evidence](validation/EPIC-119-VALIDATION.md))
+- **EPIC-120 — Repository Connector** — P1 — VALIDATED ([spec](EPIC-120-Repository-Connector.md), [evidence](validation/EPIC-120-VALIDATION.md))
 
 ### Security & Authorization
 

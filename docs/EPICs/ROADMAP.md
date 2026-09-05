@@ -8,11 +8,13 @@ coverage declined and its false claim corrected. The
 decision taken beside the options it was choosing between, because a decision
 read without its alternatives is indistinguishable from a default.
 
-**Two Epics were directed after the queue was exhausted.** EPIC-118 — Ferret
-Self-Dogfood — and EPIC-119 — Universal Source Connector Contract. Neither came
-from this document and neither is an entry invented to keep it alive; both were
-directed by the owner. See [after the queue](#after-the-queue--epic-118) and
-[EPIC-119](#after-the-queue--epic-119).
+**Epics were directed after the queue was exhausted.** EPIC-118 — Ferret
+Self-Dogfood — EPIC-119 — Universal Source Connector Contract — and EPIC-120 —
+Repository Connector, the first source connected through that boundary. None
+came from this document and none is an entry invented to keep it alive; all were
+directed by the owner. See [after the queue](#after-the-queue--epic-118),
+[EPIC-119](#after-the-queue--epic-119) and
+[EPIC-120](#after-the-queue--epic-120).
 
 **Nothing implementation-ready remains.** What is left is listed under
 [not in this queue](#not-in-this-queue), and every item there needs a decision,
@@ -597,6 +599,41 @@ No production connector was built. EPIC-120 onward is where a source is
 connected; this Epic is only the boundary it connects through, and the GitHub
 and Jira providers already on that boundary are the proof it fits a real one.
 
+## After the queue — EPIC-120
+
+**Repository Connector**, directed by the owner on 2026-09-05, and the first
+source actually connected through EPIC-119's boundary.
+
+EPIC-119 proved the contract with a tracker, which is the easy case: a board is
+one flat collection, so the adapter is a projection. A repository is five —
+description, checkouts, refs, tree, history — four of which page independently
+and none of which is shaped like an issue. If the boundary could not carry that,
+it was not universal, and the honest place to find out was the *second*
+connector rather than the fifth.
+
+It carried it. `src/connectors/ingest.ts` and `src/connectors/write.ts` are
+byte-identical to EPIC-119; the whole of the Epic is one adapter that calls the
+operations the Git provider already declares and the modelling
+`RepositoryIndexer` already calls. No second model of a commit was written.
+
+Two things it found, and both are the shape this queue keeps producing —
+**invisible from the suite, reachable only by exercising the product**:
+
+- `GitSourceProvider.listFiles` returned a paging cursor it would not accept
+  back. Nothing had ever paged a tree: the indexer reads the whole listing in
+  one page and uses the cursor only as a truncation signal. The connector is the
+  first caller that pages, and the failure was silent — a partial ingestion
+  indistinguishable from a successful bounded one.
+- The connector reached into `src/git/` for its record types. `src/connectors`
+  is core, and EPIC-017's rule is that core never knows Git exists.
+  `boundaries.test.ts` refused it by name — the control working exactly as
+  intended, on the first draft rather than after a release.
+
+Dogfooded against Ferret's own repository as an oracle: 844 of 844 tracked files
+and 201 of 201 commits, with the 14-entity difference between the file count and
+`git ls-files` accounted for exactly by the 14 paths deleted over Ferret's
+history.
+
 ## Not in this queue
 
 - **[#138](https://github.com/indoulia/Ferret/issues/138) — three limitation rows
@@ -641,6 +678,8 @@ Filled in as Epics land.
 | EPIC-114 | `78406f6` | [#166](https://github.com/indoulia/Ferret/pull/166) | `c9916bd` | [record](validation/EPIC-114-VALIDATION.md) | COMPLETE |
 | EPIC-115 | `bf02fd2` | [#167](https://github.com/indoulia/Ferret/pull/167) | `1072c3d` | [record](validation/EPIC-115-VALIDATION.md) | CLOSED — coverage deferred |
 | EPIC-118 | `4aa5fae` | [#173](https://github.com/indoulia/Ferret/pull/173) | `f4e5997` | [record](validation/EPIC-118-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-119 | `1aeffcc` | [#176](https://github.com/indoulia/Ferret/pull/176) | `1aeffcc` | [record](validation/EPIC-119-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-120 | `PENDING` | [#PENDING](https://github.com/indoulia/Ferret/pull/PENDING) | `PENDING` | [record](validation/EPIC-120-VALIDATION.md) | COMPLETE — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:
