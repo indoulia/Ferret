@@ -101,6 +101,24 @@ const CONTENT_REASON: Readonly<Record<BlobUnavailable, ContentUnavailable>> = Ob
   [BlobUnavailable.UNREADABLE]: ContentUnavailable.UNREADABLE,
 });
 
+/**
+ * An emitter supplied by the caller, in place of the provider's own.
+ *
+ * The `emit*` methods are Git's *modelling*, and EPIC-120 needed exactly that
+ * modelling reached from the connector path rather than a second copy of it.
+ * A connector must normalize through `NormalizationContext.emitter` — that is
+ * the whole mechanism by which producer, producer version and source system
+ * survive ingestion (EPIC-008) — so the modelling has to accept an emitter
+ * rather than close over one.
+ *
+ * Optional, and absent everywhere it already was: a caller that supplies none
+ * gets the provider's own emitter and behaves exactly as before, which is what
+ * keeps `RepositoryIndexer`'s output byte-identical across this change.
+ */
+export interface EmissionOverride {
+  readonly emitter?: Emitter;
+}
+
 export interface GitProviderOptions {
   /** Milliseconds any single Git invocation may take. Default 30s. */
   readonly gitTimeoutMs?: number;
@@ -370,15 +388,15 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
        * Governance §6: that distinction is recorded rather than smoothed over.
        */
       observedAt?: Date;
-    } = {},
+    } & EmissionOverride = {},
   ): {
     entities: readonly CanonicalEntity[];
     relationships: readonly CanonicalRelationship[];
     evidence: readonly CanonicalEvidence[];
   } {
-    const emitter = this.#requireEmitter();
+    const emitter = parts.emitter ?? this.#requireEmitter();
     const observedAt = parts.observedAt ?? new Date();
-    const { entity: repositoryEntity, evidence: repositoryEvidence } = this.emit(repository);
+    const { entity: repositoryEntity, evidence: repositoryEvidence } = this.emit(repository, { emitter });
 
     const entities: CanonicalEntity[] = [repositoryEntity];
     const relationships: CanonicalRelationship[] = [];
@@ -550,6 +568,18 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
     };
   }
 
+  /** The offset a `listFiles` cursor carries. Symmetric with what it emits. */
+  #decodeFilesCursor(cursor: string): number {
+    return decodeCursor(this.id, Capability.SOURCE_REPOSITORY, cursor, (state) => {
+      if (typeof state !== 'object' || state === null) throw new Error('not a file cursor');
+      const { offset } = state as { offset?: unknown };
+      if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) {
+        throw new Error('not a file cursor');
+      }
+      return offset;
+    });
+  }
+
   #decodeHistoryCursor(cursor: string): number {
     return decodeCursor(this.id, Capability.SOURCE_REPOSITORY, cursor, (state) => {
       if (typeof state !== 'object' || state === null) throw new Error('not a history cursor');
@@ -600,7 +630,7 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
        * (EPIC-036); one that does not gets the raw identities, as before.
        */
       mailmap?: Mailmap;
-    } = {},
+    } & EmissionOverride = {},
   ): {
     entities: readonly CanonicalEntity[];
     relationships: readonly CanonicalRelationship[];
@@ -623,9 +653,9 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
      */
     skippedRecords: readonly { readonly id: string; readonly reason: string }[];
   } {
-    const emitter = this.#requireEmitter();
+    const emitter = options.emitter ?? this.#requireEmitter();
     const observedAt = options.observedAt ?? new Date();
-    const repositoryEntity = this.emit(repository).entity;
+    const repositoryEntity = this.emit(repository, { emitter }).entity;
 
     const entities = new Map<string, CanonicalEntity>();
     const placeholders = new Set<string>();
@@ -1062,10 +1092,20 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
    */
   async listFiles(
     repository: DiscoveredRepository,
-    request: { revision?: string; limit?: number; offset?: number },
+    request: { revision?: string; limit?: number; offset?: number; cursor?: string },
     context: ProviderOperationContext,
   ): Promise<{ entries: readonly TreeEntry[]; cursor: string | undefined }> {
-    const offset = request.offset ?? 0;
+    // The cursor this method *returns*, accepted back. It was emitted from the
+    // first release and no caller could ever hand it in: the indexer reads the
+    // whole tree in one page and treats the cursor purely as a truncation
+    // signal, so nothing exercised the round trip. EPIC-120's connector is the
+    // first caller that actually pages a tree, and without this it re-read page
+    // one until the page limit stopped it — a silent partial ingestion that
+    // looked exactly like a successful bounded one.
+    const offset =
+      request.cursor === undefined
+        ? (request.offset ?? 0)
+        : this.#decodeFilesCursor(request.cursor);
     const listing = await listFiles({
       ...this.#gitOptions(repository, context),
       ...(request.revision === undefined ? {} : { revision: request.revision }),
@@ -1156,16 +1196,16 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
        * absent from the map is emitted as it was before.
        */
       referenceResolution?: ReadonlyMap<string, FileReferenceResolution>;
-    } = {},
+    } & EmissionOverride = {},
   ): {
     entities: readonly CanonicalEntity[];
     relationships: readonly CanonicalRelationship[];
     evidence: readonly CanonicalEvidence[];
     skipped: readonly { path: string; reason: string }[];
   } {
-    const emitter = this.#requireEmitter();
+    const emitter = options.emitter ?? this.#requireEmitter();
     const observedAt = options.observedAt ?? new Date();
-    const repositoryEntity = this.emit(repository).entity;
+    const repositoryEntity = this.emit(repository, { emitter }).entity;
 
     const entities: CanonicalEntity[] = [repositoryEntity];
     const relationships: CanonicalRelationship[] = [];
@@ -1307,8 +1347,11 @@ export class GitSourceProvider extends BaseProvider implements RepositorySource 
    * producer and producer version cannot be forgotten, and any credential
    * encountered on the way is redacted by EPIC-008 before it is stored.
    */
-  emit(repository: DiscoveredRepository): { entity: CanonicalEntity; evidence: readonly CanonicalEvidence[] } {
-    const emitter = this.#requireEmitter();
+  emit(
+    repository: DiscoveredRepository,
+    options: EmissionOverride = {},
+  ): { entity: CanonicalEntity; evidence: readonly CanonicalEvidence[] } {
+    const emitter = options.emitter ?? this.#requireEmitter();
     const entity = emitter.entity({
       kind: 'repository',
       source: {

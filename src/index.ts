@@ -804,14 +804,21 @@ export {
   type SourceRecordMetadata,
 } from './providers/contracts/source-connector.js';
 export {
+  BRANCH_RECORD,
+  COMMIT_RECORD,
   DEFAULT_INGEST_PAGE_LIMIT,
+  FILE_RECORD,
   INGEST_PRODUCER,
+  LOCAL_INSTANCE,
   NO_WRITES,
   PROJECT_ISSUE_RECORD,
+  REPOSITORY_RECORD,
   SourceIngestor,
+  WORKTREE_RECORD,
   addWrites,
   ingestSources,
   projectSourceConnector,
+  repositorySourceConnector,
   writeContribution,
   type ContributionGraph,
   type ContributionWriters,
@@ -823,6 +830,10 @@ export {
   type IngestReport,
   type IngestRequest,
   type ProjectConnectorOptions,
+  type AcquiredCommit,
+  type AcquiredTreeEntry,
+  type RepositoryConnectorOptions,
+  type RepositorySourcePort,
 } from './connectors/index.js';
 
 // EPIC-073. Releases, deployments, and the commit-graph walk that answers which

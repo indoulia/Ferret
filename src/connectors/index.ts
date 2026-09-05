@@ -28,6 +28,20 @@ export {
 } from './project-connector.js';
 
 export {
+  BRANCH_RECORD,
+  COMMIT_RECORD,
+  FILE_RECORD,
+  LOCAL_INSTANCE,
+  REPOSITORY_RECORD,
+  WORKTREE_RECORD,
+  repositorySourceConnector,
+  type AcquiredCommit,
+  type AcquiredTreeEntry,
+  type RepositoryConnectorOptions,
+  type RepositorySourcePort,
+} from './repository-connector.js';
+
+export {
   NO_WRITES,
   addWrites,
   writeContribution,
