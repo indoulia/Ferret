@@ -234,7 +234,31 @@ describe('package contents', () => {
     // grammar assertion above is the real guard on that number; this one
     // catches everything else, so it is set just above the grammars plus
     // today's JavaScript rather than at a round figure with room to hide in.
-    expect(pack.unpackedSize).toBeLessThan(9_000_000);
+    //
+    // **2026-09-05, EPIC-116 — the total bound moved for the first time since
+    // EPIC-025 set it.** The package reached 9 003 074 against a 9 000 000
+    // ceiling: 0.03% over, and the narrowest crossing in this file's history.
+    // Measured on both sides in a second worktree, at merged `main` (`b2cfb37`,
+    // 8 987 841) and again with the change applied (9 003 074), so the 15 233
+    // bytes are a measurement rather than a subtraction:
+    //
+    //     +5 459  dist/storage/export.js        (the session dimension, the scope, the gaps)
+    //     +5 422  dist/storage/export.d.ts
+    //     +2 292  dist/cli/commands/export.js   (--session and the disclosures)
+    //     +1 104  dist/cli/commands/import.js   (what came back of the session domain)
+    //       +901  dist/storage/import.d.ts
+    //       +242  dist/storage/import.js, dist/storage/index
+    //
+    // Most of it is comment and type declaration rather than code, which is this
+    // repository's style. No dependency was added, no asset shipped, and the
+    // grammars are unchanged at 5 881 661 — so the growth is entirely Ferret's
+    // own JavaScript, which the non-grammar guard below measures directly and is
+    // the reason this ceiling is a coarse backstop rather than the real control.
+    //
+    // The headroom is 3%, on the reasoning every raise in this file has used:
+    // a round figure leaves room to hide in, and the next crossing should be a
+    // decision rather than a formality.
+    expect(pack.unpackedSize).toBeLessThan(9_270_000);
     // And the grammars must stay the bulk of it: if the non-grammar output ever
     // approaches this, something is leaking.
     //
