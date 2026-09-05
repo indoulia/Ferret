@@ -606,7 +606,7 @@ Filled in as Epics land.
 | EPIC-117 | `80f9e42` | [#165](https://github.com/indoulia/Ferret/pull/165) | `76e2522` | [record](validation/EPIC-117-VALIDATION.md) | COMPLETE |
 | EPIC-114 | `78406f6` | [#166](https://github.com/indoulia/Ferret/pull/166) | `c9916bd` | [record](validation/EPIC-114-VALIDATION.md) | COMPLETE |
 | EPIC-115 | `bf02fd2` | [#167](https://github.com/indoulia/Ferret/pull/167) | `1072c3d` | [record](validation/EPIC-115-VALIDATION.md) | CLOSED — coverage deferred |
-| EPIC-118 | — | — | — | [record](validation/EPIC-118-VALIDATION.md) | IMPLEMENTED — directed outside this queue |
+| EPIC-118 | `4aa5fae` | [#173](https://github.com/indoulia/Ferret/pull/173) | `f4e5997` | [record](validation/EPIC-118-VALIDATION.md) | COMPLETE — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:
