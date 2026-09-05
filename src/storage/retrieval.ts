@@ -14,6 +14,7 @@ import {
   WithheldTally,
   WithholdReason,
   boundedLimit,
+  boundedOffset,
   traverseFrom,
   includedRepositories,
   overfetchLimit,
@@ -316,7 +317,7 @@ export class RetrievalStore implements RetrievalPort {
    */
   async findEntities(query: EntityQuery, access: AccessContext): Promise<EntityResult> {
     const limit = boundedLimit(query.limit);
-    const offset = query.offset ?? 0;
+    const offset = boundedOffset(query.offset);
 
     // EPIC-058. The scope predicate is first so it reads as the gate it is
     // rather than as one filter among several.
@@ -348,11 +349,22 @@ export class RetrievalStore implements RetrievalPort {
       // rather than inferred from the length of a list permission filtering has
       // already shortened. That inference is what reported `truncated: false`
       // over a cut answer.
+      //
+      // `e.id` last makes the ordering **total**. `(kind, source_id)` is not
+      // unique: no constraint says it is, and one kind ties in practice — a
+      // `code_symbol`'s source id is the symbol's *name*, so every name declared
+      // in two files is a tie, and Ferret's own index holds 178 such groups.
+      // PostgreSQL is then free to order tied rows differently between two
+      // executions of the same query, which is invisible within one page and
+      // corrupting across a boundary: a row that moves between one request and
+      // the next is returned twice or skipped entirely. EPIC-118 pages this
+      // query, so the tiebreak is what makes "every file in this repository" an
+      // answer rather than an approximation.
       const rows = await this.#db.execute<EntityRowShape>(sql`
         SELECT ${ENTITY_COLUMNS}
           FROM ferret.entity e
          WHERE ${sql.join(conditions, sql` AND `)}
-         ORDER BY e.kind, e.source_id
+         ORDER BY e.kind, e.source_id, e.id
          LIMIT ${limit + 1} OFFSET ${offset}
       `);
       const more = rows.rows.length > limit;

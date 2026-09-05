@@ -191,21 +191,46 @@ async function main() {
     // -- What Ferret says the repository contains, versus what it does. ---
     const tracked = trackedFiles();
     const indexed = new Map();
-    const page = await call(client, 'ferret_find', { kind: 'file', scope: repository.id, limit: 500 });
-    for (const entity of page.results ?? []) {
-      indexed.set(entity.attributes?.path, entity);
+    // Paged to exhaustion — EPIC-118. This read one page of 500 and reported
+    // that the rest were unreachable, which was true: `ferret_find` had no
+    // offset, and Ferret's own repository has more files than one page holds.
+    // The consequence was not a short answer but a *wrong* one — the 343 files
+    // beyond the page read as tracked files missing from the index, and an
+    // agent asking "every file in this repository" would have concluded they
+    // did not exist.
+    //
+    // The loop trusts `nextOffset` rather than computing an offset from the
+    // number of rows returned: permission filtering can shorten a page, and an
+    // offset derived from what came back would rewind and re-read.
+    let pages = 0;
+    let offset = 0;
+    let paged = true;
+    for (;;) {
+      const page = await call(client, 'ferret_find', {
+        kind: 'file',
+        scope: repository.id,
+        limit: 500,
+        ...(offset === 0 ? {} : { offset }),
+      });
+      pages += 1;
+      for (const entity of page.results ?? []) {
+        indexed.set(entity.attributes?.path, entity);
+      }
+      if (page.nextOffset === undefined) break;
+      // A page that does not advance would spin for ever. Ferret says it has
+      // more and cannot say where the next page starts: that is a defect, and
+      // reporting it beats hanging.
+      if (page.nextOffset <= offset) {
+        fail(
+          'the file list is complete',
+          `ferret_find reported nextOffset ${page.nextOffset} at offset ${offset}, which does not advance.`,
+        );
+        paged = false;
+        break;
+      }
+      offset = page.nextOffset;
     }
-
-    // `ferret_find` offers no cursor, so "every file in this repository" is
-    // whatever fits in one page. Saying so is the difference between a partial
-    // answer and a wrong one.
-    if (indexed.size >= 500) {
-      fail(
-        'the file list is complete',
-        'ferret_find returned a full page and offers no cursor, so the remaining files ' +
-          'cannot be enumerated and the checks below are running on a truncated set.',
-      );
-    }
+    if (paged) pass('the file list is complete', `${indexed.size} entities over ${pages} page(s)`);
 
     const live = [...indexed.entries()].filter(([, e]) => e.lifecycle === 'active').map(([p]) => p);
 

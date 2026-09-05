@@ -15,6 +15,7 @@ export {
   TraversalBound,
   boundedDepth,
   boundedLimit,
+  boundedOffset,
   type EntityQuery,
   type Neighbour,
   type RankBreakdown,

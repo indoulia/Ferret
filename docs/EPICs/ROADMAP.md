@@ -8,6 +8,13 @@ coverage declined and its false claim corrected. The
 decision taken beside the options it was choosing between, because a decision
 read without its alternatives is indistinguishable from a default.
 
+**One Epic was directed after the queue was exhausted.** EPIC-118 — Ferret
+Self-Dogfood — did not come from this document and is not an entry that was
+invented to keep it alive; it was directed by the owner, and it found a defect
+the queue could not have named, because the defect was only reachable by running
+Ferret against a repository larger than the fixtures. See
+[after the queue](#after-the-queue--epic-118).
+
 **Nothing implementation-ready remains.** What is left is listed under
 [not in this queue](#not-in-this-queue), and every item there needs a decision,
 a runner, or a recurrence before it can move. No entry was invented to keep the
@@ -521,6 +528,41 @@ And one filed rather than fixed, because it needs a decision:
 init`. Older than the Epic that exposed it, and closing it means choosing when
 configuration secrets resolve.
 
+## After the queue — EPIC-118
+
+**Ferret Self-Dogfood**, directed by the owner on 2026-09-05, after this queue
+was exhausted. Recorded here rather than added above because it was never a
+queue entry: nothing in the repository named it, and inventing an entry to
+receive it after the fact would misrepresent where it came from.
+
+It found one defect, and the shape is the same one
+[the run itself found](#what-the-run-itself-found) three times over: **not
+visible from the test suite, and reachable only by running the product against
+something the fixtures are not.**
+
+`ferret_find` — the tool whose stated purpose is *"every file in this
+repository"* — had no offset, and `MAX_LIMIT` is 500. Ferret tracks 830 files.
+Nothing in the store was missing: `EntityQuery.offset` had existed since
+EPIC-052 and `findEntities` had passed it to `OFFSET` all along, and no caller
+reached it — so the store could page and no client could ask it to.
+
+The consequence was not a short answer. Ferret's own oracle read 487 files and
+reported the other **343 as tracked files absent from the index**. The index was
+complete; the retrieval was truncated; from the call site those are
+indistinguishable. Every fixture in the tree is smaller than one page, so
+nothing could have caught it.
+
+A second defect came out of fixing the first: the paged query ordered by
+`(kind, source_id)`, which nothing constrains to be unique — Ferret's own index
+holds 178 tied groups on `code_symbol`, whose source id is the symbol's name.
+An untotal order is invisible in a single page and corrupts every paged read.
+
+Recorded because it changed the shape of the evidence: the behavioural test for
+that second defect **passes with the fix reverted**, because PostgreSQL returns
+insertion order for a small table. The reordering is latitude the planner has,
+not behaviour it always exhibits, so the control is source-level. A test that
+passes either way is not a control, and that was measured rather than assumed.
+
 ## Not in this queue
 
 - **[#138](https://github.com/indoulia/Ferret/issues/138) — three limitation rows
@@ -564,6 +606,7 @@ Filled in as Epics land.
 | EPIC-117 | `80f9e42` | [#165](https://github.com/indoulia/Ferret/pull/165) | `76e2522` | [record](validation/EPIC-117-VALIDATION.md) | COMPLETE |
 | EPIC-114 | `78406f6` | [#166](https://github.com/indoulia/Ferret/pull/166) | `c9916bd` | [record](validation/EPIC-114-VALIDATION.md) | COMPLETE |
 | EPIC-115 | `bf02fd2` | [#167](https://github.com/indoulia/Ferret/pull/167) | `1072c3d` | [record](validation/EPIC-115-VALIDATION.md) | CLOSED — coverage deferred |
+| EPIC-118 | — | — | — | [record](validation/EPIC-118-VALIDATION.md) | IMPLEMENTED — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:

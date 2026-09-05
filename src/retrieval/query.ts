@@ -501,3 +501,23 @@ export function boundedLimit(requested: number | undefined): number {
   if (!Number.isInteger(requested) || requested < 1) return DEFAULT_LIMIT;
   return Math.min(requested, MAX_LIMIT);
 }
+
+/**
+ * Where a page starts — EPIC-118.
+ *
+ * Unbounded above, deliberately: `MAX_LIMIT` bounds what one query *returns*,
+ * which is what protects a context window, and bounding the offset too would
+ * cap how much of a repository could ever be enumerated — the exact failure
+ * this exists to fix. A repository with more entities than any ceiling anyone
+ * picked is a repository Ferret would be unable to describe.
+ *
+ * Rejected values become 0 rather than an error, matching `boundedLimit`. A
+ * caller that reaches the store with a negative offset has already been refused
+ * by the MCP schema; this is the second line, and it fails towards the first
+ * page rather than towards a database error.
+ */
+export function boundedOffset(requested: number | undefined): number {
+  if (requested === undefined) return 0;
+  if (!Number.isInteger(requested) || requested < 0) return 0;
+  return requested;
+}

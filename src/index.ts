@@ -416,6 +416,7 @@ export {
   HitSource,
   MAX_LIMIT,
   boundedLimit,
+  boundedOffset,
   type EntityQuery,
   type Neighbour,
   type ReferenceCompleteness,
