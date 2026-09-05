@@ -59,6 +59,7 @@ interface SyncOptions {
   pullRequests: boolean;
   reviews: boolean;
   pageLimit?: number;
+  reviewLimit?: number;
 }
 
 /** One project's outcome, whether or not it succeeded. */
@@ -102,6 +103,12 @@ export function syncCommand(
         Number,
       ),
     )
+    .addOption(
+      new Option(
+        '--review-limit <n>',
+        'Pull requests to fetch reviews for in one pass. One request each.',
+      ).argParser(Number),
+    )
     .action(async (projects: string[], options: SyncOptions, command: Command) => {
       const globals = command.optsWithGlobals<{ json?: boolean; logLevel?: LogLevel }>();
       const json = globals.json === true;
@@ -110,6 +117,12 @@ export function syncCommand(
         throw new FerretError(ErrorCode.USAGE, '--page-limit must be a whole number of pages', {
           details: { pageLimit: options.pageLimit },
           remediation: 'Pass a positive integer, for example `--page-limit 5`.',
+        });
+      }
+      if (options.reviewLimit !== undefined && !Number.isInteger(options.reviewLimit)) {
+        throw new FerretError(ErrorCode.USAGE, '--review-limit must be a whole number', {
+          details: { reviewLimit: options.reviewLimit },
+          remediation: 'Pass a positive integer, for example `--review-limit 200`.',
         });
       }
 
@@ -169,6 +182,7 @@ export function syncCommand(
                   withPullRequests: options.pullRequests,
                   withReviews: options.reviews,
                   ...(options.pageLimit === undefined ? {} : { pageLimit: options.pageLimit }),
+                  ...(options.reviewLimit === undefined ? {} : { reviewLimit: options.reviewLimit }),
                 },
                 operation,
               );
@@ -326,6 +340,7 @@ function render(report: SyncPassReport): string {
     const counts = entry.report.counts;
     const marks: string[] = [];
     if (entry.report.truncated) marks.push('truncated');
+    if (entry.report.reviewsPartial) marks.push('reviews partial');
     if (entry.report.unchanged.length > 0) marks.push(`unchanged: ${entry.report.unchanged.join(', ')}`);
     if (entry.report.unsupported.length > 0)
       marks.push(`unsupported: ${entry.report.unsupported.join(', ')}`);
@@ -349,6 +364,21 @@ function render(report: SyncPassReport): string {
       'A page limit stopped an enumeration short, so the cursor was not advanced',
       'and the next pass reads the same window again. Raise `--page-limit` to',
       'read further in one pass.',
+    );
+  }
+
+  // Said separately from `truncated`, because it means something different and
+  // has a different consequence: the pull requests were all read, only some of
+  // their reviews were not, and the cursor advanced anyway.
+  const partial = report.entries.some((entry) => entry.report?.reviewsPartial === true);
+  if (partial) {
+    lines.push(
+      '',
+      'More pull requests were read than reviews were fetched for, so some reviews',
+      'are missing. Unlike a page limit this does not hold the cursor back — the',
+      'pull requests themselves were read in full, and a pull request whose reviews',
+      'are wanted is read again when it next changes. Raise `--review-limit` to',
+      'fetch more in one pass.',
     );
   }
 

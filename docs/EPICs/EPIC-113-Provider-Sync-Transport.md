@@ -79,8 +79,23 @@ record seen: a record edited mid-pass would otherwise fall outside the next
 window. The overlap is free — EPIC-080 makes the writes idempotent.
 
 **Bounded, because the budget is not Ferret's.** `--page-limit` (default 20
-pages per collection) and a 50-pull-request review ceiling. Hitting either
-reports `truncated` and declines to advance.
+pages per collection) and `--review-limit` (default 50 pull requests). The two
+bounds are reported **separately**, and the distinction is load-bearing rather
+than tidy:
+
+- A page limit means the *enumeration stopped*. There are records this pass
+  never saw, so advancing the cursor would skip them. It reports `truncated` and
+  the cursor stays where it was.
+- A review ceiling means the enumeration *finished* and some pull requests'
+  reviews were not fetched. Re-reading the same window would fetch the same
+  first fifty again and make no progress, so it reports `reviewsPartial` and the
+  cursor advances; the next pass asks only for what changed, and a pull request
+  whose reviews are wanted is read again when it changes.
+
+Conflating them was a defect, found by running the command against Ferret's own
+repository: 139 pull requests, the ceiling bit, and the cursor could never
+advance — so every pass would have re-read the whole tracker for ever, which is
+precisely the incremental behaviour the cursor exists to provide.
 
 **Unsupported and unchanged are different from empty.** An operation the
 provider did not declare is named in `unsupported` and never called — Jira has
@@ -123,6 +138,7 @@ and a GitHub provider nobody configured has nothing to say.
 | 1 | A pass reads, models and writes, entities before relationships before evidence | `project-sync.test.ts` (unit) — "stores entities before relationships before evidence" |
 | 2 | The cursor advances to the pass start instant and is read back next pass | unit "advances to the instant the pass started"; integration "advances a cursor a later pass reads back" |
 | 3 | A truncated enumeration does not advance the cursor | unit "does not advance when a page limit stopped the enumeration short" |
+| 3a | A review ceiling is reported and does **not** block the cursor | unit "bounds reviews, says so, and still advances the cursor"; "reports reviews as complete when the ceiling did not bite"; "honours a caller-supplied review limit" |
 | 4 | An undeclared operation is named, never called | unit "never calls an operation the provider did not declare" |
 | 5 | A dry run writes nothing and advances nothing | unit "models the records and stores none of them" |
 | 6 | One malformed record is skipped, not fatal | unit "skips it, names it, and stores the rest" |
@@ -152,7 +168,10 @@ EPIC-021, EPIC-071, EPIC-072, EPIC-075, EPIC-080, EPIC-015, EPIC-081, EPIC-002.
 ## Known limitations
 
 - **Reviews cost one request per pull request.** GitHub has no bulk endpoint.
-  Bounded at 50 per pass, reported as truncated beyond that.
+  Bounded at 50 per pass by default, reported as `reviewsPartial` beyond that,
+  and raisable with `--review-limit`. A pull request beyond the ceiling has its
+  reviews read on a later pass, when it next changes — so a repository whose
+  first sync exceeds the ceiling converges rather than staying incomplete.
 - **Only GitHub and Jira are composed.** `composeProjectSources` names them
   explicitly rather than discovering every `source.project` provider, because a
   third-party provider's required construction options are not knowable from the

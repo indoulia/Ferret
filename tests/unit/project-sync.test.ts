@@ -339,18 +339,54 @@ describe('what the tracker cannot answer is named, never invented — AC-4', () 
     expect((store.position?.['etags'] as Record<string, string>)['issues']).toBe('W/"abc"');
   });
 
-  it('bounds reviews, and says so when the bound bit', async () => {
+  it('bounds reviews, says so, and still advances the cursor', async () => {
+    // **The defect this case was rewritten for.** It used to assert that the
+    // review ceiling set `truncated`, which blocked the cursor — and running
+    // `ferret sync` against Ferret's own repository showed what that costs: 139
+    // pull requests, the ceiling bit on every pass, and the cursor could never
+    // advance. Every sync would re-read the whole tracker for ever, which is
+    // exactly the incremental behaviour the cursor exists to provide.
+    //
+    // The two kinds of incompleteness are different. A page limit means the
+    // *enumeration* stopped and advancing would skip records nothing read. A
+    // review ceiling means the enumeration finished; re-reading the same window
+    // would fetch the same first fifty reviews again and make no progress.
+    const store = cursors();
     const pulls = Array.from({ length: DEFAULT_REVIEW_LIMIT + 2 }, (_, index) =>
       pull(`P${String(index)}`, index + 1),
     );
     const source = new FakeSource({ pulls: [{ items: pulls }] });
-    const run = synchronizer(source);
+    const run = synchronizer(source, { cursors: store });
 
     const report = await run.sync({ project: 'o/r', withIssues: false });
 
     expect(source.reviewedPulls.length).toBe(DEFAULT_REVIEW_LIMIT);
-    expect(report.truncated).toBe(true);
-    expect(report.cursorAdvancedTo).toBeUndefined();
+    expect(report.reviewsPartial).toBe(true);
+    expect(report.truncated).toBe(false);
+    expect(report.cursorAdvancedTo).toBeDefined();
+  });
+
+  it('reports reviews as complete when the ceiling did not bite', async () => {
+    const source = new FakeSource({ pulls: [{ items: [pull('P1', 7)] }] });
+    const run = synchronizer(source);
+
+    const report = await run.sync({ project: 'o/r', withIssues: false });
+
+    // `false` is a claim — the reviews of every pull request this pass read were
+    // fetched — and it is not the same as having skipped reviews entirely.
+    expect(report.reviewsPartial).toBe(false);
+    expect(source.reviewedPulls).toStrictEqual([7]);
+  });
+
+  it('honours a caller-supplied review limit', async () => {
+    const pulls = Array.from({ length: 5 }, (_, index) => pull(`P${String(index)}`, index + 1));
+    const source = new FakeSource({ pulls: [{ items: pulls }] });
+    const run = synchronizer(source);
+
+    const report = await run.sync({ project: 'o/r', withIssues: false, reviewLimit: 2 });
+
+    expect(source.reviewedPulls).toStrictEqual([1, 2]);
+    expect(report.reviewsPartial).toBe(true);
   });
 
   it('carries the rate-limit budget through, and undefined when there is none', async () => {

@@ -73,6 +73,46 @@ passed, 22 files**.
 | AC-16 the pass is authorized as an ingestion | PASS | `cli-authorization.test.ts` — refusal at exit 7 naming `sync`, and the control that is not refused |
 | AC-17 no credential reaches a stored row | PASS | "never writes the token anywhere it could be read back" — `entity.attributes`, `entity.unknown_fields` and `derived_artifact.metadata` scanned for the token |
 
+## Dogfooded, and it found a defect — 2026-09-05
+
+`ferret sync` was run against **Ferret's own GitHub repository**, from a real
+token resolved through a `$secret` reference, into the dogfood database. It is
+recorded here rather than in a separate note because it changed the code.
+
+**First pass.** 28 issues and 139 pull requests read; 0 reviews, which is
+correct — this repository's pull requests are self-merged and genuinely carry
+none, checked independently against the API. Stored: 139 `pull_request`, 49
+`issue` (28 read plus 21 placeholders from "Fixes #N" bodies), 1 `developer`,
+1 `repository`, and 346 evidence rows.
+
+**The defect.** The pass reported `truncated` and did not advance the cursor —
+because the 50-pull-request **review ceiling** was setting the same flag a page
+limit sets. With 139 pull requests the ceiling bit on every pass, so the cursor
+could never advance and every sync would have re-read the entire tracker for
+ever. The incremental behaviour the cursor exists to provide was unreachable on
+any repository with more than fifty pull requests, and no test caught it because
+every fixture was small.
+
+Confirmed by measurement before it was fixed: the same pass with `--no-reviews`
+reported `truncated: false`, isolating the ceiling as the cause.
+
+**The fix.** The two kinds of incompleteness are now separate facts. A page
+limit means the *enumeration stopped* and advancing would skip records nothing
+read — it still blocks the cursor. A review ceiling means the enumeration
+*finished*; re-reading the same window would fetch the same first fifty reviews
+again and make no progress, so it reports `reviewsPartial` and the cursor
+advances. A pull request beyond the ceiling has its reviews read on a later
+pass, when it next changes.
+
+**Second pass, after the fix.** `since` was the first pass's start instant; 0
+issues and 0 pull requests returned; nothing written; the cursor advanced again;
+and the stored position carries both collections' etags, so the third pass is a
+conditional request. 4 775 of 5 000 rate-limit requests remaining, with the
+provider's 100-request reserve unspent.
+
+That is the whole design working end to end against a real tracker, and it is
+the shape of finding that only running the product produces.
+
 ## What was deliberately not done
 
 - **No daemon.** D-113.2. The command's own output ends with the sentence

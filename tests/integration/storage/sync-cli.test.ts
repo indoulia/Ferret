@@ -243,6 +243,31 @@ describeDb(`ferret sync (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REASON
       expect(json.data['dryRun']).toBe(true);
     }, 60_000);
 
+    it('refuses a review limit that is not a whole number — AC-16', async () => {
+      const result = await sync(['o/r', '--review-limit', 'lots']);
+
+      expect(result.code).not.toBe(0);
+      expect(result.json.error?.code).toBe('E_USAGE');
+      expect(result.json.error?.remediation).toContain('--review-limit');
+    });
+
+    it('reports reviews as complete when the ceiling did not bite — AC-17', async () => {
+      const result = await runCli(['sync', 'o/r', '--json'], {
+        env: { ...db.env, FERRET_CONFIG: configPath, FERRET_TEST_GITHUB_TOKEN: 'ghp_notarealtoken1234' },
+      });
+      expect(result.code, result.stderr).toBe(0);
+
+      const report = (JSON.parse(result.stdout) as Json).data['entries'] as Array<
+        Record<string, unknown>
+      >;
+      const entry = report[0]?.['report'] as Record<string, unknown>;
+      // One pull request, one review fetched. `false` is a claim — every pull
+      // request this pass read had its reviews fetched — and it is not the same
+      // as having skipped reviews altogether.
+      expect(entry['reviewsPartial']).toBe(false);
+      expect(entry['truncated']).toBe(false);
+    }, 120_000);
+
     it('says the pass is not a schedule', async () => {
       const result = await runCli(['sync', 'o/r'], {
         env: { ...db.env, FERRET_CONFIG: configPath, FERRET_TEST_GITHUB_TOKEN: 'ghp_notarealtoken1234' },
