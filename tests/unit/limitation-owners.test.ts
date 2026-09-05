@@ -1,8 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+
+import { EPIC_DOCS, catalogRows } from '../helpers/registry.js';
 
 /**
  * A limitation may not be parked on a closed Epic — issue #117.
@@ -24,23 +25,7 @@ import { describe, expect, it } from 'vitest';
  * than guessing. A row pointed at a closed Epic is a promise nobody is keeping.
  */
 
-const DOCS = fileURLToPath(new URL('../../docs/EPICs/', import.meta.url));
-const VALIDATION = join(DOCS, 'validation');
-
-/** A registry row's status, keyed by Epic number. */
-function registryStatuses(): ReadonlyMap<string, string> {
-  const registry = readFileSync(join(DOCS, 'README.md'), 'utf8');
-  const statuses = new Map<string, string>();
-  for (const line of registry.split('\n')) {
-    const match = /^- \*\*EPIC-(\d{3})[^*]*\*\*(.*)$/.exec(line.trim());
-    if (match === null) continue;
-    const rest = match[2] ?? '';
-    // The status is the last all-caps word on the row, when there is one.
-    const status = /\b(VALIDATED|IMPLEMENTED|APPROVED|DONE|DRAFT)\b/.exec(rest);
-    statuses.set(match[1] as string, status === null ? 'OPEN' : (status[1] as string));
-  }
-  return statuses;
-}
+const VALIDATION = join(EPIC_DOCS, 'validation');
 
 /** An Epic that can still take new work. */
 function isOpen(status: string | undefined): boolean {
@@ -99,7 +84,7 @@ function ownerReferences(): readonly Reference[] {
 }
 
 describe('a limitation is not parked on a closed Epic — issue #117', () => {
-  const statuses = registryStatuses();
+  const statuses = catalogRows();
   const references = ownerReferences();
 
   it('finds the registry and the validation documents, so a pass is not an empty one', () => {
@@ -152,7 +137,15 @@ describe('a limitation is not parked on a closed Epic — issue #117', () => {
     // not implemented" row was narrowed rather than struck, and its EPIC-051
     // owner stopped being parked. The pin has now moved down twice for the
     // same reason -- a stale claim corrected -- and up none.
-    expect(parked.length, parked.join('\n')).toBe(67);
+    // 67 -> 68 on 2026-09-05, catalog reconciliation. The first upward move,
+    // and no new stale row: this sweep read the whole README, so the prose
+    // bullet "- **EPIC-094 AC-11 / issue #101.** ..." was taken for a catalog
+    // row and overwrote EPIC-094's real status with an open one. EPIC-032 and
+    // EPIC-118 were shadowed the same way. Reading only the catalog section
+    // made EPIC-094 closed again and revealed the third owner of a row already
+    // parked twice -- EPIC-010's "nothing rebuilds a stale derived artefact",
+    // owned by EPIC-031, EPIC-054 and EPIC-094.
+    expect(parked.length, parked.join('\n')).toBe(68);
   });
 
   it('permits a limitation with no owner, which is an honest absence', () => {
