@@ -67,3 +67,18 @@ export {
   type AnswerPack,
   type AnswerRequest,
 } from './answer.js';
+
+// EPIC-124. One context out of many sources: the cross-source hops a connector
+// cannot make, because `normalize` is pure and cannot read a store.
+export {
+  DEFAULT_EXAMINE_LIMIT,
+  MAX_SCAN_CHARACTERS,
+  CrossSourceReferenceKind,
+  findCrossSourceReferences,
+  linkCrossSourceReferences,
+  type CrossSourceDependencies,
+  type CrossSourceOptions,
+  type CrossSourceReference,
+  type CrossSourceReport,
+  type ResolvedLink,
+} from './cross-source.js';

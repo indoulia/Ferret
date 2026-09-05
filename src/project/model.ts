@@ -246,6 +246,18 @@ function addIssue(
       // A title can carry a token: somebody pastes a failing curl command into
       // an issue and the token travels with it.
       title: redactSecrets(issue.title).text,
+      // The body — EPIC-124.
+      //
+      // Both providers have fetched it since EPIC-021, `ProjectRecord.body`
+      // has carried it, `issueAttributes` has had `description` through `base`
+      // since EPIC-006, and this function dropped it — while *reading* it, to
+      // find closing references. So Ferret knew what an issue's body said for
+      // exactly long enough to pull one edge out of it, and then forgot the
+      // text. An agent asking a context layer what an issue says got a title.
+      //
+      // Redacted, for the reason the title is: somebody pastes a failing
+      // request into an issue and the token travels with it.
+      ...(issue.body === undefined ? {} : { description: redactSecrets(issue.body).text }),
       state: issue.lifecycle,
       // The source's own word, beside the comparable reading — EPIC-021 §8.1.
       sourceState: issue.state,
@@ -258,6 +270,7 @@ function addIssue(
       ...(issue.createdAt === undefined ? {} : { createdAt: issue.createdAt }),
       ...(issue.closedAt === undefined ? {} : { closedAt: issue.closedAt }),
     },
+    externalIds: externalIdsFor(issue, input, emitter),
     ...(issue.updatedAt === undefined ? {} : { sourceObservedAt: issue.updatedAt }),
   });
   addEntity(state, entity, false);
@@ -292,6 +305,10 @@ function addPullRequest(
     attributes: {
       ...(pull.number === undefined ? {} : { number: String(pull.number) }),
       title: redactSecrets(pull.title).text,
+      // The body — EPIC-124, and the same omission the issue carried. This one
+      // matters more: a pull request body is where `Fixes FER-12` lives, so the
+      // text Ferret read to find a cross-source edge was the text it discarded.
+      ...(pull.body === undefined ? {} : { description: redactSecrets(pull.body).text }),
       // `draft` is a state a person asks about, and GitHub reports it beside
       // `open` rather than instead of it.
       state: pull.draft === true && pull.lifecycle === ProjectItemState.OPEN ? 'draft' : pull.lifecycle,
@@ -307,6 +324,7 @@ function addPullRequest(
       ...(pull.closedAt === undefined ? {} : { closedAt: pull.closedAt }),
       ...(pull.mergeCommit === undefined ? {} : { mergeCommit: pull.mergeCommit }),
     },
+    externalIds: externalIdsFor(pull, input, emitter),
     ...(pull.updatedAt === undefined ? {} : { sourceObservedAt: pull.updatedAt }),
   });
   addEntity(state, entity, false);
@@ -581,6 +599,43 @@ function addComment(
   if (author !== undefined) {
     state.evidence.push(emitter.about(entity, 'author', author.attributes['name']));
   }
+}
+
+/**
+ * How another system would quote this record — EPIC-124.
+ *
+ * `externalIds` has been on every entity since EPIC-006, is persisted in its own
+ * table, is queryable through `EntityQuery.externalId` and is surfaced over MCP.
+ * **No provider had ever populated one.** It is the mechanism a cross-source
+ * link needs and the reason one could not be made: a pull request body saying
+ * `Fixes FER-12` knows the *key*, and the Jira issue is identified by a numeric
+ * id under a Jira scope, so nothing could join them.
+ *
+ * What goes in is what a *stranger* would write down: the key or the
+ * `owner/repo#number`, which is what appears in somebody else's body. The
+ * canonical id is not an external id — it is Ferret's, and no other system
+ * quotes it.
+ */
+function externalIdsFor(
+  record: { key?: string; number?: number; url?: string },
+  input: ProjectModelInput,
+  emitter: Emitter,
+): { system: string; id: string; url?: string }[] {
+  const quoted =
+    record.key ?? (record.number === undefined ? undefined : `${input.project}#${String(record.number)}`);
+  if (quoted === undefined) return [];
+  return [
+    {
+      // The system the *identifier* belongs to, not the project: `FER-12` is a
+      // Jira key wherever it is written down, and a reader of somebody else's
+      // pull request body knows that much and no more. Two tenants can both
+      // have a `FER-12`, which is why the resolution pass narrows candidates by
+      // the scopes it was asked about rather than trusting the pair alone.
+      system: emitter.identity.sourceSystem,
+      id: quoted,
+      ...(record.url === undefined ? {} : { url: record.url }),
+    },
+  ];
 }
 
 /**

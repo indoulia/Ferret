@@ -11,14 +11,16 @@ read without its alternatives is indistinguishable from a default.
 **Epics were directed after the queue was exhausted.** EPIC-118 — Ferret
 Self-Dogfood — EPIC-119 — Universal Source Connector Contract — EPIC-120 —
 Repository Connector — EPIC-121 — GitHub Connector — EPIC-122 — Jira Connector —
-and EPIC-123 — Confluence Connector. None came from this document and none is an
-entry invented to keep it alive; all were directed by the owner. See
+EPIC-123 — Confluence Connector — and EPIC-124 — Unified Cross-Source Context.
+None came from this document and none is an entry invented to keep it alive; all
+were directed by the owner. See
 [after the queue](#after-the-queue--epic-118),
 [EPIC-119](#after-the-queue--epic-119),
 [EPIC-120](#after-the-queue--epic-120),
 [EPIC-121](#after-the-queue--epic-121),
-[EPIC-122](#after-the-queue--epic-122) and
-[EPIC-123](#after-the-queue--epic-123).
+[EPIC-122](#after-the-queue--epic-122),
+[EPIC-123](#after-the-queue--epic-123) and
+[EPIC-124](#after-the-queue--epic-124).
 
 **Nothing implementation-ready remains.** What is left is listed under
 [not in this queue](#not-in-this-queue), and every item there needs a decision,
@@ -744,6 +746,44 @@ before it had been run against the suite, and was answered by running it rather
 than by an exemption. The boundary suite gained the assertion that matters for a
 shared transport: sharing one must not become one provider importing another.
 
+## After the queue — EPIC-124
+
+**Unified Cross-Source Context**, directed by the owner on 2026-09-05, and the
+Epic the four connectors before it existed for.
+
+Three of the four hops already resolved after EPIC-120 to EPIC-123 — pull
+request to commit to file. The **cross-source** hops did not, and could not, for
+a reason that is structural rather than an oversight: `normalize` is pure by
+contract and cannot read a store, so a pull request body saying `Fixes FER-12`
+had a key and no way to reach the issue that key names. The join belongs after
+ingestion, and now happens there.
+
+**Two mechanisms had been built and joined neither time.** `proposeResolutions`
+(EPIC-051) carries a `QUOTED_KEY` rule for exactly this and has never had a
+caller. `externalIds` (EPIC-006) is on every entity, persisted, queryable and
+surfaced over MCP, and no provider had ever populated one. Both are now wired.
+
+**And the text the join needs was being thrown away.** `ProjectRecord.body` is
+fetched by both providers and `modelProject` dropped it — *while reading it*, to
+find closing references. Ferret knew what a pull request said for exactly long
+enough to pull one edge out of it, and then forgot the sentence. That is the
+fifth member of a family this arc kept finding, after `listComments`,
+`ProjectRecord.key`, `issuetype`/`priority` and `externalIds`: a value three
+layers agreed mattered with no line carrying it between them, surviving because
+the suites tested one side of a seam.
+
+**No relationship type was added**, and that is asserted rather than claimed:
+every cross-source hop uses an edge the model already had. A pull request that
+merely *mentions* an issue yields none, because there is no
+`pull_request_mentions_issue` and saying nothing beats saying the wrong thing
+about whether work is done.
+
+The false positive worth recording: `UTF-8`, `HTTP-2` and `RFC-7540` all have
+the shape of `FER-12`, and no pattern separates them because nothing about the
+text does. What separates them is whether anybody has a project called `UTF` —
+so the pass learns which projects it holds first and filters on that, which
+turns an unanswerable question about English into a lookup.
+
 ## Not in this queue
 
 - **[#138](https://github.com/indoulia/Ferret/issues/138) — three limitation rows
@@ -793,6 +833,7 @@ Filled in as Epics land.
 | EPIC-121 | `62f6c89` | [#180](https://github.com/indoulia/Ferret/pull/180) | `62f6c89` | [record](validation/EPIC-121-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-122 | `7db2ba9` | [#182](https://github.com/indoulia/Ferret/pull/182) | `7db2ba9` | [record](validation/EPIC-122-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-123 | `5b7c6fd` | [#184](https://github.com/indoulia/Ferret/pull/184) | `5b7c6fd` | [record](validation/EPIC-123-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-124 | `PENDING` | [#PENDING](https://github.com/indoulia/Ferret/pull/PENDING) | `PENDING` | [record](validation/EPIC-124-VALIDATION.md) | COMPLETE — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:

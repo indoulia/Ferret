@@ -299,6 +299,17 @@ export class ConfluenceProvider extends BaseProvider {
           ...(page.spaceId === undefined ? {} : { spaceId: page.spaceId }),
           ...(page.parentId === undefined || page.parentId === null ? {} : { parentId: page.parentId }),
         },
+        // How another system would quote this page — EPIC-124. A Confluence URL
+        // carries the numeric page id, which is what a Jira issue or a pull
+        // request body links to, and it survives a rename where a title does
+        // not.
+        externalIds: [
+          {
+            system: CONFLUENCE_SOURCE_SYSTEM,
+            id: page.id,
+            ...(record.metadata.url === undefined ? {} : { url: record.metadata.url }),
+          },
+        ],
         ...(page.version?.createdAt === undefined ? {} : { sourceObservedAt: page.version.createdAt }),
       });
 
