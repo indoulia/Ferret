@@ -1,5 +1,25 @@
 name: CI
 
+# Three kinds of coverage, deliberately kept apart — EPIC-114.
+#
+# **PR correctness.** `verify` and `storage`, on every pull request. They answer
+# "is this change correct", against the platform Ferret is developed on and the
+# database version it is primarily validated against. Nothing is added to this
+# path that does not answer that question, because everything on it is paid for
+# by every author on every push.
+#
+# **Compatibility coverage.** `compatibility`, scheduled. It answers "does the
+# range Ferret *claims* to support still work", which is a different question
+# with a different cost profile: it is broad, it is slow, and a break in it is
+# rarely caused by the commit that revealed it. Running it nightly finds a break
+# within a day for zero pull-request wait.
+#
+# **Platform validation.** The `verify` matrix. Which operating systems are
+# measured is an owner decision recorded at that job.
+#
+# The distinction is the point. A job on the wrong one of these three is either
+# slowing every author down or claiming coverage nobody is paying for.
+
 on:
   push:
     branches: [main]
@@ -159,6 +179,100 @@ jobs:
           name: storage-performance-baseline
           path: docs/Performance/EPIC-002-storage-baseline-*.json
           if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Compatibility coverage — EPIC-114.
+  #
+  # **What was wrong.** `MINIMUM_POSTGRES_MAJOR = 14` is enforced at runtime in
+  # `src/storage/connection.ts`, and EPIC-002's own limitation table recorded the
+  # gap: *"Only PostgreSQL 17 is measured. The floor is 14 and is enforced at
+  # runtime, but 14–16 are unvalidated."* Ferret refused 13 and accepted 14, 15
+  # and 16 having never run against any of them — a claim in code with no
+  # measurement behind it, which is the shape Governance §17 exists to prevent.
+  #
+  # **Why this is scheduled rather than on the PR gate.** The owner decision of
+  # 2026-09-05 asks for the normal pull-request path to stay as light as
+  # reasonably possible, with PostgreSQL 17 as the primary target. A break at the
+  # floor is real but rare, and it is almost never caused by the commit that
+  # reveals it: nothing in Ferret uses version-specific syntax, so what this lane
+  # catches is a dependency or an image changing under it. Nightly finds that
+  # within a day and costs no author any wait at all.
+  #
+  # **Isolated, and visible.** Its own job, its own name per version, and
+  # `fail-fast: false` so one broken major does not hide the others. It never
+  # runs on a pull request, so it can neither slow one down nor be mistaken for
+  # a gate — and when it fails, it fails on `main` where the failure is a
+  # notification rather than a review comment.
+  #
+  # **14 is the floor and 15 and 16 are the middle of the range.** All three are
+  # here because a floor that works while the middle does not is not a supported
+  # range, and the marginal cost of two more parallel containers on a nightly
+  # run is close to nothing.
+  #
+  # **No record may claim a version this has not measured.** The lane existing
+  # is not coverage; a green run is. `docs/EPICs/validation/EPIC-114-VALIDATION.md`
+  # records which versions have actually run and when.
+  compatibility:
+    name: compatibility (PostgreSQL ${{ matrix.postgres }})
+    runs-on: ubuntu-latest
+    # Scheduled and on demand only. `workflow_dispatch` is how a change to this
+    # lane is measured before it is merged, rather than merged and hoped for.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The declared floor first, then the middle of the range. 17 is not here
+        # because `storage` above measures it on every pull request, and
+        # measuring it twice would spend a runner to learn nothing.
+        postgres: ['14', '15', '16']
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: ferret_test
+          POSTGRES_PASSWORD: ferret_test_password
+          POSTGRES_DB: ferret_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # The version actually reached, printed before anything asserts against
+      # it. A service image whose tag no longer means what it did would
+      # otherwise produce a green run for the wrong major — the failure mode
+      # that makes a compatibility lane worse than none.
+      - name: Report the server version under test
+        run: |
+          node -e "const {Client}=require('pg');const c=new Client(process.env.FERRET_TEST_DATABASE_URL);c.connect().then(()=>c.query('SHOW server_version')).then(r=>{console.log('server_version',r.rows[0].server_version);return c.end();}).catch(e=>{console.error(e.message);process.exit(1);});"
+        env:
+          FERRET_TEST_DATABASE_URL: postgres://ferret_test:ferret_test_password@localhost:5432/ferret_test
+
+      # The same suite the `storage` job runs against 17. Deliberately the same:
+      # a compatibility lane that ran a reduced subset would measure something
+      # other than what the PR gate measures, and the difference is exactly where
+      # a version-specific break would hide.
+      - name: Storage integration, durability, reliability and performance
+        run: npm test
+        env:
+          FERRET_TEST_DATABASE_URL: postgres://ferret_test:ferret_test_password@localhost:5432/ferret_test
 
   audit:
     name: dependency audit

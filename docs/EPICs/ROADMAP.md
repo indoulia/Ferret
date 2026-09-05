@@ -41,7 +41,7 @@ not yet do. `src/cli/commands/planned.ts` names them, exits `5` with
 | 3 | EPIC-111 — Session recall over MCP | CONTINUATION | **VALIDATED** | 13 protocol cases against a fake port; boundary gate green — [record](validation/EPIC-111-VALIDATION.md) | EPIC-109, EPIC-110 | Done |
 | 4 | EPIC-112 — Session retention & redaction | HARDENING | **VALIDATED** | A `sessions` prune target; and a redaction gap on the explicit memory path, found and closed — [record](validation/EPIC-112-VALIDATION.md) | EPIC-109, EPIC-082, EPIC-088 | Done |
 | 5 | EPIC-113 — Provider sync transport (`ferret sync`) | CONTINUATION | **VALIDATED** | 14 unit, 5 storage-integration and 8 CLI cases against the built binary; the last `(planned)` entry retired — [record](validation/EPIC-113-VALIDATION.md) | EPIC-075, EPIC-021, EPIC-071 | Done — [decisions D-113.1–.3](#epic-113--provider-sync-transport-ferret-sync) taken 2026-09-05 |
-| 6 | EPIC-114 — PostgreSQL version coverage | INFRASTRUCTURE REQUIRED | BLOCKED | EPIC-002 validation: minimum supported major is 14, **only 17 measured** | EPIC-002 | [Infrastructure decisions](#epic-114--postgresql-version-coverage) — needs CI approval |
+| 6 | EPIC-114 — PostgreSQL version coverage | INFRASTRUCTURE | **VALIDATED** | 14, 15 and 16 measured on a scheduled lane — 187 files each, zero pull-request cost — [record](validation/EPIC-114-VALIDATION.md) | EPIC-002 | Done — [decision](#epic-114--postgresql-version-coverage) taken 2026-09-05 |
 | 7 | EPIC-115 — macOS packaging validation | INFRASTRUCTURE REQUIRED | BLOCKED | EPIC-105 **measured** macOS on 2026-09-03; the 2026-09-05 owner decision dropped it from CI, so nothing measures it now | EPIC-105 | [Infrastructure decisions](#epic-115--macos-packaging-validation) — needs a runner decision |
 | 8 | EPIC-116 — Session export fidelity | CONTINUATION | **VALIDATED** | 10 integration and 3 CLI cases, including a restore into a second database — [record](validation/EPIC-116-VALIDATION.md) | EPIC-109, EPIC-089 | Done — [decisions D-116.1–.3](#epic-116--session-export-fidelity) taken 2026-09-05 |
 | 9 | EPIC-117 — Recording a session over MCP | CONTINUATION | **VALIDATED** | 29 protocol cases and 3 CLI authorization cases; `record` amended onto EPIC-068's closed set — [record](validation/EPIC-117-VALIDATION.md) | EPIC-111 | Done — [decisions D-117.1–.3](#epic-117--recording-a-session-over-mcp) taken 2026-09-05 |
@@ -369,6 +369,20 @@ visible decision.
 
 #### EPIC-114 — PostgreSQL version coverage
 
+**DECIDED 2026-09-05 · IMPLEMENTED.** See
+[the Epic](EPIC-114-PostgreSQL-Version-Coverage.md) and
+[its validation record](validation/EPIC-114-VALIDATION.md). The options below
+are unchanged, because a decision is only readable beside what it was choosing
+between.
+
+**Decision taken.** A scheduled compatibility lane over 14, 15 and 16 —
+option B's cost with more of option C's coverage. The pull-request path is
+untouched: 17 still gates every change through the `storage` job, and the
+compatibility lane never runs on a pull request. `MINIMUM_POSTGRES_MAJOR` stays
+14. The lane was **dispatched and run before merge**, because the decision says
+no compatibility claim is made without running the suite: 14.24, 15.19 and 16.15
+all pass 187 test files.
+
 **Current coverage.** One job, `storage integration (PostgreSQL 17 + pgvector)`,
 on `ubuntu-latest`, against the service image `pgvector/pgvector:pg17` — the
 image EPIC-005 benchmarked pgvector 0.8.6 against. Measured **4m48s** on
@@ -476,8 +490,9 @@ Filled in as Epics land.
 | EPIC-111 | `818fdfc` | [#158](https://github.com/indoulia/Ferret/pull/158) | `39a23ca` | [record](validation/EPIC-111-VALIDATION.md) | COMPLETE |
 | EPIC-112 | `b137094` | [#159](https://github.com/indoulia/Ferret/pull/159) | `5faab0c` | [record](validation/EPIC-112-VALIDATION.md) | COMPLETE |
 | EPIC-113 | `6122ad4` | [#163](https://github.com/indoulia/Ferret/pull/163) | `b2cfb37` | [record](validation/EPIC-113-VALIDATION.md) | COMPLETE |
-| EPIC-116 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-116-VALIDATION.md) | COMPLETE |
-| EPIC-117 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-117-VALIDATION.md) | COMPLETE |
+| EPIC-116 | `899bfef` | [#164](https://github.com/indoulia/Ferret/pull/164) | `318dcfe` | [record](validation/EPIC-116-VALIDATION.md) | COMPLETE |
+| EPIC-117 | `80f9e42` | [#165](https://github.com/indoulia/Ferret/pull/165) | `76e2522` | [record](validation/EPIC-117-VALIDATION.md) | COMPLETE |
+| EPIC-114 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-114-VALIDATION.md) | COMPLETE |
 
 All four merged **without** a validation record and without a registry catalog
 entry; both were added on 2026-09-05 and every cited suite re-run to confirm the
