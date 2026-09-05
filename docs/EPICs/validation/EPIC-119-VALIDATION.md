@@ -203,6 +203,56 @@ unit suite could not:
 
 Both were found by running the product, not by reading it.
 
+## Hardening: a bounded pass could not finish a large source — 2026-09-06
+
+Recorded here rather than in a separate note because it changed the code.
+
+**The defect.** `DEFAULT_INGEST_PAGE_LIMIT` bounded a pass, and a bounded pass
+persisted nothing about where it had stopped. `page.cursor` was assigned to a
+local and discarded at `pages >= pageLimit`; the advance block then wrote no
+position at all, because it was guarded on `!truncated`. The next pass asked the
+source for its *first* page again, under the same `since`.
+
+So a source holding more than `pageLimit × pageSize` records could never be read
+past that prefix, however many times ingestion ran — while every pass wrote rows,
+reported records and returned `truncated: true`, which the CLI renders as
+"re-run to continue". The advice was sound and the re-run never completed. No
+fixture was larger than one bounded pass, so nothing caught it.
+
+**The fix.** A pass and a window are separated. A truncated pass persists
+`pageCursor` (the connector's own token, opaque here) and `passStartedAt`
+alongside an *unmoved* `syncedAt`; the next pass resumes from it. A finished pass
+writes `syncedAt` = the instant the window **opened**, not the instant its last
+pass ran, and no `pageCursor` — and because `SyncCursorStore` replaces a
+position's metadata rather than merging into it, that clears the continuation by
+construction rather than by remembering to delete it. `cursorAdvancedTo` still
+reports `undefined` for an unfinished pass, so no existing caller changes.
+
+One new state needed deciding: a source answering `unchanged` to a request that
+carries a cursor has contradicted itself, since the unread tail is exactly what
+it was asked about. Believing it would close the window over records nobody had
+read, so the continuation is kept.
+
+**Proven against the old code before the fix.** The regression suite was run on
+the unmodified implementation: 7 of 10 cases failed, including
+`expected 101 to be 126` — 125 records over 25 pages against the default bound
+of 20, of which the old implementation stored 100 and could never store more.
+
+**Dogfood, and the second defect it found.** The corrected path was run against
+**Ferret's own repository** through the real Git provider and real PostgreSQL at
+`pageLimit: 5`, deliberately tight so the boundary is crossed many times. The
+window closed after **12 passes** having read **1 092 records**, the continuation
+advancing through the connector's own stages (`files` → `commits`) and the
+position carrying no `syncedAt` until the last pass.
+
+The first run of that exercise stored **75 of 866 files and 0 of 211 commits**:
+passes 2 to 12 read 1 002 records and created **zero** entities. That is
+EPIC-120's `normalize` returning an empty contribution when the batch carries no
+repository record — a defect this correction *caused to matter*, since before it
+a bounded pass always restarted from the first stage and always had one. Fixed
+there; see that Epic's validation. After the fix the same run stores **880 file
+entities and all 211 commits**, matching `git rev-list --count HEAD` exactly.
+
 ## Tests
 
 | Suite | Result |

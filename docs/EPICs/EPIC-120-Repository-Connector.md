@@ -67,6 +67,22 @@ onto the identity the pass was scoped to, which is what
 carried is lost: `remoteUrl`, `identityKind` and `localRoot` stay on the entity,
 so the resolution layer can still collapse two clones of one remote.
 
+**A resumed pass has no description record, and still models against one.** The
+description is emitted by the first stage, so it is in the batch of a pass that
+started at the beginning and absent from one that resumed mid-enumeration. It is
+still *known*: every stage calls `repositoryFor` before it can list anything, so
+by the time `normalize` runs the pass has read the description whether or not it
+emitted it as a record. `normalize` reads the batch first and falls back to that.
+
+Not falling back was a defect, and a silent one. A resumed pass found no
+description among its records, returned an empty contribution, and dropped every
+record it had just been handed — reporting the records it read while writing
+nothing. It was invisible for as long as a bounded pass always restarted from
+the first stage, and became a loss of most of a large repository the moment
+EPIC-119's continuation let one carry on. Measured on Ferret's own repository at
+`pageLimit: 5`: 12 passes, 1 092 records read, and 75 of 866 files stored,
+because only the first pass wrote anything at all.
+
 **Identity is the checkout, resolved without I/O.** `identify` is pure and total
 by contract — the cursor is keyed by its answer, so a version that read
 `.git/config` for the remote would make an *unreachable* repository
