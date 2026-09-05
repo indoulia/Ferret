@@ -70,8 +70,9 @@ author cannot forget what they were never asked to pass.
 **Identity is three parts.** `system` / `instance` / `resource` — `github` /
 `github.com` / `owner/repo`. Two parts would have filed `PROJ` at one company
 and `PROJ` at another as one board. `sourceIdentityKey` is deterministic and
-total, and is what the sync cursor is keyed by and what the source entity's
-`source.id` derives from; it is a stored format, not a formatting helper.
+total, and is the source entity's `source.id` — so the entity's canonical id,
+and the sync cursor filed under it, both derive from it. It is a stored format,
+not a formatting helper.
 
 **No new entity kind.** The scope entity is a `repository`, which is the kind
 Ferret's model already uses for "the bounded thing records belong to". Adding a

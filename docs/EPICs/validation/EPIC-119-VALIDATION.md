@@ -96,18 +96,25 @@ isolation     failed:E_UNKNOWN  ingested:wiki::healthy.epic119.local::handbook
 
 ## Identity
 
-`sourceIdentityKey` is `system::instance::resource`, lowercased. The stored
-source entity carries it verbatim as `source.id`:
+`sourceIdentityKey` is `system::instance::resource`, lowercased, and is the
+source entity's `source.id`:
 
 ```
-canonicalKey  8:document4:wiki36:cabc6213-…-fb0dbcc75feb14:epic119-page-1
-source.system wiki
-source.scope  cabc6213-de7e-8598-820e-fb0dbcc75feb
+wiki::handbook-v3.epic119.local::handbook  →  cabc6213-de7e-8598-820e-fb0dbcc75feb
 ```
 
-Two deployments of the same resource stay apart — asserted in the suite for
-`jira/a.atlassian.net/PROJ` versus `jira/b.atlassian.net/PROJ`, and for the
-records themselves, not only their scope entity.
+Every record of that source is then scoped to it, which is what keeps two
+deployments apart. The stored document, read back over MCP:
+
+```
+canonicalKey   8:document4:wiki36:cabc6213-…-fb0dbcc75feb14:epic119-page-1
+source.system  wiki
+source.scope   cabc6213-de7e-8598-820e-fb0dbcc75feb
+```
+
+The suite asserts the same for `jira/a.atlassian.net/PROJ` versus
+`jira/b.atlassian.net/PROJ` — different keys, different source entities, and
+different record entities rather than only different scopes.
 
 ## Metadata
 
