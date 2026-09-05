@@ -197,6 +197,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 ### Durable Context
 
 - **EPIC-126 — Context Merger** — P1 — VALIDATED ([spec](EPIC-126-Context-Merger.md), [decisions](../Architecture/EPIC-126-DECISIONS.md), [evidence](validation/EPIC-126-VALIDATION.md))
+- **EPIC-127 — Context Lifecycle & Authority** — P1 — VALIDATED ([spec](EPIC-127-Context-Lifecycle-And-Authority.md), [evidence](validation/EPIC-127-VALIDATION.md))
 
 ### Security & Authorization
 

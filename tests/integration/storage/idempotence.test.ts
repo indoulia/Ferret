@@ -10,6 +10,7 @@ import {
   ContextKind,
   EntityKind,
   EvidenceMethod,
+  LifecycleState,
   RelationshipType,
   createEngineeringMemory,
   createNullLogger,
@@ -98,9 +99,18 @@ function storageFiles(): string[] {
     .map((entry) => `storage${sep}${entry.name}`.split(sep).join('/'));
 }
 
-/** Public `async` methods on a store whose name reads as a write. */
+/**
+ * Public `async` methods on a store whose name reads as a write.
+ *
+ * **`accept` and `archive` were added on 2026-09-06.** EPIC-127 introduced
+ * three lifecycle transitions and this list recognised exactly one of them —
+ * `reinstate`, and only because EPIC-032 had already needed the word. The gate
+ * caught the one it knew and said nothing about the other two, which is the
+ * failure mode it exists to prevent, one verb further out.
+ */
 function writeMethods(): { key: string; file: string; method: string }[] {
-  const verbs = /^(upsert|assert|record|store|index|save|write|start|finish|mark|retire|reinstate|replace|set)/;
+  const verbs =
+    /^(upsert|assert|record|store|index|save|write|start|finish|mark|retire|reinstate|replace|set|accept|archive)/;
   const found: { key: string; file: string; method: string }[] = [];
   for (const file of storageFiles()) {
     const source = readFileSync(resolve(SRC, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -180,6 +190,9 @@ describeDb(`idempotent ingestion (${databaseAvailable() ? 'real PostgreSQL' : SK
         'sessions.ts:saveCheckpoint',
         'sessions.ts:recordMemory',
         'durable-context.ts:record',
+        'durable-context.ts:accept',
+        'durable-context.ts:archive',
+        'durable-context.ts:reinstate',
       ]);
 
       for (const { key } of writeMethods()) {
@@ -448,6 +461,50 @@ describeDb(`idempotent ingestion (${databaseAvailable() ? 'real PostgreSQL' : SK
       expect(variant.context.entity.id).toBe(first.context.entity.id);
       expect(await count('entity')).toBe(before.entity);
       expect(await count('evidence')).toBe(before.evidence + 1);
+    });
+
+    it('replaying a durable context transition writes nothing new — EPIC-127', async () => {
+      const context = new DurableContextStore(handle);
+      const recorded = await context.record({
+        statement: 'A transition applied twice is the same transition',
+        contextKind: ContextKind.DECISION,
+        scope: repositoryId,
+        provenance: { producer: 'idem', producerVersion: '1.0.0', sourceSystem: 'ferret' },
+        state: LifecycleState.CANDIDATE,
+      });
+      const id = recorded.context.entity.id;
+
+      const hashOf = async (): Promise<string | undefined> => {
+        const rows = await handle.execute<{ [column: string]: unknown; content_hash: string }>(
+          sql`SELECT content_hash FROM ferret.entity WHERE id = ${id}`,
+        );
+        return rows.rows[0]?.content_hash;
+      };
+
+      for (const [move, target] of [
+        [() => context.accept(id), LifecycleState.ACTIVE],
+        [() => context.archive(id), LifecycleState.ARCHIVED],
+        [() => context.reinstate(id), LifecycleState.ACTIVE],
+      ] as const) {
+        const moved = await move();
+        expect(moved.entity.lifecycle).toBe(target);
+
+        const before = {
+          entity: await count('entity'),
+          evidence: await count('evidence'),
+          hash: await hashOf(),
+        };
+
+        // The second application is refused rather than absorbed — a state
+        // machine that accepts every transition is a column, not a lifecycle —
+        // and the refusal writes nothing, which is what idempotent means here.
+        await expect(move()).rejects.toThrow(/cannot be/);
+
+        expect(await count('entity')).toBe(before.entity);
+        expect(await count('evidence')).toBe(before.evidence);
+        expect(await hashOf()).toBe(before.hash);
+        expect((await context.get(id))?.entity.lifecycle).toBe(target);
+      }
     });
 
     it('a checkpoint replayed at a taken sequence writes nothing new', async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CanonicalEntity } from '../../src/domain/index.js';
-import { LIVE_STANDING, rank, standing, type SearchHit } from '../../src/retrieval/index.js';
+import { LIVE_STANDING, describeStanding, rank, standing, type SearchHit } from '../../src/retrieval/index.js';
 
 /**
  * EPIC-057, without a database.
@@ -70,6 +70,39 @@ describe('standing is a band ordered by what the lifecycle says — AC-1 to AC-4
     expect(standing(entity({ id: 'd', score: 0, lifecycle: 'deleted' }))).toBeLessThan(
       standing(entity({ id: 's', score: 0, lifecycle: 'superseded' })),
     );
+  });
+
+  it('places the two states EPIC-127 added without disturbing the four', () => {
+    const bands = ['active', 'candidate', 'unknown', 'deleted', 'archived', 'superseded'].map((lifecycle) =>
+      standing(entity({ id: lifecycle, score: 0, lifecycle })),
+    );
+
+    expect(bands).toStrictEqual([...bands].sort((a, b) => a - b));
+    // Both are below live, which is the property that matters: neither a
+    // proposal nor a retired record is current context.
+    expect(bands.slice(1).every((band) => band > LIVE_STANDING)).toBe(true);
+    // A candidate has been stated in full; `unknown` is something Ferret has
+    // only heard of, so the more informative one ranks higher.
+    expect(standing(entity({ id: 'c', score: 0, lifecycle: 'candidate' }))).toBeLessThan(
+      standing(entity({ id: 'u', score: 0, lifecycle: 'unknown' })),
+    );
+    // An archived record has no replacement to return instead, so it is not as
+    // wrong as a superseded one — but it was retired deliberately.
+    expect(standing(entity({ id: 'a', score: 0, lifecycle: 'archived' }))).toBeGreaterThan(
+      standing(entity({ id: 'd', score: 0, lifecycle: 'deleted' })),
+    );
+    expect(standing(entity({ id: 'a', score: 0, lifecycle: 'archived' }))).toBeLessThan(
+      standing(entity({ id: 's', score: 0, lifecycle: 'superseded' })),
+    );
+  });
+
+  it('explains every state it ranks, so no hit is demoted silently', () => {
+    for (const lifecycle of ['candidate', 'archived', 'deleted', 'superseded', 'unknown']) {
+      expect(describeStanding(entity({ id: lifecycle, score: 0, lifecycle }))).toMatch(
+        /^ranked below live results: /,
+      );
+    }
+    expect(describeStanding(entity({ id: 'live', score: 0 }))).toBeUndefined();
   });
 
   it('ranks a deleted hit below every live one even when it matches better — AC-1', () => {

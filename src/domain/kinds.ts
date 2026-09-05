@@ -77,7 +77,7 @@ export function isEntityKind(value: unknown): value is EntityKind {
  * answer. Erasing the row would destroy the answer along with the file.
  */
 export const LifecycleState = {
-  /** Observed to exist at the source. */
+  /** Observed to exist at the source. Durable context reads this as *current*. */
   ACTIVE: 'active',
   /** Observed to have been removed at the source. The entity is retained. */
   DELETED: 'deleted',
@@ -85,6 +85,26 @@ export const LifecycleState = {
   SUPERSEDED: 'superseded',
   /** Ferret has a reference to it but has not observed it directly. */
   UNKNOWN: 'unknown',
+  /**
+   * Proposed, and not yet part of current context — EPIC-127.
+   *
+   * Distinct from `unknown`: a candidate has been stated in full and Ferret is
+   * holding it back, where `unknown` is something Ferret has only heard *of*.
+   * Nothing becomes a candidate by default; a producer that is proposing rather
+   * than asserting says so, because making every write need acceptance would be
+   * an approval workflow nobody asked for.
+   */
+  CANDIDATE: 'candidate',
+  /**
+   * Deliberately retired from current context, with nothing replacing it —
+   * EPIC-127.
+   *
+   * Not `superseded`, which promises a replacement a reader can go to, and not
+   * `deleted`, which reports what a source did. Archiving is Ferret's own act on
+   * knowledge that has stopped applying, and it is reversible: an archive with
+   * no way back is a delete wearing a different word.
+   */
+  ARCHIVED: 'archived',
 } as const;
 
 export type LifecycleState = (typeof LifecycleState)[keyof typeof LifecycleState];
@@ -94,6 +114,20 @@ export const LIFECYCLE_STATES: readonly LifecycleState[] = Object.freeze(Object.
 export function isLifecycleState(value: unknown): value is LifecycleState {
   return typeof value === 'string' && (LIFECYCLE_STATES as readonly string[]).includes(value);
 }
+
+/**
+ * States that are not current — EPIC-127.
+ *
+ * "Historical" is this *category*, not a sixth state. A record is historical
+ * because it was replaced, archived or removed at its source, and each of those
+ * already says which; a separate `historical` value would mean the same as
+ * `superseded` while claiming to add something.
+ */
+export const HISTORICAL_LIFECYCLE_STATES: readonly LifecycleState[] = Object.freeze([
+  LifecycleState.SUPERSEDED,
+  LifecycleState.ARCHIVED,
+  LifecycleState.DELETED,
+]);
 
 export const entityKindSchema = z.enum(ENTITY_KINDS as [EntityKind, ...EntityKind[]]);
 export const lifecycleStateSchema = z.enum(LIFECYCLE_STATES as [LifecycleState, ...LifecycleState[]]);
