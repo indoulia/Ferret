@@ -1,9 +1,25 @@
+import { randomUUID } from 'node:crypto';
+
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import type { AuditWriter } from '../audit/index.js';
 import { Permission, type Principal } from '../authorization/index.js';
-import { DEFAULT_MEMORY_LIMIT, recoverSession, type Session, type SessionRecoveryPort } from '../domain/index.js';
+import {
+  DEFAULT_MEMORY_LIMIT,
+  MEMORY_KINDS,
+  createEngineeringMemory,
+  createSession,
+  createSessionCheckpoint,
+  endSession,
+  recoverSession,
+  type EngineeringMemory,
+  type Session,
+  type SessionCheckpoint,
+  type JsonValue,
+  type SessionRecoveryPort,
+} from '../domain/index.js';
+import { ErrorCode, FerretError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 
 import { createToolGuard, type ToolGuard } from './guards.js';
@@ -23,12 +39,34 @@ import { createToolGuard, type ToolGuard } from './guards.js';
  * checkpoint and a few dozen sentences instead of a transcript it would have to
  * pay for twice.
  *
- * **Read-only, deliberately.** Recording over MCP — opening a session, closing
- * it, checkpointing it — is a larger question than it looks: it needs an answer
- * to who owns a session's identity and lifetime when the client and the server
- * disagree about when a session began. EPIC-117 owns that. Half of it built
- * here would be a write path with no lifecycle behind it, and the FK from a
- * memory to its session would refuse the first call.
+ * **Recording — EPIC-117.** The read half shipped first because the write half
+ * needed an answer to who owns a session's identity and lifetime. It has one,
+ * and three decisions carry it:
+ *
+ * **The server mints the identity (D-117.1).** `ferret_session_start` returns an
+ * id the client did not choose, and there is deliberately no way to supply one.
+ * A client may *participate* in a session — every later call names the id it was
+ * given — without owning the namespace, so a buggy or hostile client cannot
+ * collide with, or write into, another client's session.
+ *
+ * **A closed transport is not an ended session (D-117.2).** Nothing here, and
+ * nothing in `server.ts`, ends a session when a connection drops. An editor
+ * restarting is the common case and it is not the user finishing their work.
+ * A session ends when `ferret_session_end` says so and at no other time, which
+ * leaves the reclamation of a crashed client's session where EPIC-112 already
+ * put it: `ferret prune --sessions`, on an age an operator supplies.
+ *
+ * **Recording has its own permission (D-117.3).** `Permission.RECORD`, an
+ * EPIC-068 amendment raised as one rather than an overload of `INDEX`. See the
+ * permission's own note for why both overload candidates were worse.
+ *
+ * **Additive, not destructive.** The four writing tools declare
+ * `destructiveHint: false`, which is the protocol's own word for a tool that
+ * performs only additive updates. Recording a decision adds a row; ending a
+ * session refuses later writes and destroys nothing that was already recorded.
+ * Routing them through EPIC-069's confirmation gate would have made an agent ask
+ * a human to approve each sentence it wanted to remember, which is the capability
+ * this Epic exists to provide.
  */
 
 /**
@@ -43,6 +81,18 @@ import { createToolGuard, type ToolGuard } from './guards.js';
 export interface SessionAccess extends SessionRecoveryPort {
   /** Sessions an actor ran, newest first. */
   sessionsFor(actorId: string, limit: number): Promise<readonly Session[]>;
+  /**
+   * The write half — EPIC-117. Optional, and its absence is a *reported* refusal.
+   *
+   * A composition that supplies a read-only access object gets the read tools
+   * and a recording tool that says recording is unavailable here, rather than a
+   * tool that is silently absent. "This build cannot record" and "this tool does
+   * not exist" are different facts, and a client that cannot tell them apart
+   * concludes the wrong one.
+   */
+  save?(value: Session): Promise<void>;
+  saveCheckpoint?(value: SessionCheckpoint): Promise<void>;
+  recordMemory?(value: EngineeringMemory): Promise<void>;
 }
 
 export interface SessionToolDependencies {
@@ -50,6 +100,40 @@ export interface SessionToolDependencies {
   readonly logger: Logger;
   readonly principal: Principal;
   readonly audit?: AuditWriter | undefined;
+}
+
+/**
+ * The writer, or a refusal that says why.
+ *
+ * A composition without the write half is a real state — `server.ts` takes
+ * `SessionAccess` from whatever a caller supplies — and the honest answer is
+ * "this installation cannot record", not a missing method's `TypeError`.
+ */
+function writerOrRefuse<T>(method: T | undefined, what: string): T {
+  if (method === undefined) {
+    throw new FerretError(
+      ErrorCode.NOT_IMPLEMENTED,
+      `This Ferret cannot ${what}: no session store is composed on this server`,
+      {
+        remediation:
+          'Start the server with `ferret mcp`, which composes the session store, and check `ferret status`.',
+      },
+    );
+  }
+  return method;
+}
+
+/** The session named by a call, or a refusal naming it. */
+async function mustFind(sessions: SessionAccess, sessionId: string): Promise<Session> {
+  const session = await sessions.getSession(sessionId);
+  if (session === undefined) {
+    throw new FerretError(ErrorCode.ENTITY_NOT_FOUND, `Session "${sessionId}" is not on record`, {
+      details: { sessionId },
+      remediation:
+        'Call ferret_session_start to open one, or ferret_session_list to find an identifier this installation holds.',
+    });
+  }
+  return session;
 }
 
 /** Most sessions one `ferret_session_list` call returns. */
@@ -273,6 +357,216 @@ export function registerSessionTools(server: McpServer, dependencies: SessionToo
             supersedes: memory.supersedes,
           })),
         };
+      }),
+  );
+  // ─── Recording — EPIC-117 ────────────────────────────────────────────────
+  //
+  // Four tools, one permission, and a lifecycle nothing but an explicit call
+  // advances. Each is `readOnlyHint: false` and `destructiveHint: false`: they
+  // write, and what they write is additive.
+
+  server.registerTool(
+    'ferret_session_start',
+    {
+      title: 'Open a session to record work in',
+      description:
+        'Open a session and return the identifier Ferret minted for it. Call ' +
+        'this once at the start of a piece of work, then pass the identifier ' +
+        'to ferret_session_remember, ferret_session_checkpoint and ' +
+        'ferret_session_end. The identifier is the server-s and cannot be ' +
+        'chosen by the client; a client resuming work should call ' +
+        'ferret_session_list to find the one it was given rather than opening ' +
+        'a second session. Closing the connection does not end a session.',
+      inputSchema: z.strictObject({
+        provider: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('The AI client this session belongs to. Defaults to the calling principal.'),
+        repositoryId: z.string().min(1).optional().describe('Repository scope, when known.'),
+        worktreeId: z.string().min(1).optional().describe('Worktree scope, when known.'),
+        branch: z.string().min(1).optional().describe('Branch scope, when known.'),
+        parentSessionId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('The session this one continues, so a recall inherits what it decided.'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async (input) =>
+      guard('session.start', Permission.RECORD, async () => {
+        const save = writerOrRefuse(sessions.save?.bind(sessions), 'open a session');
+
+        // D-117.1 — minted here, and there is no input field that could carry
+        // one. A client that supplied its own would make session ids a shared
+        // namespace, and nothing would stop it writing into another client's.
+        const value = createSession({
+          sessionId: randomUUID(),
+          provider: input.provider ?? principal.id,
+          actorId: principal.id,
+          ...(input.repositoryId === undefined ? {} : { repositoryId: input.repositoryId }),
+          ...(input.worktreeId === undefined ? {} : { worktreeId: input.worktreeId }),
+          ...(input.branch === undefined ? {} : { branch: input.branch }),
+          ...(input.parentSessionId === undefined ? {} : { parentSessionId: input.parentSessionId }),
+          startedAt: new Date().toISOString(),
+        });
+        await save(value);
+
+        return {
+          session: summarize(value),
+          sessionId: value.sessionId,
+          notice:
+            'Keep this identifier for the rest of this piece of work. A closed connection does not end the session; call ferret_session_end when the work is done.',
+        };
+      }),
+  );
+
+  server.registerTool(
+    'ferret_session_remember',
+    {
+      title: 'Record what this session decided',
+      description:
+        'Record one thing this session decided, was constrained by, preferred, ' +
+        'or discovered the hard way, so a later session inherits it without ' +
+        'replaying the transcript. One sentence per call, with the reasoning in ' +
+        '`rationale` — what it was chosen over is the part a later reader ' +
+        'cannot reconstruct. Credentials are removed from what is stored.',
+      inputSchema: z.strictObject({
+        sessionId: z.string().min(1).describe('The session that decided it.'),
+        kind: z.enum(MEMORY_KINDS).describe('What sort of thing this is.'),
+        statement: z.string().min(1).describe('What holds, in one sentence.'),
+        rationale: z.string().min(1).optional().describe('Why — and what it was chosen over.'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async (input) =>
+      guard('session.remember', Permission.RECORD, async () => {
+        const record = writerOrRefuse(sessions.recordMemory?.bind(sessions), 'record a memory');
+        await mustFind(sessions, input.sessionId);
+
+        // `explicit`, because a client stating something is not an extraction
+        // from a transcript — and EPIC-042 requires an *extracted* memory to
+        // cite the captures it was drawn from. Claiming extraction here would
+        // either fail that constraint or fabricate the citation.
+        const memory = createEngineeringMemory({
+          sessionId: input.sessionId,
+          kind: input.kind,
+          statement: input.statement,
+          ...(input.rationale === undefined ? {} : { rationale: input.rationale }),
+          origin: 'explicit',
+          recordedAt: new Date().toISOString(),
+        });
+        await record(memory);
+
+        return {
+          sessionId: memory.sessionId,
+          kind: memory.kind,
+          statement: memory.statement,
+          rationale: memory.rationale,
+          // Reported rather than silent: a client that pasted a credential
+          // should learn that Ferret removed it, and a truncated statement is
+          // not the statement the caller sent.
+          redactedSecrets: memory.redactedSecrets,
+          truncated: memory.truncated,
+          recordedAt: memory.recordedAt,
+        };
+      }),
+  );
+
+  server.registerTool(
+    'ferret_session_checkpoint',
+    {
+      title: 'Record resumable state for this session',
+      description:
+        'Record where this session has got to, compactly, so a later session ' +
+        'can resume without the transcript. The summary is prose; ' +
+        '`continuationState` is whatever the client needs handed back to it. ' +
+        'Checkpoints are numbered by Ferret and never overwrite one another, ' +
+        'so call this whenever the state of the work changes materially.',
+      inputSchema: z.strictObject({
+        sessionId: z.string().min(1).describe('The session to checkpoint.'),
+        summary: z.string().min(1).describe('What has happened so far, compactly.'),
+        continuationState: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe('Whatever this client needs handed back to resume. An object.'),
+        capturedThroughSequence: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('Highest captured turn this checkpoint represents, or 0 when unknown.'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async (input) =>
+      guard('session.checkpoint', Permission.RECORD, async () => {
+        const save = writerOrRefuse(sessions.saveCheckpoint?.bind(sessions), 'record a checkpoint');
+        const owner = await mustFind(sessions, input.sessionId);
+
+        // The sequence is read, never asked for — EPIC-110's reasoning, and the
+        // same one: a caller who has to supply it can only get it wrong, and
+        // EPIC-041 makes the progression monotonic so nobody has to track it.
+        const latest = await sessions.latestCheckpoint(input.sessionId);
+        const checkpoint = createSessionCheckpoint({
+          sessionId: input.sessionId,
+          provider: owner.provider,
+          checkpointSequence: (latest?.checkpointSequence ?? 0) + 1,
+          capturedThroughSequence: Math.max(
+            input.capturedThroughSequence ?? 0,
+            latest?.capturedThroughSequence ?? 0,
+          ),
+          checkpointedAt: new Date().toISOString(),
+          summary: input.summary,
+          // The MCP schema accepts an object of unknowns and the domain
+          // accepts only JSON values, which is the same set expressed twice:
+          // a tool argument arrived as JSON and cannot hold anything else.
+          // `createSessionCheckpoint` re-validates it either way.
+          continuationState: (input.continuationState ?? {}) as Record<string, JsonValue>,
+        });
+        await save(checkpoint);
+
+        return {
+          sessionId: checkpoint.sessionId,
+          sequence: checkpoint.checkpointSequence,
+          capturedThroughSequence: checkpoint.capturedThroughSequence,
+          checkpointedAt: checkpoint.checkpointedAt,
+        };
+      }),
+  );
+
+  server.registerTool(
+    'ferret_session_end',
+    {
+      title: 'Close this session',
+      description:
+        'Close a session. What it recorded stays readable for ever; only ' +
+        'further writes to it are refused. Call this when the work is finished ' +
+        'or abandoned. **Do not call it because a connection is closing** — a ' +
+        'session outlives the transport deliberately, so an editor restart ' +
+        'resumes the same work rather than fragmenting it.',
+      inputSchema: z.strictObject({
+        sessionId: z.string().min(1).describe('The session to close.'),
+        abandoned: z
+          .boolean()
+          .optional()
+          .describe('Record it as abandoned rather than completed. Off by default.'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async (input) =>
+      guard('session.end', Permission.RECORD, async () => {
+        const save = writerOrRefuse(sessions.save?.bind(sessions), 'close a session');
+        const session = await mustFind(sessions, input.sessionId);
+
+        // D-117.2 — this call, and nothing else, is what ends a session. The
+        // domain refuses a second terminal transition, so a client that ends an
+        // already-ended session is told rather than silently re-ending it.
+        const ended = endSession(session, input.abandoned === true ? 'abandoned' : 'completed', new Date());
+        await save(ended);
+
+        return { session: summarize(ended), endedAt: ended.endedAt, status: ended.status };
       }),
   );
 }

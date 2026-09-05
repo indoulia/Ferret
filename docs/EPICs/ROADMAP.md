@@ -44,7 +44,7 @@ not yet do. `src/cli/commands/planned.ts` names them, exits `5` with
 | 6 | EPIC-114 — PostgreSQL version coverage | INFRASTRUCTURE REQUIRED | BLOCKED | EPIC-002 validation: minimum supported major is 14, **only 17 measured** | EPIC-002 | [Infrastructure decisions](#epic-114--postgresql-version-coverage) — needs CI approval |
 | 7 | EPIC-115 — macOS packaging validation | INFRASTRUCTURE REQUIRED | BLOCKED | EPIC-105 **measured** macOS on 2026-09-03; the 2026-09-05 owner decision dropped it from CI, so nothing measures it now | EPIC-105 | [Infrastructure decisions](#epic-115--macos-packaging-validation) — needs a runner decision |
 | 8 | EPIC-116 — Session export fidelity | CONTINUATION | **VALIDATED** | 10 integration and 3 CLI cases, including a restore into a second database — [record](validation/EPIC-116-VALIDATION.md) | EPIC-109, EPIC-089 | Done — [decisions D-116.1–.3](#epic-116--session-export-fidelity) taken 2026-09-05 |
-| 9 | EPIC-117 — Recording a session over MCP | PRODUCT DECISION REQUIRED | BLOCKED | EPIC-111 shipped recall read-only; a write path needs a lifecycle owner | EPIC-111 | [D-117.1–.3](#epic-117--recording-a-session-over-mcp) |
+| 9 | EPIC-117 — Recording a session over MCP | CONTINUATION | **VALIDATED** | 29 protocol cases and 3 CLI authorization cases; `record` amended onto EPIC-068's closed set — [record](validation/EPIC-117-VALIDATION.md) | EPIC-111 | Done — [decisions D-117.1–.3](#epic-117--recording-a-session-over-mcp) taken 2026-09-05 |
 | — | #138 registry hygiene | MIXED | OPEN | Three limitation rows with no owning Epic; two are product decisions in their own right | — | [Not in this queue](#not-in-this-queue) |
 | — | #130 packaging gate flake | DEFERRED | OPEN | Gate failed once, passed twice on one tree; cause not established, has not recurred | — | [Not in this queue](#not-in-this-queue) — instrumented, awaiting a recurrence |
 
@@ -302,6 +302,21 @@ that keeps a restored memory traceable — which is the whole point of EPIC-048.
 
 #### EPIC-117 — Recording a session over MCP
 
+**DECIDED 2026-09-05 · IMPLEMENTED.** See
+[the Epic](EPIC-117-Recording-Over-MCP.md) and
+[its validation record](validation/EPIC-117-VALIDATION.md). The questions and
+options below are unchanged, because a decision is only readable beside what it
+was choosing between.
+
+**Decisions taken.** D-117.1 — the server mints and owns the session identity;
+a client participates by naming the id it was given, and the input schema offers
+no field it could supply one in. The idempotency key of option C is *not* built:
+the decision requires server ownership and nothing more. D-117.2 — a closed
+transport never ends a session; only an explicit `ferret_session_end` does, and
+the idle sweep of option C is not built for the same reason. D-117.3 —
+`Permission.RECORD`, amended onto EPIC-068's closed set in the open and recorded
+at [EPIC-068 §17](EPIC-068-AI-Authorization-Model.md#17-amendment--2026-09-05-record-epic-117).
+
 EPIC-111 shipped recall read-only. A client that can read what the last session
 decided but cannot record what this one decided is half a memory, and the missing
 half is the one an autonomous agent needs most. **The plumbing is not what
@@ -462,6 +477,7 @@ Filled in as Epics land.
 | EPIC-112 | `b137094` | [#159](https://github.com/indoulia/Ferret/pull/159) | `5faab0c` | [record](validation/EPIC-112-VALIDATION.md) | COMPLETE |
 | EPIC-113 | `6122ad4` | [#163](https://github.com/indoulia/Ferret/pull/163) | `b2cfb37` | [record](validation/EPIC-113-VALIDATION.md) | COMPLETE |
 | EPIC-116 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-116-VALIDATION.md) | COMPLETE |
+| EPIC-117 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-117-VALIDATION.md) | COMPLETE |
 
 All four merged **without** a validation record and without a registry catalog
 entry; both were added on 2026-09-05 and every cited suite re-run to confirm the

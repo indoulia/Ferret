@@ -42,6 +42,7 @@ interface Registration {
   readonly name: string;
   readonly file: string;
   readonly readOnly: boolean;
+  readonly destructive: boolean;
   readonly body: string;
 }
 
@@ -60,6 +61,11 @@ function registrations(file: string, source: string): Registration[] {
       name,
       file,
       readOnly: /readOnlyHint:\s*true/.test(chunk),
+      // EPIC-117. MCP's own word: `destructiveHint` is "the tool may perform
+      // destructive updates", and `false` is "only additive updates". The
+      // control keys on it because that is the property EPIC-069's confirmation
+      // gate is about — see the amendment note below.
+      destructive: /destructiveHint:\s*true/.test(chunk),
       body: chunk,
     };
   });
@@ -89,24 +95,49 @@ describe('destructive MCP tools', () => {
     }
   });
 
-  it('routes every non-read-only tool through the destructive guard — AC-12', () => {
-    for (const tool of tools.filter((candidate) => !candidate.readOnly)) {
+  it('routes every destructive tool through the destructive guard — AC-12', () => {
+    for (const tool of tools.filter((candidate) => candidate.destructive)) {
       expect(
         /guardDestructive\(|createDestructiveToolGuard\(/.test(tool.body),
-        `${label(tool)} is not annotated readOnlyHint: true, so it must pass through ` +
-          'the destructive guard — EPIC-069. Either it is read-only and the ' +
-          'annotation is wrong, or it changes something and needs a plan, a ' +
+        `${label(tool)} is annotated destructiveHint: true, so it must pass through ` +
+          'the destructive guard — EPIC-069. Either it is additive and the ' +
+          'annotation is wrong, or it destroys something and needs a plan, a ' +
           'permission and a confirmation.',
       ).toBe(true);
     }
   });
 
-  it('declares destructiveHint on every non-read-only tool — §16', () => {
+  /**
+   * **The amendment, and what it does not relax — EPIC-117.**
+   *
+   * This control used to read "not read-only ⇒ destructive guard", and argued
+   * its value was having no exceptions. The rule was right about every tool that
+   * existed when it was written and wrong about the first tool that writes
+   * something *additive*: `ferret_session_remember` records a sentence an agent
+   * wants a later session to inherit, and putting it behind a human confirmation
+   * would have made agent memory require a human per sentence — the capability
+   * EPIC-117 exists to provide, removed by the control meant to protect it.
+   *
+   * So the control now keys on `destructiveHint`, which is the protocol's own
+   * distinction and the one EPIC-069's gate is actually about. Nothing about a
+   * destructive tool is relaxed: the gate, the annotation and the permission are
+   * all still required, and a tool that writes must still say so. What is added
+   * is that an additive tool must **declare itself** additive — silence is still
+   * refused, because a client that cannot tell whether to prompt is the case
+   * this file was written for.
+   */
+  it('declares destructiveHint either way on every non-read-only tool — §16', () => {
     // Ferret cannot enforce a human prompt; MCP's annotation is how it asks a
     // conforming client for one, and specification §16 records that the client's
     // approval UI is the client's control while the token is Ferret's.
     for (const tool of tools.filter((candidate) => !candidate.readOnly)) {
-      expect(/destructiveHint:\s*true/.test(tool.body), label(tool)).toBe(true);
+      expect(/destructiveHint:\s*(true|false)/.test(tool.body), label(tool)).toBe(true);
+    }
+  });
+
+  it('never lets a tool claim to be both read-only and destructive', () => {
+    for (const tool of tools) {
+      expect(tool.readOnly && tool.destructive, label(tool)).toBe(false);
     }
   });
 
@@ -127,10 +158,25 @@ describe('destructive MCP tools', () => {
     // registered — and took the plain guard. The control's contract is *not
     // read-only*, not "deletes something", and its value is having no
     // exceptions: a recovery does mutate what Ferret can do.
-    expect(tools.filter((tool) => !tool.readOnly).map((tool) => tool.name)).toStrictEqual([
+    expect(tools.filter((tool) => tool.destructive).map((tool) => tool.name)).toStrictEqual([
       'ferret_config_set',
       'ferret_config_unset',
       'ferret_provider_recover',
+    ]);
+  });
+
+  it('names every additive tool too, so the second category is pinned as well', () => {
+    // EPIC-117 adds the first tools that write without destroying. Pinned for
+    // the same reason the destructive list is: growing this list should be a
+    // visible line in a diff, and an additive tool that should have been
+    // destructive is caught here rather than by a client that did not prompt.
+    expect(
+      tools.filter((tool) => !tool.readOnly && !tool.destructive).map((tool) => tool.name),
+    ).toStrictEqual([
+      'ferret_session_start',
+      'ferret_session_remember',
+      'ferret_session_checkpoint',
+      'ferret_session_end',
     ]);
   });
 
