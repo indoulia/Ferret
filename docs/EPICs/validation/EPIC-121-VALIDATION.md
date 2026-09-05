@@ -9,7 +9,7 @@ migration.
 
 | | |
 | --- | --- |
-| Tree | `025ba32` (`main`) + this Epic |
+| Tree | `025ba32` (`main`) + this Epic, merged as `62f6c89` |
 | Host | Windows 11, Node v22.23.2, vitest 4.1.11 |
 | Database | PostgreSQL 17 + pgvector, container started by `tests/support/postgres.ts` |
 | Live source | `api.github.com`, repository `indoulia/Ferret`, authenticated |
@@ -247,6 +247,38 @@ EPIC-119's 35 cases and EPIC-120's 24 stay green unchanged.
 - **No canonical model change.** No kind, no relationship type, no migration.
 - **No author edge invented** for a document, because EPIC-007 declares none.
 - **No reasoning, no autonomous action, no scheduling, no webhooks.**
+
+## Post-merge verification
+
+Re-run on merged `main` at `62f6c89`, against the live GitHub API:
+
+```
+pages / records    12 / 51      truncated false   skipped 0
+kinds              issue 29 · document 22 · repository 1 · developer 1
+comments / linked  22 / 22
+```
+
+Every comment acquired reached the graph and every one is attached to its
+parent — the assertion that was `0 / 25` before the orphan fix.
+
+`tests/integration/connectors`, `source-connector` and `boundaries` re-run on
+merged main: **205 passed**. Build clean. Working tree clean.
+
+## Known interaction, recorded rather than fixed here
+
+**A stage the provider does not support still costs a page.** The connector
+returns an empty page carrying the next stage's cursor, so a source that
+declares only issues and comments spends two of the ingestor's pages stepping
+over `pulls` and `reviews`. It is harmless at the default bound of twenty and it
+was measured: a deliberately tight `pageLimit: 4` truncated before reaching the
+comment stage at all.
+
+It matters more for a tracker with no pull requests or reviews *by nature* —
+which is EPIC-122's source — so it is named here and fixed there rather than
+tuned around. It compounds with the ingestor's existing rule that a truncated
+pass does not advance its cursor: a source larger than `pageLimit × pageSize`
+re-reads the same prefix and never completes. That rule is EPIC-119's and is
+unchanged by this Epic.
 
 ## Not applicable
 
