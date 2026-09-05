@@ -173,6 +173,29 @@ describeDb(`ferret session (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REA
       expect(result.json.data['rationale']).toContain('cannot be recomputed');
     });
 
+    it('redacts a credential a person pasted into a statement — EPIC-112', async () => {
+      // The gap EPIC-112 found on the path this Epic opened. Extraction always
+      // redacted; the explicit path — the one a person types into — did not, and
+      // `ferret_session_recall` would have handed the result to an AI client.
+      const id = await started('--id', 'cli-redact-1');
+      const result = await session([
+        'remember',
+        id,
+        '--kind',
+        'gotcha',
+        '--statement',
+        'the deploy needs AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGbPxRfiCY set',
+      ]);
+
+      expect(result.code, result.failure).toBe(0);
+      expect(String(result.json.data['statement'])).not.toContain('wJalrXUtnFEMIK7MDENGbPxRfiCY');
+      expect(result.json.data['redactedSecrets']).toBe(1);
+
+      // And it does not come back on the way out either.
+      const recalled = await session(['recall', id]);
+      expect(JSON.stringify(recalled.json)).not.toContain('wJalrXUtnFEMIK7MDENGbPxRfiCY');
+    });
+
     it('names the kinds when given one that does not exist', async () => {
       const id = await started('--id', 'cli-mem-2');
       const result = await session(['remember', id, '--kind', 'opinion', '--statement', 'x']);

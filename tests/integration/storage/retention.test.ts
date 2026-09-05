@@ -7,7 +7,12 @@ import {
   EntityKind,
   LifecycleState,
   EvidenceState,
+  createEngineeringMemory,
   createNullLogger,
+  createSession,
+  createSessionCapture,
+  createSessionCheckpoint,
+  endSession,
 } from '../../../src/index.js';
 import {
   ContentStore,
@@ -15,6 +20,7 @@ import {
   EvidenceStore,
   RetentionService,
   RetentionTarget,
+  SessionStore,
   migrate,
   type FerretDatabase,
 } from '../../../src/storage/index.js';
@@ -43,6 +49,7 @@ let entities: EntityStore;
 let content: ContentStore;
 let evidenceStore: EvidenceStore;
 let retention: RetentionService;
+let sessions: SessionStore;
 let repository: string;
 
 function bytes(text: string): Uint8Array {
@@ -119,6 +126,7 @@ describeDb(`retention (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REASON})
     content = new ContentStore(handle);
     evidenceStore = new EvidenceStore(handle);
     retention = new RetentionService(handle);
+    sessions = new SessionStore(handle);
 
     repository = (
       await entities.upsert({
@@ -352,6 +360,137 @@ describeDb(`retention (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REASON})
       } finally {
         await handle.execute(sql`ALTER TABLE ferret.content_blob_hidden RENAME TO content_blob`);
       }
+    });
+  });
+
+  describe('sessions that ended, past an age — EPIC-112', () => {
+    const OLD = '2020-01-01T00:00:00.000Z';
+
+    /** Records a session, ends it at `endedAt`, and fills it with everything. */
+    async function retired(sessionId: string, endedAt: string): Promise<void> {
+      const started = createSession({
+        sessionId,
+        provider: 'claude-code',
+        actorId: 'retention-actor',
+        startedAt: OLD,
+      });
+      await sessions.save(started);
+      await sessions.appendCapture(
+        createSessionCapture({
+          sessionId,
+          sequence: 1,
+          kind: 'user',
+          content: 'a turn',
+          capturedAt: OLD,
+          provider: 'claude-code',
+        }),
+      );
+      await sessions.saveCheckpoint(
+        createSessionCheckpoint({
+          sessionId,
+          provider: 'claude-code',
+          checkpointSequence: 1,
+          capturedThroughSequence: 1,
+          checkpointedAt: OLD,
+          summary: 'done',
+          continuationState: {},
+        }),
+      );
+      await sessions.recordMemory(
+        createEngineeringMemory({
+          sessionId,
+          kind: 'decision',
+          statement: `decided in ${sessionId}`,
+          origin: 'explicit',
+          recordedAt: OLD,
+        }),
+      );
+      await sessions.save(endSession(started, 'completed', new Date(endedAt)));
+    }
+
+    async function countIn(table: string): Promise<number> {
+      const rows = await handle.execute<{ [column: string]: unknown; n: string }>(
+        sql.raw(`SELECT count(*)::text AS n FROM ferret.${table}`),
+      );
+      return Number(rows.rows[0]?.n ?? '0');
+    }
+
+    it('refuses to choose an age, and reclaims nothing without one', async () => {
+      await retired('ret-1', OLD);
+
+      const plan = await retention.prune({ targets: [RetentionTarget.SESSIONS], apply: true });
+      const count = plan.counts.find((one) => one.target === RetentionTarget.SESSIONS);
+
+      expect(count?.rows).toBe(0);
+      expect(count?.note).toContain('refuses to choose one');
+      expect(await countIn('session')).toBeGreaterThan(0);
+    });
+
+    it('plans without deleting — AC-1', async () => {
+      const before = await countIn('session');
+
+      const plan = await retention.prune({
+        targets: [RetentionTarget.SESSIONS],
+        sessionsEndedOlderThanDays: 1,
+      });
+
+      expect(plan.applied).toBe(false);
+      expect(plan.counts.find((one) => one.target === RetentionTarget.SESSIONS)?.rows).toBeGreaterThan(0);
+      expect(await countIn('session')).toBe(before);
+    });
+
+    it('never touches a session nothing has closed, however old it is', async () => {
+      // Age is not evidence that a thing is finished — the distinction EPIC-094
+      // drew for an open run. This session started in 2020 and never ended.
+      await sessions.save(
+        createSession({
+          sessionId: 'ret-open',
+          provider: 'claude-code',
+          actorId: 'retention-actor',
+          startedAt: OLD,
+        }),
+      );
+
+      await retention.prune({
+        targets: [RetentionTarget.SESSIONS],
+        sessionsEndedOlderThanDays: 0,
+        apply: true,
+      });
+
+      expect(await sessions.getSession('ret-open')).toBeDefined();
+    });
+
+    it('keeps a session that ended more recently than the age', async () => {
+      await retired('ret-recent', new Date().toISOString());
+
+      await retention.prune({
+        targets: [RetentionTarget.SESSIONS],
+        sessionsEndedOlderThanDays: 30,
+        apply: true,
+      });
+
+      expect(await sessions.getSession('ret-recent')).toBeDefined();
+    });
+
+    it('takes the transcript, the checkpoints and the memories with it', async () => {
+      await retired('ret-cascade', OLD);
+      expect(await sessions.capturesFor('ret-cascade')).toHaveLength(1);
+
+      const plan = await retention.prune({
+        targets: [RetentionTarget.SESSIONS],
+        sessionsEndedOlderThanDays: 1,
+        apply: true,
+      });
+      const count = plan.counts.find((one) => one.target === RetentionTarget.SESSIONS);
+
+      expect(await sessions.getSession('ret-cascade')).toBeUndefined();
+      // One table deleted, four reclaimed — the cascade in migration 0015.
+      expect(await sessions.capturesFor('ret-cascade')).toHaveLength(0);
+      expect(await sessions.latestCheckpoint('ret-cascade')).toBeUndefined();
+      expect(await sessions.memoriesFor('ret-cascade')).toHaveLength(0);
+      // Said out loud, because a row count of 1 does not suggest that three
+      // other tables were emptied.
+      expect(count?.note).toContain('Captures, checkpoints and memories');
     });
   });
 });

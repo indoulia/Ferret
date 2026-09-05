@@ -196,13 +196,52 @@ describe('an age is required, and never invented — AC-6, AC-7', () => {
 
     expect(plan.counts[0]?.rows).toBe(0);
   });
+
+  it('refuses a session sweep with no age rather than choosing one — EPIC-112', async () => {
+    // The same rule, and the same reason it is the caller's: a memory is the
+    // longest-lived thing Ferret records about its own work. The stub throws on
+    // any query, so this also proves the refusal happens before the database is
+    // touched.
+    const plan = await servicing().prune({ targets: [RetentionTarget.SESSIONS] });
+
+    expect(plan.counts[0]).toMatchObject({ target: 'sessions', rows: 0 });
+    expect(plan.counts[0]?.note).toContain('age in days is required');
+  });
+
+  it('refuses a negative session age', async () => {
+    const plan = await servicing().prune({
+      targets: [RetentionTarget.SESSIONS],
+      sessionsEndedOlderThanDays: -1,
+    });
+
+    expect(plan.counts[0]?.rows).toBe(0);
+  });
 });
 
 describe('the target list is the contract — AC-9', () => {
   it('has no target for a tombstone, and no way to name one', () => {
     // §8.4. EPIC-006 §D-009: erasing the row would erase the answer along with
     // the file. A test rather than a comment, so a future flag fails the build.
-    expect([...RETENTION_TARGETS]).toStrictEqual(['blobs', 'journals', 'evidence']);
+    //
+    // **`sessions` added 2026-09-05 by EPIC-112, and this is the review the pin
+    // exists to force.** It does not weaken §8.4: a tombstone still has no flag
+    // and cannot be named. What it does do is follow `evidence` rather than
+    // `blobs`, and the distinction is the whole justification.
+    //
+    // §8.3's rule is that a target "answers no question", and an unreferenced
+    // blob genuinely answers none. A session's memories plainly do — "what did
+    // we decide" is what they are for. So does superseded evidence, and
+    // `evidence` is a target anyway: the resolution EPIC-088 already reached is
+    // that history which answers a question may be discarded *only* on an age
+    // the caller names, with no default, so that discarding it is always
+    // someone's explicit judgement rather than a sweep's side effect. Sessions
+    // are gated the same way, by `--sessions-older-than`, and refuse to run
+    // without it.
+    //
+    // A tombstone is not gated that way and must not become so. It is the
+    // record that something was deleted, and there is no age at which the
+    // answer stops mattering.
+    expect([...RETENTION_TARGETS]).toStrictEqual(['blobs', 'journals', 'evidence', 'sessions']);
     expect(RETENTION_TARGETS).not.toContain('tombstones');
     expect(RETENTION_TARGETS).not.toContain('entities');
   });

@@ -49,6 +49,15 @@ export function pruneCommand(output: (json: boolean) => OutputOptions): Command 
       ).argParser(Number),
     )
     .addOption(new Option('--journal-keep <n>', 'Rotated journal copies to keep').argParser(Number))
+    .addOption(
+      new Option('--sessions', 'Sessions that ended, past --sessions-older-than days').default(false),
+    )
+    .addOption(
+      new Option(
+        '--sessions-older-than <days>',
+        'Minimum age of an ended session. Required with --sessions; there is no default',
+      ).argParser(Number),
+    )
     .addOption(new Option('--yes', 'Actually delete what the plan names').default(false))
     .action(
       async (
@@ -56,7 +65,9 @@ export function pruneCommand(output: (json: boolean) => OutputOptions): Command 
           blobs: boolean;
           journals: boolean;
           evidence: boolean;
+          sessions: boolean;
           supersededOlderThan?: number;
+          sessionsOlderThan?: number;
           journalKeep?: number;
           yes: boolean;
         },
@@ -69,6 +80,7 @@ export function pruneCommand(output: (json: boolean) => OutputOptions): Command 
         if (options.blobs) named.push(RetentionTarget.BLOBS);
         if (options.journals) named.push(RetentionTarget.JOURNALS);
         if (options.evidence) named.push(RetentionTarget.EVIDENCE);
+        if (options.sessions) named.push(RetentionTarget.SESSIONS);
 
         // AC-1 — no target reports what *could* go across all of them, and
         // deletes nothing whatever `--yes` says. A caller who typed `--yes`
@@ -104,6 +116,9 @@ export function pruneCommand(output: (json: boolean) => OutputOptions): Command 
             ...(options.supersededOlderThan === undefined || Number.isNaN(options.supersededOlderThan)
               ? {}
               : { supersededOlderThanDays: options.supersededOlderThan }),
+            ...(options.sessionsOlderThan === undefined || Number.isNaN(options.sessionsOlderThan)
+              ? {}
+              : { sessionsEndedOlderThanDays: options.sessionsOlderThan }),
             ...(options.journalKeep === undefined || Number.isNaN(options.journalKeep)
               ? {}
               : { journalKeep: options.journalKeep }),
