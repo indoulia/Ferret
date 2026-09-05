@@ -139,9 +139,9 @@ and `#reconcileExclusive` both write `validTo` with a bare `UPDATE`, so every
 relationship either of them closes disagrees with its own hash from then on.
 Issue #118's fix landed on one of the three closing paths.
 
-Not fixed here, because it is not durable context and folding it into this Epic
-would make neither reviewable. It is the next change on this branch line, ahead
-of EPIC-127.
+Fixed in the change that follows this one, with a regression test proven against
+the unfixed code on both paths. Not folded in here, because it is not durable
+context and combining them would make neither reviewable.
 
 The 60 `evidence-tampered` rows are all from the index's first day, written by
 builds predating EPIC-094's `canonicalInstant` fix.

@@ -62,6 +62,24 @@ async function hashOf(entityId: string): Promise<string | undefined> {
   return rows.rows[0]?.content_hash;
 }
 
+async function relationshipHashOf(relationshipId: string): Promise<string | undefined> {
+  const rows = await handle.execute<{ [column: string]: unknown; content_hash: string }>(
+    sql`SELECT content_hash FROM ferret.relationship WHERE id = ${relationshipId}`,
+  );
+  return rows.rows[0]?.content_hash;
+}
+
+/** Every relationship the sweep believes disagrees with its own hash. */
+async function relationshipMismatches(): Promise<string[]> {
+  const sweep = await integrity.sweep({ logger });
+  return sweep.findings
+    .filter(
+      (finding) =>
+        finding.subject === 'relationship' && finding.kind === IntegrityFindingKind.CONTENT_HASH_MISMATCH,
+    )
+    .map((finding) => finding.id);
+}
+
 async function file(path: string): Promise<string> {
   const created = await entities.upsert({
     kind: EntityKind.FILE,
@@ -169,5 +187,78 @@ describeDb(`lifecycle writes and the content hash (${databaseAvailable() ? 'real
     expect(
       sweep.findings.filter((finding) => finding.kind === IntegrityFindingKind.CONTENT_HASH_MISMATCH),
     ).toStrictEqual([]);
+  });
+
+  /**
+   * Issue #118 fixed one of three closing paths.
+   *
+   * `IndexLifecycleStore.#retireContained` recomputed the hash; `retire` and
+   * the exclusive reconciliation inside `assert` both wrote `valid_to` with a
+   * bare `UPDATE`. Found by dogfooding EPIC-126: **112** relationship rows on
+   * Ferret's own index reported `content-hash-mismatch`, every one of them a
+   * *closed* row and none of them open, and a full re-index raised the count
+   * rather than clearing it.
+   */
+  describe('closing a relationship interval, on every path that closes one', () => {
+    it('leaves a directly retired edge verifying', async () => {
+      const id = await file('src/retired-edge.ts');
+
+      const closed = await relationships.retire(
+        repository,
+        RelationshipType.REPOSITORY_CONTAINS_FILE,
+        id,
+        new Date(),
+      );
+      expect(closed?.validTo).not.toBeNull();
+
+      const stored = await relationshipHashOf(closed?.id ?? '');
+      // The caller is handed the hash that is on the row, not the one that was.
+      expect(closed?.contentHash).toBe(stored);
+      expect(await relationshipMismatches()).toStrictEqual([]);
+    });
+
+    it('leaves an edge closed by an exclusive reassertion verifying', async () => {
+      const worktree = (
+        await entities.upsert({
+          kind: EntityKind.WORKTREE,
+          source: { system: 'git', id: '/hash-repo/wt', scope: repository },
+          attributes: { path: '/hash-repo/wt' },
+        })
+      ).entity.id;
+
+      const branches: string[] = [];
+      for (const name of ['main', 'feature']) {
+        branches.push(
+          (
+            await entities.upsert({
+              kind: EntityKind.BRANCH,
+              source: { system: 'git', id: `refs/heads/${name}`, scope: repository },
+              attributes: { ref: `refs/heads/${name}` },
+            })
+          ).entity.id,
+        );
+      }
+
+      // `worktree_checks_out_branch` is exclusive: the second assertion closes
+      // the first, through `#reconcileExclusive` rather than through `retire`.
+      const first = await relationships.assert({
+        fromId: worktree,
+        type: RelationshipType.WORKTREE_CHECKS_OUT_BRANCH,
+        toId: branches[0] ?? '',
+        validFrom: '2026-09-01T00:00:00.000Z',
+        sourceSystem: 'git',
+      });
+      const second = await relationships.assert({
+        fromId: worktree,
+        type: RelationshipType.WORKTREE_CHECKS_OUT_BRANCH,
+        toId: branches[1] ?? '',
+        validFrom: '2026-09-02T00:00:00.000Z',
+        sourceSystem: 'git',
+      });
+
+      // Non-vacuous: the first edge really was closed by the second.
+      expect(second.closed).toContain(first.relationship.id);
+      expect(await relationshipMismatches()).toStrictEqual([]);
+    });
   });
 });
