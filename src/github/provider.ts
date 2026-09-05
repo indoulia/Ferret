@@ -58,6 +58,15 @@ export const githubOptionsSchema = z
     userAgent: z.string().min(1).optional(),
     pageSize: z.number().int().min(1).max(GITHUB_MAX_PAGE_SIZE).optional(),
     rateLimitReserve: z.number().int().min(0).optional(),
+    /**
+     * Repositories `ferret sync` reads when none is named — EPIC-113.
+     *
+     * Here rather than in the core schema because `owner/repo` is GitHub's way
+     * of naming a project and Jira's is a key: Governance §4 keeps a
+     * provider-specific spelling behind the provider contract. A pass with no
+     * argument and no entry here syncs nothing and says so.
+     */
+    projects: z.array(z.string().min(1)).optional(),
   })
   .strict();
 
@@ -121,16 +130,37 @@ export class GithubProvider extends BaseProvider implements Provider, ProjectSou
     this.#options = options;
   }
 
+  /**
+   * The options actually in force: what an operator configured, then whatever
+   * the constructor was given.
+   *
+   * The provider declared `configSchema` and `secretOptions` from the day it was
+   * written, so `providers['ferret.source.github'].options.token` validated,
+   * redacted and reached `context.settings` — and then **nothing read it**.
+   * Every option had to be passed to `createGithubProvider`, which no
+   * composition outside a test does. EPIC-113 is the first caller that has to
+   * build this provider from configuration, which is what surfaced it.
+   *
+   * Constructor last, because an explicit construction is a caller saying what
+   * it wants — a test injecting `fetch`, a composition pinning a base URL — and
+   * a configuration file must not override that.
+   */
+  get effectiveOptions(): GithubProviderOptions {
+    const configured = githubOptionsSchema.parse(this.settings.options);
+    return { ...configured, ...stripUndefined(this.#options) };
+  }
+
   protected override onInitialize(_context: ProviderContext): void {
-    const fetchImpl = this.#options.fetch ?? platformFetch();
+    const options = this.effectiveOptions;
+    const fetchImpl = options.fetch ?? platformFetch();
     this.#client = new GithubClient({
       fetch: fetchImpl,
-      ...(this.#options.token === undefined ? {} : { token: this.#options.token }),
-      ...(this.#options.baseUrl === undefined ? {} : { baseUrl: this.#options.baseUrl }),
-      ...(this.#options.userAgent === undefined ? {} : { userAgent: this.#options.userAgent }),
-      ...(this.#options.rateLimitReserve === undefined
+      ...(options.token === undefined ? {} : { token: options.token }),
+      ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
+      ...(options.userAgent === undefined ? {} : { userAgent: options.userAgent }),
+      ...(options.rateLimitReserve === undefined
         ? {}
-        : { rateLimitReserve: this.#options.rateLimitReserve }),
+        : { rateLimitReserve: options.rateLimitReserve }),
     });
   }
 
@@ -654,4 +684,19 @@ function platformFetch(): FetchLike {
 /** A fresh provider, for a runtime to register. */
 export function createGithubProvider(options: GithubProviderOptions = {}): GithubProvider {
   return new GithubProvider(options);
+}
+
+/**
+ * A partial object with its `undefined` entries removed.
+ *
+ * Spreading `{ token: undefined }` over a configured token erases it, which is
+ * how "the constructor wins" becomes "the constructor erases everything it did
+ * not mention". Only keys actually supplied override configuration.
+ */
+function stripUndefined<T extends object>(value: T): Partial<T> {
+  const output: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) output[key] = entry;
+  }
+  return output as Partial<T>;
 }

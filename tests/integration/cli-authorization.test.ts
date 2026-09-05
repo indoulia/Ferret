@@ -49,6 +49,25 @@ function configGranting(permissions: readonly string[]): string {
   return path;
 }
 
+/** A configuration granting these permissions *and* configuring a tracker. */
+function configSyncing(permissions: readonly string[]): string {
+  const path = join(workspace, `syncing-${permissions.join('-') || 'nothing'}.json`);
+  writeFileSync(
+    path,
+    JSON.stringify({
+      version: CONFIG_FILE_VERSION,
+      authorization: { principalId: 'ferret.test-operator', permissions },
+      providers: {
+        // Unroutable on purpose: this file is about the permission check, which
+        // happens before anything is fetched.
+        'ferret.source.github': { enabled: true, options: { baseUrl: 'http://127.0.0.1:1' } },
+      },
+    }),
+    'utf8',
+  );
+  return path;
+}
+
 describeDb(`CLI authorization (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REASON})`, () => {
   beforeAll(async () => {
     db = await createTestDatabase('cli-authorization');
@@ -170,6 +189,31 @@ describeDb(`CLI authorization (${databaseAvailable() ? 'real PostgreSQL' : SKIP_
 
     expect(result.stderr).not.toContain('E_NOT_PERMITTED');
     expect(result.code).toBe(ExitCode.OK);
+  });
+
+  it('refuses to sync when configuration withholds index — EPIC-113 AC-16', async () => {
+    // A sync ingests, so it is checked as an index. The provider is configured
+    // in this file too: composing the tracker happens before the runtime
+    // starts, so without it the pass would fail for want of configuration and
+    // the denial under test would never be reached.
+    const result = await runCli(['sync', 'o/r'], {
+      env: { ...db.env, FERRET_CONFIG: configSyncing(['read']) },
+    });
+
+    expect(result.code).toBe(ExitCode.NOT_PERMITTED);
+    expect(result.stderr).toContain('E_NOT_PERMITTED');
+    expect(result.stderr).toContain('sync');
+  });
+
+  it('syncs when configuration grants index — EPIC-113, the control', async () => {
+    // `--dry-run` still reads the tracker, and the address is unroutable, so
+    // the pass fails per project and reports it rather than being denied. The
+    // claim under test is the absence of a refusal, not a successful fetch.
+    const result = await runCli(['sync', 'o/r', '--dry-run'], {
+      env: { ...db.env, FERRET_CONFIG: configSyncing(['read', 'index']) },
+    });
+
+    expect(result.stderr).not.toContain('E_NOT_PERMITTED');
   });
 
   it('refuses to apply an upgrade when configuration withholds index — EPIC-106 AC-11', async () => {

@@ -362,3 +362,66 @@ export const ContentStageSkip = {
 } as const;
 
 export type ContentStageSkip = (typeof ContentStageSkip)[keyof typeof ContentStageSkip];
+
+/**
+ * A canonical record, as its store's input.
+ *
+ * The conversion is mechanical and was written twice — once inside the indexer
+ * and once inside `project/sync.ts` — until the second caller made the
+ * duplication real. It lives here because this file already owns the shape of
+ * every write the core performs, and because a field added to a canonical
+ * record must reach the store from *both* ingestion paths or it silently does
+ * not persist for one of them.
+ */
+export function toEntityInput(entity: CanonicalEntity): EntityInput {
+  return {
+    kind: entity.kind,
+    source: { ...entity.source },
+    lifecycle: entity.lifecycle,
+    attributes: { ...entity.attributes },
+    unknownFields: { ...entity.unknownFields },
+    externalIds: entity.externalIds.map((id) => ({ ...id })),
+    ...(entity.sourceObservedAt === undefined ? {} : { sourceObservedAt: entity.sourceObservedAt }),
+  };
+}
+
+/** A canonical relationship, as `RelationshipWriter.assert` takes it. */
+export function toRelationshipInput(edge: CanonicalRelationship): RelationshipInput {
+  return {
+    fromId: edge.fromId,
+    type: edge.type,
+    toId: edge.toId,
+    validFrom: edge.validFrom,
+    ...(edge.validTo === null || edge.validTo === undefined ? {} : { validTo: edge.validTo }),
+    metadata: { ...edge.metadata },
+    sourceSystem: edge.sourceSystem,
+    ...(edge.sourceId === undefined ? {} : { sourceId: edge.sourceId }),
+  };
+}
+
+/** A canonical evidence record, as `EvidenceWriter.record` takes it. */
+export function toEvidenceInput(record: CanonicalEvidence): EvidenceInput {
+  return {
+    subjectId: record.subjectId,
+    ...(record.field === undefined ? {} : { field: record.field }),
+    statement: record.statement,
+    method: record.method,
+    producer: record.producer,
+    producerVersion: record.producerVersion,
+    sourceSystem: record.sourceSystem,
+    ...(record.sourceId === undefined ? {} : { sourceId: record.sourceId }),
+    ...(record.sourceUrl === undefined ? {} : { sourceUrl: record.sourceUrl }),
+    ...(record.locator === undefined ? {} : { locator: { ...record.locator } }),
+    ...(record.sourceContentHash === undefined ? {} : { sourceContentHash: record.sourceContentHash }),
+    ...(record.confidence === undefined ? {} : { confidence: record.confidence }),
+    completeness: record.completeness,
+    authority: record.authority,
+    ...(record.observedAt === undefined ? {} : { observedAt: record.observedAt }),
+    derivedFrom: [...record.derivedFrom],
+    ...(record.permissionScope === undefined ? {} : { permissionScope: record.permissionScope }),
+    // Carried through, because this function is where an emitted record becomes
+    // a write again — and dropping it here is how a collection field emitted
+    // through the SDK would still have been collapsed to its last member.
+    ...(record.cardinality === undefined ? {} : { cardinality: record.cardinality }),
+  };
+}

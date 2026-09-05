@@ -35,3 +35,17 @@ export {
   type AncestryOptions,
   type AncestryWalk,
 } from './ancestry.js';
+
+// EPIC-113. The composition nothing performed: a tracker read, modelled, stored
+// and remembered, in one explicit pass.
+export {
+  DEFAULT_PAGE_LIMIT,
+  DEFAULT_REVIEW_LIMIT,
+  ProjectSynchronizer,
+  SYNC_PRODUCER,
+  type ProjectSyncCounts,
+  type ProjectSyncDependencies,
+  type ProjectSyncOptions,
+  type ProjectSyncReport,
+  type ProjectSyncWrites,
+} from './sync.js';
