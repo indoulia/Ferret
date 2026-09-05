@@ -397,6 +397,20 @@ export {
   type SelectionOptions,
 } from './context/index.js';
 
+// EPIC-124. The cross-source join a connector cannot make.
+export {
+  DEFAULT_EXAMINE_LIMIT,
+  MAX_SCAN_CHARACTERS,
+  CrossSourceReferenceKind,
+  findCrossSourceReferences,
+  linkCrossSourceReferences,
+  type CrossSourceDependencies,
+  type CrossSourceOptions,
+  type CrossSourceReference,
+  type CrossSourceReport,
+  type ResolvedLink,
+} from './context/index.js';
+
 export {
   DEFAULT_LIMIT,
   Direction,

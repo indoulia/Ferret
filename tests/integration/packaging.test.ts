@@ -436,9 +436,30 @@ describe('package contents', () => {
     // dependency was added and nothing improper ships, re-measured rather than
     // assumed.
     //
+    // **2026-09-05, EPIC-124 — the non-grammar bound moved an eighth time.**
+    // The output reached 3 350 881 against a 3 339 000 ceiling: 0.36% over.
+    // Measured on both sides by building this branch with `src/` stashed
+    // (9 158 189 bytes in `dist/`) and again with it restored (9 184 416), so
+    // the 26 227 bytes are a measurement; the per-file deltas below sum to
+    // exactly that total, which is how it is known nothing else moved:
+    //
+    //    +14 513  dist/context/cross-source.js   (the cross-source pass)
+    //     +7 134  dist/context/cross-source.d.ts
+    //     +2 899  dist/project/model.js          (bodies, and external ids)
+    //       +576  dist/confluence/provider.js    (external ids on a page)
+    //       +310  dist/context/index.js
+    //       +287  dist/index.d.ts
+    //       +286  dist/context/index.d.ts
+    //       +222  dist/index.js
+    //
+    // No dependency was added. As with EPIC-117 and EPIC-120, most of the new
+    // bulk is prose that `tsc` keeps in the emitted `.js` — and this file is
+    // one where the reasoning is the point: it records why a tracker key is
+    // only a key when Ferret holds the project.
+    //
     // The headroom is 3%, as every raise here has been, and for the reason every
     // raise here has given.
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_339_000);
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_451_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {
