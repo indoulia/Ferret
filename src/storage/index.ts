@@ -216,10 +216,12 @@ export {
   EXPORT_EXCLUSIONS,
   EXPORT_TABLES,
   ExportService,
+  SESSION_TABLES,
   backupCommandFor,
   isExportManifest,
   isExportTrailer,
   readExportDocument,
+  sessionExclusionsFor,
   type CredentialFinding,
   type ExcludedTable,
   type ExportManifest,
@@ -228,6 +230,8 @@ export {
   type ExportRow,
   type ExportSink,
   type ExportTrailer,
+  type MemoryEvidenceGap,
+  type SessionScope,
 } from './export.js';
 export {
   ImportOutcome,

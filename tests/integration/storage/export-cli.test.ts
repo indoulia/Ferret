@@ -178,4 +178,87 @@ describeCli(`ferret export (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REA
     const trailer = readExportDocument(raw).trailer;
     expect(trailer?.credentialShaped).toStrictEqual([]);
   });
+
+  /**
+   * EPIC-116 — sessions, from the operator's side.
+   *
+   * The store-level suite proves the narrowing; these prove the surface that
+   * decides it. `--session` is the *explicit* scope D-116.1 requires, and the
+   * human output is where an operator learns what did and did not travel.
+   */
+  describe('sessions travel when they are named — EPIC-116', () => {
+    let sessionId: string;
+
+    beforeAll(async () => {
+      const started = await runCli(
+        ['session', 'start', '--provider', 'claude-code', '--json'],
+        { env },
+      );
+      expect(started.code, started.stderr).toBe(0);
+      sessionId = (JSON.parse(started.stdout) as Envelope).data['sessionId'] as string;
+
+      const remembered = await runCli(
+        [
+          'session',
+          'remember',
+          sessionId,
+          '--kind',
+          'decision',
+          '--statement',
+          'the export carries this session because it was named',
+          '--json',
+        ],
+        { env },
+      );
+      expect(remembered.code, remembered.stderr).toBe(0);
+    }, 120_000);
+
+    it('carries a named session and its memory — AC-3', async () => {
+      const out = join(home, 'named-session.ndjson');
+      const result = await runCli(['export', '--out', out, '--session', sessionId, '--json'], { env });
+      expect(result.code, result.stderr).toBe(0);
+
+      const raw = readFileSync(out, 'utf8');
+      const document = readExportDocument(raw);
+      expect(document.manifest?.sessionScope?.resolved).toStrictEqual([sessionId]);
+      expect(
+        document.rows.filter((row) => row.table === 'engineering_memory'),
+      ).toHaveLength(1);
+      expect(raw).toContain('the export carries this session because it was named');
+    }, 120_000);
+
+    it('says which named session it could not find — AC-4', async () => {
+      const out = join(home, 'missing-session.ndjson');
+      const result = await runCli(
+        ['export', '--out', out, '--session', sessionId, 'sess-nowhere'],
+        { env },
+      );
+      expect(result.code, result.stderr).toBe(0);
+
+      // The human output, because that is where the statement has to land: a
+      // scoped export that quietly carried one of two named sessions is the
+      // F-45 shape one level down.
+      expect(result.stdout).toContain('1 of 2 named session(s) carried');
+      expect(result.stdout).toContain('sess-nowhere');
+    }, 120_000);
+
+    it('says a repository-scoped export carries no session, and why — AC-2', async () => {
+      const scope = (
+        await db.pool.query<{ id: string }>(
+          `SELECT id FROM ferret.entity WHERE kind = 'repository' LIMIT 1`,
+        )
+      ).rows[0]?.id;
+      const out = join(home, 'scoped-no-session.ndjson');
+      const result = await runCli(
+        ['export', '--out', out, ...(scope === undefined ? [] : ['--scope', scope])],
+        { env },
+      );
+      expect(result.code, result.stderr).toBe(0);
+
+      if (scope !== undefined) {
+        expect(result.stdout).toContain('session —');
+        expect(result.stdout).toContain('not an entity');
+      }
+    }, 120_000);
+  });
 });

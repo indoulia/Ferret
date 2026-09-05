@@ -34,6 +34,18 @@ interface TableSpec {
   readonly key: readonly string[];
   /** Column holding the owning entity id, when the table has one. */
   readonly scopeColumn?: string;
+  /**
+   * The column naming the session a row belongs to — EPIC-116.
+   *
+   * Its presence is what makes a table part of the **session** dimension, which
+   * narrows independently of the entity scope. Deliberately not folded into
+   * `scopeColumn`: that column holds an entity id and is narrowed by the entity
+   * closure, and a session is not an entity — `session.repository_id` is free
+   * text precisely so a session can be recorded outside any repository Ferret
+   * has indexed (EPIC-039 AC-3). Overloading one field would be exactly the
+   * inference D-116.1 forbids, expressed as a type.
+   */
+  readonly sessionColumn?: string;
 }
 
 /**
@@ -53,6 +65,18 @@ export const EXPORT_TABLES: readonly TableSpec[] = [
   { table: 'derived_artifact', key: ['id'], scopeColumn: 'scope_id' },
   { table: 'identity_alias', key: ['id'] },
   { table: 'index_run', key: ['id'], scopeColumn: 'repository_id' },
+  // The Session & Agent Memory tables — EPIC-116. Last, and in this order,
+  // because the three child tables reference `session.session_id`: an importer
+  // streams the document as it arrives, and a capture written before its
+  // session is a `23503` reported as an orphan rather than a restored session.
+  //
+  // `session_capture` before `engineering_memory` for the same reason one level
+  // further: a memory cites the captures it was drawn from, and a document that
+  // presented the claim before the evidence would be readable only by buffering.
+  { table: 'session', key: ['id'], sessionColumn: 'session_id' },
+  { table: 'session_capture', key: ['id'], sessionColumn: 'session_id' },
+  { table: 'session_checkpoint', key: ['id'], sessionColumn: 'session_id' },
+  { table: 'engineering_memory', key: ['id'], sessionColumn: 'session_id' },
 ];
 
 /** Rows read per round trip. Bounds memory, not the export. */
@@ -123,57 +147,79 @@ export const EXPORT_EXCLUSIONS: readonly ExcludedTable[] = [
     reason: "The target's own record of migrations that failed here.",
     recovery: 'Not applicable — it describes the target.',
   },
-  // The four Session & Agent Memory tables — EPIC-109. One decision, stated
-  // four times because the contract is per table and a reader checking one
-  // should not have to find the others.
-  //
-  // Named here rather than exported because a scoped export narrows by *entity
-  // id*, and a session is not an entity: `session.repository_id` is free text
-  // precisely so a session can be recorded outside any repository Ferret has
-  // indexed (EPIC-039 AC-3). There is no predicate that answers "which sessions
-  // belong to this scope" without first deciding what a scoped export of a
-  // session means, and that decision is not in the repository. Carrying them
-  // only in a full export and silently dropping them from a scoped one is the
-  // exact silence F-45 was about, so they travel in neither until it is made.
-  {
-    table: 'session',
-    reason:
-      'Session identity and lifecycle are not part of the export payload. A scoped export narrows by ' +
-      'entity id and a session is not an entity, so there is no scope predicate for one; carrying ' +
-      'sessions in a full export and dropping them from a scoped export would be an omission the ' +
-      'manifest could not describe.',
-    recovery:
-      'Session context does not survive `ferret export` and `ferret import` — it is lost, and this ' +
-      'says so rather than implying otherwise. Use `pg_dump` for a full-fidelity copy of an ' +
-      'installation, which EPIC-089 §8.1 already assigns it. Roadmap EPIC-116 decides what a scoped ' +
-      'export of a session means; until it does, nothing is exported rather than exported partially.',
-  },
-  {
-    table: 'session_capture',
-    reason:
-      'The raw transcript of a session, which travels with the session or not at all. Excluded for ' +
-      'the same reason `session` is, and additionally the largest and least reconstructable payload ' +
-      'in the schema.',
-    recovery:
-      'Lost on export/import; use `pg_dump`. The transcript is evidence in EPIC-008\'s sense and ' +
-      'cannot be regenerated from anything else once the installation is gone.',
-  },
-  {
-    table: 'session_checkpoint',
-    reason: 'Derived from a session, and excluded with it — a checkpoint whose session did not travel is dangling.',
-    recovery: 'Lost on export/import; use `pg_dump`.',
-  },
-  {
-    table: 'engineering_memory',
-    reason:
-      'What a session decided and learned. Excluded with its session: a memory names the captures it ' +
-      'was drawn from, and importing it without them would carry a claim whose evidence did not ' +
-      'arrive — the one thing EPIC-042 exists to prevent.',
-    recovery:
-      'Lost on export/import; use `pg_dump`. This is the most valuable thing the exclusion costs, ' +
-      'and it is the reason EPIC-116 exists rather than a reason to carry it half-formed.',
-  },
 ];
+
+/**
+ * What a document says about sessions when it carries none — EPIC-116.
+ *
+ * The four session tables **are** exported now, so they are no longer in
+ * {@link EXPORT_EXCLUSIONS}: that constant is the list of tables no document
+ * ever carries, and `backup-contract.test.ts` holds it to exactly that meaning.
+ *
+ * An *entity-scoped* export still carries none, and D-116.1 is why: a scope
+ * narrows by entity id, `session.repository_id` is free text, and matching one
+ * against the other would infer membership from an arbitrary identifier. So the
+ * narrowing stays honest and the omission is stated per document rather than
+ * declared globally — which is F-45's rule applied to a conditional omission
+ * instead of an unconditional one.
+ */
+export function sessionExclusionsFor(reason: string): readonly ExcludedTable[] {
+  return SESSION_TABLES.map((table) => ({
+    table,
+    reason,
+    recovery:
+      'Export the sessions explicitly — `ferret export --session <id>` — or take a full export, ' +
+      'which carries every session. `pg_dump` remains the full-fidelity copy of an installation.',
+  }));
+}
+
+/** The tables that travel with a session rather than with an entity scope. */
+export const SESSION_TABLES: readonly string[] = Object.freeze([
+  'session',
+  'session_capture',
+  'session_checkpoint',
+  'engineering_memory',
+]);
+
+/**
+ * Which sessions a document carries, and which were asked for and not found.
+ *
+ * Reported in the manifest rather than inferred from the row counts: "this
+ * export carries no sessions" and "the session you named does not exist here"
+ * are different facts, and an operator moving work between installations needs
+ * to know which one happened. The count that did not resolve is the statement
+ * the roadmap's D-116.1 asked for.
+ */
+export interface SessionScope {
+  /** What the caller named, verbatim. */
+  readonly requested: readonly string[];
+  /** The `session_id` values that resolved, and therefore travelled. */
+  readonly resolved: readonly string[];
+  /** What was named and is not in this installation. */
+  readonly unresolved: readonly string[];
+}
+
+/**
+ * An extracted memory whose cited evidence is not in this document — D-116.3.
+ *
+ * `engineering_memory_extracted_has_evidence` is authoritative and is **not**
+ * weakened: the constraint is over `derived_from` being non-empty, and it holds
+ * on every row this exports. What the constraint cannot see is whether the
+ * captures those ids *name* are present, and a memory restored beside a
+ * transcript that does not contain its evidence is a claim whose basis did not
+ * arrive — the thing EPIC-042 exists to prevent, one level below where the
+ * check sits.
+ *
+ * So it is measured and reported rather than repaired. Repairing it would mean
+ * either dropping the memory (losing what a session decided, silently) or
+ * inventing a capture (fabricating evidence), and neither is available.
+ */
+export interface MemoryEvidenceGap {
+  readonly memoryId: string;
+  readonly sessionId: string;
+  /** How many cited captures are absent from this document. */
+  readonly missing: number;
+}
 
 /**
  * A value the credential scanner recognises, exported faithfully and reported.
@@ -295,6 +341,17 @@ export interface ExportManifest {
    * could not be read, which is recorded as `undefined` rather than guessed.
    */
   readonly sourceInstanceId?: string | undefined;
+  /**
+   * Which sessions this document carries — EPIC-116, D-116.1.
+   *
+   * Absent means the document predates session export. Present with an empty
+   * `resolved` means the export deliberately carried none, and `excluded` says
+   * why. A session travels only when it is **explicitly** in scope: named with
+   * `--session`, or in a full export that narrows nothing. It is never inferred
+   * from `session.repository_id`, which is free text and names nothing an
+   * entity scope can be compared against.
+   */
+  readonly sessionScope?: SessionScope | undefined;
 }
 
 /**
@@ -323,6 +380,15 @@ export interface ExportTrailer {
    * which is not the same claim as "this build did not look".
    */
   readonly credentialShaped?: readonly CredentialFinding[];
+  /**
+   * Extracted memories whose cited captures are not in this document — D-116.3.
+   *
+   * Knowable only once the session scope is fixed, and reported here beside the
+   * other after-the-fact statement. Absent in documents written before EPIC-116;
+   * an empty array is the positive claim that the check ran and found nothing,
+   * which is not the same as not having looked.
+   */
+  readonly memoryEvidenceGaps?: readonly MemoryEvidenceGap[];
 }
 
 export interface ExportRow {
@@ -338,6 +404,10 @@ export interface ExportResult {
   readonly rows: number;
   /** What the scanner recognised. Empty means it looked and found nothing. */
   readonly credentialShaped: readonly CredentialFinding[];
+  /** Sessions carried, asked for and not found — D-116.1. */
+  readonly sessionScope: SessionScope;
+  /** Extracted memories whose evidence did not travel — D-116.3. */
+  readonly memoryEvidenceGaps: readonly MemoryEvidenceGap[];
 }
 
 export interface ExportOptions {
@@ -355,6 +425,32 @@ export interface ExportOptions {
    * the export refuses and names the row.
    */
   readonly strict?: boolean | undefined;
+  /**
+   * Sessions to carry, named explicitly — EPIC-116, D-116.1.
+   *
+   * Each entry is a `session_id` as a client knows it, or the canonical id
+   * `ferret session` prints; both resolve. This is EPIC-009's
+   * `ScopeKind.SESSION` expressed at the command boundary — a session named,
+   * never a session matched.
+   *
+   * Absent has two meanings, and they are the two the caller already chose
+   * between: with no `scope`, the export is full and carries every session;
+   * with a `scope`, it carries none, because an entity scope says nothing about
+   * which sessions belong to it.
+   */
+  readonly sessions?: readonly string[] | undefined;
+}
+
+/**
+ * True when nothing narrows this export — EPIC-116.
+ *
+ * The one case in which every session travels without being named, and it is
+ * the case in which nothing else is narrowed either. Stated as a function so
+ * "full" means the same thing in the manifest, the exclusions and the row
+ * predicate rather than being re-derived at each.
+ */
+function isFullExport(options: ExportOptions): boolean {
+  return options.scope === undefined && (options.sessions ?? []).length === 0;
 }
 
 /** Where a line goes. A function rather than a stream, so a test can collect. */
@@ -428,6 +524,17 @@ export class ExportService {
     const scoped = options.scope === undefined ? undefined : await this.#closure(reader, options.scope);
     const generated = await generatedColumns(reader);
 
+    // EPIC-116 — the session dimension, decided before a row is read.
+    //
+    // `undefined` means "narrow nothing", which is only ever a full export.
+    // An entity-scoped export resolves to the *empty set* rather than to
+    // `undefined`, and the difference is D-116.1: carrying everything and
+    // carrying nothing are opposite answers, and the one an entity scope
+    // justifies is nothing.
+    const sessionScope = await this.#sessionScope(reader, options);
+    const carriesSessions = sessionScope.resolved.length > 0 || isFullExport(options);
+    const sessionIds = isFullExport(options) ? undefined : sessionScope.resolved;
+
     const manifest: ExportManifest = {
       kind: 'ferret-export',
       format: 1,
@@ -438,8 +545,19 @@ export class ExportService {
       tables: EXPORT_TABLES.map((spec) => spec.table),
       // D2 — the document says what it does not carry, in the line an importer
       // reads first, so "vectors are absent" arrives before any row does.
-      excluded: EXPORT_EXCLUSIONS,
+      excluded: carriesSessions
+        ? EXPORT_EXCLUSIONS
+        : [
+            ...EXPORT_EXCLUSIONS,
+            ...sessionExclusionsFor(
+              options.scope === undefined
+                ? 'No session was named, so none travelled. A session is carried only when it is explicitly in scope.'
+                : 'This export narrows by entity id, and a session is not an entity: `session.repository_id` is free text, ' +
+                  'so no predicate relates one to a scope without inferring membership from an arbitrary identifier.',
+            ),
+          ],
       sourceInstanceId: await this.#instanceId(reader),
+      sessionScope,
     };
     await sink(JSON.stringify(manifest));
 
@@ -450,7 +568,7 @@ export class ExportService {
 
     for (const spec of EXPORT_TABLES) {
       let written = 0;
-      for await (const row of this.#rows(reader, spec, scoped, options.batch ?? EXPORT_BATCH_ROWS)) {
+      for await (const row of this.#rows(reader, spec, scoped, sessionIds, options.batch ?? EXPORT_BATCH_ROWS)) {
         const carried = Object.fromEntries(
           Object.entries(row).filter(([column]) => !generated.has(`${spec.table}.${column}`)),
         );
@@ -501,16 +619,33 @@ export class ExportService {
       counts[spec.table] = written;
     }
 
+    // D-116.3, measured after the rows because it is a statement about what the
+    // document turned out to contain. One query rather than a set held in
+    // memory: an installation's transcripts are the largest thing in the schema
+    // and accumulating every capture id to check four memories against would
+    // trade a bounded export for an unbounded one.
+    const memoryEvidenceGaps = await this.#memoryEvidenceGaps(reader, sessionIds);
+
     const trailer: ExportTrailer = {
       kind: 'ferret-export-trailer',
       counts,
       rows: total,
       digest: hash.digest('hex'),
       credentialShaped,
+      memoryEvidenceGaps,
     };
     await sink(JSON.stringify(trailer));
 
-    return { manifest, trailer, counts, digest: trailer.digest, rows: total, credentialShaped };
+    return {
+      manifest,
+      trailer,
+      counts,
+      digest: trailer.digest,
+      rows: total,
+      credentialShaped,
+      sessionScope,
+      memoryEvidenceGaps,
+    };
   }
 
   /**
@@ -563,12 +698,108 @@ export class ExportService {
     return seen;
   }
 
+  /**
+   * The sessions this export carries, and what could not be found — D-116.1.
+   *
+   * A caller may name either identifier, and both resolve: `session_id` is what
+   * a client holds and what `ferret session start` prints, and `id` is the
+   * canonical uuid the same command reports. Refusing one of them would make an
+   * operator translate between two identifiers Ferret prints side by side.
+   *
+   * What is **not** done is match anything against `session.repository_id`.
+   */
+  async #sessionScope(reader: Reader, options: ExportOptions): Promise<SessionScope> {
+    const requested = [...(options.sessions ?? [])];
+    if (requested.length === 0) return { requested, resolved: [], unresolved: [] };
+
+    const rows = await reader.execute<{ [column: string]: unknown; session_id: string; id: string }>(
+      // `id::text`, because the caller's list is text and a uuid comparison
+      // against an arbitrary string is `22P02` rather than "no match".
+      sql`SELECT session_id, id::text AS id FROM ferret.session
+           WHERE session_id = ANY(${idArray(requested, 'text')})
+              OR id::text = ANY(${idArray(requested, 'text')})`,
+    );
+
+    const resolved = new Set<string>();
+    const matched = new Set<string>();
+    for (const row of rows.rows) {
+      resolved.add(row.session_id);
+      matched.add(row.session_id);
+      matched.add(row.id);
+    }
+
+    return {
+      requested,
+      resolved: [...resolved],
+      unresolved: requested.filter((one) => !matched.has(one)),
+    };
+  }
+
+  /**
+   * Extracted memories in scope whose cited captures are not in scope — D-116.3.
+   *
+   * The constraint `engineering_memory_extracted_has_evidence` checks that
+   * `derived_from` is non-empty, and every exported row satisfies it. This is
+   * the question the constraint cannot ask: whether the captures those ids
+   * *name* are in this document. Reported, never repaired — dropping the memory
+   * would lose what a session decided and inventing a capture would fabricate
+   * evidence, and D-116.3 rules out both.
+   */
+  async #memoryEvidenceGaps(
+    reader: Reader,
+    sessionIds: readonly string[] | undefined,
+  ): Promise<readonly MemoryEvidenceGap[]> {
+    if (sessionIds !== undefined && sessionIds.length === 0) return [];
+
+    const inScope =
+      sessionIds === undefined
+        ? sql`TRUE`
+        : sql`m.session_id = ANY(${idArray(sessionIds, 'text')})`;
+
+    const rows = await reader.execute<{
+      [column: string]: unknown;
+      id: string;
+      session_id: string;
+      missing: string;
+    }>(
+      sql`SELECT m.id::text AS id, m.session_id, count(*)::text AS missing
+            FROM ferret.engineering_memory m
+            CROSS JOIN LATERAL jsonb_array_elements(m.derived_from) AS cited
+           WHERE m.origin = 'extracted'
+             AND ${inScope}
+             AND NOT EXISTS (
+                   SELECT 1 FROM ferret.session_capture c
+                    WHERE c.id::text = cited->>'captureId'
+                      AND c.session_id = m.session_id)
+           GROUP BY m.id, m.session_id
+           ORDER BY m.id`,
+    );
+
+    return rows.rows.map((row) => ({
+      memoryId: row.id,
+      sessionId: row.session_id,
+      missing: Number(row.missing),
+    }));
+  }
+
   async *#rows(
     reader: Reader,
     spec: TableSpec,
     scoped: ReadonlySet<string> | undefined,
+    sessionIds: readonly string[] | undefined,
     batch: number,
   ): AsyncGenerator<Record<string, unknown>> {
+    // A session table narrows by session and by nothing else — EPIC-116. The
+    // entity closure does not apply to it, and applying it would be the
+    // inference D-116.1 forbids.
+    if (spec.sessionColumn !== undefined) {
+      if (sessionIds === undefined) {
+        // Full export: every session travels, unnarrowed.
+      } else if (sessionIds.length === 0) {
+        return;
+      }
+    }
+
     let after: unknown[] | undefined;
 
     for (;;) {
@@ -576,7 +807,13 @@ export class ExportService {
       if (after !== undefined) {
         predicates.push(sql`(${joined(spec.key)}) > (${sql.join(after.map((value) => sql`${value}`), sql`, `)})`);
       }
-      if (scoped !== undefined) {
+      if (spec.sessionColumn !== undefined) {
+        if (sessionIds !== undefined) {
+          predicates.push(
+            sql`${quoted(spec.sessionColumn)} = ANY(${idArray(sessionIds, 'text')})`,
+          );
+        }
+      } else if (scoped !== undefined) {
         predicates.push(this.#scopePredicate(spec, scoped));
       }
 

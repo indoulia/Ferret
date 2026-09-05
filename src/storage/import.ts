@@ -15,6 +15,8 @@ import {
   type ExportManifest,
   type ExportRow,
   type ExportTrailer,
+  type MemoryEvidenceGap,
+  type SessionScope,
 } from './export.js';
 
 /**
@@ -88,6 +90,24 @@ export interface ImportReport {
    * silence D2 exists to end.
    */
   readonly excluded: readonly ExcludedTable[] | undefined;
+  /**
+   * Which sessions the document carried, and which were named and not found —
+   * EPIC-116.
+   *
+   * `undefined` when the manifest predates session export, reported as exactly
+   * that for `excluded`'s reason: a document written before this could not have
+   * carried a session, and reporting "none requested" would be a claim its
+   * writer never made.
+   */
+  readonly sessions: SessionScope | undefined;
+  /**
+   * Extracted memories whose cited captures are not in the document — D-116.3.
+   *
+   * Surfaced at the import because that is where somebody is deciding whether
+   * the restored index is trustworthy. `undefined` when the document predates
+   * the check; an empty array means the writer looked and found none.
+   */
+  readonly memoryEvidenceGaps: readonly MemoryEvidenceGap[] | undefined;
   readonly provenance: ImportProvenance;
 }
 
@@ -270,6 +290,8 @@ export class ImportService {
       tables,
       applied: apply,
       excluded: document.manifest.excluded,
+      sessions: document.manifest.sessionScope,
+      memoryEvidenceGaps: document.trailer.memoryEvidenceGaps,
       provenance: await this.#recordProvenance(document, apply, written),
     };
   }
