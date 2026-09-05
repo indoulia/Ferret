@@ -75,7 +75,7 @@ export interface IngestReport {
   readonly connectorId: string;
   readonly system: string;
   readonly identity: SourceIdentity;
-  /** The key the cursor is filed under, and the source entity derived from. */
+  /** The stable key the source entity is derived from. */
   readonly identityKey: string;
   /** The entity every record of this pass was scoped to. */
   readonly sourceEntityId: string;
@@ -182,7 +182,12 @@ export class SourceIngestor {
     // outside the next one. The overlap re-reads a boundary record, which
     // EPIC-080 already guarantees is free: the same input twice writes one row.
     const startedAt = new Date();
-    const stored = options.full === true ? undefined : await this.#position(identityKey);
+    // Keyed by the **source entity id**, not by the identity key: the cursor
+    // store's scope is a canonical id, and a `wiki::host::resource` string is
+    // not one. Found by running a connector against the real database, where
+    // PostgreSQL answered `22P02` — the unit suite's cursor fake took any
+    // string and could not have caught it.
+    const stored = options.full === true ? undefined : await this.#position(sourceEntity.id);
     const since = stored?.syncedAt;
 
     const records: AcquiredRecord[] = [];
@@ -267,7 +272,7 @@ export class SourceIngestor {
         syncedAt: startedAt.toISOString(),
         ...(checkpoint === undefined ? {} : { checkpoint }),
       };
-      await this.#cursors.advance(INGEST_PRODUCER, identityKey, { ...position }, startedAt);
+      await this.#cursors.advance(INGEST_PRODUCER, sourceEntity.id, { ...position }, startedAt);
       cursorAdvancedTo = position.syncedAt;
     }
 
@@ -304,8 +309,8 @@ export class SourceIngestor {
     return report;
   }
 
-  async #position(identityKey: string): Promise<IngestPosition | undefined> {
-    const cursor = await this.#cursors?.read(identityKey);
+  async #position(scopeId: string): Promise<IngestPosition | undefined> {
+    const cursor = await this.#cursors?.read(scopeId);
     if (cursor === undefined) return undefined;
     const syncedAt = cursor.position['syncedAt'];
     const checkpoint = cursor.position['checkpoint'];

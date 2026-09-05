@@ -84,10 +84,11 @@ const IDENTITY_SEPARATOR = '::';
  * The stable key a source instance is remembered by.
  *
  * Deterministic and total: the same identity produces the same key on every
- * host, in every process, for ever. It is what the sync cursor is keyed by and
- * what the source entity's `source.id` is derived from, so a change to this
- * function orphans every cursor and re-creates every source entity — treat it
- * as a stored format rather than a formatting helper.
+ * host, in every process, for ever. It is the source entity's `source.id`, and
+ * therefore what that entity's canonical id — and the sync cursor filed under
+ * it — ultimately derive from. A change to this function re-creates every
+ * source entity and orphans every cursor, so treat it as a stored format rather
+ * than a formatting helper.
  *
  * The parts are lowercased because hostnames and project keys arrive in
  * whatever case a user typed, and `Github.com` and `github.com` are not two
@@ -231,6 +232,15 @@ export interface NormalizationContext {
    * The ingestor writes it; a connector hangs its records off it rather than
    * inventing a second root. A dangling scope — an id that names no row — is
    * the defect EPIC-072 §8.10 fixed one level down.
+   *
+   * **Pass it as each emitted entity's `source.scope`.** A connector that does
+   * not scope its records derives identity from the record id alone, so the
+   * same page id on two wikis — or the same issue key on two Jira tenants —
+   * collapses into one entity. `modelProject` has always scoped to the
+   * repository for exactly this reason; the field is here so a new connector
+   * inherits the rule rather than rediscovering it. Found by running an
+   * unscoped connector against the real database, where two source instances
+   * silently shared their documents.
    */
   readonly sourceEntityId: string;
   /**

@@ -228,7 +228,13 @@ class WikiConnector implements SourceConnector {
       }
       const document = context.emitter.entity({
         kind: EntityKind.DOCUMENT,
-        source: { id: record.id, ...(record.metadata.url === undefined ? {} : { url: record.metadata.url }) },
+        source: {
+          id: record.id,
+          // Scoped, as the contract requires: without it the same page slug on
+          // two wikis is one entity.
+          scope: context.sourceEntityId,
+          ...(record.metadata.url === undefined ? {} : { url: record.metadata.url }),
+        },
         attributes: {
           title: page.title,
           location: page.slug,
@@ -342,6 +348,13 @@ describe('source identity', () => {
     expect(first.sourceEntityId).not.toBe(second.sourceEntityId);
     expect(state.entities.get(first.sourceEntityId)?.entity.source.id).toBe(first.identityKey);
     expect(state.entities.get(second.sourceEntityId)?.entity.source.id).toBe(second.identityKey);
+
+    // And the records themselves stay apart. Two wikis with a page called `a`
+    // hold two pages, not one — the collision an unscoped connector produces,
+    // which the real database showed before the contract said so.
+    const documents = [...state.entities.values()].filter((row) => row.entity.kind === EntityKind.DOCUMENT);
+    expect(documents).toHaveLength(2);
+    expect(new Set(documents.map((row) => row.entity.source.scope)).size).toBe(2);
   });
 });
 
@@ -492,7 +505,11 @@ describe('change detection', () => {
     const first = new WikiConnector({ pages: [[wikiPage('a')]] });
     const report = await ingestor(first, deps).ingest({ resource: 'handbook' }, context());
     expect(report.cursorAdvancedTo).toBeDefined();
-    expect(state.cursorProducers.get(report.identityKey)).toBe(INGEST_PRODUCER);
+    // Keyed by the canonical source entity id, because the cursor store's scope
+    // is a canonical id. Asserted here because the fake below would take any
+    // string, and the real store answers `22P02` — the defect this caught.
+    expect(state.cursorProducers.get(report.sourceEntityId)).toBe(INGEST_PRODUCER);
+    expect(report.sourceEntityId).toMatch(/^[0-9a-f-]{36}$/);
 
     const second = new WikiConnector({ pages: [[wikiPage('a')]] });
     const next = await ingestor(second, deps).ingest({ resource: 'handbook' }, context());
@@ -507,7 +524,7 @@ describe('change detection', () => {
       { resource: 'handbook' },
       context(),
     );
-    expect(state.cursorPositions.get(report.identityKey)?.['checkpoint']).toStrictEqual({ lastPage: 0 });
+    expect(state.cursorPositions.get(report.sourceEntityId)?.['checkpoint']).toStrictEqual({ lastPage: 0 });
   });
 
   it('does not advance a cursor for a pass that stopped short', async () => {
@@ -521,7 +538,7 @@ describe('change detection', () => {
 
     expect(report.truncated).toBe(true);
     expect(report.cursorAdvancedTo).toBeUndefined();
-    expect(state.cursorPositions.has(report.identityKey)).toBe(false);
+    expect(state.cursorPositions.has(report.sourceEntityId)).toBe(false);
   });
 
   it('reports "nothing changed" as different from "nothing there"', async () => {
