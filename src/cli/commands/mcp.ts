@@ -15,6 +15,7 @@ import {
   EvidenceStore,
   MigrationPolicy,
   RetrievalStore,
+  SessionStore,
   createStorageProvider,
   readInventory,
 } from '../../storage/index.js';
@@ -121,6 +122,11 @@ export function mcpCommand(): Command {
             probe: async () => probeHealth({ logger: context.logger }),
             inventory: async () => readInventory(storage.pool),
           },
+          // EPIC-111. The store satisfies EPIC-043's `SessionRecoveryPort`
+          // already, so the surface gets the port rather than the storage
+          // module — `boundaries.test.ts` refuses the latter, and this is the
+          // composition root that is allowed to know about both.
+          sessions: new SessionStore(storage.db),
           // EPIC-048. Without this the traceability tool is not registered at
           // all, and the 556 evidence rows a single index run records stay
           // unreachable from the only surface an AI client has.

@@ -31,12 +31,13 @@ not yet do. `src/cli/commands/planned.ts` names them, exits `5` with
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | EPIC-109 — Session & Memory Persistence | CONTINUATION | **COMPLETE** | 28 integration cases against real PostgreSQL; migration `0015`; latent hashing defect fixed | EPIC-039–043, EPIC-086 | Done — see EPIC-109 |
 | 2 | EPIC-110 — `ferret session` command surface | CONTINUATION | **COMPLETE** | 20 integration cases driving the built binary; planned entry retired | EPIC-109 | Done — see EPIC-110 |
-| 3 | EPIC-111 — Session recall over MCP | CONTINUATION | NEXT | MCP tool catalogue exists; session domain unreachable from it | EPIC-109, EPIC-110 | Expose `session recall`/`show`/`list` as MCP tools |
-| 4 | EPIC-112 — Session retention & redaction | HARDENING | TODO | `retention.ts` (EPIC-088) covers no session table; captures hold transcripts | EPIC-109, EPIC-082, EPIC-088 | Extend prune/retention to session rows |
+| 3 | EPIC-111 — Session recall over MCP | CONTINUATION | **COMPLETE** | 13 protocol cases against a fake port; boundary gate green | EPIC-109, EPIC-110 | Done — see EPIC-111 |
+| 4 | EPIC-112 — Session retention & redaction | HARDENING | NEXT | `retention.ts` (EPIC-088) covers no session table; captures hold transcripts | EPIC-109, EPIC-082, EPIC-088 | Extend prune/retention to session rows |
 | 5 | EPIC-113 — Provider sync transport (`ferret sync`) | PRODUCT DECISION REQUIRED | BLOCKED | `planned.ts` sync entry; EPIC-021/071/072 each excluded transport by name; `cursors.ts` exists | EPIC-075, EPIC-021, EPIC-071 | See "Decisions required" |
 | 6 | EPIC-114 — PostgreSQL version coverage | HARDENING | TODO | EPIC-002 validation: minimum supported major is 14, **only 17 measured** | EPIC-002 | Add a CI matrix major |
 | 7 | EPIC-115 — macOS packaging validation | HARDENING | TODO | EPIC-001 validation: macOS not validated | EPIC-105 | Requires a macOS runner |
 | 8 | EPIC-116 — Session export fidelity | PRODUCT DECISION REQUIRED | BLOCKED | The four session tables are declared excluded from `ferret export`; the loss is stated in the manifest | EPIC-109, EPIC-089 | See "Decisions required" |
+| 9 | EPIC-117 — Recording a session over MCP | PRODUCT DECISION REQUIRED | BLOCKED | EPIC-111 shipped recall read-only; a write path needs a lifecycle owner | EPIC-111 | See "Decisions required" |
 | — | #138 registry hygiene | HARDENING | OPEN | Three limitation rows with no owning Epic | — | Not reopened this run |
 | — | #130 packaging gate flake | HARDENING | OPEN | Gate failed once, passed twice on one tree | — | Intermittent; not chased |
 
@@ -157,6 +158,29 @@ The decision needed is what a scoped export of a session *means*:
 Until these are answered, `pg_dump` is the stated recovery, which is what
 EPIC-089 §8.1 already assigns it.
 
+### EPIC-117 — Recording a session over MCP
+
+EPIC-111 exposed recall and stopped there. A client that can read what the last
+session decided but cannot record what this one decided is half a memory, and
+the missing half is the one an autonomous agent needs most.
+
+What blocks it is not the plumbing — the store and the domain both support it —
+but one question with no answer in the repository: **who owns a session's
+identity and lifetime.**
+
+1. Does the client supply the session id, or does the server mint one? A client
+   that reconnects believes it is continuing; the server sees a new transport.
+2. When does a session *end*? A transport closing is not a session ending — an
+   editor restarting is the common case — and a session left `active` forever is
+   indistinguishable from one that crashed.
+3. Does an agent recording its own memory need `INDEX`, or a permission of its
+   own? EPIC-068's set is closed, and every write on the MCP surface today is
+   configuration or provider administration, not knowledge.
+
+Recording without answering these produces sessions nothing closes and memories
+attached to sessions that were never opened — the foreign key would refuse the
+first call. EPIC-111's read-only scope is that refusal made deliberate.
+
 ### EPIC-113 — Provider sync transport
 
 `ferret sync` cannot be built from repository evidence alone. The GitHub and
@@ -185,4 +209,5 @@ Filled in as Epics land.
 | Epic | Commit | PR | Merge | Status |
 | --- | --- | --- | --- | --- |
 | EPIC-109 | `452980d` | [#156](https://github.com/indoulia/Ferret/pull/156) | `ec0a376` | COMPLETE |
-| EPIC-110 | `pending` | — | — | IMPLEMENTED |
+| EPIC-110 | `2e7ce50` | [#157](https://github.com/indoulia/Ferret/pull/157) | `533b603` | COMPLETE |
+| EPIC-111 | `pending` | — | — | IMPLEMENTED |
