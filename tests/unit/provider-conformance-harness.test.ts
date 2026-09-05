@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createGitSourceProvider } from '../../src/git/index.js';
 import { createGithubProvider } from '../../src/github/index.js';
 import { createJiraProvider } from '../../src/jira/index.js';
+import { createConfluenceProvider } from '../../src/confluence/index.js';
 import {
   createCodeParserProvider,
   createDocxParserProvider,
@@ -125,6 +126,22 @@ const RUNNABLE = [
     name: 'ferret.source.jira',
     create: () =>
       createJiraProvider({
+        baseUrl: 'https://example.atlassian.net',
+        fetch: () =>
+          Promise.resolve({
+            status: 200,
+            headers: { get: () => null },
+            text: () => Promise.resolve('{}'),
+          }),
+      }),
+  },
+  // EPIC-123, and the gate worked again — this line exists because the suite
+  // refused the Confluence provider before it had one. The first provider to
+  // declare `source.connector`, held to the same provider contract as the rest.
+  {
+    name: 'ferret.source.confluence',
+    create: () =>
+      createConfluenceProvider({
         baseUrl: 'https://example.atlassian.net',
         fetch: () =>
           Promise.resolve({

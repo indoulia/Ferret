@@ -552,6 +552,51 @@ describe('Jira provider boundary — EPIC-071', () => {
   });
 });
 
+describe('Confluence provider boundary — EPIC-123', () => {
+  const confluence = importGraph('confluence/index.ts');
+  const jira = importGraph('jira/index.ts');
+  const core = importGraph('index.ts');
+
+  it('reaches neither storage, the CLI, nor another provider', () => {
+    expect([...confluence.files].filter((file) => file.startsWith('storage/'))).toStrictEqual([]);
+    expect([...confluence.files].filter((file) => file.startsWith('cli/'))).toStrictEqual([]);
+    // The pointed one: Confluence and Jira share a *transport*, and sharing a
+    // transport must not become one provider importing the other. If this
+    // fails, `src/atlassian` stopped being a shared layer and became a
+    // back door between two providers.
+    expect([...confluence.files].filter((file) => file.startsWith('jira/'))).toStrictEqual([]);
+    expect([...jira.files].filter((file) => file.startsWith('confluence/'))).toStrictEqual([]);
+    expect([...confluence.files].filter((file) => file.startsWith('github/'))).toStrictEqual([]);
+  });
+
+  it('shares the Atlassian transport with Jira rather than copying it', () => {
+    // Both reach it, which is the whole reason it exists: one place to fix a
+    // backoff, one place a credential is assembled.
+    expect(confluence.files).toContain('atlassian/client.ts');
+    expect(jira.files).toContain('atlassian/client.ts');
+  });
+
+  it('is not reachable from the core entry point', () => {
+    // EPIC-017's rule, which is not about Git: the core asks the registry for a
+    // capability and is handed whichever provider offers it. A core that knows
+    // Confluence exists cannot have that provider replaced.
+    expect([...core.files].filter((file) => file.startsWith('confluence/'))).toStrictEqual([]);
+    expect([...core.files].filter((file) => file.startsWith('atlassian/'))).toStrictEqual([]);
+  });
+
+  it('adds nothing to the core dependency set', () => {
+    expect([...packageNames(confluence)].sort()).toStrictEqual([...ALLOWED_CORE_PACKAGES].sort());
+  });
+
+  it('implements the universal connector contract, not a source-shaped one', () => {
+    // The claim EPIC-119 made and could not test: a source that is neither a
+    // checkout nor a tracker reaches storage through the connector contract.
+    expect(confluence.files).toContain('providers/contracts/source-connector.ts');
+    expect(confluence.files).not.toContain('providers/contracts/source-project.ts');
+    expect(confluence.files).not.toContain('providers/contracts/source-repository.ts');
+  });
+});
+
 describe('event ingestion boundary — EPIC-077', () => {
   const events = importGraph('events/index.ts');
   const core = importGraph('index.ts');

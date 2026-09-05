@@ -113,6 +113,7 @@ describe('the package a consumer installs', () => {
     // composition choice rather than because it is heavy.
     expect(Object.keys(pkg.exports).sort()).toStrictEqual([
       '.',
+      './confluence',
       './git',
       './github',
       './jira',

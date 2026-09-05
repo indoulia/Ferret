@@ -10,14 +10,15 @@ read without its alternatives is indistinguishable from a default.
 
 **Epics were directed after the queue was exhausted.** EPIC-118 — Ferret
 Self-Dogfood — EPIC-119 — Universal Source Connector Contract — EPIC-120 —
-Repository Connector — EPIC-121 — GitHub Connector — and EPIC-122 — Jira
-Connector. None came from this document and none is an entry invented to keep it
-alive; all were directed by the owner. See
+Repository Connector — EPIC-121 — GitHub Connector — EPIC-122 — Jira Connector —
+and EPIC-123 — Confluence Connector. None came from this document and none is an
+entry invented to keep it alive; all were directed by the owner. See
 [after the queue](#after-the-queue--epic-118),
 [EPIC-119](#after-the-queue--epic-119),
 [EPIC-120](#after-the-queue--epic-120),
-[EPIC-121](#after-the-queue--epic-121) and
-[EPIC-122](#after-the-queue--epic-122).
+[EPIC-121](#after-the-queue--epic-121),
+[EPIC-122](#after-the-queue--epic-122) and
+[EPIC-123](#after-the-queue--epic-123).
 
 **Nothing implementation-ready remains.** What is left is listed under
 [not in this queue](#not-in-this-queue), and every item there needs a decision,
@@ -703,6 +704,46 @@ aesthetic: a live Jira instance was sampled, and 50 issues carried 144 links of
 **fourteen** distinct types, most configured for that instance. A fixed
 enumeration would have carried 33 of the 144.
 
+## After the queue — EPIC-123
+
+**Confluence Connector**, directed by the owner on 2026-09-05, and the first
+source that could only be reached through EPIC-119's boundary.
+
+The three connectors before it are *adapters* over contracts that already
+existed — `source.repository` and `source.project`. Each proved the universal
+boundary convenient; none proved it necessary, because in every case a narrower
+contract would have served. A wiki page is neither a checkout nor an issue and
+there is no third contract to adapt, so `ConfluenceProvider` declares
+`source.connector` and implements the three verbs itself. EPIC-119 predicted its
+first declarer would be EPIC-120's; it was not, because a repository already had
+a contract worth adapting.
+
+It also had nothing to build on: **no Confluence provider existed**, so this
+Epic wrote one — and moved the Jira HTTP client into `src/atlassian` rather than
+copying it, since Jira and Confluence Cloud are the same host, the same
+credential and the same retry semantics. EPIC-071's 149 tests exercise that
+client through its old name and were not rewritten, which is what proves the
+lift was faithful.
+
+The defect it found could only have been found here. `Provider.contractVersion`
+and `SourceConnector.contractVersion` mean different things — the provider
+platform's version and the connector contract's — so a class implementing both
+has one field for two facts. Both are `1` today, so the first draft compiled and
+would have passed everything; it is wrong the moment either moves, and the
+failure then is silent and years late. The provider now exposes a connector
+rather than being one.
+
+Two relationship types were added, `DOCUMENT_CONTAINS_DOCUMENT` and
+`DOCUMENT_LINKS_DOCUMENT`, kept apart on the reasoning EPIC-007 already used for
+the branch and the worktree: "what is under this page" and "what mentions this
+page" are different questions, and one edge with a flag makes the difference
+unqueryable.
+
+Two gates earned their keep. The conformance harness refused the new provider
+before it had been run against the suite, and was answered by running it rather
+than by an exemption. The boundary suite gained the assertion that matters for a
+shared transport: sharing one must not become one provider importing another.
+
 ## Not in this queue
 
 - **[#138](https://github.com/indoulia/Ferret/issues/138) — three limitation rows
@@ -751,6 +792,7 @@ Filled in as Epics land.
 | EPIC-120 | `6c810c8` | [#178](https://github.com/indoulia/Ferret/pull/178) | `6c810c8` | [record](validation/EPIC-120-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-121 | `62f6c89` | [#180](https://github.com/indoulia/Ferret/pull/180) | `62f6c89` | [record](validation/EPIC-121-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-122 | `7db2ba9` | [#182](https://github.com/indoulia/Ferret/pull/182) | `7db2ba9` | [record](validation/EPIC-122-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-123 | `PENDING` | [#PENDING](https://github.com/indoulia/Ferret/pull/PENDING) | `PENDING` | [record](validation/EPIC-123-VALIDATION.md) | COMPLETE — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:

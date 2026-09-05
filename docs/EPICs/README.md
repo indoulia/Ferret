@@ -191,6 +191,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-120 — Repository Connector** — P1 — VALIDATED ([spec](EPIC-120-Repository-Connector.md), [evidence](validation/EPIC-120-VALIDATION.md))
 - **EPIC-121 — GitHub Connector** — P1 — VALIDATED ([spec](EPIC-121-GitHub-Connector.md), [evidence](validation/EPIC-121-VALIDATION.md))
 - **EPIC-122 — Jira Connector** — P1 — VALIDATED ([spec](EPIC-122-Jira-Connector.md), [evidence](validation/EPIC-122-VALIDATION.md))
+- **EPIC-123 — Confluence Connector** — P1 — VALIDATED ([spec](EPIC-123-Confluence-Connector.md), [evidence](validation/EPIC-123-VALIDATION.md))
 
 ### Security & Authorization
 

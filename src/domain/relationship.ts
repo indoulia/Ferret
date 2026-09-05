@@ -107,6 +107,32 @@ export const RelationshipType = {
   // Knowledge
   EVIDENCE_SUPPORTS_ENTITY: 'evidence_supports_entity',
   DOCUMENT_DESCRIBES_ENTITY: 'document_describes_entity',
+  /**
+   * A document holds another beneath it — EPIC-123.
+   *
+   * A wiki's hierarchy. Kept **separate from a reference** for the reason
+   * EPIC-007 already gives about `WORKTREE_CHECKS_OUT_BRANCH` and
+   * `REPOSITORY_CONTAINS_BRANCH`: containment and holding are different
+   * relations, and one edge with a discriminator in its metadata makes the
+   * difference unqueryable at exactly the point it matters. "What is under this
+   * page" and "what mentions this page" are different questions with different
+   * answers, and a reader following the first does not want the second.
+   *
+   * Not exclusive: this is the *parent* end, and a page has many children. A
+   * child has one parent, but that is a fact about the source rather than a
+   * constraint Ferret can enforce from a bounded page.
+   */
+  DOCUMENT_CONTAINS_DOCUMENT: 'document_contains_document',
+  /**
+   * A document links to another — EPIC-123.
+   *
+   * A hyperlink in a page's body, which is a *reference* and not a hierarchy: a
+   * page commonly links sideways, upwards, and to pages in other spaces
+   * entirely. Directed, because `A links to B` is not `B links to A`, and a
+   * wiki where it were would have no way to express "everything that points at
+   * this page".
+   */
+  DOCUMENT_LINKS_DOCUMENT: 'document_links_document',
   /** A rename, or two identities resolved into one. */
   ENTITY_SUPERSEDES_ENTITY: 'entity_supersedes_entity',
 } as const;
@@ -169,6 +195,8 @@ const BUILT_IN: ReadonlyArray<
 
   [RelationshipType.EVIDENCE_SUPPORTS_ENTITY, [EntityKind.EVIDENCE], ANY, false],
   [RelationshipType.DOCUMENT_DESCRIBES_ENTITY, [EntityKind.DOCUMENT], ANY, false],
+  [RelationshipType.DOCUMENT_CONTAINS_DOCUMENT, [EntityKind.DOCUMENT], [EntityKind.DOCUMENT], false],
+  [RelationshipType.DOCUMENT_LINKS_DOCUMENT, [EntityKind.DOCUMENT], [EntityKind.DOCUMENT], false],
   [RelationshipType.ENTITY_SUPERSEDES_ENTITY, ANY, ANY, false],
 ];
 
