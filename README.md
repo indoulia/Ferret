@@ -382,7 +382,8 @@ those three is available as an explicit command instead.
 ```bash
 ferret export --out index.ndjson   # a document a different Ferret version can read
 ferret export --scope <repositoryId> --out one-repo.ndjson
-ferret export --session <id> --out one-session.ndjson
+ferret export --session <id> --out with-that-session.ndjson
+ferret export --scope <repositoryId> --session <id> --out narrowed.ndjson
 ferret export --backup-command     # ...and what a real backup is
 ```
 
@@ -393,6 +394,14 @@ session, `--session` carries the ones you name along with their transcripts,
 checkpoints and memories, and a repository-scoped export carries none and says so
 in the manifest. A session you asked for and this installation does not have is
 reported rather than quietly left out.
+
+**`--scope` and `--session` narrow different things, and neither implies the
+other.** `--session <id>` says which *sessions* travel; it says nothing about
+entities, so on its own it still exports the whole index alongside that session.
+Pass both to narrow both. There is deliberately no way to export sessions with no
+entities at all: a session's memories cite evidence, and a document that carried
+the claims without the graph they refer to would restore into something that
+cannot answer why.
 
 An **export** is not a **backup**, and conflating them is what makes a backup
 strategy fail when it is needed. A backup is a point-in-time copy restorable
