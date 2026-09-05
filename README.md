@@ -451,16 +451,31 @@ as referenced and stays. See
 | platform | verified | how |
 | --- | --- | --- |
 | Linux | everything, database suites included | `ubuntu-latest` on every pull request |
-| macOS | everything except the database suites | `macos-latest` on every pull request |
-| Windows | everything except the database suites | `windows-latest` on every push to `main` |
+| Windows | everything except the database suites | `windows-latest` on every pull request |
+| macOS | **not currently measured** | — |
 
 The database suites need a Linux container, so PostgreSQL behaviour is verified
-on Linux only. That is stated rather than implied: a platform 80% measured and
-reported as "supported" is worse than one honestly unmeasured.
+on Linux only — on 17 for every pull request, and on 14, 15 and 16 on a nightly
+compatibility lane. That is stated rather than implied: a platform 80% measured
+and reported as "supported" is worse than one honestly unmeasured.
 
-One macOS version and one architecture — whatever `macos-latest` currently
-pins, on Apple silicon. Intel macOS, older macOS, Alpine and musl are
-unmeasured.
+**macOS is the honestly unmeasured one.** It was measured: EPIC-105 ran the full
+suite on `macos-latest` on 2026-09-03 — 112 test files and 2 463 tests, the
+packaging suite and all seven signal tests included — and it passed. The owner
+decision of 2026-09-05 then removed macOS from CI, and a second decision on the
+same day declined to add it back on a scheduled lane. So Ferret has **evidence
+that macOS worked on 2026-09-03 and no evidence about today's tree**, and this
+row says exactly that rather than inheriting a claim from a run three days old.
+
+Two things go unmeasured while that stands, and they are worth naming because
+neither is covered anywhere else: the POSIX **global-install path**
+(`lib/node_modules`, the bin shim's shebang, its executable bit) and the
+**shutdown contract** — the seven signal tests are `describe.skip` on Windows,
+because Node delivers no `SIGTERM` there at all.
+
+Whatever `macos-latest` pinned in 2026-09-03's run was one macOS version on one
+architecture. Intel macOS, older macOS, Alpine and musl were unmeasured then and
+are unmeasured now.
 
 ## Global options
 
