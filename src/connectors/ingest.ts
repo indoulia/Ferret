@@ -36,6 +36,11 @@ import {
  * cursors, ordering and failure; it knows nothing about what a record is. What
  * a record is, is the connector's business, and it stays there.
  *
+ * It also knows that a pass and a window are not the same thing. The page bound
+ * ends a *pass*; the *window* — what `since` covers — closes only when the
+ * source runs out of pages, however many passes that takes. See
+ * {@link DEFAULT_INGEST_PAGE_LIMIT}.
+ *
  * **Nothing here reasons.** It fetches what it is told to fetch, in the order
  * the contract fixes, and stops. There is no planner, no retry policy of its
  * own, no model call, and no decision that is not a bound the caller passed in.
@@ -48,10 +53,18 @@ export const INGEST_PRODUCER = 'ferret.connector';
  * Pages read from one source before a pass stops asking.
  *
  * A bound, not a preference — the reason `ferret sync` gives: an unbounded
- * enumeration spends somebody else's rate limit until it runs out. A pass that
- * stops here reports `truncated` and **does not advance the cursor**, so the
- * next pass re-reads from where this one started rather than skipping what it
- * never saw.
+ * enumeration spends somebody else's rate limit until it runs out.
+ *
+ * A pass that stops here reports `truncated`, does **not** advance the window
+ * (`since` stays where it was, so nothing between the two is skipped) and
+ * persists the page cursor it stopped at, so the next pass **resumes** from
+ * there rather than re-reading the same first pages.
+ *
+ * Not resuming was the defect: the bound is per pass, so a source holding more
+ * than `pageLimit × pageSize` records re-read the same bounded prefix on every
+ * pass, for ever, and the remainder was never reached — while each pass wrote
+ * rows and looked like progress. Raising the bound only moves the source size
+ * at which that happens; the continuation is what removes it.
  */
 export const DEFAULT_INGEST_PAGE_LIMIT = 20;
 
@@ -87,8 +100,22 @@ export interface IngestReport {
   readonly writes: ContributionWrites;
   /** Records the connector could not map. One bad record must not fail a source. */
   readonly skipped: readonly SkippedSourceRecord[];
-  /** A page limit stopped the enumeration short; the cursor did not advance. */
+  /**
+   * A page limit stopped the enumeration short, so the window did not advance.
+   *
+   * The next pass continues from {@link continuation} rather than re-reading
+   * this one's first page — the pass is unfinished, not restarted.
+   */
   readonly truncated: boolean;
+  /** The page cursor this pass resumed from, or `undefined` for a fresh window. */
+  readonly resumedFrom: string | undefined;
+  /**
+   * The page cursor persisted for the next pass to continue from.
+   *
+   * `undefined` means the window finished: there is nothing left to continue,
+   * and any stored continuation has been cleared.
+   */
+  readonly continuation: string | undefined;
   /** The instant the next pass will ask from, or `undefined` when not advanced. */
   readonly cursorAdvancedTo: string | undefined;
   readonly dryRun: boolean;
@@ -105,6 +132,29 @@ export interface IngestDependencies extends ContributionWriters {
 interface IngestPosition {
   /** The instant the last completed pass started. The next `since`. */
   readonly syncedAt?: string;
+  /**
+   * The page cursor an unfinished pass stopped at, for the next one to resume.
+   *
+   * Present only between the truncation and the pass that finishes the window;
+   * a completed pass writes a position without it, and because the cursor store
+   * replaces a position rather than merging into it, that clears the
+   * continuation by construction rather than by remembering to delete it.
+   *
+   * The connector's own token, opaque here — the same value
+   * {@link AcquisitionPage.cursor} carried, handed straight back as
+   * {@link AcquisitionRequest.cursor}.
+   */
+  readonly pageCursor?: string;
+  /**
+   * The instant the *window* began, which is not the instant this pass began.
+   *
+   * A window spanning several passes must ask the next one from where the
+   * first started, not from where the last continuation ran: a record edited
+   * after the window opened but inside a page an earlier pass already read
+   * would otherwise fall outside both windows and never be re-read. Carried
+   * across continuations for that reason, and only while one is open.
+   */
+  readonly passStartedAt?: string;
   /** Whatever the connector asked to keep. Handed back untouched. */
   readonly checkpoint?: Readonly<Record<string, unknown>>;
 }
@@ -189,13 +239,21 @@ export class SourceIngestor {
     // string and could not have caught it.
     const stored = options.full === true ? undefined : await this.#position(sourceEntity.id);
     const since = stored?.syncedAt;
+    // Where an earlier pass stopped, and when the window it belongs to opened.
+    // A full read ignores both, so `--full` also clears a stuck continuation.
+    const resumedFrom = stored?.pageCursor;
+    const windowStartedAt =
+      resumedFrom === undefined ? startedAt.toISOString() : (stored?.passStartedAt ?? startedAt.toISOString());
 
     const records: AcquiredRecord[] = [];
-    let cursor: string | undefined;
+    let cursor: string | undefined = resumedFrom;
     let checkpoint = stored?.checkpoint;
     let pages = 0;
     let truncated = false;
     let unchanged = false;
+    // Set when the window is *not* finished: the page cursor the next pass must
+    // continue from. `undefined` at the end means the source was read to the end.
+    let continuation: string | undefined;
 
     for (;;) {
       throwIfAborted(context.signal, 'ingest');
@@ -213,8 +271,14 @@ export class SourceIngestor {
       // "Nothing changed" is not "nothing exists". Reported separately, and it
       // still counts as a completed pass — the cursor advances, because the
       // source has told us our position is current.
+      //
+      // Except mid-continuation, where it contradicts itself: the tail this
+      // window has not read yet is exactly what the question was about. Keeping
+      // the continuation there costs a re-read; clearing it would drop every
+      // record past the cursor and call the window finished.
       if (page.unchanged === true) {
         unchanged = true;
+        continuation = resumedFrom;
         break;
       }
 
@@ -224,6 +288,7 @@ export class SourceIngestor {
       if (cursor === undefined) break;
       if (pages >= pageLimit) {
         truncated = true;
+        continuation = cursor;
         break;
       }
     }
@@ -263,17 +328,35 @@ export class SourceIngestor {
           );
 
     // EPIC-031's rule, which EPIC-075 gave a separate verb so it could be
-    // applied here too: a pass that did not finish must be repeated, not
-    // resumed from a position it never reached. A truncated enumeration, a dry
-    // run, and a pass with no cursor store are all "did not finish".
+    // applied here too: a pass that did not finish must not leave a position
+    // claiming it did. A dry run and a pass with no cursor store write nothing
+    // at all; everything else writes one of two positions.
+    //
+    // The window is what advances or does not — `syncedAt`, the next `since`.
+    // An unfinished pass leaves it exactly where it was and files the page
+    // cursor beside it, so the next pass asks the same question from further
+    // along instead of from the beginning. That is the difference between a
+    // bound and a ceiling: a bound is per pass, and the window still closes.
     let cursorAdvancedTo: string | undefined;
-    if (options.dryRun !== true && !truncated && this.#cursors !== undefined) {
-      const position: IngestPosition = {
-        syncedAt: startedAt.toISOString(),
-        ...(checkpoint === undefined ? {} : { checkpoint }),
-      };
+    if (options.dryRun !== true && this.#cursors !== undefined) {
+      const position: IngestPosition =
+        continuation === undefined
+          ? {
+              // The window's own start, not this pass's: a continued window
+              // covers everything from when it opened, with no gap in between.
+              syncedAt: windowStartedAt,
+              ...(checkpoint === undefined ? {} : { checkpoint }),
+            }
+          : {
+              ...(since === undefined ? {} : { syncedAt: since }),
+              pageCursor: continuation,
+              passStartedAt: windowStartedAt,
+              ...(checkpoint === undefined ? {} : { checkpoint }),
+            };
       await this.#cursors.advance(INGEST_PRODUCER, sourceEntity.id, { ...position }, startedAt);
-      cursorAdvancedTo = position.syncedAt;
+      // Only a finished window has advanced. An open continuation reports
+      // `undefined` here exactly as a truncated pass always has.
+      if (continuation === undefined) cursorAdvancedTo = position.syncedAt;
     }
 
     const report: IngestReport = {
@@ -288,6 +371,8 @@ export class SourceIngestor {
       writes,
       skipped: contribution.skipped ?? [],
       truncated,
+      resumedFrom,
+      continuation: options.dryRun === true ? undefined : continuation,
       cursorAdvancedTo,
       dryRun: options.dryRun === true,
     };
@@ -301,6 +386,11 @@ export class SourceIngestor {
         source: identityKey,
         records: report.counts.records,
         truncated,
+        // Whether a window is open, never the token itself: a continuation is
+        // connector-defined and can carry a signed value, and this line reaches
+        // a log file.
+        resumed: resumedFrom !== undefined,
+        continues: report.continuation !== undefined,
         unchanged,
       },
       `Ingested ${identityKey} through ${report.connectorId}`,
@@ -313,9 +403,16 @@ export class SourceIngestor {
     const cursor = await this.#cursors?.read(scopeId);
     if (cursor === undefined) return undefined;
     const syncedAt = cursor.position['syncedAt'];
+    const pageCursor = cursor.position['pageCursor'];
+    const passStartedAt = cursor.position['passStartedAt'];
     const checkpoint = cursor.position['checkpoint'];
     return {
       ...(typeof syncedAt === 'string' ? { syncedAt } : {}),
+      // An empty string is not a cursor. A connector that produced one would
+      // resume from "the beginning" while claiming to be mid-window, which is
+      // the truncation defect wearing a continuation's clothes.
+      ...(typeof pageCursor === 'string' && pageCursor !== '' ? { pageCursor } : {}),
+      ...(typeof passStartedAt === 'string' ? { passStartedAt } : {}),
       ...(isRecord(checkpoint) ? { checkpoint } : {}),
     };
   }

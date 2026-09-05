@@ -275,6 +275,11 @@ export function repositorySourceConnector(
    */
   const described = new Map<string, DiscoveredRepository>();
 
+  /** What acquisition read for this source, for a pass that acquired no description. */
+  function cachedDescription(identity: SourceIdentity): DiscoveredRepository | undefined {
+    return described.get(sourceIdentityKey(identity));
+  }
+
   async function repositoryFor(
     identity: SourceIdentity,
     context: ProviderOperationContext,
@@ -337,13 +342,23 @@ export function repositorySourceConnector(
       records: readonly AcquiredRecord[],
       context: NormalizationContext,
     ): SourceContribution {
-      // The description is what every other stage is modelled against, and a
-      // page set without one cannot be normalized at all. That is not a failure
-      // — an `unchanged` pass legitimately carries no records — so it returns
-      // an empty contribution rather than throwing, and the ingestor still
-      // writes the source entity and advances the cursor.
-      const description = records.find((record) => record.kind === REPOSITORY_RECORD);
-      if (description === undefined) return EMPTY_CONTRIBUTION;
+      // The description is what every other stage is modelled against.
+      //
+      // A pass that started at the first stage carries it as a record. A pass
+      // that *resumed* mid-enumeration does not — the describe stage ran in an
+      // earlier pass — so it comes from the description this pass's own
+      // acquisition already read: every stage asks `repositoryFor` before it
+      // can list anything, so by the time this runs the entry is there.
+      //
+      // Reading the batch first keeps a fresh pass modelling exactly what it
+      // acquired. Falling back is what stops a resumed pass modelling nothing:
+      // it read its pages, found no description among them, returned an empty
+      // contribution, and dropped every record it had just been handed. That
+      // was invisible for as long as a bounded pass always restarted from the
+      // first stage, and became a silent loss of most of a large repository
+      // the moment one could continue.
+      const described = repositoryFrom(records) ?? cachedDescription(context.identity);
+      if (described === undefined) return EMPTY_CONTRIBUTION;
 
       const emitter = context.emitter;
       const observedAt = now();
@@ -366,7 +381,7 @@ export function repositorySourceConnector(
        * that keeps a source to a single root.
        */
       const repository: DiscoveredRepository = {
-        ...(description.payload as DiscoveredRepository),
+        ...described,
         identityKey: sourceIdentityKey(context.identity),
       };
 
@@ -688,6 +703,12 @@ function isStage(value: unknown): value is Stage {
     value === Stage.FILES ||
     value === Stage.COMMITS
   );
+}
+
+/** The description a pass acquired, when it acquired one. */
+function repositoryFrom(records: readonly AcquiredRecord[]): DiscoveredRepository | undefined {
+  const record = records.find((candidate) => candidate.kind === REPOSITORY_RECORD);
+  return record === undefined ? undefined : (record.payload as DiscoveredRepository);
 }
 
 /** The payloads of one record kind, in the order they were acquired. */

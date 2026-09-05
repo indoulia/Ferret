@@ -253,6 +253,26 @@ because they were nearly written up as defects: a deleted file legitimately
 stays in the graph (`emitHistory` keeps what a commit touched), and a `Proxy`
 around the provider breaks its private-field access.
 
+**3 — a resumed pass modelled nothing at all — 2026-09-06.**
+`normalize` returned `EMPTY_CONTRIBUTION` when no `repository` record was in the
+batch. That record is emitted by the first stage only, so a pass that *resumed*
+mid-enumeration had none, returned nothing, and dropped every record it had just
+read — reporting the records while writing none of them.
+
+It was unreachable for as long as a bounded pass always restarted from the first
+stage. EPIC-119's continuation fix made passes resume, and the defect became a
+silent loss of most of a large repository. Found by dogfooding that fix against
+Ferret's own repository at `pageLimit: 5`: 12 passes, 1 092 records read, and
+`created=0` on every pass after the first — 75 of 866 files and 0 of 211 commits
+stored.
+
+Fixed by reading the description from the batch first and falling back to the
+one this pass's own acquisition already read: every stage calls `repositoryFor`
+before it can list anything, so the description is known whether or not it was
+emitted as a record. The same run afterwards: 880 file entities, and 211 commits
+against `git rev-list --count HEAD` = 211. A second full re-read converges in 12
+passes and creates **0** entities, so continuation does not cost idempotence.
+
 ## Package size
 
 The packaging gate's non-grammar ceiling moved a seventh time: 3 242 087 against

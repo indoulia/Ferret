@@ -179,6 +179,51 @@ function wikiPage(slug: string, title = `Page ${slug}`): WikiPage {
   return { slug, title, body: 'Body text.', editedAt: '2026-09-01T00:00:00.000Z' };
 }
 
+/**
+ * A source that pages from the cursor it was handed, one record at a time.
+ *
+ * `WikiConnector` pages from its own counter, so it advances whether or not the
+ * ingestor gives the cursor back — which is exactly the thing under test here.
+ * This one is stateless between calls: hand it the wrong place and it returns
+ * the wrong records, which is what a real paging source does.
+ */
+class LedgerConnector implements SourceConnector {
+  readonly connectorId = 'fixture.source.ledger';
+  readonly contractVersion = SOURCE_CONNECTOR_CONTRACT_VERSION;
+  readonly system = 'ledger';
+  readonly asked: AcquisitionRequest[] = [];
+
+  constructor(private readonly total: number) {}
+
+  identify(resource: string) {
+    return { system: this.system, instance: 'ledger.example.com', resource: resource.trim() };
+  }
+
+  acquire(request: AcquisitionRequest): Promise<AcquisitionPage> {
+    this.asked.push(request);
+    const offset = request.cursor === undefined ? 0 : Number(request.cursor);
+    const next = Math.min(offset + 1, this.total);
+    return Promise.resolve({
+      records: offset < this.total ? [toWikiRecord(wikiPage(`entry-${String(offset)}`))] : [],
+      ...(next >= this.total ? {} : { cursor: String(next) }),
+    });
+  }
+
+  normalize(records: readonly AcquiredRecord[], context: NormalizationContext): SourceContribution {
+    return {
+      entities: records.map((record) =>
+        context.emitter.entity({
+          kind: EntityKind.DOCUMENT,
+          source: { id: record.id, scope: context.sourceEntityId },
+          attributes: { title: record.id },
+        }),
+      ),
+      relationships: [],
+      evidence: [],
+    };
+  }
+}
+
 function ingestor(connector: SourceConnector, deps: IngestDependencies): SourceIngestor {
   return new SourceIngestor(connector, deps);
 }
@@ -430,7 +475,7 @@ describe('change detection', () => {
     expect(state.cursorPositions.get(report.sourceEntityId)?.['checkpoint']).toStrictEqual({ lastPage: 0 });
   });
 
-  it('does not advance a cursor for a pass that stopped short', async () => {
+  it('does not advance the window for a pass that stopped short', async () => {
     const { deps, state } = store();
     const connector = new WikiConnector({
       pages: [[wikiPage('a')], [wikiPage('b')], [wikiPage('c')]],
@@ -441,7 +486,41 @@ describe('change detection', () => {
 
     expect(report.truncated).toBe(true);
     expect(report.cursorAdvancedTo).toBeUndefined();
-    expect(state.cursorPositions.has(report.sourceEntityId)).toBe(false);
+    // The window did not move — there is no `syncedAt` for a next pass to ask
+    // from. What *was* filed is where to carry on from, which is the difference
+    // between a bounded pass and a lost one.
+    const position = state.cursorPositions.get(report.sourceEntityId);
+    expect(position?.['syncedAt']).toBeUndefined();
+    expect(position?.['pageCursor']).toBe('p3');
+    expect(report.continuation).toBe('p3');
+  });
+
+  it('reads a source larger than a bounded pass to the end, over several passes', async () => {
+    // The defect, in the smallest shape that shows it: nine pages under a bound
+    // of two. The old implementation read pages one and two on every pass and
+    // never saw the other seven, for ever, while reporting records each time.
+    const { deps, state } = store();
+    const ledger = new LedgerConnector(9);
+    const reports = [];
+    for (let pass = 0; pass < 10; pass += 1) {
+      const report = await ingestor(ledger, deps).ingest({ resource: 'ledger', pageLimit: 2 }, context());
+      reports.push(report);
+      if (report.continuation === undefined) break;
+    }
+
+    expect(reports.at(-1)?.continuation).toBeUndefined();
+    expect(reports).toHaveLength(5);
+    expect(reports.reduce((sum, report) => sum + report.counts.records, 0)).toBe(9);
+    // Every page asked for exactly once, in order: none re-read, none skipped.
+    expect(ledger.asked.map((request) => request.cursor)).toStrictEqual([
+      undefined, '1', '2', '3', '4', '5', '6', '7', '8',
+    ]);
+    expect([...state.entities.values()].filter((row) => row.entity.kind === EntityKind.DOCUMENT)).toHaveLength(9);
+
+    // And the whole window asked from one instant, not from five: the `since`
+    // of a continued pass is the one the window opened with.
+    expect(reports.map((report) => report.since)).toStrictEqual(Array.from({ length: 5 }, () => undefined));
+    expect(state.cursorPositions.get(reports[0]?.sourceEntityId ?? '')?.['pageCursor']).toBeUndefined();
   });
 
   it('reports "nothing changed" as different from "nothing there"', async () => {

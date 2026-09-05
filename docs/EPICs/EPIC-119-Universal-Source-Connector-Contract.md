@@ -86,6 +86,28 @@ ingestion is idempotent, so the cost is traffic rather than correctness. That is
 the whole of it — realtime ingestion is a later Epic and would not change this
 contract, which is the test of whether the seam is cut in the right place.
 
+**A pass and a window are not the same thing.** `pageLimit` (default 20) bounds
+a *pass*, because an unbounded enumeration spends somebody else's rate limit
+until it runs out. The *window* is what `since` covers, and it closes only when
+the source runs out of pages — however many passes that takes. A pass that stops
+at the bound therefore does two things: it leaves `syncedAt` exactly where it
+was, so nothing between the two windows is skipped, and it files the page cursor
+it stopped at, so the next pass **continues** rather than restarting.
+
+Not filing that cursor was a defect. The bound is per pass, so a source holding
+more than `pageLimit × pageSize` records re-read the same bounded prefix on
+every pass, for ever, and the remainder was never reached — while each pass
+wrote rows, reported records and looked like progress. Raising the bound only
+moves the source size at which that happens; the continuation is what removes
+it. A window continued across passes also asks from the instant it *opened*,
+not from the instant its last pass ran, so a record edited while the window was
+still being read falls inside it rather than between two of them.
+
+`--full` is unaffected and deliberately so: it means "ignore the stored position
+and read everything", so it discards a continuation and starts over. The
+continuation a full pass then leaves carries no `syncedAt`, so the passes that
+finish it are themselves full reads.
+
 **Failure is isolated per source, and cancellation is not.** `ingestSources`
 steps over a source that throws: it is reported with its error code, its cursor
 is left where it was so nothing is skipped, and no other source's records are
