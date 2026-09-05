@@ -374,6 +374,7 @@ ferret prune                       # what could be reclaimed; deletes nothing
 ferret prune --blobs --yes         # content no file version references
 ferret prune --journals --yes      # rotated audit journals above the kept count
 ferret prune --evidence --superseded-older-than 90 --yes
+ferret prune --sessions --sessions-older-than 90 --yes   # ended sessions, and everything they recorded
 ```
 
 Nothing is deleted unless a target is named *and* `--yes` is given — `--yes`

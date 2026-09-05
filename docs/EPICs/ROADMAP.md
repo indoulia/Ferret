@@ -32,7 +32,7 @@ not yet do. `src/cli/commands/planned.ts` names them, exits `5` with
 | 1 | EPIC-109 — Session & Memory Persistence | CONTINUATION | **COMPLETE** | 28 integration cases against real PostgreSQL; migration `0015`; latent hashing defect fixed | EPIC-039–043, EPIC-086 | Done — see EPIC-109 |
 | 2 | EPIC-110 — `ferret session` command surface | CONTINUATION | **COMPLETE** | 20 integration cases driving the built binary; planned entry retired | EPIC-109 | Done — see EPIC-110 |
 | 3 | EPIC-111 — Session recall over MCP | CONTINUATION | **COMPLETE** | 13 protocol cases against a fake port; boundary gate green | EPIC-109, EPIC-110 | Done — see EPIC-111 |
-| 4 | EPIC-112 — Session retention & redaction | HARDENING | NEXT | `retention.ts` (EPIC-088) covers no session table; captures hold transcripts | EPIC-109, EPIC-082, EPIC-088 | Extend prune/retention to session rows |
+| 4 | EPIC-112 — Session retention & redaction | HARDENING | **COMPLETE** | A `sessions` prune target; and a redaction gap on the explicit memory path, found and closed | EPIC-109, EPIC-082, EPIC-088 | Done — see EPIC-112 |
 | 5 | EPIC-113 — Provider sync transport (`ferret sync`) | PRODUCT DECISION REQUIRED | BLOCKED | `planned.ts` sync entry; EPIC-021/071/072 each excluded transport by name; `cursors.ts` exists | EPIC-075, EPIC-021, EPIC-071 | See "Decisions required" |
 | 6 | EPIC-114 — PostgreSQL version coverage | HARDENING | TODO | EPIC-002 validation: minimum supported major is 14, **only 17 measured** | EPIC-002 | Add a CI matrix major |
 | 7 | EPIC-115 — macOS packaging validation | HARDENING | TODO | EPIC-001 validation: macOS not validated | EPIC-105 | Requires a macOS runner |
@@ -210,4 +210,5 @@ Filled in as Epics land.
 | --- | --- | --- | --- | --- |
 | EPIC-109 | `452980d` | [#156](https://github.com/indoulia/Ferret/pull/156) | `ec0a376` | COMPLETE |
 | EPIC-110 | `2e7ce50` | [#157](https://github.com/indoulia/Ferret/pull/157) | `533b603` | COMPLETE |
-| EPIC-111 | `pending` | — | — | IMPLEMENTED |
+| EPIC-111 | `818fdfc` | [#158](https://github.com/indoulia/Ferret/pull/158) | `39a23ca` | COMPLETE |
+| EPIC-112 | `pending` | — | — | IMPLEMENTED |

@@ -101,6 +101,7 @@ describeCli(`ferret prune (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REAS
       'blobs',
       'journals',
       'evidence',
+      'sessions',
     ]);
     expect(await blobCount()).toBe(before);
   });

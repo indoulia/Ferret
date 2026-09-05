@@ -298,3 +298,71 @@ describe('content is data, not instruction', () => {
     expect(found[0]?.derivedFrom).toHaveLength(1);
   });
 });
+
+describe('a memory cannot carry a credential — EPIC-112', () => {
+  /**
+   * The gap EPIC-112 found, on the path EPIC-110 opened.
+   *
+   * `memory-extraction.ts` redacts before it builds a memory — "redacted before
+   * it becomes a memory rather than after" — and the *explicit* path had no
+   * such caller. `ferret session remember --statement …` passed a person's text
+   * through untouched, and `ferret_session_recall` then handed it to an AI
+   * client. Redaction moved into the constructor so that no caller can be the
+   * one that forgets.
+   */
+  it('redacts an assigned secret from a statement', () => {
+    const memory = createEngineeringMemory({
+      sessionId: 's-1',
+      kind: MemoryKind.DECISION,
+      statement: 'we set AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGbPxRfiCY to reach the bucket',
+      origin: MemoryOrigin.EXPLICIT,
+      recordedAt: '2026-09-05T09:00:00.000Z',
+    });
+
+    expect(memory.statement).not.toContain('wJalrXUtnFEMIK7MDENGbPxRfiCY');
+    expect(memory.redactedSecrets).toBe(1);
+  });
+
+  it('redacts a rationale too — the field a reason for a choice goes in', () => {
+    const memory = createEngineeringMemory({
+      sessionId: 's-2',
+      kind: MemoryKind.DECISION,
+      statement: 'we rotated the deploy key',
+      rationale: 'the old one was https://ci:hunter2hunter2@git.example.com/repo',
+      origin: MemoryOrigin.EXPLICIT,
+      recordedAt: '2026-09-05T09:00:00.000Z',
+    });
+
+    expect(memory.rationale).not.toContain('hunter2hunter2');
+    expect(memory.redactedSecrets).toBe(1);
+  });
+
+  it('leaves ordinary prose alone and reports nothing redacted', () => {
+    const memory = createEngineeringMemory({
+      sessionId: 's-3',
+      kind: MemoryKind.CONSTRAINT,
+      statement: 'never weaken a test to make CI green',
+      origin: MemoryOrigin.EXPLICIT,
+      recordedAt: '2026-09-05T09:00:00.000Z',
+    });
+
+    expect(memory.statement).toBe('never weaken a test to make CI green');
+    expect(memory.redactedSecrets).toBe(0);
+  });
+
+  it('keeps what an extracting caller already removed, and adds its own', () => {
+    // Extraction redacts first and reports a count; redacting again finds
+    // nothing more, and the count it already earned must survive.
+    const memory = createEngineeringMemory({
+      sessionId: 's-4',
+      kind: MemoryKind.GOTCHA,
+      statement: 'the token was in the log',
+      origin: MemoryOrigin.EXTRACTED,
+      derivedFrom: [{ captureId: 'c-1', sequence: 1 }],
+      redactedSecrets: 2,
+      recordedAt: '2026-09-05T09:00:00.000Z',
+    });
+
+    expect(memory.redactedSecrets).toBe(2);
+  });
+});

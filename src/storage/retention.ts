@@ -1,7 +1,7 @@
 import { readdirSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
-import { and, eq, inArray, notExists, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, lt, notExists, sql } from 'drizzle-orm';
 
 import { EvidenceState } from '../domain/index.js';
 
@@ -10,6 +10,7 @@ import type { FerretDatabase } from './entities.js';
 import { contentBlob } from './schema/content.js';
 import { entity } from './schema/entities.js';
 import { evidence } from './schema/evidence.js';
+import { session } from './schema/sessions.js';
 
 /**
  * Deletion — EPIC-088, and the only place Ferret does it.
@@ -30,6 +31,20 @@ export const RetentionTarget = {
   JOURNALS: 'journals',
   /** `superseded` evidence past an age the caller names, in no live chain. */
   EVIDENCE: 'evidence',
+  /**
+   * Sessions that ended, past an age the caller names — EPIC-112.
+   *
+   * The transcript, the checkpoints and the memories go with the session, by
+   * `ON DELETE CASCADE` in migration `0015`. That is the whole reason the age
+   * has to be the caller's: a memory is the most durable thing Ferret records
+   * about its own work, and EPIC-088 §8.3 refuses to choose how long it lasts.
+   *
+   * An *active* session is never eligible, whatever its age. A session with no
+   * `ended_at` is one nothing has closed, which is not the same as one that is
+   * old — EPIC-094 made exactly this distinction for an open run, and for the
+   * same reason: age is not evidence that a thing is finished.
+   */
+  SESSIONS: 'sessions',
 } as const;
 
 export type RetentionTarget = (typeof RetentionTarget)[keyof typeof RetentionTarget];
@@ -38,6 +53,7 @@ export const RETENTION_TARGETS: readonly RetentionTarget[] = [
   RetentionTarget.BLOBS,
   RetentionTarget.JOURNALS,
   RetentionTarget.EVIDENCE,
+  RetentionTarget.SESSIONS,
 ];
 
 /** One target's share of the plan. `bytes` is undefined when unmeasurable. */
@@ -67,6 +83,13 @@ export interface RetentionRequest {
    * long is the history worth keeping" is the caller's judgement.
    */
   readonly supersededOlderThanDays?: number | undefined;
+  /**
+   * Minimum age of an *ended* session, in days. Required for
+   * {@link RetentionTarget.SESSIONS}, and separate from the evidence age
+   * because they answer different questions: how long a superseded observation
+   * is worth keeping, and how long the record of a session's work is.
+   */
+  readonly sessionsEndedOlderThanDays?: number | undefined;
   /** Where the audit journals live, for {@link RetentionTarget.JOURNALS}. */
   readonly journalPath?: string | undefined;
   /** Rotated copies to keep. Matches EPIC-085's writer default. */
@@ -116,6 +139,7 @@ export class RetentionService {
     try {
       if (target === RetentionTarget.BLOBS) return await this.#blobs(apply);
       if (target === RetentionTarget.JOURNALS) return journals(request, apply);
+      if (target === RetentionTarget.SESSIONS) return await this.#sessions(request, apply);
       return await this.#evidence(request, apply);
     } catch (error) {
       return failureOf(target, error);
@@ -190,6 +214,51 @@ export class RetentionService {
    * deleting it would erase that edge silently. EPIC-046's `derivedFrom` chain
    * is the thing §8.3 protects here.
    */
+  /**
+   * Sessions that ended, past the age the caller named — EPIC-112.
+   *
+   * The cascade in migration `0015` takes the transcript, the checkpoints and
+   * the memories with the session, so this deletes one table and reclaims four.
+   * That is deliberate and it is also why the age is required: EPIC-088 §8.3
+   * refuses to invent one, and a memory is the longest-lived thing Ferret
+   * records about its own work.
+   *
+   * `ended_at IS NOT NULL` rather than an age on `started_at`: a session
+   * nothing has closed is not a session that is finished, and deleting one
+   * because it is old would reclaim the context of work still in progress.
+   * EPIC-094 drew the same line for an open run.
+   */
+  async #sessions(request: RetentionRequest, apply: boolean): Promise<RetentionCount> {
+    const days = request.sessionsEndedOlderThanDays;
+    if (days === undefined || !Number.isFinite(days) || days < 0) {
+      return {
+        target: RetentionTarget.SESSIONS,
+        rows: 0,
+        note: 'An age in days is required; EPIC-088 §8.3 refuses to choose one.',
+      };
+    }
+
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const eligible = and(isNotNull(session.endedAt), lt(session.endedAt, cutoff));
+
+    if (!apply) {
+      const found = await this.#db.select({ id: session.id }).from(session).where(eligible);
+      return { target: RetentionTarget.SESSIONS, rows: found.length };
+    }
+
+    const deleted = await this.#db.transaction(async (tx) =>
+      tx.delete(session).where(eligible).returning({ id: session.id }),
+    );
+
+    return {
+      target: RetentionTarget.SESSIONS,
+      rows: deleted.length,
+      ...(deleted.length === 0
+        ? {}
+        : { note: 'Captures, checkpoints and memories were removed with their sessions.' }),
+    };
+  }
+
   async #evidence(request: RetentionRequest, apply: boolean): Promise<RetentionCount> {
     const days = request.supersededOlderThanDays;
     if (days === undefined || !Number.isFinite(days) || days < 0) {

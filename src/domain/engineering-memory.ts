@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { ErrorCode, FerretError } from '../errors/index.js';
 
+import { redactSecrets } from '../security/index.js';
+
 import { Confidence } from './confidence.js';
 import { canonicalId, contentHash, encodeKeyParts } from './identity.js';
 
@@ -155,22 +157,45 @@ export function createEngineeringMemory(input: EngineeringMemoryInput): Engineer
     });
   }
 
-  const truncated = value.statement.length > MAX_STATEMENT_LENGTH;
+  // Redacted here rather than by the caller — EPIC-112.
+  //
+  // `memory-extraction.ts` always did this, and its comment said why: a secret
+  // "is redacted before it becomes a memory rather than after". The *explicit*
+  // path had no such caller. `ferret session remember --statement …` passed a
+  // person's text through untouched and `ferret_session_recall` handed it to an
+  // AI client, so the one path a human types into was the one path that did not
+  // redact. Doing it in the constructor is what makes "a memory cannot carry a
+  // credential" true of every caller rather than of the careful ones.
+  //
+  // Before truncation, so a secret straddling the limit cannot survive as a
+  // prefix, and before the id is derived, so the identifier is over the text
+  // that is actually stored.
+  //
+  // The caller's own count is added to rather than replaced: extraction
+  // redacts first and reports what it removed, and running redaction again over
+  // already-redacted text finds nothing more — a count it had earned would
+  // otherwise be lost here.
+  const cleanedStatement = redactSecrets(value.statement);
+  const cleanedRationale = value.rationale === undefined ? undefined : redactSecrets(value.rationale);
+  const redactedSecrets =
+    value.redactedSecrets + cleanedStatement.redacted + (cleanedRationale?.redacted ?? 0);
+
+  const truncated = cleanedStatement.text.length > MAX_STATEMENT_LENGTH;
   const statement = truncated
-    ? `${value.statement.slice(0, MAX_STATEMENT_LENGTH - 1)}…`
-    : value.statement;
+    ? `${cleanedStatement.text.slice(0, MAX_STATEMENT_LENGTH - 1)}…`
+    : cleanedStatement.text;
 
   const memory: Omit<EngineeringMemory, 'id' | 'contentHash'> = {
     sessionId: value.sessionId,
     kind: value.kind,
     statement,
-    rationale: value.rationale,
+    rationale: cleanedRationale?.text,
     origin: value.origin,
     rule: value.rule,
     confidence: ORIGIN_CONFIDENCE[value.origin],
     derivedFrom: [...value.derivedFrom].sort((a, b) => a.sequence - b.sequence),
     recordedAt: value.recordedAt,
-    redactedSecrets: value.redactedSecrets,
+    redactedSecrets,
     truncated,
     supersededBy: undefined,
     supersedes: undefined,
