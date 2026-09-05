@@ -1,11 +1,17 @@
 # Ferret — Reconstructed Engineering Roadmap
 
-**Status: IN EXECUTION** · Base: `ae77c10` · Reconstructed: 2026-09-05 ·
-The five blocked items were decided by the owner on 2026-09-05 and are being
-delivered in the order EPIC-113 → 116 → 117 → 114 → 115. The
-[decision queue](#decision-queue) is kept in full: each entry now records the
+**Status: QUEUE EXHAUSTED** · Base: `ae77c10` · Reconstructed: 2026-09-05 ·
+Completed: 2026-09-05. All five blocked items were decided by the owner and
+delivered — EPIC-113, 116, 117 and 114 implemented and validated; EPIC-115's
+coverage declined and its false claim corrected. The
+[decision queue](#decision-queue) is kept in full: each entry records the
 decision taken beside the options it was choosing between, because a decision
 read without its alternatives is indistinguishable from a default.
+
+**Nothing implementation-ready remains.** What is left is listed under
+[not in this queue](#not-in-this-queue), and every item there needs a decision,
+a runner, or a recurrence before it can move. No entry was invented to keep the
+queue alive.
 
 ## Why this document exists
 
@@ -486,7 +492,36 @@ the file. If exact attribution matters more than cost, C.
 and because the honest recording rule cuts both ways: no record may claim macOS
 coverage until a job measures it again.
 
-### Not in this queue
+### What the run itself found
+
+Three defects, and the shape of each is worth keeping: **none was visible from
+the test suite**, and two were found by running the product rather than by
+reading it.
+
+- **Both project providers declared configuration they never read.**
+  `GithubProvider` and `JiraProvider` declared `configSchema` and
+  `secretOptions` from the day they were written and never consulted
+  `context.settings`, so every configured option — the token included — did
+  nothing. Unreachable until EPIC-113 became the first caller to build a
+  provider from configuration. Fixed there.
+- **A review ceiling was blocking the cursor a page limit is meant to block.**
+  Found by running `ferret sync` against Ferret's own repository: 139 pull
+  requests, the ceiling bit on every pass, and the cursor could never advance —
+  so every sync would have re-read the whole tracker for ever. Every fixture was
+  small enough to miss it. Fixed in [#168](https://github.com/indoulia/Ferret/pull/168).
+- **`ferret export --session` was documented as producing a session-only
+  document** and produces the whole index alongside the named session, because
+  the two scope dimensions are independent by design. The behaviour is right and
+  the wording was not; corrected in
+  [#170](https://github.com/indoulia/Ferret/pull/170).
+
+And one filed rather than fixed, because it needs a decision:
+[#169](https://github.com/indoulia/Ferret/issues/169) — an unresolvable
+`$secret` in one provider's options fails *every* command, including `ferret
+init`. Older than the Epic that exposed it, and closing it means choosing when
+configuration secrets resolve.
+
+## Not in this queue
 
 - **[#138](https://github.com/indoulia/Ferret/issues/138) — three limitation rows
   with no owning Epic.** Two of the three are product decisions in their own
@@ -494,6 +529,19 @@ coverage until a job measures it again.
   state is modelled at all), and the third is an incremental-read optimisation
   whose owner the registry does not determine. None is P0 and none is unblocked
   by anything above.
+- **[#169](https://github.com/indoulia/Ferret/issues/169) — an unresolvable
+  `$secret` fails every command.** Found by dogfooding, filed with three options
+  and a recommendation. It is a configuration-semantics decision — when a secret
+  reference resolves — not an implementation detail, so it waits for one.
+- **macOS coverage.** Declined by the owner on 2026-09-05; see
+  [EPIC-115](EPIC-115-macOS-Packaging-Validation.md). The cost of restoring it is
+  known (3m47s) and what it buys is named, so revisiting is a decision rather
+  than a rediscovery.
+- **A gate on the platform table.** `distribution.test.ts` asserts the README's
+  command and tool tables against the code; there is no equivalent for the
+  platform table, because CI configuration is not importable. EPIC-115 records
+  it as a candidate and deliberately did not build it: inventing a gate for a
+  decision that had just been made would have been scope nobody asked for.
 - **[#130](https://github.com/indoulia/Ferret/issues/130) — the packaging gate
   flake.** Cause **not established**, and it has not recurred. The diagnostic
   that a recurrence needs is already in place: the assertion now compares the
@@ -515,7 +563,15 @@ Filled in as Epics land.
 | EPIC-116 | `899bfef` | [#164](https://github.com/indoulia/Ferret/pull/164) | `318dcfe` | [record](validation/EPIC-116-VALIDATION.md) | COMPLETE |
 | EPIC-117 | `80f9e42` | [#165](https://github.com/indoulia/Ferret/pull/165) | `76e2522` | [record](validation/EPIC-117-VALIDATION.md) | COMPLETE |
 | EPIC-114 | `78406f6` | [#166](https://github.com/indoulia/Ferret/pull/166) | `c9916bd` | [record](validation/EPIC-114-VALIDATION.md) | COMPLETE |
-| EPIC-115 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-115-VALIDATION.md) | CLOSED — coverage deferred |
+| EPIC-115 | `bf02fd2` | [#167](https://github.com/indoulia/Ferret/pull/167) | `1072c3d` | [record](validation/EPIC-115-VALIDATION.md) | CLOSED — coverage deferred |
+
+Two follow-ups came out of dogfooding the Epics above rather than out of the
+queue, and are recorded here because they changed shipped behaviour:
+
+| Change | Commit | PR | Merge |
+| --- | --- | --- | --- |
+| The sync cursor defect — a review ceiling blocking what a page limit blocks | `69766e9` | [#168](https://github.com/indoulia/Ferret/pull/168) | `ea586db` |
+| `ferret export --session` narrows sessions, and the README promised otherwise | `ae0211f` | [#170](https://github.com/indoulia/Ferret/pull/170) | `09f5624` |
 
 All four merged **without** a validation record and without a registry catalog
 entry; both were added on 2026-09-05 and every cited suite re-run to confirm the
