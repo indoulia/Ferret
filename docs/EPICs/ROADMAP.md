@@ -22,7 +22,10 @@ queue alive.
 
 ## Why this document exists
 
-Registry v3.0 closed 108 Epics: 107 `VALIDATED`, 1 `DONE`, 76/76 P0. It is a
+Registry v3.0 closed 108 Epics when this document was reconstructed: 107
+`VALIDATED`, 1 `DONE`, 76/76 P0. The catalog now carries 118 rows — EPIC-109 to
+EPIC-118 delivered since, and reconciled into it on 2026-09-05 — of which 116
+are `VALIDATED`, 1 `DONE` and 1 `CLOSED` with coverage deferred. It is a
 delivery map for work that is finished, and it does not say what comes next.
 This document derives the next roadmap **from the repository itself** — the
 implementation, the tests, the Epic non-scope statements, the CLI surface and

@@ -126,6 +126,8 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-110 — Session Command Surface** — P0 — VALIDATED ([spec](EPIC-110-Session-Command-Surface.md), [evidence](validation/EPIC-110-VALIDATION.md))
 - **EPIC-111 — Session Recall Over MCP** — P0 — VALIDATED ([spec](EPIC-111-Session-Recall-Over-MCP.md), [evidence](validation/EPIC-111-VALIDATION.md))
 - **EPIC-112 — Session Retention & Redaction** — P0 — VALIDATED ([spec](EPIC-112-Session-Retention-And-Redaction.md), [evidence](validation/EPIC-112-VALIDATION.md))
+- **EPIC-116 — Session Export Fidelity** — P1 — VALIDATED ([spec](EPIC-116-Session-Export-Fidelity.md), [evidence](validation/EPIC-116-VALIDATION.md))
+- **EPIC-117 — Recording a Session over MCP** — P1 — VALIDATED ([spec](EPIC-117-Recording-Over-MCP.md), [evidence](validation/EPIC-117-VALIDATION.md))
 
 ### Evidence & Provenance
 
@@ -184,6 +186,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-078 — Periodic Reconciliation** — P1 — VALIDATED ([spec](EPIC-078-Periodic-Reconciliation.md), [evidence](validation/EPIC-078-VALIDATION.md))
 - **EPIC-079 — Retry & Backoff** — P0 — VALIDATED ([spec](EPIC-079-Retry-And-Backoff.md), [evidence](validation/EPIC-079-VALIDATION.md))
 - **EPIC-080 — Idempotent Ingestion** — P0 — VALIDATED ([spec](EPIC-080-Idempotent-Ingestion.md), [evidence](validation/EPIC-080-VALIDATION.md))
+- **EPIC-113 — Provider Sync Transport (`ferret sync`)** — P1 — VALIDATED ([spec](EPIC-113-Provider-Sync-Transport.md), [evidence](validation/EPIC-113-VALIDATION.md))
 
 ### Security & Authorization
 
@@ -200,6 +203,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-088 — Retention & Exclusion Policies** — P1 — VALIDATED ([spec](EPIC-088-Retention-And-Exclusion-Policies.md), [evidence](validation/EPIC-088-VALIDATION.md))
 - **EPIC-089 — Backup & Export** — P1 — VALIDATED ([spec](EPIC-089-Backup-And-Export.md), [evidence](validation/EPIC-089-VALIDATION.md))
 - **EPIC-090 — Data Import & Recovery** — P1 — VALIDATED ([spec](EPIC-090-Data-Import-And-Recovery.md), [evidence](validation/EPIC-090-VALIDATION.md))
+- **EPIC-114 — PostgreSQL Version Coverage** — P1 — VALIDATED ([spec](EPIC-114-PostgreSQL-Version-Coverage.md), [evidence](validation/EPIC-114-VALIDATION.md))
 
 ### Reliability & Operations
 
@@ -227,6 +231,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-105 — Cross-Platform Packaging** — P1 — VALIDATED ([spec](EPIC-105-Cross-Platform-Packaging.md), [evidence](validation/EPIC-105-VALIDATION.md))
 - **EPIC-106 — Upgrade & Migration UX** — P1 — VALIDATED ([spec](EPIC-106-Upgrade-And-Migration-UX.md), [evidence](validation/EPIC-106-VALIDATION.md))
 - **EPIC-107 — Docker Distribution** — P2 — VALIDATED ([spec](EPIC-107-Docker-Distribution.md), [evidence](validation/EPIC-107-VALIDATION.md))
+- **EPIC-115 — macOS Packaging Validation** — P2 — CLOSED — coverage DEFERRED by owner decision ([spec](EPIC-115-macOS-Packaging-Validation.md), [evidence](validation/EPIC-115-VALIDATION.md))
 
 ## Dependency baseline
 
@@ -408,6 +413,48 @@ Two facts are recorded rather than tidied away:
 Continuing work, and what is blocked, is tracked in
 [ROADMAP.md](ROADMAP.md) rather than here: the registry maps delivery, and the
 roadmap maps what has not been decided.
+
+### Addendum — the queue's own five, and a test that refuses the next one
+
+Five more Epics reached `main` without a catalog entry: EPIC-113, EPIC-114,
+EPIC-115, EPIC-116 and EPIC-117, merged in
+[#163](https://github.com/indoulia/Ferret/pull/163),
+[#166](https://github.com/indoulia/Ferret/pull/166),
+[#167](https://github.com/indoulia/Ferret/pull/167),
+[#164](https://github.com/indoulia/Ferret/pull/164) and
+[#165](https://github.com/indoulia/Ferret/pull/165). They are added above.
+
+**The gap is narrower than the four above it.** Each of the five was specified
+first and carries a validation record written with the work, and
+[ROADMAP.md](ROADMAP.md) recorded every one of them as delivered. Only the
+catalog row was missing — so the Definition of Done was met and the delivery map
+still did not say so. Nothing here changes a status: EPIC-113, EPIC-114,
+EPIC-116 and EPIC-117 were `VALIDATED` on their own evidence, and EPIC-115 is
+`CLOSED` with macOS coverage `DEFERRED` by the owner decision of 2026-09-05,
+which this pass does not revisit.
+
+Two things the entries changed, and neither is a status:
+
+**EPIC-115 is the first row in this catalog that is not `VALIDATED` or `DONE`,
+and adding it found a reader that could not have read it.** The sweep in
+`tests/unit/limitation-owners.test.ts` reads a row's status to decide whether an
+Epic can still take new work. It did not know the word `CLOSED`, so it would
+have taken the one closed Epic here for an open one — and it read the *whole*
+file, so a paragraph below the catalog that opens `- **EPIC-094 AC-11 / issue
+#101.**` was taken for a row and overwrote EPIC-094's real status. EPIC-032 and
+EPIC-118 were shadowed the same way. Both faults are one parser now
+(`tests/helpers/registry.ts`): it reads the catalog section only, and it knows
+`CLOSED`. The pinned count of limitations parked on a closed Epic moved 67 → 68,
+its first upward move, and no new stale limitation appeared — EPIC-094 became
+closed again, which revealed the third owner of a row already parked twice.
+
+**EPIC-118 added its own row in its own pull request**
+([#173](https://github.com/indoulia/Ferret/pull/173)), which is the routine the
+five missed and the four before them missed. That routine is now checked rather
+than remembered: `tests/unit/registry-catalog.test.ts` fails when an Epic has a
+specification or a validation record and no row here. It permits the reverse — a
+row with no file is the order of work [Specification files](#specification-files)
+describes, and a file with no row is a delivery this map does not show.
 
 ## Approval
 
