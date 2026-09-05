@@ -98,23 +98,36 @@ if the body throws — so a started runtime cannot leak.
 | `ferret reconcile` | Implemented | EPIC-078 |
 | `ferret upgrade` | Implemented | EPIC-106 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
+| `ferret session` | Implemented | EPIC-039–043, EPIC-109, EPIC-110 |
 | `ferret sync` | **Planned** | EPIC-021, EPIC-071, EPIC-072 |
-| `ferret session` | **Planned** | EPIC-039–043, EPIC-109, EPIC-110 |
 
-The two planned rows are not a roadmap gesture. The GitHub and Jira providers,
-project modelling and the session and memory domain are **real, tested and
-reachable as libraries** — every Epic that built them excluded transport,
-persistence and a client surface by name, and delivered the scope it declared.
-What was missing was any way for an operator to find that out: `ferret sync`
-answered with an unknown-command error indistinguishable from a typo. It now
-exits 5 with `E_NOT_IMPLEMENTED` and names the Epics that own the behaviour,
-where an unknown command still exits 2.
+The one planned row is not a roadmap gesture. The GitHub and Jira providers and
+project modelling are **real, tested and reachable as libraries** — every Epic
+that built them excluded transport, persistence and a client surface by name,
+and delivered the scope it declared. What was missing was any way for an
+operator to find that out: `ferret sync` answered with an unknown-command error
+indistinguishable from a typo. It now exits 5 with `E_NOT_IMPLEMENTED` and names
+the Epics that own the behaviour, where an unknown command still exits 2.
 
-`ferret session` has since lost half its distance. EPIC-109 built the store the
-session Epics deferred: sessions, transcripts, checkpoints and extracted
-memories persist, and `recoverSession` runs against a real database rather than
-a test double. What is still missing is the command itself — EPIC-110 — so the
-row stays `Planned` and the capability is reachable only as a library.
+`ferret session` used to be the second such row and no longer is. EPIC-109 built
+the store the session Epics deferred and EPIC-110 wired the command, so a
+session's checkpoint and what it decided now survive the process that produced
+them:
+
+```bash
+ferret session start --provider claude-code --branch feat/x   # prints an id
+ferret session remember <id> --kind decision --statement "…" --rationale "…"
+ferret session checkpoint <id> --summary "…" --state '{"next":"…"}'
+ferret session end <id>
+ferret session recall <id>          # what a later session needs, most useful first
+```
+
+`recall` is the one that matters. It assembles a bundle from what was already
+distilled while the work happened — the latest checkpoint and a few dozen
+sentences — rather than from a transcript, and it walks the parent chain so a
+continuation inherits what its ancestors decided. What it leaves out it says it
+left out. Transcript capture is a stream an AI client produces rather than
+something typed at a prompt, so no subcommand writes one.
 
 Every other approved command in this release is implemented. The mechanism for
 reporting an approved-but-unbuilt command — exit code `5` with

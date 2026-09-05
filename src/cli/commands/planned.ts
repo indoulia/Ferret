@@ -69,12 +69,4 @@ export const PLANNED_COMMANDS: readonly PlannedCommandSpec[] = [
       'them to a transport or persists what they return',
     owners: ['EPIC-021', 'EPIC-071', 'EPIC-072'],
   },
-  {
-    name: 'session',
-    summary:
-      'Record and recall agent sessions and memories. The model and its store both exist ' +
-      'and are tested — EPIC-109 persists sessions, captures, checkpoints and memories, and ' +
-      '`recoverSession` runs against it — but no command reaches them yet',
-    owners: ['EPIC-039', 'EPIC-040', 'EPIC-041', 'EPIC-042', 'EPIC-043', 'EPIC-109', 'EPIC-110'],
-  },
 ];

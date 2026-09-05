@@ -12,6 +12,7 @@ import { mcpCommand } from './commands/mcp.js';
 import { statusCommand } from './commands/status.js';
 import { pruneCommand } from './commands/prune.js';
 import { reconcileCommand } from './commands/reconcile.js';
+import { sessionCommand } from './commands/session.js';
 import { exportCommand } from './commands/export.js';
 import { importCommand } from './commands/import.js';
 import { upgradeCommand } from './commands/upgrade.js';
@@ -92,6 +93,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program.addCommand(exportCommand(output));
   program.addCommand(importCommand(output));
   program.addCommand(reconcileCommand(output, reportExitCode));
+  program.addCommand(sessionCommand(output));
   program.addCommand(upgradeCommand(output, reportExitCode));
   for (const spec of PLANNED_COMMANDS) program.addCommand(plannedCommand(spec));
 

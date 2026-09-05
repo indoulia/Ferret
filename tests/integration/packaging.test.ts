@@ -343,10 +343,32 @@ describe('package contents', () => {
     //
     // The headroom is 3%, on the same reasoning as last time and for the same
     // purpose: the next crossing should be a decision rather than a formality.
+    //
+    // **2026-09-05, EPIC-110 — the bound moved a fifth time**, and it was the
+    // decision the paragraph above asked for. The non-grammar output reached
+    // 3 040 788, 0.03% over — the narrowest crossing yet, and one file caused
+    // it. Measured on both sides, in a clean worktree at merged `main`
+    // (`ec0a376`, 3 026 126) and again with the change applied (3 040 788), so
+    // the 14 662-byte delta is a measurement rather than a subtraction:
+    //
+    //     +14 910  dist/cli/commands/session.js    (EPIC-110, the seven subcommands)
+    //        +179  dist/cli/commands/session.d.ts
+    //        -427  dist/cli/commands/planned.js    (the session entry, retired)
+    //
+    // The first measurement of this was wrong and is worth recording: stashing
+    // the change left `session.ts` behind because it was untracked, so the
+    // "baseline" compiled it anyway and came out *larger* than the tree it was
+    // supposed to be a baseline for. A baseline that includes what it is
+    // measuring is not one, which is why the figure above comes from a separate
+    // worktree at the merged commit rather than from a stash.
+    //
+    // Nothing improper ships and no dependency was added: this is one CLI
+    // module reaching a store that already shipped. Most of its bulk is comment
+    // and Commander option declarations, which is this repository's style.
     const grammarBytes = pack.files
       .filter((file) => file.path.startsWith('dist/parsers/code/grammars/'))
       .reduce((total, file) => total + file.size, 0);
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_040_000);
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_132_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {
