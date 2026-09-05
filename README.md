@@ -99,17 +99,38 @@ if the body throws — so a started runtime cannot leak.
 | `ferret upgrade` | Implemented | EPIC-106 |
 | `ferret mcp` | Implemented | EPIC-064, EPIC-065 |
 | `ferret session` | Implemented | EPIC-039–043, EPIC-109, EPIC-110 |
-| `ferret sync` | **Planned** | EPIC-021, EPIC-071, EPIC-072 |
+| `ferret sync` | Implemented | EPIC-021, EPIC-071, EPIC-072, EPIC-113 |
 
-The one planned row is not a roadmap gesture. The GitHub and Jira providers and
-project modelling are **real, tested and reachable as libraries** — every Epic
-that built them excluded transport, persistence and a client surface by name,
-and delivered the scope it declared. What was missing was any way for an
-operator to find that out: `ferret sync` answered with an unknown-command error
-indistinguishable from a typo. It now exits 5 with `E_NOT_IMPLEMENTED` and names
-the Epics that own the behaviour, where an unknown command still exits 2.
+There is no planned row left. `ferret sync` was the last one, and what it was
+saying was true: the GitHub and Jira providers and project modelling were real,
+tested and reachable as libraries, and **nothing called them in order**. EPIC-113
+is that composition — a tracker read, modelled, stored, and a cursor advanced, in
+one explicit pass:
 
-`ferret session` used to be the second such row and no longer is. EPIC-109 built
+```bash
+ferret sync owner/repo                 # issues, pull requests and reviews
+ferret sync                            # every project in the provider options
+ferret sync owner/repo --dry-run       # read the tracker, write nothing
+ferret sync owner/repo --full          # ignore the cursor and re-read everything
+```
+
+Ferret runs no timer. A second pass asks the tracker only for what changed since
+the first, and scheduling is `cron`, a `systemd` timer or Task Scheduler — the
+same position `ferret reconcile` takes. The token comes from the provider
+options as a secret reference and is resolved on every invocation, so nothing is
+stored:
+
+```bash
+ferret config set providers.ferret.source.github.options.token   '{"$secret":{"env":"FERRET_GITHUB_TOKEN"}}'
+ferret config set providers.ferret.source.github.options.projects '["owner/repo"]'
+```
+
+The mechanism the planned marker provided is unchanged and still there: a
+capability the roadmap approves and a release does not implement is declared, and
+invoking it exits 5 with `E_NOT_IMPLEMENTED` naming the owning Epic, where an
+unknown command still exits 2.
+
+`ferret session` was the row before it, and went the same way. EPIC-109 built
 the store the session Epics deferred and EPIC-110 wired the command, so a
 session's checkpoint and what it decided now survive the process that produced
 them:

@@ -31,7 +31,7 @@ export {
   type ContentStageResult,
   type UnparsedBreakdown,
 } from './content.js';
-export { ContentStageSkip } from './ports.js';
+export { ContentStageSkip, toEntityInput, toEvidenceInput, toRelationshipInput } from './ports.js';
 export type {
   ContentArtifactStore,
   ContentBlobWriter,

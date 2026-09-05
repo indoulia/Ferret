@@ -1,10 +1,11 @@
 # Ferret — Reconstructed Engineering Roadmap
 
-**Status: AWAITING DECISIONS** · Base: `0717325` · Reconstructed: 2026-09-05 ·
-Four Epics landed and are now recorded in the registry with validation evidence.
-The autonomous queue is **exhausted**: every remaining item needs a product
-decision or an infrastructure approval, and each is stated in the
-[decision queue](#decision-queue) in the form a decision needs.
+**Status: IN EXECUTION** · Base: `ae77c10` · Reconstructed: 2026-09-05 ·
+The five blocked items were decided by the owner on 2026-09-05 and are being
+delivered in the order EPIC-113 → 116 → 117 → 114 → 115. The
+[decision queue](#decision-queue) is kept in full: each entry now records the
+decision taken beside the options it was choosing between, because a decision
+read without its alternatives is indistinguishable from a default.
 
 ## Why this document exists
 
@@ -39,7 +40,7 @@ not yet do. `src/cli/commands/planned.ts` names them, exits `5` with
 | 2 | EPIC-110 — `ferret session` command surface | CONTINUATION | **VALIDATED** | 20 integration cases driving the built binary; planned entry retired — [record](validation/EPIC-110-VALIDATION.md) | EPIC-109 | Done |
 | 3 | EPIC-111 — Session recall over MCP | CONTINUATION | **VALIDATED** | 13 protocol cases against a fake port; boundary gate green — [record](validation/EPIC-111-VALIDATION.md) | EPIC-109, EPIC-110 | Done |
 | 4 | EPIC-112 — Session retention & redaction | HARDENING | **VALIDATED** | A `sessions` prune target; and a redaction gap on the explicit memory path, found and closed — [record](validation/EPIC-112-VALIDATION.md) | EPIC-109, EPIC-082, EPIC-088 | Done |
-| 5 | EPIC-113 — Provider sync transport (`ferret sync`) | PRODUCT DECISION REQUIRED | BLOCKED | `planned.ts` sync entry; EPIC-021/071/072 each excluded transport by name; `cursors.ts` exists | EPIC-075, EPIC-021, EPIC-071 | [D-113.1–.3](#epic-113--provider-sync-transport-ferret-sync) |
+| 5 | EPIC-113 — Provider sync transport (`ferret sync`) | CONTINUATION | **VALIDATED** | 14 unit, 5 storage-integration and 8 CLI cases against the built binary; the last `(planned)` entry retired — [record](validation/EPIC-113-VALIDATION.md) | EPIC-075, EPIC-021, EPIC-071 | Done — [decisions D-113.1–.3](#epic-113--provider-sync-transport-ferret-sync) taken 2026-09-05 |
 | 6 | EPIC-114 — PostgreSQL version coverage | INFRASTRUCTURE REQUIRED | BLOCKED | EPIC-002 validation: minimum supported major is 14, **only 17 measured** | EPIC-002 | [Infrastructure decisions](#epic-114--postgresql-version-coverage) — needs CI approval |
 | 7 | EPIC-115 — macOS packaging validation | INFRASTRUCTURE REQUIRED | BLOCKED | EPIC-105 **measured** macOS on 2026-09-03; the 2026-09-05 owner decision dropped it from CI, so nothing measures it now | EPIC-105 | [Infrastructure decisions](#epic-115--macos-packaging-validation) — needs a runner decision |
 | 8 | EPIC-116 — Session export fidelity | PRODUCT DECISION REQUIRED | BLOCKED | The four session tables are declared excluded from `ferret export`; the loss is stated in the manifest | EPIC-109, EPIC-089 | [D-116.1–.3](#epic-116--session-export-fidelity) |
@@ -153,9 +154,22 @@ listed, and the recommendation is not a default.
 
 #### EPIC-113 — Provider sync transport (`ferret sync`)
 
+**DECIDED 2026-09-05 · IMPLEMENTED.** The owner answered all three questions;
+the answers and what was built from them are in
+[the Epic](EPIC-113-Provider-Sync-Transport.md) and
+[its validation record](validation/EPIC-113-VALIDATION.md). The questions and
+options are kept below unchanged, because a decision is only readable beside what
+it was choosing between.
+
+**Decisions taken.** D-113.1 — persistence at rest is *authorised*; it is not
+used, because D-113.2 makes sync a one-shot command and there is nothing for a
+stored credential to outlive. D-113.2 — explicit command; no daemon, and
+scheduling documented rather than built. D-113.3 — a remote edit supersedes
+through EPIC-047's existing evidence model rather than a new one.
+
 The GitHub and Jira providers, PR/review modelling, release/deployment modelling
-and sync cursors all exist and are tested. `ferret sync` is the one remaining
-`(planned)` entry, and it is blocked on three questions rather than on code.
+and sync cursors all exist and are tested. `ferret sync` was the one remaining
+`(planned)` entry, and it was blocked on three questions rather than on code.
 
 **D-113.1 — May a long-running sync hold a credential at rest?**
 
@@ -432,6 +446,7 @@ Filled in as Epics land.
 | EPIC-110 | `2e7ce50` | [#157](https://github.com/indoulia/Ferret/pull/157) | `533b603` | [record](validation/EPIC-110-VALIDATION.md) | COMPLETE |
 | EPIC-111 | `818fdfc` | [#158](https://github.com/indoulia/Ferret/pull/158) | `39a23ca` | [record](validation/EPIC-111-VALIDATION.md) | COMPLETE |
 | EPIC-112 | `b137094` | [#159](https://github.com/indoulia/Ferret/pull/159) | `5faab0c` | [record](validation/EPIC-112-VALIDATION.md) | COMPLETE |
+| EPIC-113 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-113-VALIDATION.md) | COMPLETE |
 
 All four merged **without** a validation record and without a registry catalog
 entry; both were added on 2026-09-05 and every cited suite re-run to confirm the

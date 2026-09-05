@@ -40,6 +40,13 @@ export const jiraOptionsSchema = z
     token: z.string().min(1).optional(),
     userAgent: z.string().min(1).optional(),
     pageSize: z.number().int().min(1).max(JIRA_MAX_PAGE_SIZE).optional(),
+    /**
+     * Project keys `ferret sync` reads when none is named — EPIC-113.
+     *
+     * A key, `FER`, not `owner/repo`: the spelling is the provider's, which is
+     * why this lives beside the provider rather than in the core schema.
+     */
+    projects: z.array(z.string().min(1)).optional(),
   })
   .strict();
 
@@ -87,13 +94,31 @@ export class JiraProvider extends BaseProvider implements Provider, ProjectSourc
     this.#options = options;
   }
 
+  /**
+   * The options actually in force: configuration first, constructor last.
+   *
+   * The same gap the GitHub provider had, and for the same reason — see that
+   * provider's note. `baseUrl` is required by the schema, so a provider built
+   * with one and configured with none keeps the constructor's; only a
+   * configuration that parses contributes anything.
+   */
+  get effectiveOptions(): JiraProviderOptions {
+    const parsed = jiraOptionsSchema.safeParse(this.settings.options);
+    const configured: Partial<JiraProviderOptions> = parsed.success ? parsed.data : {};
+    // `baseUrl` is stated last and unconditionally: the type requires one at
+    // construction, so a caller has always supplied it, and the configured
+    // value could only ever replace it with the same address or the wrong one.
+    return { ...configured, ...stripUndefined(this.#options), baseUrl: this.#options.baseUrl };
+  }
+
   protected override onInitialize(_context: ProviderContext): void {
+    const options = this.effectiveOptions;
     this.#client = new JiraClient({
-      baseUrl: this.#options.baseUrl,
-      fetch: this.#options.fetch ?? platformFetch(),
-      ...(this.#options.email === undefined ? {} : { email: this.#options.email }),
-      ...(this.#options.token === undefined ? {} : { token: this.#options.token }),
-      ...(this.#options.userAgent === undefined ? {} : { userAgent: this.#options.userAgent }),
+      baseUrl: options.baseUrl,
+      fetch: options.fetch ?? platformFetch(),
+      ...(options.email === undefined ? {} : { email: options.email }),
+      ...(options.token === undefined ? {} : { token: options.token }),
+      ...(options.userAgent === undefined ? {} : { userAgent: options.userAgent }),
     });
   }
 
@@ -452,4 +477,13 @@ function platformFetch(): FetchLike {
 /** A fresh provider, for a runtime to register. */
 export function createJiraProvider(options: JiraProviderOptions): JiraProvider {
   return new JiraProvider(options);
+}
+
+/** A partial object with its `undefined` entries removed — see the GitHub note. */
+function stripUndefined<T extends object>(value: T): Partial<T> {
+  const output: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) output[key] = entry;
+  }
+  return output as Partial<T>;
 }

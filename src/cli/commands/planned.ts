@@ -58,15 +58,17 @@ export function plannedCommand(spec: PlannedCommandSpec): Command {
  *
  * Entries, not implementations. Each fails with `E_NOT_IMPLEMENTED` and names
  * the Epic that owns the behaviour. Building `ferret sync`, a session store, or
- * any transport is explicitly **not** what this is, and the triage ruled it out.
+ * any transport was explicitly **not** what this was, and the triage ruled it
+ * out.
+ *
+ * **Empty again as of EPIC-113**, and this time because the entry was served
+ * rather than because nothing had declared one. `ferret sync` composes the
+ * GitHub and Jira providers, the project model and the three canonical stores
+ * into one explicit pass, so the statement this list existed to make — "the
+ * provider is real and nothing ingests from it" — is no longer true of anything.
+ * The mechanism stays: the next capability the roadmap approves and this build
+ * does not implement is declared here rather than answered with an
+ * unknown-command error indistinguishable from a typo.
  */
-export const PLANNED_COMMANDS: readonly PlannedCommandSpec[] = [
-  {
-    name: 'sync',
-    summary:
-      'Ingest issues, pull requests and reviews from a configured external provider. ' +
-      'The GitHub and Jira providers exist and are tested as libraries; nothing wires ' +
-      'them to a transport or persists what they return',
-    owners: ['EPIC-021', 'EPIC-071', 'EPIC-072'],
-  },
-];
+export const PLANNED_COMMANDS: readonly PlannedCommandSpec[] = [];
+

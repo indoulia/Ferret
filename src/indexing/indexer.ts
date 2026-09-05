@@ -29,7 +29,12 @@ import type { FileStructure } from '../files/index.js';
 import type { ParserFramework } from '../parsing/index.js';
 
 import { runContentStage, type ContentCounts } from './content.js';
-import { ContentStageSkip } from './ports.js';
+import {
+  ContentStageSkip,
+  toEntityInput,
+  toEvidenceInput,
+  toRelationshipInput,
+} from './ports.js';
 
 /**
  * The edge types the content stage owns, and the only ones it may close.
@@ -594,7 +599,7 @@ export class RepositoryIndexer {
       const placeholders = new Set(graph.placeholderEntityIds ?? []);
       for (const entity of graph.entities) {
         const result = await this.#entities.upsert(
-          toInput(entity),
+          toEntityInput(entity),
           observedAt,
           // `ifAbsent` still wins for a gap-filler — issue #48 — so a repair
           // cannot regress a full record to a stub. Everything a repair reads
@@ -608,19 +613,7 @@ export class RepositoryIndexer {
         entities.record(result.outcome);
       }
       for (const edge of graph.relationships) {
-        const result = await this.#relationships.assert(
-          {
-            fromId: edge.fromId,
-            type: edge.type,
-            toId: edge.toId,
-            validFrom: edge.validFrom,
-            ...(edge.validTo === null ? {} : { validTo: edge.validTo }),
-            metadata: { ...edge.metadata },
-            sourceSystem: edge.sourceSystem,
-            ...(edge.sourceId === undefined ? {} : { sourceId: edge.sourceId }),
-          },
-          observedAt,
-        );
+        const result = await this.#relationships.assert(toRelationshipInput(edge), observedAt);
         relationships.record(result.outcome);
       }
       for (const record of graph.evidence) {
@@ -1449,44 +1442,6 @@ function newest(
     if (best === undefined || at > Date.parse(best)) best = commit.committedAt;
   }
   return best;
-}
-
-function toInput(entity: CanonicalEntity): Parameters<EntityWriter['upsert']>[0] {
-  return {
-    kind: entity.kind,
-    source: { ...entity.source },
-    lifecycle: entity.lifecycle,
-    attributes: { ...entity.attributes },
-    unknownFields: { ...entity.unknownFields },
-    externalIds: entity.externalIds.map((id) => ({ ...id })),
-    ...(entity.sourceObservedAt === undefined ? {} : { sourceObservedAt: entity.sourceObservedAt }),
-  };
-}
-
-function toEvidenceInput(record: CanonicalEvidence): Parameters<EvidenceWriter['record']>[0] {
-  return {
-    subjectId: record.subjectId,
-    ...(record.field === undefined ? {} : { field: record.field }),
-    statement: record.statement,
-    method: record.method,
-    producer: record.producer,
-    producerVersion: record.producerVersion,
-    sourceSystem: record.sourceSystem,
-    ...(record.sourceId === undefined ? {} : { sourceId: record.sourceId }),
-    ...(record.sourceUrl === undefined ? {} : { sourceUrl: record.sourceUrl }),
-    ...(record.locator === undefined ? {} : { locator: { ...record.locator } }),
-    ...(record.sourceContentHash === undefined ? {} : { sourceContentHash: record.sourceContentHash }),
-    ...(record.confidence === undefined ? {} : { confidence: record.confidence }),
-    completeness: record.completeness,
-    authority: record.authority,
-    ...(record.observedAt === undefined ? {} : { observedAt: record.observedAt }),
-    derivedFrom: [...record.derivedFrom],
-    ...(record.permissionScope === undefined ? {} : { permissionScope: record.permissionScope }),
-    // Carried through, because this function is where an emitted record becomes
-    // a write again — and dropping it here is how a collection field emitted
-    // through the SDK would still have been collapsed to its last member.
-    ...(record.cardinality === undefined ? {} : { cardinality: record.cardinality }),
-  };
 }
 
 /** Guard used by callers that must not proceed without a usable index. */
