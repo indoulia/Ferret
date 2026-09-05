@@ -62,6 +62,72 @@ async function lockEdge(tx: FerretDatabase, key: string): Promise<void> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
 }
 
+/**
+ * The content hash a stored relationship should carry.
+ *
+ * EPIC-007's hash covers `validTo`, so **closing an interval changes it**. Any
+ * path that writes `valid_to` with a bare `UPDATE` leaves the row disagreeing
+ * with its own hash, and `ferret verify` then reports a healthy index as
+ * corrupt — the failure mode this repository already names as "how a real
+ * finding gets trained out of an operator".
+ *
+ * Issue #118 fixed one of the three closing paths. Exported here, beside the
+ * store that owns relationships, so the other two share the definition rather
+ * than growing a third copy of it — the same shape as `recomputeEntityHash`.
+ */
+export async function recomputeRelationshipHash(
+  tx: Pick<FerretDatabase, 'execute'>,
+  relationshipId: string,
+): Promise<string | undefined> {
+  const rows = await tx.execute<{
+    [column: string]: unknown;
+    from_id: string;
+    type: string;
+    to_id: string;
+    valid_from: Date | string;
+    valid_to: Date | string | null;
+    metadata: Record<string, unknown>;
+    source_system: string;
+    source_id: string | null;
+  }>(sql`
+    SELECT from_id, type, to_id, valid_from, valid_to, metadata, source_system, source_id
+      FROM ferret.relationship
+     WHERE id = ${relationshipId}
+  `);
+  const row = rows.rows[0];
+  if (row === undefined) return undefined;
+
+  return createRelationship({
+    fromId: row.from_id,
+    type: row.type,
+    toId: row.to_id,
+    validFrom: asInstant(row.valid_from),
+    ...(row.valid_to === null ? {} : { validTo: asInstant(row.valid_to) }),
+    metadata: { ...row.metadata },
+    sourceSystem: row.source_system,
+    ...(row.source_id === null ? {} : { sourceId: row.source_id }),
+  }).contentHash;
+}
+
+/**
+ * A `timestamptz` as an ISO instant, however the driver returned it.
+ *
+ * `db.execute` is raw, so the column arrives as a `Date` or a string depending
+ * on the mapping in play. Assuming either is how `.toISOString is not a
+ * function` reaches a test.
+ */
+function asInstant(value: Date | string): string {
+  return (value instanceof Date ? value : new Date(value)).toISOString();
+}
+
+/** Recomputes and writes the hash, returning what it wrote. */
+async function rehash(tx: FerretDatabase, relationshipId: string): Promise<string | undefined> {
+  const hash = await recomputeRelationshipHash(tx, relationshipId);
+  if (hash === undefined) return undefined;
+  await tx.execute(sql`UPDATE ferret.relationship SET content_hash = ${hash} WHERE id = ${relationshipId}`);
+  return hash;
+}
+
 export const AssertOutcome = {
   /** A new relationship interval was opened. */
   OPENED: 'opened',
@@ -387,6 +453,10 @@ export class RelationshipStore {
     const covering = await tx.select().from(relationship).where(overlapping);
     if (covering.length > 0) {
       await tx.update(relationship).set({ validTo: validFrom, lastIndexedAt: now }).where(overlapping);
+      // The hash covers `validTo`, so every row this just closed now disagrees
+      // with its own. After the UPDATE, not before: the hash has to be over the
+      // interval that was actually written.
+      for (const row of covering) await rehash(tx, row.id);
     }
 
     const [successor] = await tx
@@ -455,13 +525,19 @@ export class RelationshipStore {
       // interval that every temporal query would then have to defend against.
       if (at < open.validFrom) return toCanonical(open);
 
-      const [row] = await this.#db
-        .update(relationship)
-        .set({ validTo: at, lastIndexedAt: now })
-        .where(eq(relationship.id, open.id))
-        .returning();
+      return await this.#db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(relationship)
+          .set({ validTo: at, lastIndexedAt: now })
+          .where(eq(relationship.id, open.id))
+          .returning();
 
-      return row === undefined ? undefined : toCanonical(row);
+        if (row === undefined) return undefined;
+
+        // The hash covers `validTo` — closing the interval changed it.
+        const hash = await rehash(tx, row.id);
+        return toCanonical(hash === undefined ? row : { ...row, contentHash: hash });
+      });
     } catch (error) {
       throw classifyDatabaseError(error, 'storage.relationship.retire');
     }
