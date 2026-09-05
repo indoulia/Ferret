@@ -42,7 +42,7 @@ not yet do. `src/cli/commands/planned.ts` names them, exits `5` with
 | 4 | EPIC-112 — Session retention & redaction | HARDENING | **VALIDATED** | A `sessions` prune target; and a redaction gap on the explicit memory path, found and closed — [record](validation/EPIC-112-VALIDATION.md) | EPIC-109, EPIC-082, EPIC-088 | Done |
 | 5 | EPIC-113 — Provider sync transport (`ferret sync`) | CONTINUATION | **VALIDATED** | 14 unit, 5 storage-integration and 8 CLI cases against the built binary; the last `(planned)` entry retired — [record](validation/EPIC-113-VALIDATION.md) | EPIC-075, EPIC-021, EPIC-071 | Done — [decisions D-113.1–.3](#epic-113--provider-sync-transport-ferret-sync) taken 2026-09-05 |
 | 6 | EPIC-114 — PostgreSQL version coverage | INFRASTRUCTURE | **VALIDATED** | 14, 15 and 16 measured on a scheduled lane — 187 files each, zero pull-request cost — [record](validation/EPIC-114-VALIDATION.md) | EPIC-002 | Done — [decision](#epic-114--postgresql-version-coverage) taken 2026-09-05 |
-| 7 | EPIC-115 — macOS packaging validation | INFRASTRUCTURE REQUIRED | BLOCKED | EPIC-105 **measured** macOS on 2026-09-03; the 2026-09-05 owner decision dropped it from CI, so nothing measures it now | EPIC-105 | [Infrastructure decisions](#epic-115--macos-packaging-validation) — needs a runner decision |
+| 7 | EPIC-115 — macOS packaging validation | INFRASTRUCTURE | **CLOSED — coverage DEFERRED** | No runner enabled, by owner decision. The README claimed macOS was verified on every pull request and it was not; that is corrected — [record](validation/EPIC-115-VALIDATION.md) | EPIC-105 | Owner decision 2026-09-05: not a priority. Revisit needs a runner approval |
 | 8 | EPIC-116 — Session export fidelity | CONTINUATION | **VALIDATED** | 10 integration and 3 CLI cases, including a restore into a second database — [record](validation/EPIC-116-VALIDATION.md) | EPIC-109, EPIC-089 | Done — [decisions D-116.1–.3](#epic-116--session-export-fidelity) taken 2026-09-05 |
 | 9 | EPIC-117 — Recording a session over MCP | CONTINUATION | **VALIDATED** | 29 protocol cases and 3 CLI authorization cases; `record` amended onto EPIC-068's closed set — [record](validation/EPIC-117-VALIDATION.md) | EPIC-111 | Done — [decisions D-117.1–.3](#epic-117--recording-a-session-over-mcp) taken 2026-09-05 |
 | — | #138 registry hygiene | MIXED | OPEN | Three limitation rows with no owning Epic; two are product decisions in their own right | — | [Not in this queue](#not-in-this-queue) |
@@ -421,6 +421,28 @@ job without that approval would reverse a decision by side effect.
 
 #### EPIC-115 — macOS packaging validation
 
+**DECIDED 2026-09-05 · COVERAGE DEFERRED.** See
+[the Epic](EPIC-115-macOS-Packaging-Validation.md) and
+[its validation record](validation/EPIC-115-VALIDATION.md). The options below
+are unchanged, because a decision is only readable beside what it was choosing
+between — and because this one may be revisited.
+
+**Decisions taken, in order.** First: add genuine macOS packaging validation,
+preferably on a scheduled lane, and *"do not pretend macOS is validated unless
+the packaging path actually ran on macOS"*. Then, superseding the runner half:
+**do not enable remote CI for macOS** — the owner's last priority.
+
+The second decision removes option A, B and C alike. What it leaves standing is
+the first decision's final clause, which is not optional and is what EPIC-115
+delivers: the README claimed macOS was *"verified on every pull request"* three
+days after that stopped being true, and claimed Windows ran only on a push to
+`main` in the same table. Both are corrected. macOS now reads **not currently
+measured**, which is a different claim from unsupported and is the true one.
+
+**To revisit**, the cost is known: EPIC-105 measured the job at 3m47s, and what
+it buys is named in the Epic — the POSIX global-install path and the shutdown
+contract, the second of which nothing else measures at all.
+
 **What is missing, exactly.** Nothing about macOS was ever unmeasurable — it was
 measured. EPIC-105 ran `macos-latest` on
 [#140](https://github.com/indoulia/Ferret/pull/140): **112 test files and 2 463
@@ -492,7 +514,8 @@ Filled in as Epics land.
 | EPIC-113 | `6122ad4` | [#163](https://github.com/indoulia/Ferret/pull/163) | `b2cfb37` | [record](validation/EPIC-113-VALIDATION.md) | COMPLETE |
 | EPIC-116 | `899bfef` | [#164](https://github.com/indoulia/Ferret/pull/164) | `318dcfe` | [record](validation/EPIC-116-VALIDATION.md) | COMPLETE |
 | EPIC-117 | `80f9e42` | [#165](https://github.com/indoulia/Ferret/pull/165) | `76e2522` | [record](validation/EPIC-117-VALIDATION.md) | COMPLETE |
-| EPIC-114 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-114-VALIDATION.md) | COMPLETE |
+| EPIC-114 | `78406f6` | [#166](https://github.com/indoulia/Ferret/pull/166) | `c9916bd` | [record](validation/EPIC-114-VALIDATION.md) | COMPLETE |
+| EPIC-115 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-115-VALIDATION.md) | CLOSED — coverage deferred |
 
 All four merged **without** a validation record and without a registry catalog
 entry; both were added on 2026-09-05 and every cited suite re-run to confirm the
