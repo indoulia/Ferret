@@ -75,6 +75,28 @@ export const RelationshipType = {
   PULL_REQUEST_PROPOSES_COMMIT: 'pull_request_proposes_commit',
   PULL_REQUEST_TARGETS_BRANCH: 'pull_request_targets_branch',
   PULL_REQUEST_RESOLVES_ISSUE: 'pull_request_resolves_issue',
+  /**
+   * One issue linked to another, as a tracker states it — EPIC-122.
+   *
+   * **The only edge here whose meaning is in its metadata**, and that is a
+   * deliberate exception rather than a shortcut. Every other type names its
+   * relation because Ferret knows what the relation is: a commit modifies a
+   * file, and there is one way to be a parent commit. A tracker's issue links
+   * are *configured per instance* — `Blocks`, `Duplicates`, `Clones`, and
+   * whatever an administrator added last week — so a fixed enumeration would be
+   * wrong at the first customer who added one, and a link Ferret could not name
+   * would be a link it dropped.
+   *
+   * So the type is generic and `metadata.linkType` carries the vendor's own
+   * word, unmapped. The alternative considered and rejected was recording links
+   * as evidence, which keeps the model frozen at the price of making them
+   * unwalkable — and a link that cannot be traversed is not a relationship,
+   * which is the whole thing EPIC-122 was asked for.
+   *
+   * Direction is normalised to the vendor's *outward* reading, so "A blocks B"
+   * and "B is blocked by A" are one edge rather than two facing each other.
+   */
+  ISSUE_LINKS_ISSUE: 'issue_links_issue',
   REVIEW_REVIEWS_PULL_REQUEST: 'review_reviews_pull_request',
   COMMIT_RESOLVES_ISSUE: 'commit_resolves_issue',
 
@@ -139,6 +161,8 @@ const BUILT_IN: ReadonlyArray<
   [RelationshipType.PULL_REQUEST_RESOLVES_ISSUE, [EntityKind.PULL_REQUEST], [EntityKind.ISSUE], false],
   [RelationshipType.REVIEW_REVIEWS_PULL_REQUEST, [EntityKind.REVIEW], [EntityKind.PULL_REQUEST], true],
   [RelationshipType.COMMIT_RESOLVES_ISSUE, [EntityKind.COMMIT], [EntityKind.ISSUE], false],
+  // Not exclusive: an issue blocks as many others as it blocks.
+  [RelationshipType.ISSUE_LINKS_ISSUE, [EntityKind.ISSUE], [EntityKind.ISSUE], false],
 
   [RelationshipType.RELEASE_INCLUDES_COMMIT, [EntityKind.RELEASE], [EntityKind.COMMIT], false],
   [RelationshipType.DEPLOYMENT_DEPLOYS_RELEASE, [EntityKind.DEPLOYMENT], [EntityKind.RELEASE], true],

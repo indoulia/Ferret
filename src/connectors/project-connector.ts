@@ -128,6 +128,25 @@ function remember(known: Parent[], parent: Parent): void {
 }
 
 /**
+ * How a tracker's sub-collections address one of its records — EPIC-122.
+ *
+ * `number` where the tracker numbers, `key` where it keys, and the id only as a
+ * last resort. Both fields exist on `ProjectRecord` for exactly this: EPIC-071
+ * added `key` because "GitHub numbers its issues and Jira keys them".
+ *
+ * The id is the wrong answer for Jira and the fallback made it the *only*
+ * answer: `toIssue` identifies an issue by its numeric id — deliberately, since
+ * that survives a move between projects — while `listComments` requires an
+ * issue **key** and throws `E_USAGE` on anything else. So a connector reaching
+ * for comments handed `10042` to a method demanding `FER-12` and failed the
+ * whole source. Found by reading the Jira provider rather than by running it,
+ * which is the only reason it is not a second orphaned-comment story.
+ */
+function addressOf(record: { number?: number; key?: string; id: string }): number | string {
+  return record.number ?? record.key ?? record.id;
+}
+
+/**
  * Where a staged acquisition got to.
  *
  * The stages run in a fixed order, and it is the order `modelProject` needs
@@ -193,16 +212,17 @@ export function projectSourceConnector(options: ProjectConnectorOptions): Source
       request: AcquisitionRequest,
       context: ProviderOperationContext,
     ): Promise<AcquisitionPage> {
-      const cursor = decodeStage(request.cursor);
       const parents = parentsFor(request.identity);
+      // A stage the provider cannot serve is stepped over **here**, not by
+      // returning an empty page that costs one of the ingestor's twenty.
+      // Jira is the source that made this matter: it declares issues and
+      // comments and nothing else, so every pass spent two pages arriving at a
+      // `pulls` stage and a `reviews` stage it was never going to use. Measured
+      // on GitHub first, where a deliberately tight page limit truncated before
+      // the comment stage for no other reason.
+      const cursor = skipUnsupported(decodeStage(request.cursor), operations);
 
       if (cursor.stage === Stage.ISSUES) {
-        // An operation the provider did not declare is not called. The
-        // alternative is discovering it by exception at the call site, which
-        // `source.project` already refused for the same reason.
-        if (!operations.has(ProjectOperation.LIST_ISSUES)) {
-          return { records: [], cursor: encodeStage({ stage: Stage.PULLS }) };
-        }
         const page = await options.source.listIssues(queryFor(request, cursor), context);
 
         // `304 Not Modified` is carried through rather than collapsed into an
@@ -218,20 +238,20 @@ export function projectSourceConnector(options: ProjectConnectorOptions): Source
         }
 
         for (const issue of page.items) {
-          remember(parents.items, { addressedBy: issue.number ?? issue.id, id: issue.id });
+          remember(parents.items, { addressedBy: addressOf(issue), id: issue.id });
         }
 
         return {
           records: page.items.map((issue) => issueRecord(issue)),
-          cursor: advance(Stage.ISSUES, Stage.PULLS, page.cursor),
+          cursor:
+            page.cursor === undefined
+              ? nextStageCursor(Stage.ISSUES, operations)
+              : encodeStage({ stage: Stage.ISSUES, inner: page.cursor }),
           ...(page.etag === undefined ? {} : { checkpoint: { etag: page.etag } }),
         };
       }
 
       if (cursor.stage === Stage.PULLS) {
-        if (!operations.has(ProjectOperation.LIST_PULL_REQUESTS)) {
-          return { records: [], cursor: encodeStage({ stage: Stage.REVIEWS, done: 0 }) };
-        }
         const page = await options.source.listPullRequests?.(queryFor(request, cursor), context);
         const items = page?.items ?? [];
 
@@ -239,22 +259,19 @@ export function projectSourceConnector(options: ProjectConnectorOptions): Source
           if (typeof pull.number === 'number') {
             remember(parents.pulls, { addressedBy: pull.number, id: pull.id });
           }
-          remember(parents.items, { addressedBy: pull.number ?? pull.id, id: pull.id });
+          remember(parents.items, { addressedBy: addressOf(pull), id: pull.id });
         }
 
         return {
           records: items.map((pull) => pullRequestRecord(pull)),
           cursor:
             page?.cursor === undefined
-              ? encodeStage({ stage: Stage.REVIEWS, done: 0 })
+              ? nextStageCursor(Stage.PULLS, operations)
               : encodeStage({ stage: Stage.PULLS, inner: page.cursor }),
         };
       }
 
       if (cursor.stage === Stage.REVIEWS) {
-        if (!operations.has(ProjectOperation.LIST_REVIEWS)) {
-          return { records: [], cursor: encodeStage({ stage: Stage.COMMENTS, done: 0 }) };
-        }
         const done = cursor.done ?? 0;
         // A pull request with no number cannot be asked about — the contract
         // numbers reviews by their parent — so `parents.pulls` holds only the
@@ -279,7 +296,7 @@ export function projectSourceConnector(options: ProjectConnectorOptions): Source
           records,
           cursor:
             reached >= parents.pulls.length
-              ? encodeStage({ stage: Stage.COMMENTS, done: 0 })
+              ? nextStageCursor(Stage.REVIEWS, operations)
               : encodeStage({ stage: Stage.REVIEWS, done: reached }),
         };
       }
@@ -465,11 +482,53 @@ function queryFor(request: AcquisitionRequest, cursor: StagedCursor): ProjectQue
   };
 }
 
-/** Move to the next stage when this one is done, or stay and carry its place. */
-function advance(current: Stage, next: Stage, inner: string | undefined): string {
-  return inner === undefined
-    ? encodeStage({ stage: next })
-    : encodeStage({ stage: current, inner });
+/** The stages in the order they run. Parents before the collections that name them. */
+const STAGE_ORDER: readonly Stage[] = [Stage.ISSUES, Stage.PULLS, Stage.REVIEWS, Stage.COMMENTS];
+
+/** Which declared operation each stage needs. A stage without one cannot run. */
+const STAGE_OPERATION: Readonly<Record<Stage, string>> = {
+  [Stage.ISSUES]: ProjectOperation.LIST_ISSUES,
+  [Stage.PULLS]: ProjectOperation.LIST_PULL_REQUESTS,
+  [Stage.REVIEWS]: ProjectOperation.LIST_REVIEWS,
+  [Stage.COMMENTS]: ProjectOperation.LIST_COMMENTS,
+};
+
+/**
+ * The first stage at or after this one that the provider can actually serve.
+ *
+ * An operation the provider did not declare is never called — `source.project`
+ * refused discovery-by-exception and this keeps that — but *stepping over* it
+ * must not cost a page either. Returns the last stage when nothing remains,
+ * which reads as an empty terminal page and ends the pass.
+ */
+function skipUnsupported(cursor: StagedCursor, operations: ReadonlySet<string>): StagedCursor {
+  let index = STAGE_ORDER.indexOf(cursor.stage);
+  if (index < 0) return cursor;
+  if (operations.has(STAGE_OPERATION[cursor.stage])) return cursor;
+  // Only the first stage keeps its position: once a stage is skipped, whatever
+  // place the old cursor carried belonged to a collection that is not running.
+  while (index < STAGE_ORDER.length - 1) {
+    index += 1;
+    const stage = STAGE_ORDER[index] as Stage;
+    if (operations.has(STAGE_OPERATION[stage])) return startOf(stage);
+  }
+  return startOf(STAGE_ORDER[STAGE_ORDER.length - 1] as Stage);
+}
+
+/** A cursor naming the next servable stage, or none when the pass is over. */
+function nextStageCursor(current: Stage, operations: ReadonlySet<string>): string | undefined {
+  const index = STAGE_ORDER.indexOf(current);
+  for (let next = index + 1; next < STAGE_ORDER.length; next += 1) {
+    const stage = STAGE_ORDER[next] as Stage;
+    if (operations.has(STAGE_OPERATION[stage])) return encodeStage(startOf(stage));
+  }
+  // Absent means the pass finished, which is what lets the cursor advance.
+  return undefined;
+}
+
+/** A per-parent stage starts at the first parent; a paged one at its first page. */
+function startOf(stage: Stage): StagedCursor {
+  return stage === Stage.REVIEWS || stage === Stage.COMMENTS ? { stage, done: 0 } : { stage };
 }
 
 function encodeStage(cursor: StagedCursor): string {

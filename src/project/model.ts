@@ -165,6 +165,15 @@ export function modelProject(input: ProjectModelInput, emitter: Emitter): Projec
     });
   }
 
+  // Links last, when every issue this batch read is already an entity, so a
+  // link between two of them joins the records rather than two stubs.
+  for (const issue of input.issues ?? []) {
+    if (issue.links === undefined || issue.links.length === 0) continue;
+    modelOne(state, issue.id, () => {
+      addIssueLinks(state, issue, parentsById, input, emitter);
+    });
+  }
+
   return {
     entities: state.entities,
     relationships: state.relationships,
@@ -223,7 +232,17 @@ function addIssue(
       ...(issue.url === undefined ? {} : { url: issue.url }),
     },
     attributes: {
-      ...(issue.number === undefined ? {} : { key: String(issue.number) }),
+      // The number where the tracker numbers, the key where it keys — EPIC-122.
+      // `ProjectRecord.key` was added by EPIC-071 with the reason stated on the
+      // field: "a contract with only `number` would have made every Jira issue
+      // arrive without the identifier its users actually say out loud". This
+      // module then read only `number`, so that is exactly what happened —
+      // every Jira issue reached the graph with no `FER-12` on it.
+      ...(issue.number !== undefined
+        ? { key: String(issue.number) }
+        : issue.key === undefined
+          ? {}
+          : { key: issue.key }),
       // A title can carry a token: somebody pastes a failing curl command into
       // an issue and the token travels with it.
       title: redactSecrets(issue.title).text,
@@ -231,6 +250,11 @@ function addIssue(
       // The source's own word, beside the comparable reading — EPIC-021 §8.1.
       sourceState: issue.state,
       labels: [...(issue.labels ?? [])],
+      // Declared by `issueAttributes` since EPIC-006 and never populated: the
+      // Jira provider requested both fields on every search and discarded them
+      // for want of a contract field to carry them. EPIC-122.
+      ...(issue.issueType === undefined ? {} : { issueType: issue.issueType }),
+      ...(issue.priority === undefined ? {} : { priority: issue.priority }),
       ...(issue.createdAt === undefined ? {} : { createdAt: issue.createdAt }),
       ...(issue.closedAt === undefined ? {} : { closedAt: issue.closedAt }),
     },
@@ -556,6 +580,75 @@ function addComment(
 
   if (author !== undefined) {
     state.evidence.push(emitter.about(entity, 'author', author.attributes['name']));
+  }
+}
+
+/**
+ * Typed links between issues — EPIC-122.
+ *
+ * **Direction is normalised to the vendor's outward reading.** A tracker shows
+ * the same link on both issues — `FER-1 blocks FER-2` appears on FER-1 as
+ * outward and on FER-2 as inward — so modelling each as stated would produce
+ * two edges facing each other for one fact, and a repeated ingestion would
+ * produce them again. Flipping the inward ones means both readings derive the
+ * same edge, which is what makes the pass idempotent whichever issues happen to
+ * be in the batch.
+ *
+ * The vendor's own word for the link goes in `metadata.linkType`, unmapped, for
+ * the reason `ISSUE_LINKS_ISSUE` gives: Jira's link types are configured per
+ * instance, and any enumeration Ferret wrote would be wrong at the first
+ * customer who added one.
+ */
+function addIssueLinks(
+  state: Accumulator,
+  issue: ProjectIssue,
+  parents: ReadonlyMap<string, CanonicalEntity>,
+  input: ProjectModelInput,
+  emitter: Emitter,
+): void {
+  const self = parents.get(issue.id);
+  if (self === undefined) return;
+
+  for (const link of issue.links ?? []) {
+    // The linked issue as this batch read it, or a stub standing in for one it
+    // has not — the same rule a closing reference follows, and for the same
+    // reason: an id that resolves to nothing *yet* is still the correct id.
+    const target =
+      parents.get(link.targetId) ??
+      addEntity(
+        state,
+        emitter.entity({
+          kind: EntityKind.ISSUE,
+          source: { id: link.targetId, scope: input.repositoryId },
+          attributes: link.targetKey === undefined ? {} : { key: link.targetKey },
+        }),
+        true,
+      );
+
+    const [fromId, toId] =
+      link.direction === 'outward' ? [self.id, target.id] : [target.id, self.id];
+
+    // A link to itself is not a link. Jira will not produce one, and an edge
+    // whose endpoints are equal is a cycle every traversal has to special-case.
+    if (fromId === toId) continue;
+
+    state.relationships.push(
+      emitter.relationship({
+        fromId,
+        type: RelationshipType.ISSUE_LINKS_ISSUE,
+        toId,
+        metadata: { linkType: link.type },
+        sourceId: issue.id,
+      }),
+    );
+
+    state.evidence.push(
+      emitter.about(self, 'links', {
+        linkType: link.type,
+        direction: link.direction,
+        target: link.targetKey ?? link.targetId,
+      }, { cardinality: 'collection' }),
+    );
   }
 }
 
