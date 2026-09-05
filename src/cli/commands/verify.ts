@@ -5,6 +5,7 @@ import { Command, Option } from 'commander';
 
 import { Permission, assertPermitted, localOperatorFrom } from '../../authorization/index.js';
 import { registerCodeSymbolKind } from '../../code/index.js';
+import { registerDurableContextKind } from '../../context/index.js';
 import { IntegrityFindingKind, type IntegrityFinding } from '../../domain/index.js';
 import { createGitSourceProvider } from '../../git/index.js';
 import { RepositoryIndexer, contentProducerIdentity } from '../../indexing/index.js';
@@ -124,6 +125,10 @@ export function verifyCommand(
           // `parsers/` — so the CLI's boundary is untouched, and it is
           // idempotent by design.
           registerCodeSymbolKind();
+          // EPIC-126, and the same defect one kind later: durable context is
+          // registered too, or every `context` row reads as `schema-invalid`.
+          // Found by dogfooding — 4 of 4 on Ferret's own index.
+          registerDurableContextKind();
 
           const integrity = new IntegrityService(storage.db);
           // AC-7 — present only when a parser was composed, so the sweep either

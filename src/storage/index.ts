@@ -244,3 +244,15 @@ export {
   type ImportReport,
   type ImportTableReport,
 } from './import.js';
+
+// EPIC-126. The merger: identity merges, similarity only relates.
+export {
+  DURABLE_CONTEXT_PRODUCER,
+  DurableContextStore,
+  MAX_CONTEXT_PAGE,
+  type ContextProvenance,
+  type ContextQuery,
+  type RecordContextInput,
+  type RecordedContext,
+  type RelatedContext,
+} from './durable-context.js';

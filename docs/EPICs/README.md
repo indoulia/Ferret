@@ -194,6 +194,10 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-123 — Confluence Connector** — P1 — VALIDATED ([spec](EPIC-123-Confluence-Connector.md), [evidence](validation/EPIC-123-VALIDATION.md))
 - **EPIC-124 — Unified Cross-Source Context** — P1 — VALIDATED ([spec](EPIC-124-Unified-Cross-Source-Context.md), [evidence](validation/EPIC-124-VALIDATION.md))
 
+### Durable Context
+
+- **EPIC-126 — Context Merger** — P1 — VALIDATED ([spec](EPIC-126-Context-Merger.md), [decisions](../Architecture/EPIC-126-DECISIONS.md), [evidence](validation/EPIC-126-VALIDATION.md))
+
 ### Security & Authorization
 
 - **EPIC-081 — Credential Isolation** — P0 — VALIDATED ([spec](EPIC-081-Credential-Isolation.md), [evidence](validation/EPIC-081-VALIDATION.md))

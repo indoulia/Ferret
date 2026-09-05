@@ -258,7 +258,19 @@ describe('package contents', () => {
     // The headroom is 3%, on the reasoning every raise in this file has used:
     // a round figure leaves room to hide in, and the next crossing should be a
     // decision rather than a formality.
-    expect(pack.unpackedSize).toBeLessThan(9_270_000);
+    //
+    // **2026-09-06, EPIC-126 — raised again.** 9 273 533 against 9 270 000:
+    // 0.04% over, and every byte of it accounted for as new product code.
+    //
+    //     +13 145  dist/storage/durable-context.js
+    //      +8 763  dist/context/durable.js
+    //      +6 151  dist/context/durable.d.ts
+    //      +4 535  dist/storage/durable-context.d.ts
+    //      +2 300  dist/storage/migrations/0016_durable_context.sql
+    //
+    // 34 894 bytes, no dependency added, grammars unchanged at 5 881 661, and
+    // the non-grammar guard below still passes with room. Same 3% headroom.
+    expect(pack.unpackedSize).toBeLessThan(9_550_000);
     // And the grammars must stay the bulk of it: if the non-grammar output ever
     // approaches this, something is leaking.
     //

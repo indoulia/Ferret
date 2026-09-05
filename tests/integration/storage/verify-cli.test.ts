@@ -2,8 +2,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { ContextKind } from '../../../src/index.js';
+import { DurableContextStore } from '../../../src/storage/index.js';
 import { createRepository, createWorkspace, git, gitVersion } from '../../support/git-fixtures.js';
 import { SKIP_REASON, createTestDatabase, databaseAvailable, type TestDatabase } from '../../support/postgres.js';
 import { runCli } from '../../helpers/cli.js';
@@ -73,6 +76,22 @@ describeCli(`ferret verify (${runnable ? 'real PostgreSQL and git' : SKIP_REASON
     expect(body.sweep.findings).toStrictEqual([]);
     expect(body.sweep.complete).toBe(true);
     expect(code).toBe(0);
+  });
+
+  it('does not read a durable context row as corrupt — EPIC-126', async () => {
+    // `createEntity` refuses a kind the *current process* has not registered,
+    // so a registered kind the verify composition forgets is reported as
+    // `schema-invalid` on a healthy index. It happened to `code_symbol` (1 811
+    // rows) and dogfooding EPIC-126 found it again for `context` (4 of 4).
+    const store = new DurableContextStore(drizzle(db.pool));
+    const recorded = await store.record({
+      statement: 'The verify composition must register every kind it may read',
+      contextKind: ContextKind.CONSTRAINT,
+      provenance: { producer: 'epic-126', producerVersion: '1.0.0', sourceSystem: 'ferret' },
+    });
+
+    const { body } = await verify();
+    expect(body.sweep.findings.filter((finding) => finding.id === recorded.context.entity.id)).toStrictEqual([]);
   });
 
   it('records the run that indexed, so nothing looks unindexed — AC-6', async () => {
