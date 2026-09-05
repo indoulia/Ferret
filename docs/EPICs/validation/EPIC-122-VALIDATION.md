@@ -9,7 +9,7 @@ migration.
 
 | | |
 | --- | --- |
-| Tree | `baae460` (`main`) + this Epic |
+| Tree | `baae460` (`main`) + this Epic, merged as `7db2ba9` |
 | Host | Windows 11, Node v22.23.2, vitest 4.1.11 |
 | Database | PostgreSQL 17 + pgvector, container started by `tests/support/postgres.ts` |
 | Live source consulted | `nymi-inc.atlassian.net`, read-only, for field shapes only |
@@ -219,6 +219,18 @@ EPIC-119's 35, EPIC-120's 24 and EPIC-121's 26 stay green unchanged.
   this Epic did not add it — status *history* is a collection nobody has asked
   for yet, and adding it would be scope this Epic was not given.
 - **No reasoning, no autonomous action, no scheduling, no webhooks.**
+
+## Post-merge verification
+
+Re-verified on merged `main` at `7db2ba9`: the three connector suites, the
+EPIC-119 contract suite and the architecture boundary suite — **231 passed**.
+Build clean. Working tree clean.
+
+No live Jira run was made against the merged tree: Ferret's Jira provider needs
+a token this environment does not hold, and the live instance was consulted for
+field *shapes* only. What the shapes proved is recorded above; what a
+credentialled run would add is a count, and inventing one would be worse than
+saying so.
 
 ## Not applicable
 
