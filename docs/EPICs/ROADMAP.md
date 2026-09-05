@@ -22,8 +22,8 @@ queue alive.
 ## Why this document exists
 
 Registry v3.0 closed 108 Epics when this document was reconstructed: 107
-`VALIDATED`, 1 `DONE`, 76/76 P0. The catalog now carries 118 rows — EPIC-109 to
-EPIC-118 delivered since, and reconciled into it on 2026-09-05 — of which 116
+`VALIDATED`, 1 `DONE`, 76/76 P0. The catalog now carries 119 rows — EPIC-109 to
+EPIC-119 delivered since, and reconciled into it on 2026-09-05 — of which 117
 are `VALIDATED`, 1 `DONE` and 1 `CLOSED` with coverage deferred. It is a
 delivery map for work that is finished, and it does not say what comes next.
 This document derives the next roadmap **from the repository itself** — the
@@ -641,6 +641,7 @@ Filled in as Epics land.
 | EPIC-114 | `78406f6` | [#166](https://github.com/indoulia/Ferret/pull/166) | `c9916bd` | [record](validation/EPIC-114-VALIDATION.md) | COMPLETE |
 | EPIC-115 | `bf02fd2` | [#167](https://github.com/indoulia/Ferret/pull/167) | `1072c3d` | [record](validation/EPIC-115-VALIDATION.md) | CLOSED — coverage deferred |
 | EPIC-118 | `4aa5fae` | [#173](https://github.com/indoulia/Ferret/pull/173) | `f4e5997` | [record](validation/EPIC-118-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-119 | `2bf1afa` | [#176](https://github.com/indoulia/Ferret/pull/176) | `1aeffcc` | [record](validation/EPIC-119-VALIDATION.md) | COMPLETE — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:
