@@ -786,6 +786,45 @@ export {
   type SkippedRecord,
 } from './project/index.js';
 
+// EPIC-119. The universal source connector boundary: the contract a source of
+// any shape implements, and the single ingestion path every one of them reaches.
+export {
+  SOURCE_CONNECTOR_CONTRACT_VERSION,
+  ConnectorOperation,
+  isSourceConnector,
+  sourceIdentityKey,
+  type AcquiredRecord,
+  type AcquisitionPage,
+  type AcquisitionRequest,
+  type NormalizationContext,
+  type SkippedSourceRecord,
+  type SourceConnector,
+  type SourceContribution,
+  type SourceIdentity,
+  type SourceRecordMetadata,
+} from './providers/contracts/source-connector.js';
+export {
+  DEFAULT_INGEST_PAGE_LIMIT,
+  INGEST_PRODUCER,
+  NO_WRITES,
+  PROJECT_ISSUE_RECORD,
+  SourceIngestor,
+  addWrites,
+  ingestSources,
+  projectSourceConnector,
+  writeContribution,
+  type ContributionGraph,
+  type ContributionWriters,
+  type ContributionWrites,
+  type IngestCounts,
+  type IngestDependencies,
+  type IngestOptions,
+  type IngestOutcome,
+  type IngestReport,
+  type IngestRequest,
+  type ProjectConnectorOptions,
+} from './connectors/index.js';
+
 // EPIC-073. Releases, deployments, and the commit-graph walk that answers which
 // commits a release contains — the one question no release API answers.
 export {

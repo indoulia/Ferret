@@ -8,12 +8,11 @@ coverage declined and its false claim corrected. The
 decision taken beside the options it was choosing between, because a decision
 read without its alternatives is indistinguishable from a default.
 
-**One Epic was directed after the queue was exhausted.** EPIC-118 — Ferret
-Self-Dogfood — did not come from this document and is not an entry that was
-invented to keep it alive; it was directed by the owner, and it found a defect
-the queue could not have named, because the defect was only reachable by running
-Ferret against a repository larger than the fixtures. See
-[after the queue](#after-the-queue--epic-118).
+**Two Epics were directed after the queue was exhausted.** EPIC-118 — Ferret
+Self-Dogfood — and EPIC-119 — Universal Source Connector Contract. Neither came
+from this document and neither is an entry invented to keep it alive; both were
+directed by the owner. See [after the queue](#after-the-queue--epic-118) and
+[EPIC-119](#after-the-queue--epic-119).
 
 **Nothing implementation-ready remains.** What is left is listed under
 [not in this queue](#not-in-this-queue), and every item there needs a decision,
@@ -565,6 +564,38 @@ that second defect **passes with the fix reverted**, because PostgreSQL returns
 insertion order for a small table. The reordering is latitude the planner has,
 not behaviour it always exhibits, so the control is source-level. A test that
 passes either way is not a control, and that was measured rather than assumed.
+
+## After the queue — EPIC-119
+
+**Universal Source Connector Contract**, directed by the owner on 2026-09-05.
+Recorded here for the same reason EPIC-118 is: it was never a queue entry, and
+inventing one to receive it after the fact would misrepresent where it came
+from.
+
+The premise it was given — that adding a source meant adding an ingestion path —
+was **checked against the repository rather than assumed**, by asking Ferret. The
+answer named `src/indexing/ports.ts`, whose own comment already says the
+converters were duplicated *"once inside the indexer and once inside
+`project/sync.ts`"* until a second caller made it real. The converters had been
+shared. The loop around them had not, and the loop is what holds the rules: the
+write order the foreign keys demand, the `ifAbsent` placeholder rule from issue
+#48, and the `reconcileConflicts` sweep EPIC-047 had to add to the sync path five
+Epics after the indexer's. `writeContribution` is that loop, lifted out once.
+
+It found two defects, both of the shape EPIC-118 and the queue itself kept
+producing — **invisible from the suite, reachable only by running the product**:
+
+- The connector cursor was keyed by the identity string. PostgreSQL answered
+  `22P02`; `SyncCursorStore`'s scope is a canonical id. The suite's cursor fake
+  took any string, so nothing in 2261 unit tests could have said so.
+- The contract did not require a connector to scope its records to the source
+  entity, so the same page slug on two wiki instances collapsed into one entity.
+  Visible in a live run as `created=1 updated=2` where `created=3` was expected;
+  invisible in a suite where every fixture uses one instance.
+
+No production connector was built. EPIC-120 onward is where a source is
+connected; this Epic is only the boundary it connects through, and the GitHub
+and Jira providers already on that boundary are the proof it fits a real one.
 
 ## Not in this queue
 

@@ -30,6 +30,15 @@ export const Capability = {
   SOURCE_FILE: 'source.file',
   /** Issues, pull requests, reviews, releases, deployments. */
   SOURCE_PROJECT: 'source.project',
+  /**
+   * Acquire, identify and normalize records from any source — EPIC-119.
+   *
+   * The common boundary the three above are *not*: each of them is shaped
+   * around what one kind of system holds, and a source that is neither a Git
+   * checkout nor a tracker can implement none of them. A connector declares
+   * this instead, and reaches the same storage, index and retrieval path.
+   */
+  SOURCE_CONNECTOR: 'source.connector',
   /** Turn file content into structured extraction. */
   PARSER: 'parser',
   /** Produce vectors for semantic retrieval. */
@@ -66,6 +75,7 @@ export const CAPABILITY_VERSIONS: Readonly<Record<Capability, number>> = Object.
   [Capability.SOURCE_HISTORY]: 1,
   [Capability.SOURCE_FILE]: 1,
   [Capability.SOURCE_PROJECT]: 1,
+  [Capability.SOURCE_CONNECTOR]: 1,
   [Capability.PARSER]: 1,
   [Capability.EMBEDDING]: 1,
   [Capability.MCP]: 1,
@@ -85,6 +95,7 @@ export const MINIMUM_CAPABILITY_VERSIONS: Readonly<Record<Capability, number>> =
   [Capability.SOURCE_HISTORY]: 1,
   [Capability.SOURCE_FILE]: 1,
   [Capability.SOURCE_PROJECT]: 1,
+  [Capability.SOURCE_CONNECTOR]: 1,
   [Capability.PARSER]: 1,
   [Capability.EMBEDDING]: 1,
   [Capability.MCP]: 1,

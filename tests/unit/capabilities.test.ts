@@ -52,6 +52,9 @@ describe('the capability catalogue', () => {
       'embedding',
       'mcp',
       'parser',
+      // EPIC-119. The common source boundary, alongside the three
+      // system-shaped ones rather than replacing them.
+      'source.connector',
       'source.file',
       'source.history',
       'source.project',
