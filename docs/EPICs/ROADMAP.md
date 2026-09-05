@@ -10,12 +10,14 @@ read without its alternatives is indistinguishable from a default.
 
 **Epics were directed after the queue was exhausted.** EPIC-118 — Ferret
 Self-Dogfood — EPIC-119 — Universal Source Connector Contract — EPIC-120 —
-Repository Connector — and EPIC-121 — GitHub Connector. None came from this
-document and none is an entry invented to keep it alive; all were directed by
-the owner. See [after the queue](#after-the-queue--epic-118),
+Repository Connector — EPIC-121 — GitHub Connector — and EPIC-122 — Jira
+Connector. None came from this document and none is an entry invented to keep it
+alive; all were directed by the owner. See
+[after the queue](#after-the-queue--epic-118),
 [EPIC-119](#after-the-queue--epic-119),
-[EPIC-120](#after-the-queue--epic-120) and
-[EPIC-121](#after-the-queue--epic-121).
+[EPIC-120](#after-the-queue--epic-120),
+[EPIC-121](#after-the-queue--epic-121) and
+[EPIC-122](#after-the-queue--epic-122).
 
 **Nothing implementation-ready remains.** What is left is listed under
 [not in this queue](#not-in-this-queue), and every item there needs a decision,
@@ -671,6 +673,36 @@ its parent is `DOCUMENT_DESCRIBES_ENTITY` — both already in the model, for the
 reason EPIC-119 gave when it scoped sources to `repository` rather than minting
 a `source` kind.
 
+## After the queue — EPIC-122
+
+**Jira Connector**, directed by the owner on 2026-09-05. No new connector was
+written: `projectSourceConnector` now serves GitHub and Jira alike, which is
+what EPIC-119's boundary was for.
+
+**Jira ingestion had never worked end to end.** Jira reports
+`2026-09-01T00:00:00.000-0500` — a numeric offset with no colon — and `instant`
+is `z.iso.datetime({ offset: true })`, which rejects it. So `createEntity`
+refused every Jira issue and `modelProject` did the right thing with a record it
+cannot model: skipped it and counted it. A whole board arrived as a skip count,
+through `ferret sync` or anything else. EPIC-071's suite never saw it because it
+asserts what the *provider* returns and never carries that across the seam into
+the model — and its fixture has had the real Jira spelling since the day it was
+written.
+
+Three smaller gaps of the same family came with it, each one a value that three
+layers agreed mattered and no line carried between them: `ProjectRecord.key` was
+added by EPIC-071 so Jira issues would not lose `FER-12`, and `modelProject`
+read only `number`; `issuetype` and `priority` were requested on every search
+since EPIC-071, paid for in every response, and discarded; and a tracker that
+declares two of four operations spent two of the ingestor's twenty pages
+arriving at collections it would never run.
+
+One relationship type was added — `ISSUE_LINKS_ISSUE`, generic, with the
+vendor's own word in `metadata`. The evidence is empirical rather than
+aesthetic: a live Jira instance was sampled, and 50 issues carried 144 links of
+**fourteen** distinct types, most configured for that instance. A fixed
+enumeration would have carried 33 of the 144.
+
 ## Not in this queue
 
 - **[#138](https://github.com/indoulia/Ferret/issues/138) — three limitation rows
@@ -718,6 +750,7 @@ Filled in as Epics land.
 | EPIC-119 | `1aeffcc` | [#176](https://github.com/indoulia/Ferret/pull/176) | `1aeffcc` | [record](validation/EPIC-119-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-120 | `6c810c8` | [#178](https://github.com/indoulia/Ferret/pull/178) | `6c810c8` | [record](validation/EPIC-120-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-121 | `62f6c89` | [#180](https://github.com/indoulia/Ferret/pull/180) | `62f6c89` | [record](validation/EPIC-121-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-122 | `PENDING` | [#PENDING](https://github.com/indoulia/Ferret/pull/PENDING) | `PENDING` | [record](validation/EPIC-122-VALIDATION.md) | COMPLETE — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:

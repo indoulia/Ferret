@@ -100,9 +100,28 @@ export interface ProjectRecord {
   readonly updatedAt?: string;
   readonly closedAt?: string;
   readonly labels?: readonly string[];
+  /**
+   * The tracker's own word for what kind of work this is — `Bug`, `Story`.
+   *
+   * Added by EPIC-122, and the canonical model had `issueAttributes.issueType`
+   * waiting for it since EPIC-006. The Jira provider had been *requesting* the
+   * field on every search and dropping it on the floor for want of somewhere to
+   * put it.
+   */
+  readonly issueType?: string;
+  /** The tracker's own priority name — `High`. Not a comparable reading. */
+  readonly priority?: string;
 }
 
 export interface ProjectIssue extends ProjectRecord {
+  /**
+   * Issues this one is linked to — EPIC-122.
+   *
+   * Optional because most trackers have nothing like it and GitHub does not:
+   * a source with no concept of a typed issue link reports none, rather than
+   * being made to invent one.
+   */
+  readonly links?: readonly ProjectIssueLink[];
   readonly assignees?: readonly ProjectActor[];
 }
 
@@ -114,6 +133,34 @@ export interface ProjectPullRequest extends ProjectRecord {
   readonly mergedAt?: string;
   readonly draft?: boolean;
   readonly requestedReviewers?: readonly ProjectActor[];
+}
+
+/**
+ * One issue related to another, as the tracker states it — EPIC-122.
+ *
+ * `type` is the **vendor's** name for the relationship — `Blocks`,
+ * `Duplicates`, `Relates`, and whatever else an administrator has configured.
+ * It is carried rather than mapped, because Jira's link types are defined per
+ * instance: any fixed enumeration Ferret wrote would be wrong at the first
+ * customer who added one, and a link Ferret could not name would be a link it
+ * dropped.
+ */
+export interface ProjectIssueLink {
+  readonly type: string;
+  /**
+   * Which way the tracker stated it, from the issue carrying the link.
+   *
+   * `outward` is "this issue blocks that one"; `inward` is "this issue is
+   * blocked by that one". Both are reported because a tracker shows a link on
+   * *both* issues and only the direction distinguishes them — collapsing them
+   * would make "what is blocking this" and "what is this blocking" the same
+   * question.
+   */
+  readonly direction: 'outward' | 'inward';
+  /** The other issue's id, as the source identifies it. */
+  readonly targetId: string;
+  /** The key a person would quote for it — `FER-13`. */
+  readonly targetKey?: string;
 }
 
 /** One review. `state` is the vendor's; `approved` is the comparable reading. */

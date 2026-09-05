@@ -9,6 +9,7 @@ import {
   type ProjectActor,
   type ProjectComment,
   type ProjectIssue,
+  type ProjectIssueLink,
   type ProjectPage,
   type ProjectQuery,
   type ProjectRateLimit,
@@ -189,7 +190,8 @@ export class JiraProvider extends BaseProvider implements Provider, ProjectSourc
         maxResults: pageSize,
         // Named rather than defaulted: Jira returns every field otherwise, and
         // a large instance's custom fields are megabytes Ferret does not read.
-        fields: 'summary,description,status,issuetype,priority,labels,created,updated,resolutiondate,assignee,reporter',
+        fields:
+          'summary,description,status,issuetype,priority,labels,created,updated,resolutiondate,assignee,reporter,issuelinks',
       },
       signal: context.signal,
     });
@@ -336,7 +338,29 @@ interface JiraIssue {
     readonly resolutiondate?: string | null;
     readonly assignee?: JiraUser;
     readonly reporter?: JiraUser;
+    readonly issuelinks?: readonly JiraIssueLink[];
   };
+}
+
+/**
+ * One link, as Jira reports it on an issue.
+ *
+ * Exactly one of `outwardIssue` and `inwardIssue` is present: the one that is
+ * *not* the issue carrying the link. Which one it is, is the direction.
+ */
+interface JiraIssueLink {
+  readonly type?: {
+    readonly name?: string;
+    readonly inward?: string;
+    readonly outward?: string;
+  };
+  readonly outwardIssue?: JiraLinkedIssue;
+  readonly inwardIssue?: JiraLinkedIssue;
+}
+
+interface JiraLinkedIssue {
+  readonly id?: string;
+  readonly key?: string;
 }
 
 interface JiraSearch {
@@ -443,14 +467,49 @@ function toIssue(issue: JiraIssue): ProjectIssue {
     lifecycle: toLifecycle(fields.status?.statusCategory?.key),
     ...(issue.self === undefined ? {} : { url: issue.self }),
     ...(toActor(fields.reporter) === undefined ? {} : { author: toActor(fields.reporter) }),
-    ...(fields.created === undefined ? {} : { createdAt: fields.created }),
-    ...(fields.updated === undefined ? {} : { updatedAt: fields.updated }),
-    ...(fields.resolutiondate === undefined || fields.resolutiondate === null
-      ? {}
-      : { closedAt: fields.resolutiondate }),
+    ...instantField('createdAt', fields.created),
+    ...instantField('updatedAt', fields.updated),
+    ...instantField('closedAt', fields.resolutiondate ?? undefined),
     labels: [...(fields.labels ?? [])],
+    // Requested on every search since EPIC-071 and dropped on the floor until
+    // EPIC-122, for want of a field to put them in. `issueAttributes` has
+    // declared both since EPIC-006.
+    ...(fields.issuetype?.name === undefined ? {} : { issueType: fields.issuetype.name }),
+    ...(fields.priority?.name === undefined ? {} : { priority: fields.priority.name }),
+    ...(toLinks(fields.issuelinks).length === 0 ? {} : { links: toLinks(fields.issuelinks) }),
     assignees: toActor(fields.assignee) === undefined ? [] : [toActor(fields.assignee) as ProjectActor],
   };
+}
+
+/**
+ * Jira's issue links, in the contract's terms — EPIC-122.
+ *
+ * A link with no type name, or naming no other issue, is dropped: it carries no
+ * fact. Jira reports the same link on both issues, so the pair is deduplicated
+ * one layer up by normalising direction rather than here, where only one side
+ * is visible.
+ */
+function toLinks(links: readonly JiraIssueLink[] | undefined): readonly ProjectIssueLink[] {
+  const mapped: ProjectIssueLink[] = [];
+  for (const link of links ?? []) {
+    const name = link.type?.name;
+    if (name === undefined || name === '') continue;
+    const outward = link.outwardIssue;
+    const inward = link.inwardIssue;
+    const other = outward ?? inward;
+    // The id, not the key: a Jira issue keeps its id across a move between
+    // projects and gets a new key, which is the same reason `toIssue` identifies
+    // by id. Falling back to the key is better than dropping the link.
+    const targetId = other?.id ?? other?.key;
+    if (targetId === undefined) continue;
+    mapped.push({
+      type: name,
+      direction: outward !== undefined ? 'outward' : 'inward',
+      targetId,
+      ...(other?.key === undefined ? {} : { targetKey: other.key }),
+    });
+  }
+  return mapped;
 }
 
 function toComment(comment: JiraComment, parentId: string): ProjectComment {
@@ -459,10 +518,48 @@ function toComment(comment: JiraComment, parentId: string): ProjectComment {
     parentId,
     body: documentText(comment.body),
     ...(toActor(comment.author) === undefined ? {} : { author: toActor(comment.author) }),
-    ...(comment.created === undefined ? {} : { createdAt: comment.created }),
-    ...(comment.updated === undefined ? {} : { updatedAt: comment.updated }),
+    ...instantField('createdAt', comment.created),
+    ...instantField('updatedAt', comment.updated),
     ...(comment.self === undefined ? {} : { url: comment.self }),
   };
+}
+
+/**
+ * Jira's instants, in the spelling Ferret's model accepts — EPIC-122.
+ *
+ * **Jira ingestion had never worked end to end, and this is why.** Jira reports
+ * `2026-01-02T03:04:05.000+0000` — a numeric offset with no colon, which is
+ * valid ISO 8601 *basic* format and is not what `z.iso.datetime({ offset: true })`
+ * accepts. Every issue therefore failed `createEntity` validation, and
+ * `modelProject` did exactly what it should with a record it cannot model: it
+ * skipped it and counted it. A hundred per cent of a Jira board arrived as a
+ * skip count.
+ *
+ * It survived EPIC-071 because the provider suite asserts the provider's
+ * *output* — a `ProjectIssue` with the string on it — and never carried that
+ * output across the seam into the model. The fixture had the real Jira spelling
+ * from the first day; nothing ever handed it to the thing that rejects it.
+ *
+ * Normalising here rather than loosening the model is deliberate. A provider's
+ * job is to map its vendor's representation onto the contract, and widening
+ * `instant` would let every other source emit an offset Ferret cannot compare.
+ *
+ * An unparseable value yields **nothing**, following the rule EPIC-020 settled
+ * for Git's dates: absent is honest, and a wrong instant in a field every
+ * consumer reads as one is not.
+ */
+function toInstant(value: string | undefined): string | undefined {
+  if (value === undefined || value === '') return undefined;
+  // `+0000` / `-0530` → `+00:00` / `-05:30`. Anything already carrying a colon,
+  // or ending in `Z`, is left exactly as the source wrote it.
+  const spelled = value.replace(/([+-])(\d{2})(\d{2})$/, '$1$2:$3');
+  return Number.isNaN(Date.parse(spelled)) ? undefined : spelled;
+}
+
+/** The field, or nothing at all when the source's value was not an instant. */
+function instantField(name: string, value: string | undefined): Record<string, string> {
+  const instant = toInstant(value);
+  return instant === undefined ? {} : { [name]: instant };
 }
 
 function neverAborts(): AbortSignal {
