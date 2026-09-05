@@ -122,6 +122,10 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-041 — Durable Checkpoints** — P0 — VALIDATED ([evidence](validation/EPIC-041-VALIDATION.md))
 - **EPIC-042 — Decision & Engineering Memory** — P0 — VALIDATED ([spec](EPIC-042-Decision-And-Engineering-Memory.md), [evidence](validation/EPIC-042-VALIDATION.md))
 - **EPIC-043 — Session Recovery** — P0 — VALIDATED ([spec](EPIC-043-Session-Recovery.md), [evidence](validation/EPIC-043-VALIDATION.md))
+- **EPIC-109 — Session & Memory Persistence** — P0 — VALIDATED ([spec](EPIC-109-Session-And-Memory-Persistence.md), [evidence](validation/EPIC-109-VALIDATION.md))
+- **EPIC-110 — Session Command Surface** — P0 — VALIDATED ([spec](EPIC-110-Session-Command-Surface.md), [evidence](validation/EPIC-110-VALIDATION.md))
+- **EPIC-111 — Session Recall Over MCP** — P0 — VALIDATED ([spec](EPIC-111-Session-Recall-Over-MCP.md), [evidence](validation/EPIC-111-VALIDATION.md))
+- **EPIC-112 — Session Retention & Redaction** — P0 — VALIDATED ([spec](EPIC-112-Session-Retention-And-Redaction.md), [evidence](validation/EPIC-112-VALIDATION.md))
 
 ### Evidence & Provenance
 
@@ -371,6 +375,38 @@ rather than overwritten and corrected from each row's own reasoning — four to 
 determinable owner, two to none as accepted design decisions, three left
 `unassigned` because the registry does not determine one. None is P0.
 Tracked in [#117](https://github.com/indoulia/Ferret/issues/117).
+
+## Catalog reconciliation — 2026-09-05
+
+Four Epics reached `main` without a catalog entry and without a validation
+record. EPIC-109, EPIC-110, EPIC-111 and EPIC-112 were specified, implemented,
+reviewed and merged in [#156](https://github.com/indoulia/Ferret/pull/156),
+[#157](https://github.com/indoulia/Ferret/pull/157),
+[#158](https://github.com/indoulia/Ferret/pull/158) and
+[#159](https://github.com/indoulia/Ferret/pull/159); the registry knew nothing
+about any of them, so the authoritative delivery map was silent on the whole of
+the Session & Agent Memory persistence work.
+
+**They are added above rather than introduced.** They were approved by the
+governance that reviewed and merged them; what was missing is the record, not the
+approval. The four entries and the four validation documents together close the
+Definition of Done's last clause — *validation evidence is recorded* — which was
+the one clause unmet on all four.
+
+Two facts are recorded rather than tidied away:
+
+- The validation documents were written **after** the merges, not alongside them.
+  [Specification files](#specification-files) says the specification and the work
+  are authored together, and each validation document states that plainly. For
+  these four it is not true, and each says so at the top. The evidence in them is
+  measured on the merged tree, not reconstructed.
+- Nothing about the four Epics' status changed here. Each was `VALIDATED` on the
+  evidence that existed at merge; this pass recorded that evidence in the form
+  the registry requires, and re-ran every cited suite to confirm it still holds.
+
+Continuing work, and what is blocked, is tracked in
+[ROADMAP.md](ROADMAP.md) rather than here: the registry maps delivery, and the
+roadmap maps what has not been decided.
 
 ## Approval
 
