@@ -83,7 +83,25 @@ export const SYNC_PRODUCER = 'ferret.sync';
  */
 export const DEFAULT_PAGE_LIMIT = 20;
 
-/** Pull requests whose reviews one pass will fetch. One request each. */
+/**
+ * Pull requests whose reviews one pass will fetch. One request each.
+ *
+ * Hitting this ceiling is **not** the same kind of incompleteness as a page
+ * limit, and conflating them was a defect found by running the command against
+ * Ferret's own repository: 139 pull requests, the ceiling bit, the pass reported
+ * `truncated`, and the cursor therefore never advanced. Every pass would have
+ * re-read the whole tracker for ever, which is precisely the incremental
+ * behaviour the cursor exists to provide.
+ *
+ * The two are different facts. A page limit means *the enumeration stopped* —
+ * there are pull requests this pass never saw, so advancing would skip them. A
+ * review ceiling means *the enumeration finished* and the reviews of the last
+ * few were not fetched; re-reading the same window next time would fetch the
+ * same first fifty again and make no progress at all. So this one is reported
+ * as `reviewsPartial` and does not block the cursor: the next pass asks only
+ * for what changed, and a pull request whose reviews are wanted is read again
+ * when it changes.
+ */
 export const DEFAULT_REVIEW_LIMIT = 50;
 
 export interface ProjectSyncOptions {
@@ -145,6 +163,14 @@ export interface ProjectSyncReport {
    * next pass reads the same window again.
    */
   readonly truncated: boolean;
+  /**
+   * Reviews were fetched for only the first {@link DEFAULT_REVIEW_LIMIT} pull
+   * requests this pass read.
+   *
+   * Reported, and deliberately **not** cursor-blocking — see that constant for
+   * why the two kinds of incompleteness are different.
+   */
+  readonly reviewsPartial: boolean;
   /** The instant the next pass will ask from, or `undefined` when not advanced. */
   readonly cursorAdvancedTo: string | undefined;
   /** What the tracker last said about the budget. `undefined` when it says nothing. */
@@ -311,6 +337,7 @@ export class ProjectSynchronizer {
     }
 
     const reviews: ProjectReview[] = [];
+    let reviewsPartial = false;
     if (wantReviews && pullRequests.length > 0) {
       if (!this.#operations.has(ProjectOperation.LIST_REVIEWS)) {
         unsupported.push(REVIEWS);
@@ -322,7 +349,7 @@ export class ProjectSynchronizer {
         const numbered = pullRequests.filter(
           (pull): pull is ProjectPullRequest & { number: number } => typeof pull.number === 'number',
         );
-        if (numbered.length > reviewLimit) truncated = true;
+        if (numbered.length > reviewLimit) reviewsPartial = true;
         for (const pull of numbered.slice(0, reviewLimit)) {
           throwIfAborted(context.signal, 'sync');
           const page = await this.#source.listReviews?.(
@@ -387,6 +414,7 @@ export class ProjectSynchronizer {
       writes,
       skipped: modelled.skipped,
       truncated,
+      reviewsPartial,
       cursorAdvancedTo,
       rateLimit: this.#source.rateLimit(),
       dryRun: options.dryRun === true,
@@ -403,6 +431,7 @@ export class ProjectSynchronizer {
         pullRequests: report.counts.pullRequests,
         reviews: report.counts.reviews,
         truncated,
+        reviewsPartial,
       },
       `Synchronized ${project} from ${this.#sourceSystem}`,
     );
