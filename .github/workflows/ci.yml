@@ -38,7 +38,6 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   # Cancel a superseded *pull request* run; never cancel one on `main`.
   #
   # A superseded PR run is genuinely redundant, because the next one covers the
@@ -47,11 +46,21 @@ concurrency:
   # its own. Observed — `f4e0c39` was cancelled exactly that way by two merges
   # in quick succession.
   #
-  # This was load-bearing when Windows ran *only* on the push to `main`, since
-  # a cancelled run meant the sole Windows check for that commit was lost.
-  # Windows now also gates every pull request (see the matrix below), so a
-  # cancelled `main` run is less costly than it was — but the rule stands on
-  # its own reasoning above, and `main` is the branch a release is cut from.
+  # **`cancel-in-progress: false` did not close that, and `1072c3d` is the
+  # proof.** It protects a run that has *started*; a run still **queued** in the
+  # same group is cancelled by the next one regardless. Three merges in nine
+  # minutes on 2026-09-05 produced exactly that: `ea586db` was running,
+  # `1072c3d` was queued behind it in the same `refs/heads/main` group, and
+  # `09f5624`'s arrival cancelled it. The run finished `cancelled` with **zero
+  # jobs**, and the comment above went on claiming it could not happen. So a
+  # commit on `main` had no verification of its own, which is the one thing this
+  # block exists to prevent.
+  #
+  # The group is now the *commit* for everything except a pull request, so no
+  # two `main` runs ever share one and none can cancel another — queued or
+  # running. Pull requests keep grouping by ref, which is where superseding is
+  # correct and where the wait it saves is paid by a person.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
