@@ -43,7 +43,7 @@ not yet do. `src/cli/commands/planned.ts` names them, exits `5` with
 | 5 | EPIC-113 — Provider sync transport (`ferret sync`) | CONTINUATION | **VALIDATED** | 14 unit, 5 storage-integration and 8 CLI cases against the built binary; the last `(planned)` entry retired — [record](validation/EPIC-113-VALIDATION.md) | EPIC-075, EPIC-021, EPIC-071 | Done — [decisions D-113.1–.3](#epic-113--provider-sync-transport-ferret-sync) taken 2026-09-05 |
 | 6 | EPIC-114 — PostgreSQL version coverage | INFRASTRUCTURE REQUIRED | BLOCKED | EPIC-002 validation: minimum supported major is 14, **only 17 measured** | EPIC-002 | [Infrastructure decisions](#epic-114--postgresql-version-coverage) — needs CI approval |
 | 7 | EPIC-115 — macOS packaging validation | INFRASTRUCTURE REQUIRED | BLOCKED | EPIC-105 **measured** macOS on 2026-09-03; the 2026-09-05 owner decision dropped it from CI, so nothing measures it now | EPIC-105 | [Infrastructure decisions](#epic-115--macos-packaging-validation) — needs a runner decision |
-| 8 | EPIC-116 — Session export fidelity | PRODUCT DECISION REQUIRED | BLOCKED | The four session tables are declared excluded from `ferret export`; the loss is stated in the manifest | EPIC-109, EPIC-089 | [D-116.1–.3](#epic-116--session-export-fidelity) |
+| 8 | EPIC-116 — Session export fidelity | CONTINUATION | **VALIDATED** | 10 integration and 3 CLI cases, including a restore into a second database — [record](validation/EPIC-116-VALIDATION.md) | EPIC-109, EPIC-089 | Done — [decisions D-116.1–.3](#epic-116--session-export-fidelity) taken 2026-09-05 |
 | 9 | EPIC-117 — Recording a session over MCP | PRODUCT DECISION REQUIRED | BLOCKED | EPIC-111 shipped recall read-only; a write path needs a lifecycle owner | EPIC-111 | [D-117.1–.3](#epic-117--recording-a-session-over-mcp) |
 | — | #138 registry hygiene | MIXED | OPEN | Three limitation rows with no owning Epic; two are product decisions in their own right | — | [Not in this queue](#not-in-this-queue) |
 | — | #130 packaging gate flake | DEFERRED | OPEN | Gate failed once, passed twice on one tree; cause not established, has not recurred | — | [Not in this queue](#not-in-this-queue) — instrumented, awaiting a recurrence |
@@ -231,6 +231,20 @@ keeps EPIC-048 answers stable across remote edits, and A is recoverable from B
 whereas B is not recoverable from A.
 
 #### EPIC-116 — Session export fidelity
+
+**DECIDED 2026-09-05 · IMPLEMENTED.** See
+[the Epic](EPIC-116-Session-Export-Fidelity.md) and
+[its validation record](validation/EPIC-116-VALIDATION.md). The questions and
+options below are unchanged, because a decision is only readable beside what it
+was choosing between.
+
+**Decisions taken.** D-116.1 — a session travels only when it is *explicitly* in
+scope, named through `--session`, which is EPIC-009's `ScopeKind.SESSION` at the
+command boundary; membership is never inferred from `repository_id`. D-116.2 —
+the transcript travels, with the provenance that makes it readable away from the
+installation that wrote it. D-116.3 — memories travel with their evidence, and
+`engineering_memory_extracted_has_evidence` is untouched; what the constraint
+cannot see is measured and reported, never repaired.
 
 EPIC-109 declared all four session tables **excluded** from `ferret export` and
 stated the loss in the manifest rather than exporting them partially. `pg_dump`
@@ -446,7 +460,8 @@ Filled in as Epics land.
 | EPIC-110 | `2e7ce50` | [#157](https://github.com/indoulia/Ferret/pull/157) | `533b603` | [record](validation/EPIC-110-VALIDATION.md) | COMPLETE |
 | EPIC-111 | `818fdfc` | [#158](https://github.com/indoulia/Ferret/pull/158) | `39a23ca` | [record](validation/EPIC-111-VALIDATION.md) | COMPLETE |
 | EPIC-112 | `b137094` | [#159](https://github.com/indoulia/Ferret/pull/159) | `5faab0c` | [record](validation/EPIC-112-VALIDATION.md) | COMPLETE |
-| EPIC-113 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-113-VALIDATION.md) | COMPLETE |
+| EPIC-113 | `6122ad4` | [#163](https://github.com/indoulia/Ferret/pull/163) | `b2cfb37` | [record](validation/EPIC-113-VALIDATION.md) | COMPLETE |
+| EPIC-116 | _pending_ | _pending_ | _pending_ | [record](validation/EPIC-116-VALIDATION.md) | COMPLETE |
 
 All four merged **without** a validation record and without a registry catalog
 entry; both were added on 2026-09-05 and every cited suite re-run to confirm the

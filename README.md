@@ -354,8 +354,17 @@ those three is available as an explicit command instead.
 ```bash
 ferret export --out index.ndjson   # a document a different Ferret version can read
 ferret export --scope <repositoryId> --out one-repo.ndjson
+ferret export --session <id> --out one-session.ndjson
 ferret export --backup-command     # ...and what a real backup is
 ```
+
+A **session** travels when it is named, and never because its `repository_id`
+happens to look like a scope — that column is free text so a session can be
+recorded outside any repository Ferret has indexed. A full export carries every
+session, `--session` carries the ones you name along with their transcripts,
+checkpoints and memories, and a repository-scoped export carries none and says so
+in the manifest. A session you asked for and this installation does not have is
+reported rather than quietly left out.
 
 An **export** is not a **backup**, and conflating them is what makes a backup
 strategy fail when it is needed. A backup is a point-in-time copy restorable

@@ -151,6 +151,32 @@ function render(report: ImportReport, document: string): string {
     }
   }
 
+  // EPIC-116 — what came back of the session domain, on the restore rather
+  // than only on the export. `undefined` is a third answer and is said as one.
+  if (report.sessions === undefined) {
+    const carried = report.tables.find((table) => table.table === 'session');
+    if (carried === undefined) {
+      lines.push(
+        '',
+        'This document predates session export, so it carries no session, transcript,',
+        'checkpoint or engineering memory. `pg_dump` is the full-fidelity copy.',
+      );
+    }
+  } else if (report.sessions.resolved.length > 0) {
+    lines.push('', `Sessions restored: ${String(report.sessions.resolved.length)}`);
+  }
+
+  // D-116.3, at the moment somebody is deciding whether to trust the restore.
+  const gaps = report.memoryEvidenceGaps ?? [];
+  if (gaps.length > 0) {
+    lines.push(
+      '',
+      `${String(gaps.length)} restored memory(s) cite captures this document does not carry.`,
+      'Their statements are intact; the transcript they were drawn from is not here, so',
+      '`ferret session recall` can quote the memory and not the turn behind it.',
+    );
+  }
+
   // D2 — both identities, always, because the contract is that they differ.
   const { instanceId, sourceInstanceId, recorded, note } = report.provenance;
   lines.push(

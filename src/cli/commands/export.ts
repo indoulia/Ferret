@@ -39,6 +39,16 @@ export function exportCommand(output: (json: boolean) => OutputOptions): Command
     .description('Write the index as a portable NDJSON document a different version can read')
     .addOption(new Option('--out <path>', 'Write to a file rather than stdout'))
     .addOption(new Option('--scope <repositoryId>', 'Export one repository and what it contains'))
+    // EPIC-116, D-116.1. A session travels when it is *named*, never when a
+    // scope happens to look like its `repository_id` — which is free text and
+    // relates to nothing an entity scope can be compared against. Repeatable,
+    // because moving one piece of work usually means moving its lineage.
+    .addOption(
+      new Option(
+        '--session <id...>',
+        'Export these sessions, their transcripts, checkpoints and memories. A full export carries every session.',
+      ),
+    )
     .addOption(
       new Option('--backup-command', 'Print the pg_dump command for a real backup and exit').default(
         false,
@@ -57,7 +67,13 @@ export function exportCommand(output: (json: boolean) => OutputOptions): Command
     )
     .action(
       async (
-        options: { out?: string; scope?: string; backupCommand: boolean; strict: boolean },
+        options: {
+          out?: string;
+          scope?: string;
+          session?: string[];
+          backupCommand: boolean;
+          strict: boolean;
+        },
         command: Command,
       ) => {
         const globals = command.optsWithGlobals<{ json?: boolean; logLevel?: LogLevel }>();
@@ -108,6 +124,7 @@ export function exportCommand(output: (json: boolean) => OutputOptions): Command
           try {
             const written = await service.exportDocument(sink.write, {
               ...(options.scope === undefined ? {} : { scope: options.scope }),
+              ...(options.session === undefined ? {} : { sessions: options.session }),
               strict: options.strict,
             });
             await sink.close();
@@ -134,6 +151,8 @@ export function exportCommand(output: (json: boolean) => OutputOptions): Command
               trailer: written.trailer,
               destination: options.out ?? 'stdout',
               credentialShaped: written.credentialShaped,
+              sessionScope: written.sessionScope,
+              memoryEvidenceGaps: written.memoryEvidenceGaps,
             };
           } catch (error) {
             await sink.close();
@@ -178,6 +197,42 @@ function disclosures(manifest: ExportManifest, trailer: ExportTrailer): readonly
     for (const table of excluded) lines.push(`  ${table.table} — ${table.reason}`);
     const embedding = excluded.find((table) => table.table === 'embedding');
     if (embedding !== undefined) lines.push('', `Vectors: ${embedding.recovery}`);
+  }
+
+  // EPIC-116, D-116.1. Which sessions travelled, and which were asked for and
+  // are not here — the second is the statement the decision asked for, and it
+  // is the one an operator moving work between installations acts on.
+  const sessions = manifest.sessionScope;
+  if (sessions !== undefined && sessions.requested.length > 0) {
+    lines.push(
+      '',
+      `Sessions: ${String(sessions.resolved.length)} of ${String(sessions.requested.length)} named session(s) carried`,
+    );
+    if (sessions.unresolved.length > 0) {
+      lines.push(
+        `  ${String(sessions.unresolved.length)} not found here: ${sessions.unresolved.slice(0, 5).join(', ')}${sessions.unresolved.length > 5 ? ' …' : ''}`,
+      );
+    }
+  }
+
+  // D-116.3. Never repaired, always reported: dropping the memory would lose
+  // what a session decided and inventing a capture would fabricate evidence.
+  const gaps = trailer.memoryEvidenceGaps ?? [];
+  if (gaps.length > 0) {
+    lines.push(
+      '',
+      `${String(gaps.length)} extracted memory(s) cite captures this document does not carry:`,
+    );
+    for (const gap of gaps.slice(0, 10)) {
+      lines.push(`  ${gap.memoryId} (session ${gap.sessionId}) — ${String(gap.missing)} missing`);
+    }
+    if (gaps.length > 10) lines.push(`  … and ${String(gaps.length - 10)} more`);
+    lines.push(
+      '',
+      'They are carried as they are. An extracted memory whose evidence did not arrive is',
+      'still a memory EPIC-042 built from something, and neither dropping it nor inventing',
+      'the capture it names is an honest repair.',
+    );
   }
 
   const findings = trailer.credentialShaped ?? [];
