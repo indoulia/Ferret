@@ -1,9 +1,5 @@
-import {
-  EntityKind,
-  type CanonicalEntity,
-  type CanonicalEvidence,
-  type CanonicalRelationship,
-} from '../domain/index.js';
+import { writeContribution, type ContributionGraph } from '../connectors/write.js';
+import { EntityKind, type CanonicalEntity } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import type {
   EntityWriter,
@@ -11,7 +7,6 @@ import type {
   RelationshipWriter,
   SyncCursors,
 } from '../indexing/ports.js';
-import { toEntityInput, toEvidenceInput, toRelationshipInput } from '../indexing/ports.js';
 import type { Logger } from '../logging/index.js';
 import {
   ProjectOperation,
@@ -508,77 +503,26 @@ export class ProjectSynchronizer {
   }
 
   /**
-   * Entities, then relationships, then evidence.
+   * Entities, then relationships, then evidence — through the shared writer.
    *
-   * Not a preference: the database has foreign keys, and the reverse order
-   * fails on a project never synchronized before. Placeholders are written
-   * `ifAbsent` for the reason issue #48 records — a stub emitted only so an
-   * edge has an endpoint must not overwrite a record an earlier run read in
-   * full.
+   * This method used to *be* that loop. EPIC-119 lifted it into
+   * `connectors/write.ts` unchanged so `SourceIngestor` could reuse the path
+   * rather than grow a second copy of it: the order, the `ifAbsent` rule for
+   * placeholders and the conflict sweep are each a lesson an earlier Epic paid
+   * for, and a second implementation would have had to learn them again.
    */
   async #write(
-    modelled: {
-      readonly entities: readonly CanonicalEntity[];
-      readonly relationships: readonly CanonicalRelationship[];
-      readonly evidence: readonly CanonicalEvidence[];
-      readonly placeholderEntityIds: readonly string[];
-    },
+    modelled: ContributionGraph,
     now: Date,
     context: ProviderOperationContext,
   ): Promise<ProjectSyncWrites> {
-    const placeholders = new Set(modelled.placeholderEntityIds);
-    let created = 0;
-    let updated = 0;
-    let unchangedEntities = 0;
-
-    for (const entity of modelled.entities) {
-      throwIfAborted(context.signal, 'sync');
-      const result = await this.#entities.upsert(
-        toEntityInput(entity),
-        now,
-        placeholders.has(entity.id) ? { ifAbsent: true } : {},
-      );
-      if (result.outcome === 'created') created += 1;
-      else if (result.outcome === 'updated') updated += 1;
-      else unchangedEntities += 1;
-    }
-
-    let relationships = 0;
-    for (const edge of modelled.relationships) {
-      throwIfAborted(context.signal, 'sync');
-      await this.#relationships.assert(toRelationshipInput(edge), now);
-      relationships += 1;
-    }
-
-    let recorded = 0;
-    let deduplicated = 0;
-    const subjects = new Set<string>();
-    for (const record of modelled.evidence) {
-      throwIfAborted(context.signal, 'sync');
-      const result = await this.#evidence.record(toEvidenceInput(record), now);
-      if (result.deduplicated) deduplicated += 1;
-      else {
-        recorded += 1;
-        subjects.add(record.subjectId);
-      }
-    }
-
-    // EPIC-047 §8.4, as the indexer does it: the subjects this pass wrote about
-    // are exactly the ones whose conflict state can have changed. Maintaining
-    // it here rather than leaving it to whoever remembers to ask is what stops
-    // `conflicting` from becoming unreachable on the sync path too.
-    for (const subjectId of subjects) {
-      await this.#evidence.reconcileConflicts?.(subjectId, now);
-    }
-
-    return {
-      entitiesCreated: created,
-      entitiesUpdated: updated,
-      entitiesUnchanged: unchangedEntities,
-      relationships,
-      evidenceRecorded: recorded,
-      evidenceDeduplicated: deduplicated,
-    };
+    return writeContribution(
+      modelled,
+      { entities: this.#entities, relationships: this.#relationships, evidence: this.#evidence },
+      now,
+      context,
+      'sync',
+    );
   }
 }
 
