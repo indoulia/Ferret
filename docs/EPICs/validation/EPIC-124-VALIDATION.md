@@ -9,7 +9,7 @@ change, no migration.
 
 | | |
 | --- | --- |
-| Tree | `5b7c6fd` (`main`) + this Epic |
+| Tree | `5b7c6fd` (`main`) + this Epic, merged as `8cfee5a` |
 | Host | Windows 11, Node v22.23.2, vitest 4.1.11 |
 | Database | PostgreSQL 17 + pgvector, container started by `tests/support/postgres.ts` |
 | Date | 2026-09-05 |
@@ -204,6 +204,29 @@ dependency added.
 - **No live credentialled run.** The four transports answer fixtures. The
   wire shapes they answer with were verified against live GitHub, Jira and
   Confluence in EPIC-121 to EPIC-123 and are recorded there.
+
+## Post-merge verification
+
+Re-verified on merged `main` at `8cfee5a`: the five connector suites, the
+EPIC-119 contract suite, the boundary suite and the conformance harness —
+**288 passed**. Build clean. Working tree clean.
+
+## The claim EPIC-119 made, now measured
+
+`git diff 1aeffcc..8cfee5a` over the ingestion path and the contract is
+**empty**:
+
+```
+src/connectors/ingest.ts                        unchanged
+src/connectors/write.ts                         unchanged
+src/providers/contracts/source-connector.ts     unchanged
+```
+
+Four connectors across four genuinely different source shapes — a Git checkout,
+two trackers with incompatible identity schemes, and a wiki — and neither the
+one ingestion path nor the contract itself needed a character changed to receive
+any of them. That is the acceptance criterion EPIC-119 wrote for itself, stated
+as a diff rather than as a claim.
 
 ## Not applicable
 
