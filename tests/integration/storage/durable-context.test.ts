@@ -14,6 +14,7 @@ import {
   RelationshipType,
   SourceAuthority,
   createNullLogger,
+  type DurableContextPort,
 } from '../../../src/index.js';
 import {
   DurableContextStore,
@@ -81,6 +82,16 @@ describeDb(`durable context merger (${databaseAvailable() ? 'real PostgreSQL' : 
 
   afterAll(async () => {
     await db.drop();
+  });
+
+  it('satisfies the agent-facing port structurally — EPIC-128', () => {
+    // The assignment is the proof, and it is the whole of what keeps the bridge
+    // agent-independent: `DurableContextStore` never imports the port, and the
+    // port never imports the store. If the store's shape drifts, the
+    // composition root stops compiling here rather than at a client.
+    const port: DurableContextPort = context;
+    expect(typeof port.record).toBe('function');
+    expect(typeof port.trust).toBe('function');
   });
 
   it('converges four writers of one decision onto one record, keeping four observations', async () => {

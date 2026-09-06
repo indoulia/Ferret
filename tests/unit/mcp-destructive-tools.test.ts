@@ -173,6 +173,14 @@ describe('destructive MCP tools', () => {
     expect(
       tools.filter((tool) => !tool.readOnly && !tool.destructive).map((tool) => tool.name),
     ).toStrictEqual([
+      // EPIC-128, and first because the list is in `readdir` order.
+      // Recording durable context adds a row; a lifecycle transition writes one
+      // column, destroys no observation, and archiving is reversible. Both are
+      // additive in the protocol's sense and neither is ungoverned:
+      // `ferret_context_record` needs `record`, and `ferret_context_lifecycle`
+      // needs `mutate`, which nothing holds by default.
+      'ferret_context_record',
+      'ferret_context_lifecycle',
       'ferret_session_start',
       'ferret_session_remember',
       'ferret_session_checkpoint',

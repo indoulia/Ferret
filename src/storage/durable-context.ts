@@ -17,6 +17,7 @@ import {
   type DurableContext,
   type DurableContextInput,
 } from '../context/durable.js';
+import { MAX_CONTEXT_PAGE } from '../context/durable-port.js';
 import {
   EvidenceMethod,
   EvidenceState,
@@ -113,9 +114,6 @@ export interface ContextQuery {
   readonly states?: readonly LifecycleState[] | undefined;
   readonly limit?: number;
 }
-
-/** How many records one `current` read returns before it stops. */
-export const MAX_CONTEXT_PAGE = 200;
 
 export class DurableContextStore {
   readonly #db: FerretDatabase;

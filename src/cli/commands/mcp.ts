@@ -15,6 +15,7 @@ import {
   EvidenceStore,
   MigrationPolicy,
   RetrievalStore,
+  DurableContextStore,
   SessionStore,
   createStorageProvider,
   readInventory,
@@ -127,6 +128,11 @@ export function mcpCommand(): Command {
           // module — `boundaries.test.ts` refuses the latter, and this is the
           // composition root that is allowed to know about both.
           sessions: new SessionStore(storage.db),
+          // EPIC-128. `DurableContextStore` satisfies `DurableContextPort`
+          // structurally, so the surface an agent calls never learns that
+          // PostgreSQL exists — and the port, not this store, is what a second
+          // client would be written against.
+          context: new DurableContextStore(storage.db),
           // EPIC-048. Without this the traceability tool is not registered at
           // all, and the 556 evidence rows a single index run records stay
           // unreachable from the only surface an AI client has.

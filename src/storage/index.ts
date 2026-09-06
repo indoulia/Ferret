@@ -249,7 +249,6 @@ export {
 export {
   DURABLE_CONTEXT_PRODUCER,
   DurableContextStore,
-  MAX_CONTEXT_PAGE,
   type ContextProvenance,
   type ContextQuery,
   type ContextTrust,

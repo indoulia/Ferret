@@ -5,12 +5,14 @@ import { z } from 'zod';
 import {
   AnswerPackBuilder,
   CONTENT_NOTICE,
+  DEFAULT_CONTEXT_PRODUCER,
   ContextPackBuilder,
   MAX_ANSWER_BUDGET,
   MAX_BUDGET,
   MAX_LINEAGE_DEPTH,
   renderAnswer,
   renderPack,
+  type DurableContextPort,
   type EvidenceReader,
 } from '../context/index.js';
 import {
@@ -52,6 +54,7 @@ import {
 import { VERSION } from '../version.js';
 
 import { registerConfigTools, type ConfigurationAccess } from './config-tools.js';
+import { registerContextTools } from './context-tools.js';
 import { registerHealthTools, type HealthAccess } from './health-tools.js';
 import { registerSessionTools, type SessionAccess } from './session-tools.js';
 import { registerProviderTools, type ProviderAdministration } from './provider-tools.js';
@@ -211,6 +214,24 @@ export interface McpServerDependencies {
    * not registered, as with every other optional dependency here.
    */
   readonly sessions?: SessionAccess;
+  /**
+   * Durable context, over the port an agent reaches it through — EPIC-128.
+   *
+   * A port for the same reason `sessions` is one, and one more: the surface
+   * has to be agent-independent, and a dependency typed as a store would
+   * make the first client's storage the architecture. Absent means the tools
+   * report that this build serves no durable context, rather than being
+   * silently missing.
+   */
+  readonly context?: DurableContextPort;
+  /**
+   * What is recorded as the producer of everything an agent stores.
+   *
+   * From the composition root, never from tool input: a client that could
+   * name its own producer could claim a parser's identity and inherit its
+   * authority. Governance §12, one layer up.
+   */
+  readonly contextProducer?: string;
   readonly logger: Logger;
 }
 
@@ -292,6 +313,22 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       principal,
       logger,
       ...(dependencies.audit === undefined ? {} : { audit: dependencies.audit }),
+    });
+  }
+
+  // EPIC-128. The durable context surface an agent uses instead of keeping a
+  // parallel store of its own. Registered only when one is wired, which is the
+  // convention `evidence` above records: a tool that is honestly absent is
+  // better than one that answers "unavailable", because a client can tell the
+  // two apart.
+  if (dependencies.context !== undefined) {
+    registerContextTools({
+      server,
+      guard,
+      context: dependencies.context,
+      permittedScopes: access.permittedScopes,
+      producer: dependencies.contextProducer ?? DEFAULT_CONTEXT_PRODUCER,
+      producerVersion: VERSION,
     });
   }
 

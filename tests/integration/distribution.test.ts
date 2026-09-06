@@ -76,6 +76,12 @@ describe('the README describes the CLI that exists', () => {
       'ferret_get_entity',
       'ferret_neighbours',
       'ferret_context_pack',
+      // EPIC-128 — the durable context surface an agent uses instead of a
+      // parallel store of its own.
+      'ferret_context_record',
+      'ferret_context_find',
+      'ferret_context_trust',
+      'ferret_context_lifecycle',
     ]) {
       expect(readme).toContain(tool);
     }
