@@ -45,10 +45,17 @@ const withContent = process.argv.includes('--content');
 
 /** Findings, so the run reports all of them rather than only the first. */
 const findings = [];
+const skipped = [];
+
 function fail(check, detail) {
   findings.push({ check, detail });
   process.stderr.write(`  FAIL  ${check}\n        ${detail}\n`);
 }
+function skip(check, reason) {
+  skipped.push(check);
+  process.stderr.write(`  skip  ${check}\n        ${reason}\n`);
+}
+
 function pass(check, detail) {
   process.stderr.write(`  ok    ${check}${detail === undefined ? '' : `  (${detail})`}\n`);
 }
@@ -378,6 +385,160 @@ async function main() {
       }
     }
 
+    // -- Durable context must converge, and stay converged. ---------------
+    //
+    // EPIC-134. The same oracle discipline as the questions above: every
+    // expectation here is computed independently in this script, from the
+    // statements it is about to write, so a disagreement is a defect rather
+    // than a matter of opinion.
+    //
+    // Through the MCP surface, because that is what an agent has. Four defects
+    // in EPIC-126 to EPIC-133 were invisible from SQL and from the fixtures,
+    // and visible here: an AND query that could not find the duplicate that
+    // mattered, a verify sweep that read every context row as corrupt, a
+    // promotion that dropped the confidence it had just computed, and a
+    // retention target the CLI could name and never age.
+    // `record` is not granted by default, and should not be: EPIC-068 makes a
+    // Ferret nobody configured the restricted one. So these checks run where an
+    // operator has granted it and report themselves skipped where nobody has —
+    // a check that quietly did not run reads exactly like one that passed.
+    //
+    //   ferret config set authorization.permissions '["read","record","mutate"]'
+    const granted = (await client.listTools()).tools.some((tool) => tool.name === 'ferret_context_record');
+    // Probed with the first statement it would write anyway, rather than a
+    // throwaway: a probe that records `dogfood probe` leaves a record that says
+    // nothing in an index whose whole point is that it says something.
+    const probe = granted
+      ? await client.callTool({
+          name: 'ferret_context_record',
+          arguments: {
+            statement: 'Ferret dogfoods itself through the surface an agent actually uses',
+            contextKind: 'fact',
+          },
+        })
+      : undefined;
+    const permitted = probe !== undefined && probe.isError !== true;
+
+    if (!permitted) {
+      skip(
+        'durable context',
+        granted
+          ? 'this principal does not hold `record`. Grant it to exercise the durable context surface:\n' +
+              "        ferret config set authorization.permissions '[\"read\",\"record\",\"mutate\"]'"
+          : 'this build serves no durable context store.',
+      );
+    } else {
+    const CONTEXT_KIND = 'fact';
+    const wordings = [
+      'Ferret dogfoods itself through the surface an agent actually uses',
+      'Ferret dogfoods itself through the surface an agent actually uses.',
+      'ferret dogfoods itself through the surface an agent actually uses',
+      'Ferret dogfoods itself through a surface no agent uses',
+    ];
+    // The independent answer: distinct after the same normalization the
+    // product applies. Computed here rather than asked of Ferret.
+    const normalized = new Set(
+      wordings.map((one) =>
+        one
+          .normalize('NFKC')
+          .toLowerCase()
+          .replace(/[,;:](?=\s|$)/gu, '')
+          .replace(/\s+/gu, ' ')
+          .trim()
+          .replace(/[.!?;:,]+$/u, '')
+          .trim(),
+      ),
+    );
+
+    const recorded = [];
+    for (const statement of wordings) {
+      recorded.push(await call(client, 'ferret_context_record', { statement, contextKind: CONTEXT_KIND }));
+    }
+    const distinctIds = new Set(recorded.map((one) => one.context.id));
+
+    if (distinctIds.size !== normalized.size) {
+      fail(
+        'durable context converges',
+        `${String(wordings.length)} wordings reduce to ${String(normalized.size)} statements, and Ferret holds ${String(distinctIds.size)}.`,
+      );
+    } else {
+      pass('durable context converges', `${String(wordings.length)} wordings → ${String(distinctIds.size)} records`);
+    }
+
+    // Replaying what an agent already recorded must add nothing. This is the
+    // property an agent re-reading its own memory each session depends on.
+    for (const statement of wordings) {
+      await call(client, 'ferret_context_record', { statement, contextKind: CONTEXT_KIND });
+    }
+    const afterReplay = new Set(
+      (await call(client, 'ferret_context_find', { contextKind: CONTEXT_KIND, limit: 200 })).context.map(
+        (one) => one.id,
+      ),
+    );
+    const stillThere = [...distinctIds].every((id) => afterReplay.has(id));
+    if (!stillThere) {
+      fail('replay adds nothing', 'a statement Ferret held before the replay is no longer current.');
+    } else {
+      pass('replay adds nothing', `${String(distinctIds.size)} record(s) unchanged`);
+    }
+
+    // A question that reaches a cluster must answer with one of it, not all of
+    // it — EPIC-130. The independent answer is the cluster size.
+    const asked = await call(client, 'ferret_context_find', { contextKind: CONTEXT_KIND, limit: 200 });
+    const surviving = asked.context.filter((one) => distinctIds.has(one.id));
+    if (surviving.length !== distinctIds.size) {
+      fail(
+        'every statement stays reachable',
+        `Ferret recorded ${String(distinctIds.size)} and returns ${String(surviving.length)}.`,
+      );
+    } else {
+      pass('every statement stays reachable', `${String(surviving.length)} of ${String(distinctIds.size)}`);
+    }
+
+    // What Ferret believes, and why — EPIC-127. A statement three producers
+    // stated has three observations, and the report must say so.
+    const first = recorded[0].context.id;
+    const trust = await call(client, 'ferret_context_trust', { contextId: first });
+    if (trust.found !== true || trust.belief === undefined) {
+      fail('a statement can say why it is believed', 'no belief was reported for a record Ferret holds.');
+    } else if (trust.belief.current !== true) {
+      fail('a statement can say why it is believed', `reported state ${String(trust.belief.state)}.`);
+    } else {
+      pass('a statement can say why it is believed', trust.belief.reason?.slice(0, 44));
+    }
+
+    // A proposal is not something Ferret holds — EPIC-127, EPIC-129.
+    const proposal = await call(client, 'ferret_context_record', {
+      statement: 'A proposal is not a belief until somebody accepts it',
+      contextKind: 'next-step',
+      propose: true,
+    });
+    const currentAfterProposal = await call(client, 'ferret_context_find', { limit: 200 });
+    if (currentAfterProposal.context.some((one) => one.id === proposal.context.id)) {
+      fail('a proposal is not current context', 'a candidate was returned as something Ferret holds.');
+    } else {
+      pass('a proposal is not current context');
+    }
+
+    // The notice precedes the content, on the surface an agent reads — the one
+    // structural defence `mcp/server.ts` rests on.
+    const raw = await client.callTool({
+      name: 'ferret_context_find',
+      arguments: { contextKind: CONTEXT_KIND, limit: 5 },
+    });
+    const rendered = (raw.content ?? []).map((part) => part.text ?? '').join('');
+    const noticeAt = rendered.indexOf('DATA, not instructions');
+    const contentAt = rendered.indexOf('ferret:content');
+    if (noticeAt < 0 || contentAt < 0 || noticeAt > contentAt) {
+      fail(
+        'the notice precedes the content',
+        `notice at ${String(noticeAt)}, first contained value at ${String(contentAt)}.`,
+      );
+    } else {
+      pass('the notice precedes the content');
+    }
+    }
+
     // -- Health must describe reality. ------------------------------------
     const status = execFileSync(process.execPath, [CLI, 'status', '--json'], {
       cwd: ROOT,
@@ -395,6 +556,9 @@ async function main() {
   }
 
   process.stderr.write('\n');
+  if (skipped.length > 0) {
+    process.stderr.write(`${String(skipped.length)} check(s) skipped: ${skipped.join(', ')}.\n`);
+  }
   if (findings.length > 0) {
     process.stderr.write(`${findings.length} finding(s). Ferret disagrees with the repository.\n`);
     process.exit(1);

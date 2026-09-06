@@ -30,8 +30,8 @@ queue alive.
 ## Why this document exists
 
 Registry v3.0 closed 108 Epics when this document was reconstructed: 107
-`VALIDATED`, 1 `DONE`, 76/76 P0. The catalog now carries 132 rows — EPIC-109 to
-EPIC-133 delivered since — of which 130 are `VALIDATED`, 1 `DONE` and 1 `CLOSED`
+`VALIDATED`, 1 `DONE`, 76/76 P0. The catalog now carries 133 rows — EPIC-109 to
+EPIC-134 delivered since — of which 131 are `VALIDATED`, 1 `DONE` and 1 `CLOSED`
 with coverage deferred, and 81/81 P0. EPIC-125 is the one number in that range
 with no catalog row: it shipped as [#198](https://github.com/indoulia/Ferret/pull/198)
 with its evidence recorded on EPIC-119 and EPIC-120 rather than under its own
@@ -845,6 +845,7 @@ Filled in as Epics land.
 | EPIC-130 | `8830d20` | [#204](https://github.com/indoulia/Ferret/pull/204) | `8830d20` | [record](validation/EPIC-130-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-131 | `a5a8049` | [#205](https://github.com/indoulia/Ferret/pull/205) | `a5a8049` | [record](validation/EPIC-131-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-132 | `7899ef7` | [#207](https://github.com/indoulia/Ferret/pull/207) | `7899ef7` | [record](validation/EPIC-132-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-133 | `cacad40` | [#208](https://github.com/indoulia/Ferret/pull/208) | `cacad40` | [record](validation/EPIC-133-VALIDATION.md) | COMPLETE — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:
