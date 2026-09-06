@@ -464,7 +464,13 @@ ferret prune --blobs --yes         # content no file version references
 ferret prune --journals --yes      # rotated audit journals above the kept count
 ferret prune --evidence --superseded-older-than 90 --yes
 ferret prune --sessions --sessions-older-than 90 --yes   # ended sessions, and everything they recorded
+ferret prune --context --archived-older-than 180 --yes   # durable context an agent deliberately retired
 ```
+
+`--context` reaches only durable context an agent **archived** — deliberately
+retired, with nothing replacing it. Superseded context is never reclaimed,
+because it is the record of a decision that changed; nor is anything current,
+however old, or a proposal nobody has answered.
 
 Nothing is deleted unless a target is named *and* `--yes` is given — `--yes`
 alone deletes nothing, because it is a confirmation and not a target. There is

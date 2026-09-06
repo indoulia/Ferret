@@ -3,7 +3,9 @@ import { basename, dirname, join } from 'node:path';
 
 import { and, eq, inArray, isNotNull, lt, notExists, sql } from 'drizzle-orm';
 
-import { EvidenceState } from '../domain/index.js';
+import { EvidenceState, LifecycleState } from '../domain/index.js';
+
+import { DURABLE_CONTEXT_KIND } from '../context/index.js';
 
 import { classifyDatabaseError } from './connection.js';
 import type { FerretDatabase } from './entities.js';
@@ -45,6 +47,33 @@ export const RetentionTarget = {
    * same reason: age is not evidence that a thing is finished.
    */
   SESSIONS: 'sessions',
+  /**
+   * **Archived** durable context past an age the caller names — EPIC-133.
+   *
+   * Only archived. The three states this deliberately never reclaims are the
+   * whole of the retention decision:
+   *
+   * - **`superseded` is never eligible.** It is the record of a decision that
+   *   changed, and "why did we change our mind" is a question the model exists
+   *   to answer. Deleting the replaced half destroys the answer along with it —
+   *   the same reasoning `LifecycleState.DELETED` gives for a tombstone.
+   * - **`active` is never eligible.** It is what Ferret currently holds, and
+   *   age is not evidence that something stopped being true. EPIC-057 refused
+   *   a decay curve for exactly this reason.
+   * - **`candidate` is never eligible.** A proposal nobody has accepted is not
+   *   abandoned; it is unanswered, and reclaiming it would decide by timeout
+   *   what nobody decided.
+   *
+   * Archiving is a deliberate act by an agent holding `mutate` saying a
+   * statement no longer applies, with nothing replacing it. Reclaiming those
+   * after an age the *caller* names — never one Ferret chose — is the one
+   * deletion this model can defend, and it is what makes archiving reversible
+   * up to that point rather than for ever.
+   *
+   * The supporting evidence goes with it. An observation whose subject no
+   * longer exists is unreachable rather than retained.
+   */
+  CONTEXT: 'context',
 } as const;
 
 export type RetentionTarget = (typeof RetentionTarget)[keyof typeof RetentionTarget];
@@ -54,6 +83,7 @@ export const RETENTION_TARGETS: readonly RetentionTarget[] = [
   RetentionTarget.JOURNALS,
   RetentionTarget.EVIDENCE,
   RetentionTarget.SESSIONS,
+  RetentionTarget.CONTEXT,
 ];
 
 /** One target's share of the plan. `bytes` is undefined when unmeasurable. */
@@ -90,6 +120,13 @@ export interface RetentionRequest {
    * is worth keeping, and how long the record of a session's work is.
    */
   readonly sessionsEndedOlderThanDays?: number | undefined;
+  /**
+   * Minimum age of *archived* durable context, in days. Required for
+   * {@link RetentionTarget.CONTEXT}, and its own age for the reason the two
+   * above are separate: how long a retired organizational statement is worth
+   * keeping is a different judgement from either, and none of them is Ferret's.
+   */
+  readonly archivedOlderThanDays?: number | undefined;
   /** Where the audit journals live, for {@link RetentionTarget.JOURNALS}. */
   readonly journalPath?: string | undefined;
   /** Rotated copies to keep. Matches EPIC-085's writer default. */
@@ -140,6 +177,7 @@ export class RetentionService {
       if (target === RetentionTarget.BLOBS) return await this.#blobs(apply);
       if (target === RetentionTarget.JOURNALS) return journals(request, apply);
       if (target === RetentionTarget.SESSIONS) return await this.#sessions(request, apply);
+      if (target === RetentionTarget.CONTEXT) return await this.#context(request, apply);
       return await this.#evidence(request, apply);
     } catch (error) {
       return failureOf(target, error);
@@ -311,6 +349,65 @@ export class RetentionService {
     );
 
     return { target: RetentionTarget.EVIDENCE, rows: deleted.length };
+  }
+
+  /**
+   * Archived durable context, and the observations that supported it.
+   *
+   * `archivedOlderThanDays` is required and has no default, on EPIC-088 §8.3's
+   * rule that Ferret does not choose how long a record of its own work lasts.
+   * A caller that names no age reclaims nothing and is told why.
+   *
+   * The `lifecycle = 'archived'` predicate is repeated on the delete rather
+   * than trusted from the select: between the two a reinstatement may have
+   * made the row current again, and a plan is not a lock.
+   */
+  async #context(request: RetentionRequest, apply: boolean): Promise<RetentionCount> {
+    const days = request.archivedOlderThanDays;
+    if (days === undefined || !Number.isFinite(days) || days < 0) {
+      return {
+        target: RetentionTarget.CONTEXT,
+        rows: 0,
+        note: 'An age in days is required; Ferret does not choose how long durable context lasts.',
+      };
+    }
+
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const found = await this.#db.execute<{ [column: string]: unknown; id: string }>(sql`
+      SELECT id FROM ferret.entity
+       WHERE kind = ${DURABLE_CONTEXT_KIND}
+         AND lifecycle = ${LifecycleState.ARCHIVED}
+         AND last_indexed_at < ${cutoff}
+    `);
+    const rows = found.rows;
+
+    if (!apply || rows.length === 0) {
+      return { target: RetentionTarget.CONTEXT, rows: rows.length };
+    }
+
+    const ids = rows.map((row) => row.id);
+    const deleted = await this.#db.transaction(async (tx) => {
+      // Evidence first, then the edges, then the record: an observation whose
+      // subject is gone is unreachable, and a relationship to a deleted row is
+      // a dangling edge every traversal would then have to defend against.
+      await tx.execute(sql`
+        DELETE FROM ferret.evidence WHERE subject_id::text = ANY(${sql.raw('ARRAY[')}${sql.join(
+          ids.map((id) => sql`${id}`),
+          sql`, `,
+        )}${sql.raw(']::text[]')})
+      `);
+      await tx.execute(sql`
+        DELETE FROM ferret.relationship
+         WHERE from_id::text = ANY(${sql.raw('ARRAY[')}${sql.join(ids.map((id) => sql`${id}`), sql`, `)}${sql.raw(']::text[]')})
+            OR to_id::text = ANY(${sql.raw('ARRAY[')}${sql.join(ids.map((id) => sql`${id}`), sql`, `)}${sql.raw(']::text[]')})
+      `);
+      return tx
+        .delete(entity)
+        .where(and(inArray(entity.id, ids), eq(entity.lifecycle, LifecycleState.ARCHIVED)))
+        .returning({ id: entity.id });
+    });
+
+    return { target: RetentionTarget.CONTEXT, rows: deleted.length };
   }
 }
 
