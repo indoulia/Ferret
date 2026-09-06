@@ -92,6 +92,39 @@ export async function pack(client, question, { budget }) {
   };
 }
 
+/**
+ * Refuse to measure an index that holds the answer key.
+ *
+ * The baseline cannot grep `benchmark/`; `EXCLUDED_PREFIXES` sees to that. An
+ * *index* built without the matching exclusion can, and filtering those results
+ * out afterwards does not undo the damage — measured on the first run after the
+ * harness was committed and indexed: the benchmark's own files displaced real
+ * answers out of `ferret_search`'s top ten, and the corpus filter then removed
+ * them, leaving a shorter list that had quietly lost the results they pushed
+ * out. Worse, the strict query now matched *something* for every question, which
+ * masked the empty-pack defect the benchmark had just found.
+ *
+ * So this is a precondition rather than a warning. It asks a `read` question —
+ * "is this file in the index" — rather than reading configuration, because
+ * `config.read` is not granted by default and should not be: the property that
+ * matters is whether the answer key is reachable, not which rule was written.
+ */
+export async function assertCorpusExcluded(client, probePath) {
+  const { text } = await call(client, 'ferret_find', {
+    kind: 'file',
+    attributes: { path: probePath },
+    limit: 1,
+  });
+  const found = (JSON.parse(text).results ?? []).length > 0;
+  if (!found) return;
+  throw new Error(
+    `The index holds ${probePath}, which is this benchmark's answer key.\n` +
+      'Exclude the harness and re-index, then run again:\n' +
+      "  node dist/cli/main.js config set exclude '[\"benchmark\"]'\n" +
+      '  node scripts/dogfood-db.mjs --index',
+  );
+}
+
 /** A ranked search for the question. */
 export async function search(client, question, { limit }) {
   const { result, ms, text } = await call(client, 'ferret_search', { query: question, limit });

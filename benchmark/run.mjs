@@ -132,6 +132,10 @@ const client = await ferret.connect({
   },
 });
 
+// Before anything is measured. A run against an index that holds the questions
+// produces numbers, and they mean nothing.
+await ferret.assertCorpusExcluded(client, 'benchmark/tasks.json');
+
 const rows = [];
 for (const task of tasks) {
   const questionTerms = baseline.terms(task.question);
