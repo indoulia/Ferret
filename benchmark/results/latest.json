@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "ranAt": "2026-09-06T13:47:22.912Z",
+  "ranAt": "2026-09-06T15:16:40.215Z",
   "baseCommit": "271be92",
   "parameters": {
     "k": 10,
@@ -9,76 +9,76 @@
   },
   "summary": {
     "baseline": {
-      "tasks": 16,
-      "recall": 0.3125,
-      "precision5": 0.1625,
-      "precision10": 0.1125,
-      "ndcg10": 0.30666289417426634,
-      "mrrPrimary": 0.37872023809523814,
+      "tasks": 19,
+      "recall": 0.35526315789473684,
+      "precision5": 0.16842105263157894,
+      "precision10": 0.12105263157894738,
+      "ndcg10": 0.3394651590778614,
+      "mrrPrimary": 0.40570175438596495,
       "sourced": {
-        "rate": 0.375,
-        "of": 16
+        "rate": 0.42105263157894735,
+        "of": 19
       },
       "staleAboveCurrent": {
         "rate": 0,
-        "of": 1
+        "of": 2
       },
-      "irrelevant5PerTask": 4.0625,
-      "retrievalTokens": 2733,
-      "readTokensFull": 603481,
-      "readTokensFrugal": 563608,
-      "totalTokensFull": 606214,
-      "totalTokensFrugal": 566341,
-      "tokensPerSourcedTask": 101036,
-      "medianMs": 2081.4678999999996
+      "irrelevant5PerTask": 4.052631578947368,
+      "retrievalTokens": 3269,
+      "readTokensFull": 781788,
+      "readTokensFrugal": 719411,
+      "totalTokensFull": 785057,
+      "totalTokensFrugal": 722680,
+      "tokensPerSourcedTask": 98132,
+      "medianMs": 969.0464999999967
     },
     "ferret-pack": {
-      "tasks": 16,
-      "recall": 0.171875,
-      "precision5": 0.18611111111111112,
-      "precision10": 0.15965608465608463,
-      "ndcg10": 0.18384654013946913,
-      "mrrPrimary": 0.196875,
+      "tasks": 19,
+      "recall": 0.25,
+      "precision5": 0.13859649122807016,
+      "precision10": 0.1434419381787803,
+      "ndcg10": 0.2225172808119646,
+      "mrrPrimary": 0.23032581453634088,
       "sourced": {
-        "rate": 0.1875,
-        "of": 16
+        "rate": 0.2631578947368421,
+        "of": 19
       },
       "staleAboveCurrent": {
         "rate": 0,
-        "of": 1
+        "of": 2
       },
-      "irrelevant5PerTask": 2.4375,
-      "retrievalTokens": 29684,
-      "readTokensFull": 309663,
-      "readTokensFrugal": 287689,
-      "totalTokensFull": 339347,
-      "totalTokensFrugal": 317373,
-      "tokensPerSourcedTask": 113116,
-      "medianMs": 118.07634999999937
+      "irrelevant5PerTask": 3.6842105263157894,
+      "retrievalTokens": 49270,
+      "readTokensFull": 667390,
+      "readTokensFrugal": 598329,
+      "totalTokensFull": 716660,
+      "totalTokensFrugal": 647599,
+      "tokensPerSourcedTask": 143332,
+      "medianMs": 97.99309999999969
     },
     "ferret-search": {
-      "tasks": 16,
-      "recall": 0.203125,
-      "precision5": 0.15,
-      "precision10": 0.12013888888888888,
-      "ndcg10": 0.21771621552727857,
-      "mrrPrimary": 0.246875,
+      "tasks": 19,
+      "recall": 0.2631578947368421,
+      "precision5": 0.16842105263157894,
+      "precision10": 0.13567251461988306,
+      "ndcg10": 0.262118992699124,
+      "mrrPrimary": 0.2710526315789474,
       "sourced": {
-        "rate": 0.25,
-        "of": 16
+        "rate": 0.3157894736842105,
+        "of": 19
       },
       "staleAboveCurrent": {
         "rate": 0,
-        "of": 1
+        "of": 2
       },
-      "irrelevant5PerTask": 3.375,
-      "retrievalTokens": 157778,
-      "readTokensFull": 521093,
-      "readTokensFrugal": 475725,
-      "totalTokensFull": 678871,
-      "totalTokensFrugal": 633503,
-      "tokensPerSourcedTask": 169718,
-      "medianMs": 187.84540000000015
+      "irrelevant5PerTask": 3.3157894736842106,
+      "retrievalTokens": 205505,
+      "readTokensFull": 667390,
+      "readTokensFrugal": 598329,
+      "totalTokensFull": 872895,
+      "totalTokensFrugal": 803834,
+      "tokensPerSourcedTask": 145483,
+      "medianMs": 52.04280000000017
     }
   },
   "tasks": [
@@ -115,7 +115,7 @@
             "retrievalTokens": 174,
             "readTokensFull": 32771,
             "readTokensFrugal": 26614,
-            "ms": 1200.7145
+            "ms": 817.0037000000002
           }
         },
         "ferret-pack": {
@@ -135,9 +135,14 @@
               "reason": "token-budget",
               "count": 3,
               "detail": "3 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
             }
           ],
-          "packJsonTokens": 8102,
+          "packJsonTokens": 8187,
           "score": {
             "recall": 0.25,
             "precision5": 0.2,
@@ -150,10 +155,10 @@
             "staleAboveCurrent": false,
             "supersededInWindow": 0,
             "irrelevant5": 4,
-            "retrievalTokens": 2781,
+            "retrievalTokens": 2843,
             "readTokensFull": 7466,
             "readTokensFrugal": 5238,
-            "ms": 138.78569999999945
+            "ms": 80.95789999999988
           }
         },
         "ferret-search": {
@@ -185,7 +190,7 @@
             "retrievalTokens": 25362,
             "readTokensFull": 7466,
             "readTokensFrugal": 5238,
-            "ms": 82.1217999999999
+            "ms": 50.89549999999963
           }
         }
       }
@@ -221,7 +226,7 @@
             "retrievalTokens": 195,
             "readTokensFull": 24794,
             "readTokensFrugal": 24794,
-            "ms": 1918.0251000000007
+            "ms": 1309.0603
           }
         },
         "ferret-pack": {
@@ -241,9 +246,14 @@
               "reason": "token-budget",
               "count": 17,
               "detail": "17 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
             }
           ],
-          "packJsonTokens": 7872,
+          "packJsonTokens": 7957,
           "score": {
             "recall": 0.25,
             "precision5": 0.2,
@@ -254,10 +264,10 @@
             "primaryTotal": 2,
             "reciprocalRankPrimary": 0,
             "irrelevant5": 4,
-            "retrievalTokens": 2823,
+            "retrievalTokens": 2885,
             "readTokensFull": 20766,
             "readTokensFrugal": 20766,
-            "ms": 1212.7742999999991
+            "ms": 216.07820000000083
           }
         },
         "ferret-search": {
@@ -287,7 +297,7 @@
             "retrievalTokens": 4899,
             "readTokensFull": 20766,
             "readTokensFrugal": 20766,
-            "ms": 434.6214
+            "ms": 52.04280000000017
           }
         }
       }
@@ -321,29 +331,50 @@
             "reciprocalRankPrimary": 0.25,
             "irrelevant5": 4,
             "retrievalTokens": 153,
-            "readTokensFull": 31492,
-            "readTokensFrugal": 25209,
-            "ms": 3280.857399999999
+            "readTokensFull": 32404,
+            "readTokensFrugal": 26122,
+            "ms": 867.1342999999997
           }
         },
         "ferret-pack": {
-          "ranked": [],
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "file:src/retrieval/query.ts",
+            "file:src/index.ts",
+            "file:tests/unit/boundaries.test.ts",
+            "file:src/context/pack.ts",
+            "file:src/mcp/context-tools.ts",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md"
+          ],
           "harnessReturned": 0,
           "standingCount": 0,
-          "omitted": [],
-          "packJsonTokens": 469,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 33,
+              "detail": "33 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
+            }
+          ],
+          "packJsonTokens": 7771,
           "score": {
             "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
             "ndcg10": 0,
             "sourced": false,
             "primaryFound": 0,
             "primaryTotal": 2,
             "reciprocalRankPrimary": 0,
-            "irrelevant5": 0,
-            "retrievalTokens": 635,
-            "readTokensFull": 0,
-            "readTokensFrugal": 0,
-            "ms": 50.38839999999982
+            "irrelevant5": 5,
+            "retrievalTokens": 2788,
+            "readTokensFull": 42103,
+            "readTokensFrugal": 31873,
+            "ms": 431.8848999999991
           }
         },
         "ferret-search": {
@@ -373,7 +404,7 @@
             "retrievalTokens": 4881,
             "readTokensFull": 42103,
             "readTokensFrugal": 31873,
-            "ms": 2378.936999999998
+            "ms": 212.09039999999914
           }
         }
       }
@@ -385,8 +416,8 @@
       "conditions": {
         "baseline": {
           "ranked": [
-            "file:README.md",
             "file:scripts/dogfood.mjs",
+            "file:README.md",
             "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
             "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
             "commit:6e74992575",
@@ -400,16 +431,16 @@
             "recall": 0.5,
             "precision5": 0.2,
             "precision10": 0.2,
-            "ndcg10": 0.4139502977142807,
+            "ndcg10": 0.5778809165118342,
             "sourced": true,
             "primaryFound": 2,
             "primaryTotal": 2,
-            "reciprocalRankPrimary": 0.5,
+            "reciprocalRankPrimary": 1,
             "irrelevant5": 4,
             "retrievalTokens": 150,
-            "readTokensFull": 50621,
-            "readTokensFrugal": 49996,
-            "ms": 2726.449800000002
+            "readTokensFull": 51364,
+            "readTokensFrugal": 50739,
+            "ms": 1362.3507000000009
           }
         },
         "ferret-pack": {
@@ -420,8 +451,14 @@
           ],
           "harnessReturned": 0,
           "standingCount": 2,
-          "omitted": [],
-          "packJsonTokens": 1712,
+          "omitted": [
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
+            }
+          ],
+          "packJsonTokens": 1798,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -432,10 +469,10 @@
             "primaryTotal": 2,
             "reciprocalRankPrimary": 0,
             "irrelevant5": 3,
-            "retrievalTokens": 1053,
+            "retrievalTokens": 1130,
             "readTokensFull": 24808,
             "readTokensFrugal": 23387,
-            "ms": 110.49250000000029
+            "ms": 40.95800000000054
           }
         },
         "ferret-search": {
@@ -456,7 +493,7 @@
             "retrievalTokens": 908,
             "readTokensFull": 24808,
             "readTokensFrugal": 23387,
-            "ms": 70.97920000000158
+            "ms": 24.513300000000527
           }
         }
       }
@@ -492,7 +529,7 @@
             "retrievalTokens": 142,
             "readTokensFull": 33139,
             "readTokensFrugal": 30899,
-            "ms": 1750.4362
+            "ms": 1039.4429
           }
         },
         "ferret-pack": {
@@ -514,9 +551,14 @@
               "reason": "token-budget",
               "count": 5,
               "detail": "5 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
             }
           ],
-          "packJsonTokens": 8020,
+          "packJsonTokens": 8104,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -527,10 +569,10 @@
             "primaryTotal": 2,
             "reciprocalRankPrimary": 0,
             "irrelevant5": 5,
-            "retrievalTokens": 2943,
+            "retrievalTokens": 3005,
             "readTokensFull": 36374,
             "readTokensFrugal": 36154,
-            "ms": 192.35440000000017
+            "ms": 124.76180000000022
           }
         },
         "ferret-search": {
@@ -560,7 +602,7 @@
             "retrievalTokens": 4884,
             "readTokensFull": 36374,
             "readTokensFrugal": 36154,
-            "ms": 110.62489999999889
+            "ms": 69.22739999999976
           }
         }
       }
@@ -596,7 +638,7 @@
             "retrievalTokens": 180,
             "readTokensFull": 21724,
             "readTokensFrugal": 18924,
-            "ms": 1283.0740000000005
+            "ms": 916.5378000000001
           }
         },
         "ferret-pack": {
@@ -607,8 +649,14 @@
           ],
           "harnessReturned": 0,
           "standingCount": 1,
-          "omitted": [],
-          "packJsonTokens": 2610,
+          "omitted": [
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
+            }
+          ],
+          "packJsonTokens": 2695,
           "score": {
             "recall": 0.25,
             "precision5": 0.3333333333333333,
@@ -619,10 +667,10 @@
             "primaryTotal": 2,
             "reciprocalRankPrimary": 0.5,
             "irrelevant5": 2,
-            "retrievalTokens": 1260,
+            "retrievalTokens": 1337,
             "readTokensFull": 18869,
             "readTokensFrugal": 16069,
-            "ms": 62.729699999999866
+            "ms": 42.46720000000096
           }
         },
         "ferret-search": {
@@ -644,7 +692,7 @@
             "retrievalTokens": 1287,
             "readTokensFull": 18869,
             "readTokensFrugal": 16069,
-            "ms": 34.634799999999814
+            "ms": 27.65229999999974
           }
         }
       }
@@ -652,101 +700,108 @@
     {
       "task": "score-comparability",
       "kind": "rationale",
-      "question": "Why must a retrieval score never be compared between two different queries?",
+      "question": "Is a Ferret retrieval score comparable between two different queries?",
       "conditions": {
         "baseline": {
           "ranked": [
             "file:src/storage/retrieval.ts",
             "file:docs/EPICs/EPIC-098-Retrieval-Quality-Harness.md",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
             "file:tests/integration/retrieval/permission.test.ts",
-            "file:tests/unit/retrieval-quality.test.ts",
             "file:tests/integration/retrieval/retrieval.test.ts",
-            "file:src/retrieval/rank.ts",
             "file:src/retrieval/query.ts",
+            "file:src/retrieval/rank.ts",
+            "file:tests/integration/evaluation/golden-dataset.test.ts",
             "file:docs/EPICs/EPIC-056-Ranking-And-Reranking.md",
-            "file:tests/unit/retrieval-rank.test.ts",
-            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
+            "file:tests/unit/retrieval-quality.test.ts"
           ],
           "score": {
             "recall": 0.75,
             "precision5": 0.2,
             "precision10": 0.3,
-            "ndcg10": 0.4140240129823034,
-            "sourced": false,
+            "ndcg10": 0.4894730788432801,
+            "sourced": true,
             "primaryFound": 1,
-            "primaryTotal": 2,
-            "reciprocalRankPrimary": 0.14285714285714285,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0.16666666666666666,
             "irrelevant5": 4,
-            "retrievalTokens": 190,
-            "readTokensFull": 38368,
-            "readTokensFrugal": 34292,
-            "ms": 3584.907699999996
+            "retrievalTokens": 195,
+            "readTokensFull": 55816,
+            "readTokensFrugal": 53042,
+            "ms": 1172.5512000000017
           }
         },
         "ferret-pack": {
           "ranked": [
+            "context:8e13befb-836a-823d-bbe0-c27d5860e62b",
+            "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
             "file:docs/EPICs/EPIC-098-Retrieval-Quality-Harness.md",
             "file:src/storage/retrieval.ts",
+            "file:docs/EPICs/EPIC-063-Query-Explanation.md",
             "file:docs/EPICs/EPIC-056-Ranking-And-Reranking.md",
             "file:src/retrieval/query.ts",
-            "file:tests/integration/evaluation/golden-dataset.test.ts",
-            "file:docs/EPICs/EPIC-052-053-Retrieval.md",
-            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
+            "file:tests/security/injection-boundary.test.ts",
+            "file:src/retrieval/rank.ts"
           ],
           "harnessReturned": 0,
-          "standingCount": 0,
+          "standingCount": 2,
           "omitted": [
             {
               "reason": "token-budget",
-              "count": 7,
-              "detail": "7 result(s) did not fit in 4000 estimated tokens"
+              "count": 12,
+              "detail": "12 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
             }
           ],
-          "packJsonTokens": 7941,
+          "packJsonTokens": 8192,
           "score": {
-            "recall": 0.5,
-            "precision5": 0.4,
-            "precision10": 0.2857142857142857,
-            "ndcg10": 0.5206052770047669,
-            "sourced": false,
+            "recall": 0.75,
+            "precision5": 0.2,
+            "precision10": 0.3333333333333333,
+            "ndcg10": 0.42495012853726505,
+            "sourced": true,
             "primaryFound": 1,
-            "primaryTotal": 2,
-            "reciprocalRankPrimary": 0.25,
-            "irrelevant5": 3,
-            "retrievalTokens": 2803,
-            "readTokensFull": 34347,
-            "readTokensFrugal": 30601,
-            "ms": 636.0316999999995
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0.14285714285714285,
+            "irrelevant5": 4,
+            "retrievalTokens": 2996,
+            "readTokensFull": 34379,
+            "readTokensFrugal": 32385,
+            "ms": 166.55359999999928
           }
         },
         "ferret-search": {
           "ranked": [
             "file:docs/EPICs/EPIC-098-Retrieval-Quality-Harness.md",
             "file:src/storage/retrieval.ts",
+            "file:docs/EPICs/EPIC-063-Query-Explanation.md",
             "file:docs/EPICs/EPIC-056-Ranking-And-Reranking.md",
             "file:src/retrieval/query.ts",
+            "file:tests/security/injection-boundary.test.ts",
+            "file:src/retrieval/rank.ts",
             "file:tests/integration/evaluation/golden-dataset.test.ts",
-            "file:docs/EPICs/EPIC-052-053-Retrieval.md",
             "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
-            "file:.agent/FINDINGS.md",
-            "file:src/storage/embeddings.ts",
-            "file:docs/EPICs/EPIC-057-Freshness-And-Authority-Ranking.md"
+            "file:docs/EPICs/EPIC-052-053-Retrieval.md"
           ],
           "harnessReturned": 0,
           "score": {
-            "recall": 0.5,
+            "recall": 0.75,
             "precision5": 0.4,
-            "precision10": 0.2,
-            "ndcg10": 0.5206052770047669,
-            "sourced": false,
+            "precision10": 0.3,
+            "ndcg10": 0.6250354713820326,
+            "sourced": true,
             "primaryFound": 1,
-            "primaryTotal": 2,
-            "reciprocalRankPrimary": 0.25,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0.2,
             "irrelevant5": 3,
-            "retrievalTokens": 4675,
-            "readTokensFull": 34347,
-            "readTokensFrugal": 30601,
-            "ms": 265.0659000000014
+            "retrievalTokens": 4772,
+            "readTokensFull": 34379,
+            "readTokensFrugal": 32385,
+            "ms": 56.34549999999945
           }
         }
       }
@@ -780,29 +835,50 @@
             "reciprocalRankPrimary": 1,
             "irrelevant5": 4,
             "retrievalTokens": 149,
-            "readTokensFull": 43519,
-            "readTokensFrugal": 38101,
-            "ms": 2273.9801000000007
+            "readTokensFull": 45852,
+            "readTokensFrugal": 40273,
+            "ms": 1175.854000000003
           }
         },
         "ferret-pack": {
-          "ranked": [],
+          "ranked": [
+            "file:README.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/README.md",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:tests/integration/mcp/tools.test.ts",
+            "file:docs/EPICs/EPIC-131-Context-Assembly.md",
+            "file:docs/EPICs/validation/EPIC-131-VALIDATION.md"
+          ],
           "harnessReturned": 0,
           "standingCount": 0,
-          "omitted": [],
-          "packJsonTokens": 468,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 33,
+              "detail": "33 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 5,
+              "detail": "5 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
+            }
+          ],
+          "packJsonTokens": 7880,
           "score": {
-            "recall": 0,
-            "ndcg10": 0,
+            "recall": 0.25,
+            "precision5": 0,
+            "precision10": 0.14285714285714285,
+            "ndcg10": 0.1582172097800351,
             "sourced": false,
-            "primaryFound": 0,
+            "primaryFound": 1,
             "primaryTotal": 2,
-            "reciprocalRankPrimary": 0,
-            "irrelevant5": 0,
-            "retrievalTokens": 634,
-            "readTokensFull": 0,
-            "readTokensFrugal": 0,
-            "ms": 44.659599999999045
+            "reciprocalRankPrimary": 0.16666666666666666,
+            "irrelevant5": 5,
+            "retrievalTokens": 2761,
+            "readTokensFull": 57383,
+            "readTokensFrugal": 49139,
+            "ms": 431.27340000000186
           }
         },
         "ferret-search": {
@@ -832,7 +908,7 @@
             "retrievalTokens": 4778,
             "readTokensFull": 57383,
             "readTokensFrugal": 49139,
-            "ms": 2654.0555999999997
+            "ms": 220.85680000000139
           }
         }
       }
@@ -851,9 +927,9 @@
             "file:src/indexing/indexer.ts",
             "commit:10531e003a",
             "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md",
+            "file:src/storage/retrieval.ts",
             "file:docs/EPICs/ROADMAP.md",
-            "file:docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md",
-            "file:src/storage/retrieval.ts"
+            "file:docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md"
           ],
           "score": {
             "recall": 0,
@@ -868,27 +944,55 @@
             "retrievalTokens": 161,
             "readTokensFull": 58023,
             "readTokensFrugal": 56089,
-            "ms": 2168.903299999998
+            "ms": 959.160100000001
           }
         },
         "ferret-pack": {
-          "ranked": [],
+          "ranked": [
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md",
+            "commit:6e74992575",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
+          ],
           "harnessReturned": 0,
           "standingCount": 0,
-          "omitted": [],
-          "packJsonTokens": 464,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 1,
+              "detail": "1 observation(s) not cited — the result carrying them was shortened to fit the token budget"
+            },
+            {
+              "reason": "content-trimmed",
+              "count": 1,
+              "detail": "1 result(s) had their longest values shortened to fit"
+            },
+            {
+              "reason": "token-budget",
+              "count": 36,
+              "detail": "36 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 5,
+              "detail": "5 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
+            }
+          ],
+          "packJsonTokens": 6393,
           "score": {
             "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
             "ndcg10": 0,
             "sourced": false,
             "primaryFound": 0,
             "primaryTotal": 1,
             "reciprocalRankPrimary": 0,
-            "irrelevant5": 0,
-            "retrievalTokens": 629,
-            "readTokensFull": 0,
-            "readTokensFrugal": 0,
-            "ms": 39.29290000000037
+            "irrelevant5": 4,
+            "retrievalTokens": 4076,
+            "readTokensFull": 52458,
+            "readTokensFrugal": 52458,
+            "ms": 360.85499999999956
           }
         },
         "ferret-search": {
@@ -918,7 +1022,7 @@
             "retrievalTokens": 22877,
             "readTokensFull": 52458,
             "readTokensFrugal": 52458,
-            "ms": 3492.187699999995
+            "ms": 198.09890000000087
           }
         }
       }
@@ -954,7 +1058,7 @@
             "retrievalTokens": 196,
             "readTokensFull": 24329,
             "readTokensFrugal": 20317,
-            "ms": 1756.9497999999949
+            "ms": 738.5502000000015
           }
         },
         "ferret-pack": {
@@ -986,9 +1090,14 @@
               "reason": "token-budget",
               "count": 21,
               "detail": "21 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 3,
+              "detail": "3 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
             }
           ],
-          "packJsonTokens": 7977,
+          "packJsonTokens": 8062,
           "score": {
             "recall": 0.5,
             "precision5": 0.2,
@@ -999,10 +1108,10 @@
             "primaryTotal": 1,
             "reciprocalRankPrimary": 0.2,
             "irrelevant5": 4,
-            "retrievalTokens": 3199,
+            "retrievalTokens": 3261,
             "readTokensFull": 25204,
             "readTokensFrugal": 18330,
-            "ms": 413.85020000000077
+            "ms": 198.42859999999928
           }
         },
         "ferret-search": {
@@ -1032,7 +1141,7 @@
             "retrievalTokens": 6075,
             "readTokensFull": 25204,
             "readTokensFrugal": 18330,
-            "ms": 379.6527999999962
+            "ms": 44.97330000000147
           }
         }
       }
@@ -1068,27 +1177,55 @@
             "retrievalTokens": 148,
             "readTokensFull": 46565,
             "readTokensFrugal": 42226,
-            "ms": 2272.5941999999995
+            "ms": 990.2455000000009
           }
         },
         "ferret-pack": {
-          "ranked": [],
+          "ranked": [
+            "file:README.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md",
+            "commit:10531e003a",
+            "file:tests/integration/domain/entity-store.test.ts"
+          ],
           "harnessReturned": 0,
           "standingCount": 0,
-          "omitted": [],
-          "packJsonTokens": 461,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 1,
+              "detail": "1 observation(s) not cited — the result carrying them was shortened to fit the token budget"
+            },
+            {
+              "reason": "content-trimmed",
+              "count": 1,
+              "detail": "1 result(s) had their longest values shortened to fit"
+            },
+            {
+              "reason": "token-budget",
+              "count": 36,
+              "detail": "36 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 4,
+              "detail": "4 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
+            }
+          ],
+          "packJsonTokens": 6357,
           "score": {
             "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
             "ndcg10": 0,
             "sourced": false,
             "primaryFound": 0,
             "primaryTotal": 1,
             "reciprocalRankPrimary": 0,
-            "irrelevant5": 0,
-            "retrievalTokens": 627,
-            "readTokensFull": 0,
-            "readTokensFrugal": 0,
-            "ms": 31.24199999999837
+            "irrelevant5": 4,
+            "retrievalTokens": 4101,
+            "readTokensFull": 59486,
+            "readTokensFrugal": 54566,
+            "ms": 506.28859999999986
           }
         },
         "ferret-search": {
@@ -1118,7 +1255,7 @@
             "retrievalTokens": 25613,
             "readTokensFull": 59486,
             "readTokensFrugal": 54566,
-            "ms": 2532.6289000000033
+            "ms": 254.59760000000097
           }
         }
       }
@@ -1154,7 +1291,7 @@
             "retrievalTokens": 192,
             "readTokensFull": 43865,
             "readTokensFrugal": 43311,
-            "ms": 1172.0929999999935
+            "ms": 779.2456999999995
           }
         },
         "ferret-pack": {
@@ -1176,9 +1313,14 @@
               "reason": "token-budget",
               "count": 2,
               "detail": "2 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
             }
           ],
-          "packJsonTokens": 8214,
+          "packJsonTokens": 8299,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -1189,10 +1331,10 @@
             "primaryTotal": 2,
             "reciprocalRankPrimary": 0,
             "irrelevant5": 5,
-            "retrievalTokens": 3006,
+            "retrievalTokens": 3067,
             "readTokensFull": 35135,
             "readTokensFrugal": 34581,
-            "ms": 125.66019999999844
+            "ms": 84.82090000000244
           }
         },
         "ferret-search": {
@@ -1221,7 +1363,7 @@
             "retrievalTokens": 4649,
             "readTokensFull": 35135,
             "readTokensFrugal": 34581,
-            "ms": 83.85659999999916
+            "ms": 54.948199999998906
           }
         }
       }
@@ -1255,9 +1397,9 @@
             "reciprocalRankPrimary": 0,
             "irrelevant5": 5,
             "retrievalTokens": 165,
-            "readTokensFull": 53316,
-            "readTokensFrugal": 51881,
-            "ms": 1958.5792000000074
+            "readTokensFull": 55649,
+            "readTokensFrugal": 54168,
+            "ms": 947.8487999999998
           }
         },
         "ferret-pack": {
@@ -1268,8 +1410,14 @@
           ],
           "harnessReturned": 0,
           "standingCount": 2,
-          "omitted": [],
-          "packJsonTokens": 1797,
+          "omitted": [
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
+            }
+          ],
+          "packJsonTokens": 1883,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -1280,10 +1428,10 @@
             "primaryTotal": 1,
             "reciprocalRankPrimary": 0,
             "irrelevant5": 3,
-            "retrievalTokens": 1081,
+            "retrievalTokens": 1158,
             "readTokensFull": 27014,
             "readTokensFrugal": 26450,
-            "ms": 80.98889999999665
+            "ms": 38.153300000001764
           }
         },
         "ferret-search": {
@@ -1304,7 +1452,7 @@
             "retrievalTokens": 883,
             "readTokensFull": 27014,
             "readTokensFrugal": 26450,
-            "ms": 38.000599999999395
+            "ms": 25.754800000002433
           }
         }
       }
@@ -1340,7 +1488,7 @@
             "retrievalTokens": 189,
             "readTokensFull": 30530,
             "readTokensFrugal": 30530,
-            "ms": 1994.0325000000012
+            "ms": 989.4018999999971
           }
         },
         "ferret-pack": {
@@ -1368,9 +1516,14 @@
               "reason": "token-budget",
               "count": 4,
               "detail": "4 result(s) did not fit in 4000 estimated tokens"
+            },
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
             }
           ],
-          "packJsonTokens": 6638,
+          "packJsonTokens": 6723,
           "score": {
             "recall": 0.6666666666666666,
             "precision5": 0.4,
@@ -1381,10 +1534,10 @@
             "primaryTotal": 2,
             "reciprocalRankPrimary": 1,
             "irrelevant5": 3,
-            "retrievalTokens": 3556,
+            "retrievalTokens": 3617,
             "readTokensFull": 14358,
             "readTokensFrugal": 14358,
-            "ms": 720.5239000000001
+            "ms": 97.99309999999969
           }
         },
         "ferret-search": {
@@ -1413,7 +1566,7 @@
             "retrievalTokens": 43063,
             "readTokensFull": 14358,
             "readTokensFrugal": 14358,
-            "ms": 298.0578999999998
+            "ms": 65.93050000000221
           }
         }
       }
@@ -1449,7 +1602,7 @@
             "retrievalTokens": 212,
             "readTokensFull": 44080,
             "readTokensFrugal": 44080,
-            "ms": 2505.8840000000055
+            "ms": 597.3080000000045
           }
         },
         "ferret-pack": {
@@ -1459,8 +1612,14 @@
           ],
           "harnessReturned": 0,
           "standingCount": 0,
-          "omitted": [],
-          "packJsonTokens": 2708,
+          "omitted": [
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
+            }
+          ],
+          "packJsonTokens": 2793,
           "score": {
             "recall": 0.3333333333333333,
             "precision5": 0.5,
@@ -1471,10 +1630,10 @@
             "primaryTotal": 1,
             "reciprocalRankPrimary": 1,
             "irrelevant5": 1,
-            "retrievalTokens": 1481,
+            "retrievalTokens": 1557,
             "readTokensFull": 25156,
             "readTokensFrugal": 25156,
-            "ms": 182.2216999999946
+            "ms": 30.476800000004005
           }
         },
         "ferret-search": {
@@ -1496,7 +1655,7 @@
             "retrievalTokens": 1566,
             "readTokensFull": 25156,
             "readTokensFrugal": 25156,
-            "ms": 96.556700000001
+            "ms": 24.242700000002515
           }
         }
       }
@@ -1515,8 +1674,8 @@
             "file:README.md",
             "file:src/git/provider.ts",
             "file:src/storage/export.ts",
-            "commit:10531e003a",
             "file:src/storage/retrieval.ts",
+            "commit:10531e003a",
             "file:tests/integration/storage/sessions.test.ts"
           ],
           "score": {
@@ -1532,7 +1691,7 @@
             "retrievalTokens": 137,
             "readTokensFull": 26345,
             "readTokensFrugal": 26345,
-            "ms": 2252.6503000000084
+            "ms": 969.0464999999967
           }
         },
         "ferret-pack": {
@@ -1542,8 +1701,14 @@
           ],
           "harnessReturned": 0,
           "standingCount": 0,
-          "omitted": [],
-          "packJsonTokens": 2435,
+          "omitted": [
+            {
+              "reason": "permission-withheld",
+              "count": 2,
+              "detail": "2 result(s) were withheld because this caller is not permitted to see them; an answer built from this pack is partial"
+            }
+          ],
+          "packJsonTokens": 2521,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -1554,10 +1719,10 @@
             "primaryTotal": 3,
             "reciprocalRankPrimary": 0,
             "irrelevant5": 2,
-            "retrievalTokens": 1173,
+            "retrievalTokens": 1250,
             "readTokensFull": 40166,
             "readTokensFrugal": 36599,
-            "ms": 107.29879999998957
+            "ms": 37.364300000001094
           }
         },
         "ferret-search": {
@@ -1579,7 +1744,302 @@
             "retrievalTokens": 1378,
             "readTokensFull": 40166,
             "readTokensFrugal": 36599,
-            "ms": 83.40849999999045
+            "ms": 31.55359999999928
+          }
+        }
+      }
+    },
+    {
+      "task": "where-decisions-live",
+      "kind": "supersession",
+      "question": "Where does something one agent's session decided become readable by a different agent?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "file:README.md",
+            "file:src/mcp/session-tools.ts",
+            "file:src/cli/commands/session.ts",
+            "file:tests/integration/mcp/session-tools.test.ts",
+            "file:tests/integration/mcp/multi-agent-context.test.ts",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md",
+            "file:docs/EPICs/EPIC-132-Multi-Agent-Shared-Context.md",
+            "file:docs/EPICs/EPIC-043-Session-Recovery.md",
+            "file:tests/integration/mcp/context-tools.test.ts"
+          ],
+          "score": {
+            "recall": 0.25,
+            "precision5": 0,
+            "precision10": 0.1,
+            "ndcg10": 0.0934137479442162,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "staleAboveCurrent": false,
+            "supersededInWindow": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 188,
+            "readTokensFull": 51619,
+            "readTokensFrugal": 38877,
+            "ms": 1029.2091999999975
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "context:8e13befb-836a-823d-bbe0-c27d5860e62b",
+            "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
+            "file:README.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md"
+          ],
+          "harnessReturned": 0,
+          "standingCount": 2,
+          "omitted": [],
+          "packJsonTokens": 3706,
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "staleAboveCurrent": false,
+            "supersededInWindow": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 1601,
+            "readTokensFull": 62347,
+            "readTokensFrugal": 44328,
+            "ms": 67.57540000000154
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:README.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md"
+          ],
+          "harnessReturned": 0,
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "staleAboveCurrent": false,
+            "supersededInWindow": 0,
+            "irrelevant5": 3,
+            "retrievalTokens": 1684,
+            "readTokensFull": 62347,
+            "readTokensFrugal": 44328,
+            "ms": 45.96070000000327
+          }
+        }
+      }
+    },
+    {
+      "task": "macos-ever-measured",
+      "kind": "supersession",
+      "question": "Has Ferret's packaging suite ever passed on macOS, and does anything run it now?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "file:README.md",
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md",
+            "file:docs/evidence/FERRET-F73-RELEASE-GATE-INTEGRITY.md",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "commit:10531e003a",
+            "commit:6e74992575",
+            "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md",
+            "file:docs/EPICs/EPIC-105-Cross-Platform-Packaging.md"
+          ],
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.2,
+            "ndcg10": 0.30441284755367665,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 3,
+            "reciprocalRankPrimary": 0.125,
+            "irrelevant5": 4,
+            "retrievalTokens": 174,
+            "readTokensFull": 55530,
+            "readTokensFrugal": 54973,
+            "ms": 1210.262999999999
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "context:8e13befb-836a-823d-bbe0-c27d5860e62b",
+            "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
+            "file:README.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/validation/EPIC-017-VALIDATION.md",
+            "file:.github/workflows/ci.yml",
+            "commit:10531e003a"
+          ],
+          "harnessReturned": 0,
+          "standingCount": 2,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 1,
+              "detail": "1 observation(s) not cited — the result carrying them was shortened to fit the token budget"
+            },
+            {
+              "reason": "content-trimmed",
+              "count": 1,
+              "detail": "1 result(s) had their longest values shortened to fit"
+            },
+            {
+              "reason": "token-budget",
+              "count": 4,
+              "detail": "4 result(s) did not fit in 4000 estimated tokens"
+            }
+          ],
+          "packJsonTokens": 6593,
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.2857142857142857,
+            "ndcg10": 0.2851641798377759,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 3,
+            "reciprocalRankPrimary": 0.16666666666666666,
+            "irrelevant5": 4,
+            "retrievalTokens": 3540,
+            "readTokensFull": 50891,
+            "readTokensFrugal": 50891,
+            "ms": 109.71940000000177
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:README.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/validation/EPIC-017-VALIDATION.md",
+            "file:.github/workflows/ci.yml",
+            "commit:10531e003a",
+            "commit:6e74992575",
+            "file:docs/EPICs/validation/EPIC-018-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-009-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-007-VALIDATION.md"
+          ],
+          "harnessReturned": 0,
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.4,
+            "precision10": 0.2222222222222222,
+            "ndcg10": 0.4538137664241199,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 3,
+            "reciprocalRankPrimary": 0.25,
+            "irrelevant5": 3,
+            "retrievalTokens": 43029,
+            "readTokensFull": 50891,
+            "readTokensFrugal": 50891,
+            "ms": 69.74529999999504
+          }
+        }
+      }
+    },
+    {
+      "task": "nightly-run",
+      "kind": "rationale",
+      "question": "Why does CI still run on a nightly schedule?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:.github/workflows/ci.yml",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:README.md",
+            "file:docs/EPICs/EPIC-114-PostgreSQL-Version-Coverage.md",
+            "file:tests/unit/runtime.test.ts",
+            "file:docs/EPICs/EPIC-078-Periodic-Reconciliation.md",
+            "file:spikes/results/raw/report-run1.json",
+            "file:spikes/results/raw/report-run2.json",
+            "file:spikes/results/raw/report-run3-final.json",
+            "file:src/runtime/runtime.ts"
+          ],
+          "score": {
+            "recall": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "ndcg10": 0.9060254355346823,
+            "sourced": true,
+            "primaryFound": 1,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 3,
+            "retrievalTokens": 169,
+            "readTokensFull": 47389,
+            "readTokensFrugal": 37088,
+            "ms": 521.5414999999994
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "file:.github/workflows/ci.yml",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/EPIC-114-PostgreSQL-Version-Coverage.md",
+            "file:README.md",
+            "file:docs/EPICs/validation/EPIC-002-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-114-VALIDATION.md"
+          ],
+          "harnessReturned": 0,
+          "standingCount": 0,
+          "omitted": [],
+          "packJsonTokens": 6580,
+          "score": {
+            "recall": 1,
+            "precision5": 0.4,
+            "precision10": 0.3333333333333333,
+            "ndcg10": 0.9385574520455129,
+            "sourced": true,
+            "primaryFound": 1,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 3,
+            "retrievalTokens": 2297,
+            "readTokensFull": 33027,
+            "readTokensFrugal": 25601,
+            "ms": 53.63300000000163
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:.github/workflows/ci.yml",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/EPIC-114-PostgreSQL-Version-Coverage.md",
+            "file:README.md",
+            "file:docs/EPICs/validation/EPIC-002-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-114-VALIDATION.md"
+          ],
+          "harnessReturned": 0,
+          "score": {
+            "recall": 1,
+            "precision5": 0.4,
+            "precision10": 0.3333333333333333,
+            "ndcg10": 0.9385574520455129,
+            "sourced": true,
+            "primaryFound": 1,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 3,
+            "retrievalTokens": 2917,
+            "readTokensFull": 33027,
+            "readTokensFrugal": 25601,
+            "ms": 39.390800000001036
           }
         }
       }

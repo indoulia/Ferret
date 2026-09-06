@@ -1,11 +1,24 @@
 /**
  * Retrieval quality metrics — EPIC-098.
  *
- * Pure, and computed from **rank order only**. `src/retrieval/query.ts:150`
- * records why that constraint is not stylistic: a `SearchHit.score` is
- * PostgreSQL's `ts_rank`, "comparable within one result set and nowhere else …
- * treating it as one across queries is how a threshold gets hard-coded that means
- * nothing". A metric built on it would be a number without a meaning.
+ * Pure, and computed from **rank order only**.
+ *
+ * That was written when a `SearchHit.score` was PostgreSQL's raw `ts_rank` —
+ * *"comparable within one result set and nowhere else … treating it as one
+ * across queries is how a threshold gets hard-coded that means nothing"* — and a
+ * metric built on it would have been a number without a meaning. **It is not
+ * that any more.** EPIC-056 §8.1 normalised every branch to `[0, 1]` and
+ * `SearchHit.score` now documents itself as *comparable across queries*, so the
+ * reason this module was given stopped describing the code it cited. The
+ * citation was to a line number, which by now holds a traversal bound.
+ *
+ * The constraint survives, for a reason that does not expire. A relevance grade
+ * is **ordinal**: EPIC-096 grades a label 1, 2 or 3 to mean *marginal*,
+ * *relevant*, *the answer*, not to say one is three times another. Precision,
+ * recall, reciprocal rank and nDCG are therefore defined over positions, and a
+ * metric that read the ranker's scores would be measuring the ranker's
+ * calibration rather than whether the right things came back. Normalising the
+ * score changed how comparable it is; it did not make it a relevance grade.
  *
  * Nothing here knows what a golden dataset is, what a retrieval port is, or where
  * a ranking came from. They take a ranked list of ids and a map of graded
