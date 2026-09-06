@@ -157,6 +157,18 @@ fixed as a defect in its own right. Correcting it removed the trap, so the task
 carries none — a benchmark records the repository as it is, and a stale claim is
 not preserved for the sake of a measurement.
 
+**A run measured a build that was not the working tree.** The harness runs
+against `dist/` and nothing made it check that `dist/` had been built from the
+tree it was reporting on. A run made after a rebase failed measured a build from
+before a merged retrieval fix, and its numbers were committed as current:
+`ferret-search` was recorded as sourcing 32% of tasks where the build under test
+sources 37%. Nothing was wrong with the run. It measured what it was pointed at
+and said nothing about what that was — and a stale result is indistinguishable
+from a regression.
+
+`run.mjs` now refuses to start when `dist/` is older than `src/`, and every
+report carries the commit it measured and whether the tree was dirty.
+
 **Three tasks were added for supersession.** `staleAboveCurrent` is the
 measurement this exists for and one task in sixteen exercised it, which is not
 enough evidence to report a rate from. `where-decisions-live`,
