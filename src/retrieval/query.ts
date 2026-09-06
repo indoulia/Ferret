@@ -325,6 +325,19 @@ export interface RankBreakdown {
 export interface RankSignals {
   /** The backing evidence's authority rank, when this hit came from one. */
   readonly authority?: number | undefined;
+  /**
+   * A cluster of hits that say the same thing — EPIC-130.
+   *
+   * Hits sharing a key are restatements of one another, and only the one that
+   * sorts first is returned; the rest are folded and reported in `subsumed`.
+   *
+   * **Supplied, never inferred here.** Equivalence is a fact the merger already
+   * recorded as `context_relates_to_context` edges (EPIC-126), and a ranking
+   * that re-derived it would be a second opinion about what is the same thing —
+   * with no evidence behind it, since ranking cannot read the graph. A hit with
+   * no key is its own answer.
+   */
+  readonly equivalenceKey?: string | undefined;
 }
 
 /**

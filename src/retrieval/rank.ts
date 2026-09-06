@@ -165,7 +165,7 @@ export function rank<T extends SearchHit & RankSignals>(
     container.subsumed.add(group.best.entity.id);
   }
 
-  return survivors
+  return foldEquivalents(survivors)
     .map((group) => {
       const score = noisyOr(group.contributions.values());
       const where = standing(group.best.entity);
@@ -183,6 +183,75 @@ export function rank<T extends SearchHit & RankSignals>(
     })
     .sort(compareRanked)
     .slice(0, limit);
+}
+
+/**
+ * Folds hits that say the same thing into the one a reader should get —
+ * EPIC-130.
+ *
+ * The measured problem, on Ferret's own index: one question returned **four**
+ * durable context records saying **two** things, while the merger had already
+ * recorded five `context_relates_to_context` edges naming them as restatements
+ * of one another. The knowledge was in the graph and the answer did not use it.
+ *
+ * Mirrors the container fold above and differs in one way that matters: a part
+ * folds into its *whole*, which is a structural fact, while a restatement folds
+ * into whichever of the cluster **sorts first** — so a current record always
+ * survives a superseded duplicate, because standing leads the ordering. Picking
+ * by score alone would let a better-matching retired wording win.
+ *
+ * Nothing is hidden: every folded id is reported in `subsumed`, exactly as a
+ * folded part is, so a caller can ask for what was collapsed.
+ */
+function foldEquivalents<T extends SearchHit & RankSignals>(groups: readonly Group<T>[]): Group<T>[] {
+  // Choose each cluster's survivor first, then fold. One pass that did both got
+  // it wrong: a group that had never been pushed was spliced out by index, and
+  // `indexOf` returning -1 removed the *last* survivor instead — which deleted
+  // every durable context hit from a real answer rather than the duplicates.
+  // Two passes cannot express that mistake.
+  const winners = new Map<string, Group<T>>();
+  for (const group of groups) {
+    const key = group.best.equivalenceKey;
+    if (key === undefined) continue;
+    const held = winners.get(key);
+    // The same ordering the answer is sorted by, so a cluster's survivor is the
+    // hit that would have led it anyway — and a current record therefore always
+    // survives a superseded restatement, because standing leads that ordering.
+    if (held === undefined || compareRanked(rankedView(group), rankedView(held)) < 0) {
+      winners.set(key, group);
+    }
+  }
+
+  const survivors: Group<T>[] = [];
+  for (const group of groups) {
+    const key = group.best.equivalenceKey;
+    const winner = key === undefined ? undefined : winners.get(key);
+    if (winner === undefined || winner === group) {
+      survivors.push(group);
+      continue;
+    }
+    // The restatement is credited to the survivor and folded. Its relevance
+    // moves; its text does not, which is what keeps this a ranking decision.
+    winner.contributions.set(`subsumed:${group.best.entity.id}`, noisyOr(group.contributions.values()));
+    winner.subsumed.add(group.best.entity.id);
+    for (const id of group.subsumed) winner.subsumed.add(id);
+  }
+
+  return survivors;
+}
+
+/** A group as the comparator sees it, before its final score is combined. */
+function rankedView<T extends SearchHit & RankSignals>(group: Group<T>): T & { readonly ranking: RankBreakdown } {
+  return {
+    ...group.best,
+    score: noisyOr(group.contributions.values()),
+    ranking: {
+      relevance: clamp(group.best.score),
+      contributors: [...group.contributions.keys()].sort(),
+      subsumed: [...group.subsumed].sort(),
+      standing: standing(group.best.entity),
+    },
+  };
 }
 
 /**
