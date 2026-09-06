@@ -384,13 +384,20 @@ describe('the fences survive every transformation — F-32', () => {
   });
 
   it('keeps the closing delimiter on a value the budget shortened', async () => {
-    // The mechanism of F-32. `budget: 400` cannot hold a 4 000-character commit
+    // The mechanism of F-32. This budget cannot hold a 4 000-character commit
     // message, so the pack trims the longest attribute — which containment had
     // already wrapped, so the slice cut `␃ferret:content␃` off the end and every
     // field after it fell inside the quoted region.
+    //
+    // It was 400 until an item began being charged for what it actually sends
+    // rather than for `{ entity, evidence }`. Under the honest charge the
+    // trimmed item costs more than 400 tokens, so the pack **dropped** it
+    // instead of trimming it and this case stopped exercising a trim at all —
+    // which the assertion below said out loud rather than passing quietly.
+    // Raised to the smallest budget that still forces one.
     const result = (await client.callTool({
       name: 'ferret_context_pack',
-      arguments: { question: 'what changed', budget: 400 },
+      arguments: { question: 'what changed', budget: 800 },
     })) as { content: { type: string; text: string }[] };
     const raw = result.content[0]?.text ?? '{}';
     const pack = JSON.parse(raw) as {
@@ -409,7 +416,7 @@ describe('the fences survive every transformation — F-32', () => {
   it('keeps the closing delimiter on the rendered text form too', async () => {
     const result = (await client.callTool({
       name: 'ferret_context_pack',
-      arguments: { question: 'what changed', budget: 400, format: 'text' },
+      arguments: { question: 'what changed', budget: 800, format: 'text' },
     })) as { content: { type: string; text: string }[] };
     const raw = result.content[0]?.text ?? '{}';
     const rendered = String((JSON.parse(raw) as { rendered: string }).rendered);

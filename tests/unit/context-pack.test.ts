@@ -316,7 +316,10 @@ describe('building a context pack', () => {
     expect(pack.producer).toBe('ferret.context');
     expect(pack.producerVersion.length).toBeGreaterThan(0);
     expect(pack.question).toBe('who changed this');
-    expect(pack.formatVersion).toBe(1);
+    // A literal, deliberately: the point of this assertion is that the format
+    // version does not move by accident. Two, since a citation names its
+    // observation rather than repeating the record `evidence` already carries.
+    expect(pack.formatVersion).toBe(2);
   });
 
   it('refuses a pack with no question', async () => {
@@ -706,6 +709,74 @@ describe('evidence selection on a pack item', () => {
       'token-budget',
     ]);
     expect(pack.omitted.some((entry) => entry.detail.includes('shortened to fit the token budget'))).toBe(true);
+  });
+
+  describe('a pack keeps the budget it reports keeping', () => {
+    it('charges for the item it sends, not for a different object', async () => {
+      // The estimate used to be taken over `{ entity, evidence, neighbours }`,
+      // which is neither the item nor what crosses the wire: it charged for a
+      // neighbour summary the item does not carry and charged nothing for
+      // `evidenceSelection`, `reason` or `evidenceOmitted`. Measured on one real
+      // pack before this: five items charged 3 669 tokens against a 4 000 budget
+      // and estimated 5 169 as sent.
+      //
+      // `budget.ts` is unambiguous about the direction the error may run — an
+      // under-count means the client truncates the pack itself, silently, and
+      // "the thing that gets cut is not the thing Ferret would have chosen to
+      // cut". So this asserts the charge is never less than the item.
+      const store = new StatedEvidenceStore([
+        { evidence: evidenceRecord('e1', 'message', 100, '2026-01-01T00:00:00.000Z'), state: 'current' },
+        { evidence: evidenceRecord('e2', 'message', 90, '2026-01-02T00:00:00.000Z'), state: 'current' },
+      ]);
+      const pack = await new ContextPackBuilder(
+        new FakeRetrieval([hit('c1', { message: 'a change worth citing' })]),
+        PUBLIC_ACCESS,
+        store,
+      ).build({ question: 'why' });
+
+      expect(pack.items.length).toBeGreaterThan(0);
+      for (const item of pack.items) {
+        expect(item.estimatedTokens).toBeGreaterThanOrEqual(estimateJsonTokens(item));
+      }
+      expect(pack.estimatedTokens).toBeGreaterThanOrEqual(
+        pack.items.reduce((total, item) => total + estimateJsonTokens(item), 0),
+      );
+    });
+
+    it('cites an observation by id rather than repeating the record beside it', async () => {
+      const store = new StatedEvidenceStore([
+        { evidence: evidenceRecord('e1', 'message', 100, '2026-01-01T00:00:00.000Z'), state: 'current' },
+      ]);
+      const pack = await new ContextPackBuilder(
+        new FakeRetrieval([hit('c1', { message: 'x' })]),
+        PUBLIC_ACCESS,
+        store,
+      ).build({ question: 'why' });
+
+      const item = pack.items[0];
+      expect(item?.evidenceSelection.selected.map((entry) => entry.id)).toStrictEqual(['e1']);
+      // The record is on the item, once. A citation that carried it too would be
+      // the same bytes twice by construction — `evidence` is built from exactly
+      // these entries.
+      expect(item?.evidence.map((record) => record.id)).toStrictEqual(['e1']);
+      expect(JSON.stringify(item?.evidenceSelection.selected)).not.toContain('producerVersion');
+    });
+
+    it('still renders a cited record, reading it off the item', async () => {
+      const store = new StatedEvidenceStore([
+        { evidence: evidenceRecord('e1', 'message', 100, '2026-01-01T00:00:00.000Z'), state: 'current' },
+      ]);
+      const pack = await new ContextPackBuilder(
+        new FakeRetrieval([hit('c1', { message: 'x' })]),
+        PUBLIC_ACCESS,
+        store,
+      ).build({ question: 'why' });
+
+      // EPIC-062 AC-14 is about the text an answer is written from, and the
+      // citation no longer carries what that text prints. Reading it off
+      // `evidence` by id keeps the rendered form identical.
+      expect(renderPack(pack)).toContain('evidence: observed by');
+    });
   });
 });
 
