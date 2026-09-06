@@ -39,8 +39,16 @@ const ABBREV = 10;
  * A question's own answer key is not evidence. It is excluded from **both**
  * conditions by the same list, and what each condition returned from it is
  * counted rather than quietly dropped, so the contamination stays visible.
+ *
+ * The evidence report is on the list for the same reason and by a harder route:
+ * it is an ordinary document in `docs/evidence/`, it is real repository
+ * knowledge, and it states every task's answer in prose. Committed, it appeared
+ * **twelve times** across the three conditions' results and cost `ferret-pack`
+ * five points of `sourced` by displacing the documents it was describing. The
+ * rule is not "the benchmark directory"; it is **what would not exist but for
+ * the benchmark, and what states its answers**.
  */
-export const EXCLUDED_PREFIXES = ['benchmark/'];
+export const EXCLUDED_PREFIXES = ['benchmark/', 'docs/evidence/FERRET-DOES-IT-HELP.md'];
 
 /** Whether an artefact is part of the corpus rather than the harness. */
 export function withinCorpus(artefact) {

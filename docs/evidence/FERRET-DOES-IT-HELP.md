@@ -233,6 +233,15 @@ benchmark through the person writing the labels — which is the failure mode
 Both were corrected, and fixing the comment *removed* the trap rather than
 preserving it.
 
+**This document contaminated the corpus the day it was written.** It is an
+ordinary file in `docs/evidence/`, real repository knowledge, and it states every
+task's answer in prose. Indexed, it appeared **twelve times** across the three
+conditions and cost `ferret-pack` five points of `sourced` — 26% to 21% — by
+displacing the documents it describes. It is now on the exclusion list beside
+`tasks.json`; every other document in `docs/evidence/` stays corpus. The numbers
+in §2 are measured with it excluded and are unchanged from what was first
+published.
+
 **A run measured a build that was not the working tree.** The harness ran against
 `dist/` and never checked it had been built from the tree it reported on. A run
 made after a failed rebase measured a build predating a merged fix, and those

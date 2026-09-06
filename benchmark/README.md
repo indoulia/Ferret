@@ -157,6 +157,18 @@ fixed as a defect in its own right. Correcting it removed the trap, so the task
 carries none — a benchmark records the repository as it is, and a stale claim is
 not preserved for the sake of a measurement.
 
+**The evidence report contaminated the corpus the day it was written.**
+`docs/evidence/FERRET-DOES-IT-HELP.md` is an ordinary document in `docs/`, real
+repository knowledge, and it states every task's answer in prose. Committed and
+indexed, it appeared **twelve times** across the three conditions' results and
+cost `ferret-pack` five points of `sourced` — 26% to 21% — by displacing the very
+documents it was describing.
+
+So the rule is not "the benchmark directory". It is **what would not exist but
+for the benchmark, and what states its answers**, and the report is on the
+exclusion list beside `tasks.json`. Every other document in `docs/evidence/`
+stays corpus. The runner probes for both before it measures anything.
+
 **A run measured a build that was not the working tree.** The harness runs
 against `dist/` and nothing made it check that `dist/` had been built from the
 tree it was reporting on. A run made after a rebase failed measured a build from
