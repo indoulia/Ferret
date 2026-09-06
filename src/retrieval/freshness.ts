@@ -30,11 +30,23 @@ import { LifecycleState, type CanonicalEntity } from '../domain/index.js';
  * - **`superseded` is worse than `deleted`.** A superseded entity's replacement
  *   is retrievable, so returning the old one is wrong in a way that returning a
  *   deleted one — where there is nothing else to return — is not.
+ * - **`candidate` outranks `unknown`** — EPIC-127. A candidate has been stated
+ *   in full and is merely unaccepted; `unknown` is something Ferret has only
+ *   heard of. Both rank below live, and the more informative one ranks higher.
+ * - **`archived` sits between `deleted` and `superseded`**, on the same
+ *   reasoning that separates those two: an archived record has no replacement
+ *   to return instead, so it is not as wrong as a superseded one — but it was
+ *   retired deliberately, where a deleted one merely stopped existing.
+ *
+ * The insertions used the gaps rather than renumbering, which is what the
+ * spacing above was left for.
  */
 const STANDING: Readonly<Record<string, number | undefined>> = Object.freeze({
   [LifecycleState.ACTIVE]: 0,
+  [LifecycleState.CANDIDATE]: 10,
   [LifecycleState.UNKNOWN]: 20,
   [LifecycleState.DELETED]: 40,
+  [LifecycleState.ARCHIVED]: 45,
   [LifecycleState.SUPERSEDED]: 50,
 });
 
@@ -72,6 +84,10 @@ export function describeStanding(entity: CanonicalEntity): string | undefined {
       return 'ranked below live results: this was replaced, and its replacement is the answer instead';
     case LifecycleState.UNKNOWN:
       return 'ranked below live results: Ferret has a reference to this but has not observed it';
+    case LifecycleState.CANDIDATE:
+      return 'ranked below live results: this was proposed and has not been accepted as current';
+    case LifecycleState.ARCHIVED:
+      return 'ranked below live results: this was retired from current context, with nothing replacing it';
     default:
       return `ranked below live results: unrecognised lifecycle ${JSON.stringify(entity.lifecycle)}`;
   }

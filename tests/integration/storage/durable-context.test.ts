@@ -259,7 +259,7 @@ describeDb(`durable context merger (${databaseAvailable() ? 'real PostgreSQL' : 
     const withHistory = await context.current({
       scope: repository,
       contextKind: ContextKind.FACT,
-      includeSuperseded: true,
+      states: [],
     });
     expect(withHistory.map((held) => held.entity.id)).toContain(old.context.entity.id);
     expect(await evidence.forSubject(old.context.entity.id, { permittedScopes: [] })).toHaveLength(1);

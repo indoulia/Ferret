@@ -252,6 +252,7 @@ export {
   MAX_CONTEXT_PAGE,
   type ContextProvenance,
   type ContextQuery,
+  type ContextTrust,
   type RecordContextInput,
   type RecordedContext,
   type RelatedContext,

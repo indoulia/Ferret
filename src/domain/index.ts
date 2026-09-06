@@ -23,6 +23,7 @@ export {
 export {
   ENTITY_KINDS,
   EntityKind,
+  HISTORICAL_LIFECYCLE_STATES,
   LIFECYCLE_STATES,
   LifecycleState,
   entityKindSchema,
