@@ -427,6 +427,17 @@ export {
   type PairVerdict,
 } from './context/index.js';
 
+// EPIC-131. Assembly: what Ferret currently holds that bears on a task, ordered
+// by what acting against it costs. Arranges what retrieval returned.
+export {
+  MAX_STANDING_CONTEXT,
+  isStandingContext,
+  orderStanding,
+  standingContextOf,
+  type StandingCandidate,
+  type StandingContext,
+} from './context/index.js';
+
 // EPIC-129. Promoting what a session learned into durable context — never a
 // transcript, and an extraction becomes a proposal rather than a belief.
 export {

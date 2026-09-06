@@ -143,3 +143,15 @@ export {
   type PromotionReport,
   type RefusedPromotion,
 } from './promotion.js';
+
+// EPIC-131. Assembly: what Ferret currently holds that bears on a task, ordered
+// by what acting against it costs. Arranges what retrieval returned; merges
+// nothing.
+export {
+  MAX_STANDING_CONTEXT,
+  isStandingContext,
+  orderStanding,
+  standingContextOf,
+  type StandingCandidate,
+  type StandingContext,
+} from './standing.js';
