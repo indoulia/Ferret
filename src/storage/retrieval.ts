@@ -879,7 +879,8 @@ export class RetrievalStore implements RetrievalPort {
                          coalesce(e.attributes->>'ref', '') || ' ' ||
                          coalesce(e.attributes->>'title', '') || ' ' || e.source_id,
                          q.query,
-                         'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
+                         'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight,
+             NULL::text AS highlight_blob
         FROM ferret.entity e, ${tsquery}
        WHERE e.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}
          AND ${scopePredicate(access)}`;
@@ -895,7 +896,8 @@ export class RetrievalStore implements RetrievalPort {
              ev.authority AS evidence_authority,
              ts_rank(ev.search_vector, q.query, ${RANK_NORMALIZATION}) AS score,
              ts_headline('english', coalesce(ev.statement #>> '{}', ''), q.query,
-                         'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
+                         'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight,
+             NULL::text AS highlight_blob
         FROM ferret.evidence ev
         JOIN ferret.entity e ON e.id = ev.subject_id, ${tsquery}
        WHERE ev.search_vector @@ q.query AND ${kindFilter} AND ${systemFilter}
@@ -952,8 +954,10 @@ export class RetrievalStore implements RetrievalPort {
              NULL::uuid AS evidence_id,
              NULL::integer AS evidence_authority,
              ts_rank(cb.search_vector, q.query, ${RANK_NORMALIZATION}) AS score,
-             ts_headline('english', coalesce(cb.text_content, ''), q.query,
-                         'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
+             -- Not computed here. See highlightsFor below: on this branch alone
+             -- the headline is the whole cost of the query.
+             NULL::text AS highlight,
+             cb.content_hash AS highlight_blob
         FROM ferret.content_blob cb
         JOIN ferret.entity fv
           ON fv.kind = 'file_version'
@@ -976,7 +980,8 @@ export class RetrievalStore implements RetrievalPort {
              -- Ranked above every ranked hit: an exact identifier prefix is not
              -- a guess about relevance, it is the thing that was asked for.
              1.0::real AS score,
-             e.source_id AS highlight
+             e.source_id AS highlight,
+             NULL::text AS highlight_blob
         FROM ferret.entity e
        WHERE (e.source_id LIKE ${`${abbreviated}%`}
               OR e.attributes->>'sha' LIKE ${`${abbreviated}%`})
@@ -999,6 +1004,7 @@ export class RetrievalStore implements RetrievalPort {
           evidence_authority: number | null;
           score: number;
           highlight: string | null;
+          highlight_blob: string | null;
         }
       >(sql`
         SELECT * FROM (
@@ -1028,6 +1034,7 @@ export class RetrievalStore implements RetrievalPort {
         score: Number(row.score),
         highlight: row.highlight ?? undefined,
         evidenceId: row.evidence_id,
+        highlightBlob: row.highlight_blob,
         // EPIC-057. `undefined` rather than `0`: an absent rank is unassessed,
         // and `effectiveAuthority` is what keeps that distinct from weakest.
         authority: row.evidence_authority ?? undefined,
@@ -1049,10 +1056,20 @@ export class RetrievalStore implements RetrievalPort {
         return key === undefined ? hit : { ...hit, equivalenceKey: key };
       });
 
+      const ranked = rank(clustered, limit);
+      const highlights = await this.#highlightsFor(
+        ranked.flatMap((hit) => (hit.highlightBlob === null ? [] : [hit.highlightBlob])),
+        text,
+        query.relax === true,
+      );
+
       const visible: SearchHit[] = [];
-      for (const { evidenceId, authority: _authority, ...hit } of rank(clustered, limit)) {
+      for (const { evidenceId, highlightBlob, authority: _authority, ...hit } of ranked) {
         visible.push({
           ...hit,
+          ...(highlightBlob === null
+            ? {}
+            : { highlight: highlights.get(highlightBlob) ?? hit.highlight }),
           evidence: evidenceId === null ? undefined : await this.#readEvidence(evidenceId),
         });
       }
@@ -1062,6 +1079,57 @@ export class RetrievalStore implements RetrievalPort {
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.search');
     }
+  }
+
+  /**
+   * The marked-up excerpt for the content hits that actually survived.
+   *
+   * **`ts_headline` over file content was the whole cost of a widened search.**
+   * Measured on Ferret's own index, for one task question relaxed to match any
+   * term: the match itself took **11 ms** over 896 blobs, and computing their
+   * headlines took **1 128 ms**. The entity branch's headline over a few
+   * attributes took 98 ms and the evidence branch's over one statement took 5.
+   * A blob is a whole file, `ts_headline` re-parses the document it is given,
+   * and the query then discarded all but twenty of them — so nearly all of that
+   * seconds was spent marking up excerpts nobody would ever see.
+   *
+   * This is the same decision the ranked path already makes one field along:
+   * *"the id is carried instead and resolved below for the hits that are
+   * actually returned"*. The content branch now carries its blob hash and the
+   * excerpt is produced here, for at most `limit` rows, in one query.
+   *
+   * The query has to be rebuilt rather than reused because the marking depends
+   * on it — a headline generated from a different query would mark the wrong
+   * words — so `relax` is passed through and the same two expressions are used.
+   *
+   * **No permission predicate here, and that is deliberate.** The hashes reach
+   * this method only from hits that already passed `scopePredicate` in the
+   * ranked query and `visibleEntities` after it, so a caller cannot name a blob
+   * it was refused. Filtering again on `content_blob` would also be filtering
+   * the wrong thing: a blob is shared by definition — the same bytes at two
+   * paths are one row — which is why the ranked query never scopes on it either
+   * and returns an entity that passed instead. Anything that starts calling
+   * this with hashes from another source has to bring its own filter.
+   */
+  async #highlightsFor(
+    hashes: readonly string[],
+    text: string,
+    relax: boolean,
+  ): Promise<ReadonlyMap<string, string>> {
+    if (hashes.length === 0) return new Map();
+    const tsquery = relax
+      ? sql`${relaxedTsQuery(text)} AS q(query)`
+      : sql`(SELECT websearch_to_tsquery('english', ${text})) AS q(query)`;
+    const rows = await this.#db.execute<{ [column: string]: unknown; content_hash: string; highlight: string }>(sql`
+      SELECT cb.content_hash,
+             ts_headline('english', coalesce(cb.text_content, ''), q.query,
+                         'MaxFragments=1,MaxWords=20,MinWords=5') AS highlight
+        FROM ferret.content_blob cb, ${tsquery}
+       WHERE cb.content_hash = ANY(${sql.raw('ARRAY[')}${sql.join(
+         hashes.map((hash) => sql`${hash}`),
+         sql`, `,
+       )}${sql.raw(']::text[]')})`);
+    return new Map(rows.rows.map((row) => [row.content_hash, row.highlight]));
   }
 
   /**

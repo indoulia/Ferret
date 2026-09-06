@@ -261,6 +261,31 @@ describeDb(`deduplicated content storage (${databaseAvailable() ? 'real PostgreS
       expect(hit?.highlight).toContain('protocol');
     });
 
+    it('marks every content hit it returns, however many blobs matched', async () => {
+      // The excerpt is no longer produced by the ranked query: `ts_headline`
+      // over file bodies was the whole cost of a widened search — 1 128 ms of a
+      // 1 139 ms query on Ferret's own index, nearly all of it marking up rows
+      // the limit then discarded. It is resolved afterwards, for the rows that
+      // survived, which is what this asserts: ask for fewer than matched, and
+      // every one that comes back is still marked.
+      // A second body carrying the same word, so one of the two is discarded by
+      // the limit and the excerpt for the survivor cannot have been produced by
+      // the ranked query alone.
+      await fileWithVersion('src/other-notes.ts', 'h:body-two', repositoryA);
+      await content.store({
+        contentHash: 'h:body-two',
+        bytes: bytes(`// another note about the ${BODY_ONLY} protocol
+export const m = 2;
+`),
+      });
+
+      const result = await retrieval.search({ text: BODY_ONLY, limit: 1 }, PUBLIC_ACCESS);
+
+      const marked = result.hits.filter((one) => one.source === 'content');
+      expect(marked.length).toBe(1);
+      expect(marked[0]?.highlight).toContain(BODY_ONLY);
+    });
+
     it('reaches `authenticateUser` from the word `authenticate` — AC-10', async () => {
       // The measurement this Epic exists to move. Without the camel split in
       // migration 0011 the body is one lexeme, `authenticateuser`, and this
