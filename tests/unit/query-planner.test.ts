@@ -337,7 +337,7 @@ describe('planning a query', () => {
     expect(plan.strategies.find((s) => s.strategy === 'text')?.skipped).toContain('widened');
   });
 
-  it('does not widen when the strict answer exists', async () => {
+  it('does not widen when the strict answer filled the page', async () => {
     // When every term does match, that is the better answer, and starting loose
     // would bury it.
     let relaxedCall = false;
@@ -346,13 +346,50 @@ describe('planning a query', () => {
       text: {
         search: (q: { relax?: boolean }) => {
           if (q.relax === true) relaxedCall = true;
-          return Promise.resolve({ hits: [hit('strict')], withheld: NOTHING_WITHHELD });
+          return Promise.resolve({
+            hits: Array.from({ length: 3 }, (_, at) => hit(`strict-${String(at)}`)),
+            withheld: NOTHING_WITHHELD,
+          });
         },
       },
     });
 
-    await planner.search({ question: 'how are deleted files tombstoned' }, PUBLIC_ACCESS);
+    await planner.search({ question: 'how are deleted files tombstoned', limit: 3 }, PUBLIC_ACCESS);
     expect(relaxedCall).toBe(false);
+  });
+
+  it('fills the rest of the page when the strict answer was one incidental match', async () => {
+    // The threshold used to be *nothing at all*, and EPIC-131 recorded what that
+    // costs while rejecting a different change: the strict query "returned one
+    // incidental commit, so the change did not fix what it claimed to".
+    // Measured across sixteen task questions by `benchmark/`, five filled one or
+    // two of ten slots and those one or two suppressed the widening.
+    const planner = new QueryPlanner({
+      exact: exactStore(),
+      text: {
+        search: (q: { relax?: boolean }) =>
+          Promise.resolve({
+            hits:
+              q.relax === true
+                ? [hit('incidental'), hit('loose-a'), hit('loose-b')]
+                : [hit('incidental')],
+            withheld: NOTHING_WITHHELD,
+          }),
+      },
+    });
+
+    const { plan, hits } = await planner.search(
+      { question: 'how are deleted files tombstoned', limit: 5 },
+      PUBLIC_ACCESS,
+    );
+
+    // The strict match leads and is not duplicated by the widened query that
+    // also returned it. Replacing the strict hits would trade one defect for
+    // its mirror image.
+    expect(hits.map((h) => h.entity.id)).toStrictEqual(['incidental', 'loose-a', 'loose-b']);
+    expect(plan.strategies.find((s) => s.strategy === 'text')?.skipped).toContain(
+      'Only 1 document(s) contained every term',
+    );
   });
 
   it('does not widen an exact question', async () => {

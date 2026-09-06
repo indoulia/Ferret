@@ -164,8 +164,21 @@ export class QueryPlanner {
     // `tombstone` found a result, "how are deleted files tombstoned" found
     // nothing. Retry for any term, but only as a fallback: a strict match is
     // the better answer and starting loose would bury it.
+    //
+    // **Fewer than asked for, not none.** The first version of this fired only
+    // on an empty result, and EPIC-131 recorded what that costs while rejecting
+    // a different change: the strict query "returned one incidental commit, so
+    // the change did not fix what it claimed to". Measured across sixteen task
+    // questions by `benchmark/`: five filled one or two of ten slots because one
+    // or two documents happened to contain every word, and the widening that
+    // would have filled the rest was suppressed by exactly those. One incidental
+    // match beating nine relevant ones is the same defect as zero matches
+    // beating ten, one result short of invisible.
+    //
+    // So the strict hits are **kept and ranked first** and the widened ones fill
+    // what is left. Replacing them would trade the defect for its mirror image.
     let text = strict;
-    if (strict !== undefined && strict.length === 0 && !classification.exact) {
+    if (strict !== undefined && strict.length < limit && !classification.exact) {
       const relaxed = await this.#attempt('text-relaxed', outcomes, async () => {
         const result = await this.#text.search(
           {
@@ -182,12 +195,19 @@ export class QueryPlanner {
         return result.hits;
       });
       if (relaxed !== undefined && relaxed.length > 0) {
-        annotate(
-          outcomes,
-          'text',
-          'No document contained every term, so the search was widened to any of them.',
-        );
-        text = relaxed;
+        const held = new Set(strict.map((hit) => hit.entity.id));
+        const added = relaxed.filter((hit) => !held.has(hit.entity.id));
+        if (added.length > 0) {
+          annotate(
+            outcomes,
+            'text',
+            strict.length === 0
+              ? 'No document contained every term, so the search was widened to any of them.'
+              : `Only ${strict.length} document(s) contained every term, so the search was ` +
+                'widened to any of them and the strict matches kept ahead of the rest.',
+          );
+          text = [...strict, ...added];
+        }
       }
     }
 
