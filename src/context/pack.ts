@@ -320,6 +320,49 @@ export class ContextPackBuilder {
   }
 
   /**
+   * The records that match the question, widened only if none did.
+   *
+   * Full text ANDs every term, and a task is a sentence. EPIC-131 measured that
+   * against the *standing* read and widened it there; the record search kept the
+   * strict query, and it has the same failure for the same reason. Measured on
+   * Ferret's own index by `benchmark/`: on three of sixteen task questions
+   * `ferret_context_pack` returned **zero** items with `omitted: []` —
+   * indistinguishable from a repository holding nothing — while `ferret_search`,
+   * given the identical string, returned ten. One of the three asks why a CI run
+   * on `main` groups by commit rather than by ref, and the workflow file that
+   * answers it was indexed the whole time.
+   *
+   * The questions are paraphrased here rather than quoted, deliberately: the
+   * benchmark greps this repository, and a comment carrying a task's exact
+   * wording would rank itself for that task.
+   *
+   * The fallback is `QueryPlanner`'s, applied here rather than borrowed by
+   * routing the pack through it. That routing is EPIC-131's **Rejected**
+   * change, and it stays rejected: it was tried against the standing defect,
+   * where the strict query returned one incidental commit, so widening never
+   * fired and the change did not fix what it claimed to. This is the other
+   * case, the one where widening does fire — strict returned nothing at all —
+   * and the guard is what keeps the two apart.
+   *
+   * Strict first, always. When every term does match, that is the better
+   * answer, and starting loose would bury it.
+   */
+  async #recordsFor(
+    question: string,
+    kinds: readonly string[] | undefined,
+    limit: number,
+  ): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
+    const query = { text: question, ...(kinds === undefined ? {} : { kinds }), limit };
+    const strict = await this.#retrieval.search(query, this.#access);
+    if (strict.hits.length > 0) return strict;
+
+    // The widened query is the one that produced these hits, so its own
+    // `withheld` is the count that describes them — the same reasoning
+    // `src/retrieval/planner.ts` records where it reassigns the report.
+    return this.#retrieval.search({ ...query, relax: true }, this.#access);
+  }
+
+  /**
    * Builds a pack for a question.
    *
    * Highest-scoring first, each item admitted only if it fits. Ranked order
@@ -338,13 +381,10 @@ export class ContextPackBuilder {
     const budget = new TokenBudget(Math.min(request.budget ?? DEFAULT_BUDGET, MAX_BUDGET));
     const maxItems = request.maxItems ?? 20;
 
-    const { hits, withheld } = await this.#retrieval.search(
-      {
-        text: question,
-        ...(request.kinds === undefined ? {} : { kinds: request.kinds }),
-        limit: Math.max(maxItems * 2, 20),
-      },
-      this.#access,
+    const { hits, withheld } = await this.#recordsFor(
+      question,
+      request.kinds,
+      Math.max(maxItems * 2, 20),
     );
 
     const items: PackItem[] = [];

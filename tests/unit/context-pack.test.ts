@@ -69,6 +69,12 @@ function hit(id: string, attributes: Record<string, unknown>, score = 1): Search
   };
 }
 
+/** As much of a retrieval query as these doubles look at. */
+interface FakeQuery {
+  readonly relax?: boolean;
+  readonly kinds?: readonly string[];
+}
+
 class FakeRetrieval implements RetrievalPort {
   /** EPIC-050. Not exercised here; the traversal has its own suites. */
   traverse(): Promise<TraversalResult> {
@@ -94,7 +100,12 @@ class FakeRetrieval implements RetrievalPort {
   neighbours(): Promise<{ neighbours: readonly Neighbour[]; withheld: WithheldReport; more: boolean }> {
     return Promise.resolve({ neighbours: this.links, withheld: NOTHING_WITHHELD, more: false });
   }
-  search(): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
+  /**
+   * The query is ignored here and read by `RelaxAwareRetrieval` below, which is
+   * why it is named rather than omitted: a subclass cannot widen a signature
+   * its base declared as taking nothing.
+   */
+  search(_query?: FakeQuery): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
     return Promise.resolve({ hits: this.hits, withheld: NOTHING_WITHHELD });
   }
 }
@@ -695,5 +706,80 @@ describe('evidence selection on a pack item', () => {
       'token-budget',
     ]);
     expect(pack.omitted.some((entry) => entry.detail.includes('shortened to fit the token budget'))).toBe(true);
+  });
+});
+
+/**
+ * A `RetrievalPort` that answers strictly and loosely, and records which was
+ * asked.
+ *
+ * The distinction is the whole point of the fallback, and `FakeRetrieval`
+ * cannot express it: it ignores the query and returns one list. Recording the
+ * calls is what proves the widening is a *fallback* rather than a new default —
+ * asserting only on the hits would pass just as well for a builder that had
+ * stopped searching strictly at all.
+ */
+class RelaxAwareRetrieval extends FakeRetrieval {
+  readonly relaxed: boolean[] = [];
+
+  constructor(
+    private readonly strictHits: readonly SearchHit[],
+    private readonly relaxedHits: readonly SearchHit[],
+  ) {
+    super([]);
+  }
+
+  override search(query?: FakeQuery): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
+    // The standing read is its own query and always relaxes; counting it here
+    // would make every assertion below true by accident.
+    if (query?.kinds?.includes('context') === true) {
+      return Promise.resolve({ hits: [], withheld: NOTHING_WITHHELD });
+    }
+    this.relaxed.push(query?.relax === true);
+    return Promise.resolve({
+      hits: query?.relax === true ? this.relaxedHits : this.strictHits,
+      withheld: NOTHING_WITHHELD,
+    });
+  }
+}
+
+describe('a task question that no single document contains every word of', () => {
+  const found = [hit('c1', { message: 'concurrency group is the commit sha on main' })];
+
+  it('widens the record search when the strict query matched nothing', async () => {
+    // Measured on Ferret's own index by `benchmark/`: the pack returned zero
+    // items for a question `ferret_search` answered with ten, and said nothing
+    // was omitted — so "Ferret holds nothing" and "the query matched nothing"
+    // read identically.
+    const retrieval = new RelaxAwareRetrieval([], found);
+
+    const pack = await new ContextPackBuilder(retrieval, PUBLIC_ACCESS).build({
+      // Not a verbatim benchmark question. The harness greps this repository,
+      // so a test quoting one would put its own file in the results for the
+      // task it covers — the contamination `EXCLUDED_PREFIXES` documents,
+      // arriving through a file that exclusion does not cover.
+      question: 'which concurrency group does a run on the trunk use',
+    });
+
+    expect(pack.items).toHaveLength(1);
+    expect(retrieval.relaxed).toStrictEqual([false, true]);
+  });
+
+  it('does not widen when the strict query matched, because a strict match is the better answer', async () => {
+    const retrieval = new RelaxAwareRetrieval(found, [hit('c2', { message: 'unrelated' })]);
+
+    const pack = await new ContextPackBuilder(retrieval, PUBLIC_ACCESS).build({ question: 'why' });
+
+    expect(pack.items.map((item) => item.entity.id)).toStrictEqual(['c1']);
+    expect(retrieval.relaxed).toStrictEqual([false]);
+  });
+
+  it('reports an empty pack when neither query matched, rather than widening twice', async () => {
+    const retrieval = new RelaxAwareRetrieval([], []);
+
+    const pack = await new ContextPackBuilder(retrieval, PUBLIC_ACCESS).build({ question: 'why' });
+
+    expect(pack.items).toStrictEqual([]);
+    expect(retrieval.relaxed).toStrictEqual([false, true]);
   });
 });
