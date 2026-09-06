@@ -14,14 +14,36 @@
       "question": "Should CI add a macOS runner for the packaging suite?",
       "answerBasis": "No. The owner dropped macOS from the verify matrix on 2026-09-05 and EPIC-115 was closed with coverage DEFERRED; the obligation that replaced it was to stop claiming macOS is verified. The workflow matrix is windows-latest only.",
       "expected": [
-        { "artefact": "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md", "relevance": 3, "basis": "Status line: CLOSED — coverage DEFERRED by owner decision." },
-        { "artefact": "file:.github/workflows/ci.yml", "relevance": 3, "basis": "verify matrix comment: Windows only, by owner decision, 2026-09-05." },
-        { "artefact": "file:docs/EPICs/validation/EPIC-115-VALIDATION.md", "relevance": 2, "basis": "Records the corrected claim." },
-        { "artefact": "file:README.md", "relevance": 2, "basis": "Holds the platform table the decision obliged correcting." }
+        {
+          "artefact": "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md",
+          "relevance": 3,
+          "basis": "Status line: CLOSED — coverage DEFERRED by owner decision."
+        },
+        {
+          "artefact": "file:.github/workflows/ci.yml",
+          "relevance": 3,
+          "basis": "verify matrix comment: Windows only, by owner decision, 2026-09-05."
+        },
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-115-VALIDATION.md",
+          "relevance": 2,
+          "basis": "Records the corrected claim."
+        },
+        {
+          "artefact": "file:README.md",
+          "relevance": 2,
+          "basis": "Holds the platform table the decision obliged correcting."
+        }
       ],
       "superseded": [
-        { "artefact": "file:docs/EPICs/EPIC-105-Cross-Platform-Packaging.md", "basis": "Adds macos-latest to the matrix. True when written, reversed on 2026-09-05." },
-        { "artefact": "file:docs/EPICs/validation/EPIC-105-VALIDATION.md", "basis": "Records macOS as validated — the claim EPIC-115 exists to correct." }
+        {
+          "artefact": "file:docs/EPICs/EPIC-105-Cross-Platform-Packaging.md",
+          "basis": "Adds macos-latest to the matrix. True when written, reversed on 2026-09-05."
+        },
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-105-VALIDATION.md",
+          "basis": "Records macOS as validated — the claim EPIC-115 exists to correct."
+        }
       ]
     },
     {
@@ -30,10 +52,26 @@
       "question": "Why is a durable context record identified by its statement rather than by the session that recorded it?",
       "answerBasis": "engineeringMemoryKey(sessionId, kind, statement) put the author in the identity, so two sessions recording one decision produced two rows by construction. Keying on what is said rather than who said it is the merge.",
       "expected": [
-        { "artefact": "file:docs/Architecture/EPIC-126-DECISIONS.md", "basis": "The structural cause is engineeringMemoryKey… identity contains the author.", "relevance": 3 },
-        { "artefact": "file:docs/EPICs/EPIC-126-Context-Merger.md", "relevance": 3, "basis": "Merging is a property of the identifier: no scan, no comparison against the corpus." },
-        { "artefact": "file:src/context/durable.ts", "relevance": 2, "basis": "Where the identity is derived." },
-        { "artefact": "file:docs/EPICs/validation/EPIC-126-VALIDATION.md", "relevance": 2, "basis": "The convergence measurement." }
+        {
+          "artefact": "file:docs/Architecture/EPIC-126-DECISIONS.md",
+          "basis": "The structural cause is engineeringMemoryKey… identity contains the author.",
+          "relevance": 3
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-126-Context-Merger.md",
+          "relevance": 3,
+          "basis": "Merging is a property of the identifier: no scan, no comparison against the corpus."
+        },
+        {
+          "artefact": "file:src/context/durable.ts",
+          "relevance": 2,
+          "basis": "Where the identity is derived."
+        },
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-126-VALIDATION.md",
+          "relevance": 2,
+          "basis": "The convergence measurement."
+        }
       ],
       "superseded": []
     },
@@ -43,10 +81,26 @@
       "question": "What constrains a change to the context merger — what is it not allowed to become?",
       "answerBasis": "No model inside the merger; nothing consolidates on a score; a contradiction keeps both sides and picks no winner; near duplicates relate rather than merge; judging whether a statement deserves to be durable belongs to EPIC-129 and the lifecycle to EPIC-127.",
       "expected": [
-        { "artefact": "file:docs/EPICs/EPIC-126-Context-Merger.md", "relevance": 3, "basis": "Non-scope list, including 'Any use of a model inside the merger'." },
-        { "artefact": "file:docs/Architecture/EPIC-126-DECISIONS.md", "relevance": 3, "basis": "The tier boundary the merger owns." },
-        { "artefact": "file:docs/EPICs/EPIC-127-Context-Lifecycle-And-Authority.md", "relevance": 2, "basis": "Owns the lifecycle the merger must not absorb." },
-        { "artefact": "file:src/context/durable.ts", "relevance": 2, "basis": "classifyPair and NEAR_DUPLICATE_SIMILARITY, where the constraint is enforced." }
+        {
+          "artefact": "file:docs/EPICs/EPIC-126-Context-Merger.md",
+          "relevance": 3,
+          "basis": "Non-scope list, including 'Any use of a model inside the merger'."
+        },
+        {
+          "artefact": "file:docs/Architecture/EPIC-126-DECISIONS.md",
+          "relevance": 3,
+          "basis": "The tier boundary the merger owns."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-127-Context-Lifecycle-And-Authority.md",
+          "relevance": 2,
+          "basis": "Owns the lifecycle the merger must not absorb."
+        },
+        {
+          "artefact": "file:src/context/durable.ts",
+          "relevance": 2,
+          "basis": "classifyPair and NEAR_DUPLICATE_SIMILARITY, where the constraint is enforced."
+        }
       ],
       "superseded": []
     },
@@ -56,10 +110,26 @@
       "question": "Why does the dogfood oracle report a skipped outcome instead of a pass when a check cannot run?",
       "answerBasis": "record is not granted by default, so the durable-context checks would otherwise not run at all; a check that quietly did not run reads exactly like one that passed, which Governance forbids. Skips are counted separately and named, with the remediation.",
       "expected": [
-        { "artefact": "file:docs/EPICs/EPIC-134-Continuous-Self-Dogfooding.md", "relevance": 3, "basis": "'A skip is a third outcome' section." },
-        { "artefact": "file:scripts/dogfood.mjs", "relevance": 3, "basis": "The skip() function and the summary that counts them." },
-        { "artefact": "file:docs/Governance/AI-DEVELOPMENT-RULES.md", "relevance": 2, "basis": "The rule a skip reading as a pass violates." },
-        { "artefact": "file:docs/EPICs/validation/EPIC-134-VALIDATION.md", "relevance": 2, "basis": "Records the run and its skips." }
+        {
+          "artefact": "file:docs/EPICs/EPIC-134-Continuous-Self-Dogfooding.md",
+          "relevance": 3,
+          "basis": "'A skip is a third outcome' section."
+        },
+        {
+          "artefact": "file:scripts/dogfood.mjs",
+          "relevance": 3,
+          "basis": "The skip() function and the summary that counts them."
+        },
+        {
+          "artefact": "file:docs/Governance/AI-DEVELOPMENT-RULES.md",
+          "relevance": 2,
+          "basis": "The rule a skip reading as a pass violates."
+        },
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-134-VALIDATION.md",
+          "relevance": 2,
+          "basis": "Records the run and its skips."
+        }
       ],
       "superseded": []
     },
@@ -69,10 +139,26 @@
       "question": "Which agent is allowed to read a session's recorded state, and what changed about that?",
       "answerBasis": "The agent that ran it. ferret_session_recall and ferret_session_show took an identifier and enforced no ownership, so one agent could read another's working state; EPIC-133 closed it with one comparison. Found while proving EPIC-132.",
       "expected": [
-        { "artefact": "file:docs/EPICs/EPIC-133-Context-Governance-And-Security.md", "relevance": 3, "basis": "'A session is read by the agent that ran it'." },
-        { "artefact": "file:src/mcp/session-tools.ts", "relevance": 3, "basis": "Where the ownership comparison is enforced." },
-        { "artefact": "file:docs/EPICs/EPIC-132-Multi-Agent-Shared-Context.md", "relevance": 2, "basis": "Where the defect was found." },
-        { "artefact": "file:docs/EPICs/validation/EPIC-133-VALIDATION.md", "relevance": 2, "basis": "The evidence the control holds." }
+        {
+          "artefact": "file:docs/EPICs/EPIC-133-Context-Governance-And-Security.md",
+          "relevance": 3,
+          "basis": "'A session is read by the agent that ran it'."
+        },
+        {
+          "artefact": "file:src/mcp/session-tools.ts",
+          "relevance": 3,
+          "basis": "Where the ownership comparison is enforced."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-132-Multi-Agent-Shared-Context.md",
+          "relevance": 2,
+          "basis": "Where the defect was found."
+        },
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-133-VALIDATION.md",
+          "relevance": 2,
+          "basis": "The evidence the control holds."
+        }
       ],
       "superseded": []
     },
@@ -82,23 +168,55 @@
       "question": "Which PostgreSQL major versions does CI actually measure, and on which events?",
       "answerBasis": "17 on every pull request in the storage job; 14, 15 and 16 on the nightly schedule and on workflow_dispatch only. The floor enforced in code is 14. No record may claim a version the lane has not measured.",
       "expected": [
-        { "artefact": "file:.github/workflows/ci.yml", "relevance": 3, "basis": "storage job pins pg17; compatibility matrix is 14, 15, 16 and gated on schedule." },
-        { "artefact": "file:docs/EPICs/validation/EPIC-114-VALIDATION.md", "relevance": 3, "basis": "Records which versions have actually run and when." },
-        { "artefact": "file:docs/EPICs/EPIC-114-PostgreSQL-Version-Coverage.md", "relevance": 2, "basis": "Why the lane is scheduled rather than on the gate." },
-        { "artefact": "file:src/storage/connection.ts", "relevance": 2, "basis": "MINIMUM_POSTGRES_MAJOR, the floor enforced at runtime." }
+        {
+          "artefact": "file:.github/workflows/ci.yml",
+          "relevance": 3,
+          "basis": "storage job pins pg17; compatibility matrix is 14, 15, 16 and gated on schedule."
+        },
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-114-VALIDATION.md",
+          "relevance": 3,
+          "basis": "Records which versions have actually run and when."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-114-PostgreSQL-Version-Coverage.md",
+          "relevance": 2,
+          "basis": "Why the lane is scheduled rather than on the gate."
+        },
+        {
+          "artefact": "file:src/storage/connection.ts",
+          "relevance": 2,
+          "basis": "MINIMUM_POSTGRES_MAJOR, the floor enforced at runtime."
+        }
       ],
       "superseded": []
     },
     {
       "id": "score-comparability",
       "kind": "rationale",
-      "question": "Why must a retrieval score never be compared between two different queries?",
-      "answerBasis": "The score is PostgreSQL's ts_rank, a function of the document and the query, comparable within one result set and nowhere else. Treating it as comparable is how a meaningless threshold gets hard-coded, which is why the quality metrics are computed from rank order only.",
+      "question": "Is a Ferret retrieval score comparable between two different queries?",
+      "answerBasis": "Yes, since EPIC-056 normalised every branch to [0, 1]; SearchHit.score documents itself as comparable across queries and reserves 1.0 for an exact identifier match. It was not, when it was PostgreSQL's raw ts_rank. The retrieval quality metrics are still computed from rank order only, but not for that reason: a relevance grade is ordinal.",
       "expected": [
-        { "artefact": "file:src/retrieval/query.ts", "relevance": 3, "basis": "The comment on SearchHit.score." },
-        { "artefact": "file:src/evaluation/metrics.ts", "relevance": 3, "basis": "Computed from rank order only, citing that constraint." },
-        { "artefact": "file:docs/EPICs/EPIC-098-Retrieval-Quality-Harness.md", "relevance": 2, "basis": "The harness that consumes rank-order metrics." },
-        { "artefact": "file:src/retrieval/rank.ts", "relevance": 1, "basis": "Where ranking is applied." }
+        {
+          "artefact": "file:src/retrieval/query.ts",
+          "relevance": 3,
+          "basis": "The comment on SearchHit.score: comparable across queries, EPIC-056 section 8.1, which is what changed it."
+        },
+        {
+          "artefact": "file:src/retrieval/rank.ts",
+          "relevance": 2,
+          "basis": "Where the normalisation is applied."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-098-Retrieval-Quality-Harness.md",
+          "relevance": 2,
+          "basis": "The harness that consumes rank-order metrics."
+        },
+        {
+          "artefact": "file:src/evaluation/metrics.ts",
+          "relevance": 2,
+          "basis": "Records the reversal and why the rank-order constraint outlived the reason first given for it."
+        }
       ],
       "superseded": []
     },
@@ -108,10 +226,26 @@
       "question": "What earlier decisions affect a change to how the context pack finds durable context?",
       "answerBasis": "EPIC-131 widened the standing read deliberately and only there, having tried and reverted wiring the pack to QueryPlanner. It is safe there because EPIC-130 already folded restatements, ordering is by cost not score, and the section is capped. ferret_search is untouched.",
       "expected": [
-        { "artefact": "file:docs/EPICs/EPIC-131-Context-Assembly.md", "relevance": 3, "basis": "Design, Rejected and Non-scope sections." },
-        { "artefact": "file:src/context/pack.ts", "relevance": 3, "basis": "The standing read and the comment recording why it widens only here." },
-        { "artefact": "file:docs/EPICs/EPIC-130-Retrieval-Quality.md", "relevance": 2, "basis": "The restatement folding the widening depends on." },
-        { "artefact": "file:src/context/standing.ts", "relevance": 2, "basis": "The ordering by what acting against a statement costs." }
+        {
+          "artefact": "file:docs/EPICs/EPIC-131-Context-Assembly.md",
+          "relevance": 3,
+          "basis": "Design, Rejected and Non-scope sections."
+        },
+        {
+          "artefact": "file:src/context/pack.ts",
+          "relevance": 3,
+          "basis": "The standing read and the comment recording why it widens only here."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-130-Retrieval-Quality.md",
+          "relevance": 2,
+          "basis": "The restatement folding the widening depends on."
+        },
+        {
+          "artefact": "file:src/context/standing.ts",
+          "relevance": 2,
+          "basis": "The ordering by what acting against a statement costs."
+        }
       ],
       "superseded": []
     },
@@ -121,7 +255,11 @@
       "question": "Why does a CI run on main group by commit sha instead of by ref?",
       "answerBasis": "A superseded main run is not redundant: each commit on main is a squash, and cancelling its run leaves that commit unverified. cancel-in-progress: false did not close it, because it protects a started run and not a queued one — 1072c3d was cancelled while queued and finished with zero jobs.",
       "expected": [
-        { "artefact": "file:.github/workflows/ci.yml", "relevance": 3, "basis": "The concurrency block and the 1072c3d evidence in it." }
+        {
+          "artefact": "file:.github/workflows/ci.yml",
+          "relevance": 3,
+          "basis": "The concurrency block and the 1072c3d evidence in it."
+        }
       ],
       "superseded": []
     },
@@ -131,8 +269,16 @@
       "question": "Why is the dogfood database separate from the test database?",
       "answerBasis": "tests/global-setup.ts creates a fresh database per test file and drops it; the dogfood one persists, because an index built over ten minutes is not something to rebuild per question.",
       "expected": [
-        { "artefact": "file:scripts/dogfood-db.mjs", "relevance": 3, "basis": "'Deliberately separate from the test database.'" },
-        { "artefact": "file:tests/global-setup.ts", "relevance": 2, "basis": "The per-file create-and-drop it is separate from." }
+        {
+          "artefact": "file:scripts/dogfood-db.mjs",
+          "relevance": 3,
+          "basis": "'Deliberately separate from the test database.'"
+        },
+        {
+          "artefact": "file:tests/global-setup.ts",
+          "relevance": 2,
+          "basis": "The per-file create-and-drop it is separate from."
+        }
       ],
       "superseded": []
     },
@@ -142,8 +288,16 @@
       "question": "Why is the per-developer Claude Code settings file ignored by git?",
       "answerBasis": "It holds the dogfood database password, which .mcp.json deliberately does not. It is ignored in the repository rather than relying on one developer's global ignore file, because a protection that lives outside the repository is a protection the repository does not have.",
       "expected": [
-        { "artefact": "file:.gitignore", "relevance": 3, "basis": "The comment on the .claude/settings.local.json rule." },
-        { "artefact": "file:.mcp.json", "relevance": 2, "basis": "The file that deliberately omits the credential." }
+        {
+          "artefact": "file:.gitignore",
+          "relevance": 3,
+          "basis": "The comment on the .claude/settings.local.json rule."
+        },
+        {
+          "artefact": "file:.mcp.json",
+          "relevance": 2,
+          "basis": "The file that deliberately omits the credential."
+        }
       ],
       "superseded": []
     },
@@ -153,10 +307,26 @@
       "question": "What must a new Ferret provider implement, and what is it forbidden from doing?",
       "answerBasis": "The provider contract in docs/Architecture/WRITING-A-PROVIDER.md, backed by src/providers/contract.ts and the conformance harness.",
       "expected": [
-        { "artefact": "file:docs/Architecture/WRITING-A-PROVIDER.md", "relevance": 3, "basis": "The contract, written for the author of a provider." },
-        { "artefact": "file:src/providers/contract.ts", "relevance": 3, "basis": "The interface the document describes." },
-        { "artefact": "file:src/providers/capabilities.ts", "relevance": 2, "basis": "What a provider may declare." },
-        { "artefact": "file:docs/EPICs/EPIC-099-Provider-Conformance-Harness.md", "relevance": 2, "basis": "What a provider is checked against." }
+        {
+          "artefact": "file:docs/Architecture/WRITING-A-PROVIDER.md",
+          "relevance": 3,
+          "basis": "The contract, written for the author of a provider."
+        },
+        {
+          "artefact": "file:src/providers/contract.ts",
+          "relevance": 3,
+          "basis": "The interface the document describes."
+        },
+        {
+          "artefact": "file:src/providers/capabilities.ts",
+          "relevance": 2,
+          "basis": "What a provider may declare."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-099-Provider-Conformance-Harness.md",
+          "relevance": 2,
+          "basis": "What a provider is checked against."
+        }
       ],
       "superseded": []
     },
@@ -166,8 +336,16 @@
       "question": "Why does Ferret estimate tokens rather than counting them, and which way does the estimate err?",
       "answerBasis": "A real count needs the tokenizer of a specific model, which would tie Ferret to a model family — Governance forbids it, since the AI client is a provider like any other. The estimate over-counts deliberately, because under-counting means the client truncates silently from whichever end it chooses.",
       "expected": [
-        { "artefact": "file:src/context/budget.ts", "relevance": 3, "basis": "The module comment and ESTIMATE_MARGIN." },
-        { "artefact": "file:docs/Governance/AI-DEVELOPMENT-RULES.md", "relevance": 2, "basis": "The rule against tying Ferret to a model family." }
+        {
+          "artefact": "file:src/context/budget.ts",
+          "relevance": 3,
+          "basis": "The module comment and ESTIMATE_MARGIN."
+        },
+        {
+          "artefact": "file:docs/Governance/AI-DEVELOPMENT-RULES.md",
+          "relevance": 2,
+          "basis": "The rule against tying Ferret to a model family."
+        }
       ],
       "superseded": []
     },
@@ -177,9 +355,21 @@
       "question": "Why does the test run fail when the packaging suite was collected but did not execute?",
       "answerBasis": "Its beforeAll exceeded its budget under contention, so Vitest failed the module and marked its 34 tests skipped, which merged into the same bucket as the 7 deliberately conditional ones and read as zero failing tests. The secret scan of the shipped bytes and the reproducible-tarball assertion are the gate, and a run that did not execute them has not cleared it.",
       "expected": [
-        { "artefact": "file:tests/required-groups.ts", "relevance": 3, "basis": "The reporter and the F-73 comment that states the failure mode." },
-        { "artefact": "file:docs/evidence/FERRET-F73-RELEASE-GATE-INTEGRITY.md", "relevance": 3, "basis": "The finding it answers." },
-        { "artefact": "file:vitest.config.ts", "relevance": 2, "basis": "Where the reporter is installed." }
+        {
+          "artefact": "file:tests/required-groups.ts",
+          "relevance": 3,
+          "basis": "The reporter and the F-73 comment that states the failure mode."
+        },
+        {
+          "artefact": "file:docs/evidence/FERRET-F73-RELEASE-GATE-INTEGRITY.md",
+          "relevance": 3,
+          "basis": "The finding it answers."
+        },
+        {
+          "artefact": "file:vitest.config.ts",
+          "relevance": 2,
+          "basis": "Where the reporter is installed."
+        }
       ],
       "superseded": []
     },
@@ -189,9 +379,21 @@
       "question": "Why does EPIC-125 have no row in the Epic catalog?",
       "answerBasis": "It shipped as pull request #198 with its evidence recorded on EPIC-119 and EPIC-120 rather than under its own number; the roadmap's completion record says so.",
       "expected": [
-        { "artefact": "file:docs/EPICs/ROADMAP.md", "relevance": 3, "basis": "'EPIC-125 is the one number in that range with no catalog row.'" },
-        { "artefact": "file:docs/EPICs/EPIC-119-Universal-Source-Connector-Contract.md", "relevance": 2, "basis": "Carries part of the evidence." },
-        { "artefact": "file:docs/EPICs/EPIC-120-Repository-Connector.md", "relevance": 2, "basis": "Carries the rest." }
+        {
+          "artefact": "file:docs/EPICs/ROADMAP.md",
+          "relevance": 3,
+          "basis": "'EPIC-125 is the one number in that range with no catalog row.'"
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-119-Universal-Source-Connector-Contract.md",
+          "relevance": 2,
+          "basis": "Carries part of the evidence."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-120-Repository-Connector.md",
+          "relevance": 2,
+          "basis": "Carries the rest."
+        }
       ],
       "superseded": []
     },
@@ -201,10 +403,108 @@
       "question": "What would a new session need to know to continue the self-dogfooding work?",
       "answerBasis": "That the oracle is scripts/dogfood.mjs and grew rather than being replaced, that every check needs an answer computed independently of Ferret, that skips are a third outcome, that it is deliberately not a CI gate because it needs a real repository and database, and what the last run found.",
       "expected": [
-        { "artefact": "file:docs/EPICs/EPIC-134-Continuous-Self-Dogfooding.md", "relevance": 3, "basis": "Scope, non-scope and the oracle discipline." },
-        { "artefact": "file:scripts/dogfood.mjs", "relevance": 3, "basis": "The oracle itself." },
-        { "artefact": "file:docs/EPICs/validation/EPIC-134-VALIDATION.md", "relevance": 3, "basis": "What the last run found and which regression each finding became." },
-        { "artefact": "file:docs/EPICs/EPIC-118-Ferret-Self-Dogfood.md", "relevance": 2, "basis": "Where the oracle discipline was established." }
+        {
+          "artefact": "file:docs/EPICs/EPIC-134-Continuous-Self-Dogfooding.md",
+          "relevance": 3,
+          "basis": "Scope, non-scope and the oracle discipline."
+        },
+        {
+          "artefact": "file:scripts/dogfood.mjs",
+          "relevance": 3,
+          "basis": "The oracle itself."
+        },
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-134-VALIDATION.md",
+          "relevance": 3,
+          "basis": "What the last run found and which regression each finding became."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-118-Ferret-Self-Dogfood.md",
+          "relevance": 2,
+          "basis": "Where the oracle discipline was established."
+        }
+      ],
+      "superseded": []
+    },
+    {
+      "id": "where-decisions-live",
+      "kind": "supersession",
+      "question": "Where does something one agent's session decided become readable by a different agent?",
+      "answerBasis": "Durable context, which is keyed on the statement rather than on who recorded it, and which a session's memories reach only by being promoted. A session memory on its own is keyed on the session and is unreachable to any later session that was not that one.",
+      "expected": [
+        {
+          "artefact": "file:docs/EPICs/EPIC-129-Durable-Context-Capture.md",
+          "relevance": 3,
+          "basis": "Problem: memories are keyed on the session, so they are unreachable to any later session that was not that one."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-126-Context-Merger.md",
+          "relevance": 3,
+          "basis": "Durable context is keyed on what is said, independent of who said it."
+        },
+        {
+          "artefact": "file:src/context/promotion.ts",
+          "relevance": 2,
+          "basis": "The mapping from memory to durable context."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-132-Multi-Agent-Shared-Context.md",
+          "relevance": 2,
+          "basis": "Proves the second agent reads it without a protocol between the two."
+        }
+      ],
+      "superseded": [
+        {
+          "artefact": "file:docs/EPICs/EPIC-042-Decision-And-Engineering-Memory.md",
+          "basis": "Calls session memory durable and traceable. True of its own scope and not of this question: the identity contains the session, which is the structural cause EPIC-126 names."
+        }
+      ]
+    },
+    {
+      "id": "macos-ever-measured",
+      "kind": "supersession",
+      "question": "Has Ferret's packaging suite ever passed on macOS, and does anything run it now?",
+      "answerBasis": "Yes and no. EPIC-105 ran macos-latest on pull request #140: 112 test files and 2 463 tests passed, the packaging suite among them. The owner then dropped macOS from the verify matrix on 2026-09-05 and nothing has run it since. An answer citing only one of those is wrong in one of two directions.",
+      "expected": [
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-105-VALIDATION.md",
+          "relevance": 3,
+          "basis": "macOS passes: 112 files, 2 463 tests, packaging suite included, on PR #140."
+        },
+        {
+          "artefact": "file:.github/workflows/ci.yml",
+          "relevance": 3,
+          "basis": "The matrix is windows-latest only; the comment keeps the measurement that dropping macOS re-opened a gap."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md",
+          "relevance": 3,
+          "basis": "Nothing about macOS was ever unmeasurable. It was measured — and the coverage is now deferred."
+        },
+        {
+          "artefact": "file:README.md",
+          "relevance": 2,
+          "basis": "The platform table the correction obliged."
+        }
+      ],
+      "superseded": []
+    },
+    {
+      "id": "nightly-run",
+      "kind": "rationale",
+      "question": "Why does CI still run on a nightly schedule?",
+      "answerBasis": "The reason it was added no longer holds — it existed because Windows ran only there, and the 2026-09-05 matrix change put Windows on every event. It is kept for what a per-commit run cannot do: a run against a tree nobody touched that day. The scheduled compatibility lane for PostgreSQL 14, 15 and 16 also runs only there.",
+      "expected": [
+        {
+          "artefact": "file:.github/workflows/ci.yml",
+          "relevance": 3,
+          "basis": "The schedule trigger's own comment, and the compatibility job gated on it."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-114-PostgreSQL-Version-Coverage.md",
+          "relevance": 2,
+          "basis": "Why compatibility coverage is scheduled rather than on the pull-request gate."
+        }
       ],
       "superseded": []
     }

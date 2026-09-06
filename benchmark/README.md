@@ -139,6 +139,43 @@ the benchmark directory covers. Both now paraphrase, and say why.
 Results measured before the exclusion are not comparable with results after it.
 The first committed run is one of them.
 
+**A label stated the answer it was supposed to catch.** `score-comparability`
+asked why a retrieval score must never be compared between queries, and gave as
+its basis that a `SearchHit.score` is PostgreSQL's `ts_rank`, *"comparable within
+one result set and nowhere else"*. That has been false since EPIC-056 normalised
+every branch to `[0, 1]`; `SearchHit.score` now documents itself as comparable
+across queries.
+
+The label was wrong because `src/evaluation/metrics.ts` said so, citing
+`src/retrieval/query.ts:150` — a line which by then held a traversal bound. The
+task was written from that citation, which is precisely the failure the task set
+exists to measure, arriving through the person writing the labels.
+
+Both are corrected: the task now asks whether the score *is* comparable and
+grades `query.ts` as the answer, and the stale rationale in `metrics.ts` was
+fixed as a defect in its own right. Correcting it removed the trap, so the task
+carries none — a benchmark records the repository as it is, and a stale claim is
+not preserved for the sake of a measurement.
+
+**A run measured a build that was not the working tree.** The harness runs
+against `dist/` and nothing made it check that `dist/` had been built from the
+tree it was reporting on. A run made after a rebase failed measured a build from
+before a merged retrieval fix, and its numbers were committed as current:
+`ferret-search` was recorded as sourcing 32% of tasks where the build under test
+sources 37%. Nothing was wrong with the run. It measured what it was pointed at
+and said nothing about what that was — and a stale result is indistinguishable
+from a regression.
+
+`run.mjs` now refuses to start when `dist/` is older than `src/`, and every
+report carries the commit it measured and whether the tree was dirty.
+
+**Three tasks were added for supersession.** `staleAboveCurrent` is the
+measurement this exists for and one task in sixteen exercised it, which is not
+enough evidence to report a rate from. `where-decisions-live`,
+`macos-ever-measured` and `nightly-run` were added from real reversals in this
+repository. No existing label was touched, and the three are reported separately
+from the original sixteen wherever the difference could matter.
+
 ## What this does not measure
 
 Stated here rather than discovered later.
