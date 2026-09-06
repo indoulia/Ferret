@@ -203,6 +203,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-130 — Retrieval Quality** — P1 — VALIDATED ([spec](EPIC-130-Retrieval-Quality.md), [evidence](validation/EPIC-130-VALIDATION.md))
 - **EPIC-131 — Context Assembly** — P1 — VALIDATED ([spec](EPIC-131-Context-Assembly.md), [evidence](validation/EPIC-131-VALIDATION.md))
 - **EPIC-132 — Multi-Agent Shared Context** — P1 — VALIDATED ([spec](EPIC-132-Multi-Agent-Shared-Context.md), [evidence](validation/EPIC-132-VALIDATION.md))
+- **EPIC-133 — Context Governance & Security** — P0 — VALIDATED ([spec](EPIC-133-Context-Governance-And-Security.md), [evidence](validation/EPIC-133-VALIDATION.md))
 
 ### Security & Authorization
 

@@ -241,7 +241,26 @@ describe('the target list is the contract — AC-9', () => {
     // A tombstone is not gated that way and must not become so. It is the
     // record that something was deleted, and there is no age at which the
     // answer stops mattering.
-    expect([...RETENTION_TARGETS]).toStrictEqual(['blobs', 'journals', 'evidence', 'sessions']);
+    //
+    // **`context` added 2026-09-06 by EPIC-133, and this is the review again.**
+    // It follows `evidence` and `sessions`, not `blobs`: durable context plainly
+    // answers a question, so it is discarded only on an age the caller names,
+    // with no default, and `--context` refuses to run without one.
+    //
+    // It does not weaken §8.4 and does not become an `entities` target. It
+    // reaches exactly one registered kind in exactly one state — `archived`,
+    // which an agent holding `mutate` chose — and three states are refused
+    // outright: `superseded` is the record of a decision that changed,
+    // `active` is what Ferret still holds, and `candidate` is unanswered rather
+    // than abandoned. A tombstone is `deleted`, is not among them, and remains
+    // unnameable.
+    expect([...RETENTION_TARGETS]).toStrictEqual([
+      'blobs',
+      'journals',
+      'evidence',
+      'sessions',
+      'context',
+    ]);
     expect(RETENTION_TARGETS).not.toContain('tombstones');
     expect(RETENTION_TARGETS).not.toContain('entities');
   });

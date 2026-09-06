@@ -102,6 +102,11 @@ describeCli(`ferret prune (${databaseAvailable() ? 'real PostgreSQL' : SKIP_REAS
       'journals',
       'evidence',
       'sessions',
+      // EPIC-133. Named here because `ferret prune` with no target reports what
+      // *could* go across all of them, so a new target that this list did not
+      // know about would be invisible in the one command an operator runs to
+      // find out.
+      'context',
     ]);
     expect(await blobCount()).toBe(before);
   });

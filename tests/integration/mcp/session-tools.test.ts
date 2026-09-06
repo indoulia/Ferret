@@ -256,10 +256,28 @@ describe('list and show — AC-5', () => {
 
   it('says an actor has none rather than returning a bare empty list', async () => {
     const { client } = await harness(accessOf({ sessions: [] }));
-    const { body } = await call(client, 'ferret_session_list', { actorId: 'someone-else' });
+    const { body } = await call(client, 'ferret_session_list');
 
     expect(body['count']).toBe(0);
     expect(String(body['notice'])).toContain('No sessions are recorded');
+  });
+
+  it('offers no way to list another actor’s sessions — EPIC-133', async () => {
+    // Listing another agent's sessions disclosed how much work it had done and
+    // when, and handed over the identifiers every other session read takes.
+    // The field is removed rather than defaulted: a parameter that is ignored
+    // is a parameter someone will believe.
+    const { client } = await harness(accessOf({ sessions: [sessionOf('a')] }));
+    const { tools } = await client.listTools();
+    const schema = JSON.stringify(tools.find((tool) => tool.name === 'ferret_session_list')?.inputSchema);
+
+    expect(schema).not.toContain('actorId');
+
+    const refused = (await client.callTool({
+      name: 'ferret_session_list',
+      arguments: { actorId: 'someone-else' },
+    })) as { isError?: boolean };
+    expect(refused.isError).toBe(true);
   });
 
   it('shows one session with its checkpoint and every memory, superseded included', async () => {

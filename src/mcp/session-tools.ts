@@ -161,6 +161,31 @@ function summarize(session: Session): Record<string, unknown> {
  * `mcp-destructive-tools.test.ts` scans every module in `src/mcp/`, so a
  * control naming one file would stop covering the surface.
  */
+/**
+ * What a caller is told about a session that is not theirs — EPIC-133.
+ *
+ * **The same answer for "no such session" and "not your session."** A message
+ * that distinguished them would let a caller enumerate another agent's work by
+ * probing identifiers, which is the disclosure the ownership check exists to
+ * prevent. A legitimate owner who mistyped one still gets an actionable answer.
+ *
+ * Stated once and used by every read, because a rule written three times is a
+ * rule that will hold in two places.
+ */
+function notYours(sessionId: string): Record<string, unknown> {
+  return {
+    found: false,
+    sessionId,
+    detail: 'No session you own has that identifier.',
+    remediation: 'Call ferret_session_list to see the sessions this agent has recorded.',
+  };
+}
+
+/** True when this session is the calling principal's to read. */
+function ownedBy(session: Session | undefined, actorId: string): session is Session {
+  return session !== undefined && session.actorId === actorId;
+}
+
 export function registerSessionTools(server: McpServer, dependencies: SessionToolDependencies): void {
   const { sessions, logger, principal, audit } = dependencies;
   const guard: ToolGuard = createToolGuard({
@@ -205,14 +230,12 @@ export function registerSessionTools(server: McpServer, dependencies: SessionToo
         // decided nothing" and "there is no such session" are different
         // answers, and a client that cannot tell them apart will ask the user
         // to repeat context that was never lost.
+        // EPIC-133. A session is read by the agent that ran it. Found by
+        // EPIC-132: an agent could recall, and then publish, another agent's
+        // working state simply by naming its identifier.
         const session = await sessions.getSession(input.sessionId);
-        if (session === undefined) {
-          return {
-            found: false,
-            sessionId: input.sessionId,
-            detail: 'No session with that identifier is on record.',
-            remediation: 'Call ferret_session_list to see the sessions this installation holds.',
-          };
+        if (!ownedBy(session, principal.id)) {
+          return notYours(input.sessionId);
         }
 
         const bundle = await recoverSession(input.sessionId, sessions, {
@@ -268,11 +291,6 @@ export function registerSessionTools(server: McpServer, dependencies: SessionToo
         'restart. Reports the total held as well as the page returned, so an ' +
         'empty list for one actor is distinguishable from an empty store.',
       inputSchema: z.strictObject({
-        actorId: z
-          .string()
-          .min(1)
-          .optional()
-          .describe('Whose sessions. Defaults to the principal making the call.'),
         limit: z
           .number()
           .int()
@@ -285,7 +303,11 @@ export function registerSessionTools(server: McpServer, dependencies: SessionToo
     },
     async (input) =>
       guard('session.list', Permission.READ, async () => {
-        const actorId = input.actorId ?? principal.id;
+        // EPIC-133. The principal's own sessions, and there is no field a
+        // caller could name someone else's in. Listing another agent's
+        // sessions disclosed how much work it had done and when, and handed
+        // over the identifiers every other session read takes.
+        const actorId = principal.id;
         const found = await sessions.sessionsFor(actorId, input.limit ?? 20);
         return {
           actorId,
@@ -316,14 +338,11 @@ export function registerSessionTools(server: McpServer, dependencies: SessionToo
     },
     async (input) =>
       guard('session.show', Permission.READ, async () => {
+        // EPIC-133, the same rule as recall: a session is read by the agent
+        // that ran it.
         const session = await sessions.getSession(input.sessionId);
-        if (session === undefined) {
-          return {
-            found: false,
-            sessionId: input.sessionId,
-            detail: 'No session with that identifier is on record.',
-            remediation: 'Call ferret_session_list to see the sessions this installation holds.',
-          };
+        if (!ownedBy(session, principal.id)) {
+          return notYours(input.sessionId);
         }
 
         const [checkpoint, memories] = await Promise.all([
