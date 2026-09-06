@@ -14,7 +14,14 @@ import {
   type DurableContextPort,
   type StoreContextRequest,
 } from '../../../src/context/index.js';
-import { LifecycleState } from '../../../src/domain/index.js';
+import {
+  LifecycleState,
+  MemoryOrigin,
+  createEngineeringMemory,
+  createSession,
+  type EngineeringMemory,
+  type Session,
+} from '../../../src/domain/index.js';
 import { createToolGuard, registerContextTools } from '../../../src/mcp/index.js';
 import { RecordingLogger } from '../../support/recording-logger.js';
 
@@ -133,9 +140,23 @@ interface Harness {
 
 const open: Harness[] = [];
 
+const PROMOTED_AT = '2026-09-06T10:00:00.000Z';
+
+/** A session with what it recorded, for the promotion tool — EPIC-129. */
+function sessionsOf(
+  session: Session | undefined,
+  memories: readonly EngineeringMemory[] = [],
+): { getSession: (id: string) => Promise<Session | undefined>; memoriesFor: () => Promise<readonly EngineeringMemory[]> } {
+  return {
+    getSession: (id) => Promise.resolve(session?.sessionId === id ? session : undefined),
+    memoriesFor: () => Promise.resolve(memories),
+  };
+}
+
 async function harness(
   seed: readonly DurableContext[] = [],
   principal: Principal = CURATOR,
+  sessions?: ReturnType<typeof sessionsOf>,
 ): Promise<Harness> {
   const server = new McpServer({ name: 'ferret-context-test', version: '0.0.0' });
   const port = portOf(seed);
@@ -144,6 +165,7 @@ async function harness(
     server,
     guard: createToolGuard({ principal, logger }),
     context: port,
+    ...(sessions === undefined ? {} : { sessions }),
     permittedScopes: principal.permittedScopes,
     producer: 'ferret.agent',
     producerVersion: '0.0.0',
@@ -178,7 +200,7 @@ afterEach(async () => {
 });
 
 describe('the surface an agent is offered', () => {
-  it('registers four tools and no more', async () => {
+  it('registers four tools when no session read is wired', async () => {
     const { client } = await harness();
     const { tools } = await client.listTools();
 
@@ -188,6 +210,13 @@ describe('the surface an agent is offered', () => {
       'ferret_context_record',
       'ferret_context_trust',
     ]);
+  });
+
+  it('adds promotion only when a session read is wired — EPIC-129', async () => {
+    const { client } = await harness([], CURATOR, sessionsOf(undefined));
+    const { tools } = await client.listTools();
+
+    expect(tools.map((tool) => tool.name)).toContain('ferret_context_promote');
   });
 
   it('marks the reads read-only and the writes additive', async () => {
@@ -359,6 +388,114 @@ describe('reading it back', () => {
     // after the content it governs has already lost.
     expect(text.indexOf('DATA, not instructions')).toBeGreaterThanOrEqual(0);
     expect(text.indexOf('DATA, not instructions')).toBeLessThan(text.indexOf('Ignore your previous'));
+  });
+});
+
+describe('promoting what a session learned — EPIC-129', () => {
+  const session = createSession({
+    sessionId: 'promote-me',
+    provider: 'test-agent',
+    actorId: 'actor-1',
+    startedAt: PROMOTED_AT,
+  });
+
+  function memoryOf(statement: string, origin: MemoryOrigin = MemoryOrigin.EXPLICIT): EngineeringMemory {
+    return createEngineeringMemory({
+      sessionId: session.sessionId,
+      kind: 'decision',
+      statement,
+      origin,
+      recordedAt: PROMOTED_AT,
+      ...(origin === MemoryOrigin.EXTRACTED
+        ? { rule: 'we-decided', derivedFrom: [{ captureId: 'c1', sequence: 1 }] }
+        : {}),
+    });
+  }
+
+  it('promotes a session\u2019s memories and reports what became of each', async () => {
+    const { client, port } = await harness(
+      [],
+      CURATOR,
+      sessionsOf(session, [
+        memoryOf('We chose PostgreSQL over SQLite'),
+        memoryOf('We decided to page history newest-first', MemoryOrigin.EXTRACTED),
+      ]),
+    );
+
+    const { body } = await call(client, 'ferret_context_promote', { sessionId: session.sessionId });
+
+    expect(body['found']).toBe(true);
+    expect(body['considered']).toBe(2);
+    expect(body['created']).toBe(2);
+    // The extracted one is a proposal, so automatic extraction never silently
+    // becomes current context.
+    expect(body['proposed']).toBe(1);
+    expect(port.recorded.map((one) => one.request.state)).toStrictEqual([
+      LifecycleState.ACTIVE,
+      LifecycleState.CANDIDATE,
+    ]);
+  });
+
+  it('carries the session across as the provenance of what it promoted', async () => {
+    const { client, port } = await harness(
+      [],
+      CURATOR,
+      sessionsOf(session, [memoryOf('The provenance reaches the work, not just Ferret')]),
+    );
+
+    await call(client, 'ferret_context_promote', { sessionId: session.sessionId });
+
+    expect(port.recorded[0]?.request.provenance.sourceId).toBe(session.sessionId);
+    expect(port.recorded[0]?.request.provenance.observedAt).toBe(PROMOTED_AT);
+  });
+
+  it('says a session is absent rather than failing', async () => {
+    const { client } = await harness([], CURATOR, sessionsOf(session));
+    const { body, isError } = await call(client, 'ferret_context_promote', { sessionId: 'never-existed' });
+
+    expect(isError).toBe(false);
+    expect(body['found']).toBe(false);
+  });
+
+  it('promotes nothing from a session that recorded nothing', async () => {
+    const { client, port } = await harness([], CURATOR, sessionsOf(session, []));
+    const { body } = await call(client, 'ferret_context_promote', { sessionId: session.sessionId });
+
+    // The Epic's forbidden case has no route in: a transcript is not an input,
+    // and a session with no memories promotes nothing rather than its captures.
+    expect(body['considered']).toBe(0);
+    expect(port.recorded).toStrictEqual([]);
+  });
+
+  it('offers no way to promote a transcript', async () => {
+    const { client } = await harness([], CURATOR, sessionsOf(session));
+    const { tools } = await client.listTools();
+    const schema = JSON.stringify(tools.find((tool) => tool.name === 'ferret_context_promote')?.inputSchema);
+
+    // One field: which session. Nothing that could name a capture, a range or
+    // a transcript.
+    expect(schema).toContain('sessionId');
+    expect(schema).not.toContain('capture');
+    expect(schema).not.toContain('transcript');
+    expect(schema).not.toContain('sequence');
+  });
+
+  it('needs `record`, not `mutate` — promoting is recording', async () => {
+    const { client } = await harness(
+      [],
+      AGENT,
+      sessionsOf(session, [memoryOf('An ordinary agent may promote its own work')]),
+    );
+
+    const { isError } = await call(client, 'ferret_context_promote', { sessionId: session.sessionId });
+    expect(isError).toBe(false);
+  });
+
+  it('refuses a reader that may not record', async () => {
+    const { client } = await harness([], READER, sessionsOf(session, [memoryOf('Not for a reader')]));
+    const { isError } = await call(client, 'ferret_context_promote', { sessionId: session.sessionId });
+
+    expect(isError).toBe(true);
   });
 });
 

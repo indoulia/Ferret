@@ -277,9 +277,10 @@ secret out of one more file.
 | `ferret_context_find` | "What do we currently hold about this repository?" — current context, or history when asked for |
 | `ferret_context_trust` | "Should I believe this, and why?" — the evidence, its authority, and what contradicts it |
 | `ferret_context_lifecycle` | Accept a proposal, archive what stopped applying, reinstate what came back |
+| `ferret_context_promote` | Promote what a session decided and learned into durable context — never its transcript |
 
 Every knowledge tool is **read-only**, and indexing is still a command a person
-runs. Nine tools write, in three groups that are governed differently because
+runs. Ten tools write, in three groups that are governed differently because
 they do different things.
 
 The **three configuration tools** change what Ferret is and how it behaves, and
@@ -319,10 +320,13 @@ they add a row and destroy nothing. They are governed differently on purpose.
   in an environment variable and set a `{"$secret":{"env":"…"}}` reference instead.
   Configuration read back through any tool returns `[redacted]`.
 
-The **two durable context tools that write** are what let an agent stop keeping
-a parallel store of its own. `ferret_context_record` requires `record`, the same
-permission the session tools use and for the same reason: recording what was
-learned is not ingesting a source. `ferret_context_lifecycle` requires `mutate`,
+The **three durable context tools that write** are what let an agent stop keeping
+a parallel store of its own. `ferret_context_record` and `ferret_context_promote`
+require `record`, the same permission the session tools use and for the same
+reason: recording what was learned is not ingesting a source. Promotion carries
+what a session *deliberately recorded* — never its transcript, its scratchpads
+or its working state; a memory the session stated outright becomes current
+context, and one an extraction rule found becomes a proposal. `ferret_context_lifecycle` requires `mutate`,
 which no installation holds by default — accepting a proposal or retiring a
 statement other people rely on changes what Ferret believes, and that is exactly
 what `mutate` means. Neither destroys anything: a transition writes one column,

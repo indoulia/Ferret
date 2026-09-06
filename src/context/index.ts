@@ -129,3 +129,17 @@ export {
   type StoreContextRequest,
   type StoredContext,
 } from './durable-port.js';
+
+// EPIC-129. Promoting what a session learned into durable context — never a
+// transcript, and an extraction becomes a proposal rather than a belief.
+export {
+  PROMOTION_PRODUCER,
+  PROMOTION_SOURCE_SYSTEM,
+  PromotionRefusal,
+  isRefusal,
+  planPromotion,
+  promoteMemories,
+  type PromotionPlan,
+  type PromotionReport,
+  type RefusedPromotion,
+} from './promotion.js';

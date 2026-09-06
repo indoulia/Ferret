@@ -427,6 +427,20 @@ export {
   type PairVerdict,
 } from './context/index.js';
 
+// EPIC-129. Promoting what a session learned into durable context — never a
+// transcript, and an extraction becomes a proposal rather than a belief.
+export {
+  PROMOTION_PRODUCER,
+  PROMOTION_SOURCE_SYSTEM,
+  PromotionRefusal,
+  isRefusal,
+  planPromotion,
+  promoteMemories,
+  type PromotionPlan,
+  type PromotionReport,
+  type RefusedPromotion,
+} from './context/index.js';
+
 // EPIC-128. The agent-facing durable context port, so an MCP server, a CLI or an
 // HTTP surface are all adapters and none of them owns the model.
 export {

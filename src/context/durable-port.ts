@@ -50,6 +50,17 @@ export interface AgentProvenance {
   readonly sourceUrl?: string | undefined;
   readonly observedAt?: string | undefined;
   readonly permissionScope?: string | undefined;
+  /**
+   * How sure the producer is, 0..1 — EPIC-046's scale, and omitted for
+   * unassessed rather than defaulted to zero.
+   *
+   * **Not settable by an agent.** No tool exposes it, because a caller naming
+   * its own confidence is self-assessment and `authority.ts` records what a
+   * number like that becomes. It exists for a producer *Ferret* runs — the
+   * promoter, which derives it from a memory's recorded origin, where an
+   * explicit statement and a matched marker are genuinely 0.35 apart.
+   */
+  readonly confidence?: number | undefined;
 }
 
 export interface StoreContextRequest {

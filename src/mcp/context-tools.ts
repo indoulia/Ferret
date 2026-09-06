@@ -5,6 +5,7 @@ import { Permission } from '../authorization/index.js';
 import {
   CONTENT_NOTICE,
   CONTEXT_KINDS,
+  promoteMemories,
   CONTEXT_TRANSITIONS,
   ContextTransition,
   MAX_CONTEXT_PAGE,
@@ -12,7 +13,13 @@ import {
   type DurableContext,
   type DurableContextPort,
 } from '../context/index.js';
-import { LIFECYCLE_STATES, LifecycleState, MAX_STATEMENT_LENGTH } from '../domain/index.js';
+import {
+  LIFECYCLE_STATES,
+  LifecycleState,
+  MAX_STATEMENT_LENGTH,
+  type EngineeringMemory,
+  type Session,
+} from '../domain/index.js';
 import { ContentSafety, containUntrusted } from '../security/index.js';
 
 import type { ToolGuard } from './guards.js';
@@ -116,6 +123,18 @@ function describeBelief(belief: ContextBelief): Record<string, unknown> {
   };
 }
 
+/**
+ * The narrow session read promotion needs.
+ *
+ * Deliberately two methods rather than `SessionAccess`: promotion reads what a
+ * session decided, and nothing about checkpoints or recovery. A port that asked
+ * for more would make a build that serves promotion also serve recall.
+ */
+export interface SessionPromotionAccess {
+  getSession(sessionId: string): Promise<Session | undefined>;
+  memoriesFor(sessionId: string): Promise<readonly EngineeringMemory[]>;
+}
+
 export interface ContextToolDependencies {
   readonly server: McpServer;
   readonly guard: ToolGuard;
@@ -129,6 +148,11 @@ export interface ContextToolDependencies {
    * opposite and `mcp/tools.test.ts` caught it.
    */
   readonly context: DurableContextPort;
+  /**
+   * What a session recorded, for promotion — EPIC-129. Optional: a build
+   * without sessions offers no promotion tool rather than one that refuses.
+   */
+  readonly sessions?: SessionPromotionAccess | undefined;
   /** The permission scopes the calling principal holds — EPIC-083. */
   readonly permittedScopes: readonly string[];
   /**
@@ -146,6 +170,7 @@ export function registerContextTools({
   server,
   guard,
   context,
+  sessions,
   permittedScopes,
   producer,
   producerVersion,
@@ -226,6 +251,46 @@ export function registerContextTools({
         };
       }),
   );
+
+  if (sessions !== undefined) {
+    server.registerTool(
+      'ferret_context_promote',
+      {
+        title: 'Promote what a session learned into durable context',
+        description:
+          'Promote the decisions, constraints and lessons a session recorded into durable ' +
+          'context, so a later session inherits them. Transcripts, scratchpads and working ' +
+          'state are never promoted — only what the session deliberately recorded. A memory ' +
+          'the session recorded explicitly becomes current context; one an extraction rule ' +
+          'found becomes a proposal. ' + CONTENT_NOTICE,
+        inputSchema: z.strictObject({
+          sessionId: z
+            .string()
+            .min(1)
+            .describe('The session whose recorded memories should be promoted.'),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ sessionId }) =>
+        // The same permission recording takes: promoting what a session already
+        // decided is recording it durably, not changing what Ferret believes.
+        guard('contextPromote', Permission.RECORD, async () => {
+          const session = await sessions.getSession(sessionId);
+          if (session === undefined) {
+            return { notice: CONTENT_NOTICE, found: false, sessionId };
+          }
+          const memories = await sessions.memoriesFor(sessionId);
+          const report = await promoteMemories(context, session, memories, producerVersion);
+          return {
+            notice: CONTENT_NOTICE,
+            found: true,
+            ...report,
+            refused: report.refused.map((one) => ({ ...one })),
+            contextIds: [...report.contextIds],
+          };
+        }),
+    );
+  }
 
   server.registerTool(
     'ferret_context_find',
