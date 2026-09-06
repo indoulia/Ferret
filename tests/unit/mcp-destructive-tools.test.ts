@@ -180,6 +180,9 @@ describe('destructive MCP tools', () => {
       // `ferret_context_record` needs `record`, and `ferret_context_lifecycle`
       // needs `mutate`, which nothing holds by default.
       'ferret_context_record',
+      // EPIC-129. Promotion records what a session already decided; it adds
+      // rows and rewrites no observation.
+      'ferret_context_promote',
       'ferret_context_lifecycle',
       'ferret_session_start',
       'ferret_session_remember',

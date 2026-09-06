@@ -326,6 +326,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       server,
       guard,
       context: dependencies.context,
+      // EPIC-129. The same store the session tools take, narrowed to the two
+      // reads promotion needs; absent means no promotion tool is offered.
+      ...(dependencies.sessions === undefined ? {} : { sessions: dependencies.sessions }),
       permittedScopes: access.permittedScopes,
       producer: dependencies.contextProducer ?? DEFAULT_CONTEXT_PRODUCER,
       producerVersion: VERSION,

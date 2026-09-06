@@ -471,7 +471,20 @@ describe('package contents', () => {
     //
     // The headroom is 3%, as every raise here has been, and for the reason every
     // raise here has given.
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_451_000);
+    //
+    // **2026-09-06, EPIC-128 and EPIC-129 — raised again.** 3 454 426 against
+    // 3 451 000: 0.1% over, and the agent-facing surface accounts for it.
+    //
+    //    +14 070  dist/mcp/context-tools.js       (four tools, then five)
+    //     +5 367  dist/context/promotion.js       (the promotion rule and loop)
+    //     +4 397  dist/context/promotion.d.ts
+    //     +3 754  dist/mcp/context-tools.d.ts
+    //     +2 900  dist/context/durable-port.js + .d.ts, and the barrels
+    //
+    // No dependency was added, and most of the bulk is again prose `tsc` keeps
+    // in the emitted `.js` — these two files carry the permission split and the
+    // reason a transcript cannot be promoted, which is the part worth keeping.
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_560_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {
