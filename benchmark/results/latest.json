@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "ranAt": "2026-09-06T13:27:56.810Z",
+  "ranAt": "2026-09-06T13:47:22.912Z",
   "baseCommit": "271be92",
   "parameters": {
     "k": 10,
@@ -30,7 +30,7 @@
       "totalTokensFull": 606214,
       "totalTokensFrugal": 566341,
       "tokensPerSourcedTask": 101036,
-      "medianMs": 1022.468350000001
+      "medianMs": 2081.4678999999996
     },
     "ferret-pack": {
       "tasks": 16,
@@ -54,7 +54,7 @@
       "totalTokensFull": 339347,
       "totalTokensFrugal": 317373,
       "tokensPerSourcedTask": 113116,
-      "medianMs": 55.10005000000274
+      "medianMs": 118.07634999999937
     },
     "ferret-search": {
       "tasks": 16,
@@ -78,7 +78,7 @@
       "totalTokensFull": 678871,
       "totalTokensFrugal": 633503,
       "tokensPerSourcedTask": 169718,
-      "medianMs": 73.36530000000039
+      "medianMs": 187.84540000000015
     }
   },
   "tasks": [
@@ -115,7 +115,7 @@
             "retrievalTokens": 174,
             "readTokensFull": 32771,
             "readTokensFrugal": 26614,
-            "ms": 777.0614
+            "ms": 1200.7145
           }
         },
         "ferret-pack": {
@@ -128,6 +128,7 @@
             "file:docs/EPICs/validation/EPIC-002-VALIDATION.md",
             "file:docs/EPICs/validation/EPIC-019-020-VALIDATION.md"
           ],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [
             {
@@ -152,7 +153,7 @@
             "retrievalTokens": 2781,
             "readTokensFull": 7466,
             "readTokensFrugal": 5238,
-            "ms": 86.25540000000001
+            "ms": 138.78569999999945
           }
         },
         "ferret-search": {
@@ -168,6 +169,7 @@
             "file:docs/EPICs/validation/EPIC-017-VALIDATION.md",
             "commit:10531e003a"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0.25,
             "precision5": 0.2,
@@ -183,7 +185,7 @@
             "retrievalTokens": 25362,
             "readTokensFull": 7466,
             "readTokensFrugal": 5238,
-            "ms": 55.500800000000254
+            "ms": 82.1217999999999
           }
         }
       }
@@ -219,7 +221,7 @@
             "retrievalTokens": 195,
             "readTokensFull": 24794,
             "readTokensFrugal": 24794,
-            "ms": 1088.8450999999995
+            "ms": 1918.0251000000007
           }
         },
         "ferret-pack": {
@@ -232,6 +234,7 @@
             "file:README.md",
             "file:scripts/dogfood.mjs"
           ],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [
             {
@@ -254,7 +257,7 @@
             "retrievalTokens": 2823,
             "readTokensFull": 20766,
             "readTokensFrugal": 20766,
-            "ms": 188.86809999999969
+            "ms": 1212.7742999999991
           }
         },
         "ferret-search": {
@@ -270,6 +273,7 @@
             "file:src/context/promotion.ts",
             "file:tests/integration/mcp/session-tools.test.ts"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0.25,
             "precision5": 0.2,
@@ -283,7 +287,7 @@
             "retrievalTokens": 4899,
             "readTokensFull": 20766,
             "readTokensFrugal": 20766,
-            "ms": 129.29399999999987
+            "ms": 434.6214
           }
         }
       }
@@ -319,11 +323,12 @@
             "retrievalTokens": 153,
             "readTokensFull": 31492,
             "readTokensFrugal": 25209,
-            "ms": 852.4805999999999
+            "ms": 3280.857399999999
           }
         },
         "ferret-pack": {
           "ranked": [],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [],
           "packJsonTokens": 469,
@@ -338,7 +343,7 @@
             "retrievalTokens": 635,
             "readTokensFull": 0,
             "readTokensFrugal": 0,
-            "ms": 19.661599999999453
+            "ms": 50.38839999999982
           }
         },
         "ferret-search": {
@@ -354,6 +359,7 @@
             "file:README.md",
             "file:tests/integration/mcp/tools.test.ts"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -367,7 +373,7 @@
             "retrievalTokens": 4881,
             "readTokensFull": 42103,
             "readTokensFrugal": 31873,
-            "ms": 1284.8700999999992
+            "ms": 2378.936999999998
           }
         }
       }
@@ -403,7 +409,7 @@
             "retrievalTokens": 150,
             "readTokensFull": 50621,
             "readTokensFrugal": 49996,
-            "ms": 1351.0216
+            "ms": 2726.449800000002
           }
         },
         "ferret-pack": {
@@ -412,6 +418,7 @@
             "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
             "file:docs/EPICs/ROADMAP.md"
           ],
+          "harnessReturned": 0,
           "standingCount": 2,
           "omitted": [],
           "packJsonTokens": 1712,
@@ -428,13 +435,14 @@
             "retrievalTokens": 1053,
             "readTokensFull": 24808,
             "readTokensFrugal": 23387,
-            "ms": 55.936799999999494
+            "ms": 110.49250000000029
           }
         },
         "ferret-search": {
           "ranked": [
             "file:docs/EPICs/ROADMAP.md"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -448,7 +456,7 @@
             "retrievalTokens": 908,
             "readTokensFull": 24808,
             "readTokensFrugal": 23387,
-            "ms": 38.70709999999963
+            "ms": 70.97920000000158
           }
         }
       }
@@ -484,7 +492,7 @@
             "retrievalTokens": 142,
             "readTokensFull": 33139,
             "readTokensFrugal": 30899,
-            "ms": 1080.3567000000003
+            "ms": 1750.4362
           }
         },
         "ferret-pack": {
@@ -499,6 +507,7 @@
             "file:src/domain/relationship.ts",
             "file:docs/EPICs/EPIC-068-AI-Authorization-Model.md"
           ],
+          "harnessReturned": 0,
           "standingCount": 2,
           "omitted": [
             {
@@ -521,7 +530,7 @@
             "retrievalTokens": 2943,
             "readTokensFull": 36374,
             "readTokensFrugal": 36154,
-            "ms": 124.58920000000035
+            "ms": 192.35440000000017
           }
         },
         "ferret-search": {
@@ -537,6 +546,7 @@
             "file:src/mcp/server.ts",
             "file:src/cli/commands/mcp.ts"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -550,7 +560,7 @@
             "retrievalTokens": 4884,
             "readTokensFull": 36374,
             "readTokensFrugal": 36154,
-            "ms": 67.15570000000116
+            "ms": 110.62489999999889
           }
         }
       }
@@ -586,7 +596,7 @@
             "retrievalTokens": 180,
             "readTokensFull": 21724,
             "readTokensFrugal": 18924,
-            "ms": 871.4653999999991
+            "ms": 1283.0740000000005
           }
         },
         "ferret-pack": {
@@ -595,6 +605,7 @@
             "file:.github/workflows/ci.yml",
             "file:docs/evidence/FERRET-REVIEW-PACKAGE.md"
           ],
+          "harnessReturned": 0,
           "standingCount": 1,
           "omitted": [],
           "packJsonTokens": 2610,
@@ -611,7 +622,7 @@
             "retrievalTokens": 1260,
             "readTokensFull": 18869,
             "readTokensFrugal": 16069,
-            "ms": 35.61739999999918
+            "ms": 62.729699999999866
           }
         },
         "ferret-search": {
@@ -619,6 +630,7 @@
             "file:.github/workflows/ci.yml",
             "file:docs/evidence/FERRET-REVIEW-PACKAGE.md"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0.25,
             "precision5": 0.5,
@@ -632,7 +644,7 @@
             "retrievalTokens": 1287,
             "readTokensFull": 18869,
             "readTokensFrugal": 16069,
-            "ms": 20.379799999998795
+            "ms": 34.634799999999814
           }
         }
       }
@@ -668,7 +680,7 @@
             "retrievalTokens": 190,
             "readTokensFull": 38368,
             "readTokensFrugal": 34292,
-            "ms": 979.3492000000006
+            "ms": 3584.907699999996
           }
         },
         "ferret-pack": {
@@ -681,6 +693,7 @@
             "file:docs/EPICs/EPIC-052-053-Retrieval.md",
             "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
           ],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [
             {
@@ -703,7 +716,7 @@
             "retrievalTokens": 2803,
             "readTokensFull": 34347,
             "readTokensFrugal": 30601,
-            "ms": 134.04279999999926
+            "ms": 636.0316999999995
           }
         },
         "ferret-search": {
@@ -719,6 +732,7 @@
             "file:src/storage/embeddings.ts",
             "file:docs/EPICs/EPIC-057-Freshness-And-Authority-Ranking.md"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0.5,
             "precision5": 0.4,
@@ -732,7 +746,7 @@
             "retrievalTokens": 4675,
             "readTokensFull": 34347,
             "readTokensFrugal": 30601,
-            "ms": 79.57489999999962
+            "ms": 265.0659000000014
           }
         }
       }
@@ -768,11 +782,12 @@
             "retrievalTokens": 149,
             "readTokensFull": 43519,
             "readTokensFrugal": 38101,
-            "ms": 1217.7955000000002
+            "ms": 2273.9801000000007
           }
         },
         "ferret-pack": {
           "ranked": [],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [],
           "packJsonTokens": 468,
@@ -787,7 +802,7 @@
             "retrievalTokens": 634,
             "readTokensFull": 0,
             "readTokensFrugal": 0,
-            "ms": 19.654900000001362
+            "ms": 44.659599999999045
           }
         },
         "ferret-search": {
@@ -803,6 +818,7 @@
             "file:src/mcp/server.ts",
             "file:src/index.ts"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0.5,
             "precision5": 0,
@@ -816,7 +832,7 @@
             "retrievalTokens": 4778,
             "readTokensFull": 57383,
             "readTokensFrugal": 49139,
-            "ms": 1403.9596999999994
+            "ms": 2654.0555999999997
           }
         }
       }
@@ -852,11 +868,12 @@
             "retrievalTokens": 161,
             "readTokensFull": 58023,
             "readTokensFrugal": 56089,
-            "ms": 1065.5875000000015
+            "ms": 2168.903299999998
           }
         },
         "ferret-pack": {
           "ranked": [],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [],
           "packJsonTokens": 464,
@@ -871,7 +888,7 @@
             "retrievalTokens": 629,
             "readTokensFull": 0,
             "readTokensFrugal": 0,
-            "ms": 24.23530000000028
+            "ms": 39.29290000000037
           }
         },
         "ferret-search": {
@@ -887,6 +904,7 @@
             "file:src/git/history.ts",
             "file:src/domain/attributes.ts"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -900,7 +918,7 @@
             "retrievalTokens": 22877,
             "readTokensFull": 52458,
             "readTokensFrugal": 52458,
-            "ms": 1830.5866999999998
+            "ms": 3492.187699999995
           }
         }
       }
@@ -936,7 +954,7 @@
             "retrievalTokens": 196,
             "readTokensFull": 24329,
             "readTokensFrugal": 20317,
-            "ms": 758.0511999999981
+            "ms": 1756.9497999999949
           }
         },
         "ferret-pack": {
@@ -951,6 +969,7 @@
             "file:tests/integration/storage/context-lifecycle.test.ts",
             "commit:355a833064"
           ],
+          "harnessReturned": 0,
           "standingCount": 2,
           "omitted": [
             {
@@ -983,7 +1002,7 @@
             "retrievalTokens": 3199,
             "readTokensFull": 25204,
             "readTokensFrugal": 18330,
-            "ms": 245.64830000000075
+            "ms": 413.85020000000077
           }
         },
         "ferret-search": {
@@ -999,6 +1018,7 @@
             "file:docs/EPICs/EPIC-134-Continuous-Self-Dogfooding.md",
             "file:docs/EPICs/validation/EPIC-058-VALIDATION.md"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0.5,
             "precision5": 0.2,
@@ -1012,7 +1032,7 @@
             "retrievalTokens": 6075,
             "readTokensFull": 25204,
             "readTokensFrugal": 18330,
-            "ms": 124.14619999999923
+            "ms": 379.6527999999962
           }
         }
       }
@@ -1048,11 +1068,12 @@
             "retrievalTokens": 148,
             "readTokensFull": 46565,
             "readTokensFrugal": 42226,
-            "ms": 958.4858000000022
+            "ms": 2272.5941999999995
           }
         },
         "ferret-pack": {
           "ranked": [],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [],
           "packJsonTokens": 461,
@@ -1067,7 +1088,7 @@
             "retrievalTokens": 627,
             "readTokensFull": 0,
             "readTokensFrugal": 0,
-            "ms": 20.20560000000114
+            "ms": 31.24199999999837
           }
         },
         "ferret-search": {
@@ -1083,6 +1104,7 @@
             "file:tests/integration/mcp/tools.test.ts",
             "file:tests/integration/git/discovery.test.ts"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -1096,7 +1118,7 @@
             "retrievalTokens": 25613,
             "readTokensFull": 59486,
             "readTokensFrugal": 54566,
-            "ms": 1448.4752000000008
+            "ms": 2532.6289000000033
           }
         }
       }
@@ -1132,7 +1154,7 @@
             "retrievalTokens": 192,
             "readTokensFull": 43865,
             "readTokensFrugal": 43311,
-            "ms": 740.7697999999982
+            "ms": 1172.0929999999935
           }
         },
         "ferret-pack": {
@@ -1147,6 +1169,7 @@
             "file:tests/unit/source-connector.test.ts",
             "file:docs/EPICs/validation/EPIC-001-VALIDATION.md"
           ],
+          "harnessReturned": 0,
           "standingCount": 2,
           "omitted": [
             {
@@ -1169,7 +1192,7 @@
             "retrievalTokens": 3006,
             "readTokensFull": 35135,
             "readTokensFrugal": 34581,
-            "ms": 100.4948000000004
+            "ms": 125.66019999999844
           }
         },
         "ferret-search": {
@@ -1184,6 +1207,7 @@
             "file:tests/integration/mcp/tools.test.ts",
             "file:tests/integration/connectors/confluence-connector.test.ts"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -1197,7 +1221,7 @@
             "retrievalTokens": 4649,
             "readTokensFull": 35135,
             "readTokensFrugal": 34581,
-            "ms": 56.49699999999939
+            "ms": 83.85659999999916
           }
         }
       }
@@ -1233,7 +1257,7 @@
             "retrievalTokens": 165,
             "readTokensFull": 53316,
             "readTokensFrugal": 51881,
-            "ms": 1121.0842000000011
+            "ms": 1958.5792000000074
           }
         },
         "ferret-pack": {
@@ -1242,6 +1266,7 @@
             "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
             "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
           ],
+          "harnessReturned": 0,
           "standingCount": 2,
           "omitted": [],
           "packJsonTokens": 1797,
@@ -1258,13 +1283,14 @@
             "retrievalTokens": 1081,
             "readTokensFull": 27014,
             "readTokensFrugal": 26450,
-            "ms": 47.68340000000171
+            "ms": 80.98889999999665
           }
         },
         "ferret-search": {
           "ranked": [
             "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -1278,7 +1304,7 @@
             "retrievalTokens": 883,
             "readTokensFull": 27014,
             "readTokensFrugal": 26450,
-            "ms": 31.402600000001257
+            "ms": 38.000599999999395
           }
         }
       }
@@ -1314,7 +1340,7 @@
             "retrievalTokens": 189,
             "readTokensFull": 30530,
             "readTokensFrugal": 30530,
-            "ms": 1198.672000000006
+            "ms": 1994.0325000000012
           }
         },
         "ferret-pack": {
@@ -1325,6 +1351,7 @@
             "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
             "commit:6e74992575"
           ],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [
             {
@@ -1357,7 +1384,7 @@
             "retrievalTokens": 3556,
             "readTokensFull": 14358,
             "readTokensFrugal": 14358,
-            "ms": 134.70760000000155
+            "ms": 720.5239000000001
           }
         },
         "ferret-search": {
@@ -1372,6 +1399,7 @@
             "file:docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md",
             "commit:10531e003a"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0.6666666666666666,
             "precision5": 0.4,
@@ -1385,7 +1413,7 @@
             "retrievalTokens": 43063,
             "readTokensFull": 14358,
             "readTokensFrugal": 14358,
-            "ms": 126.83140000000276
+            "ms": 298.0578999999998
           }
         }
       }
@@ -1421,7 +1449,7 @@
             "retrievalTokens": 212,
             "readTokensFull": 44080,
             "readTokensFrugal": 44080,
-            "ms": 792.7911000000022
+            "ms": 2505.8840000000055
           }
         },
         "ferret-pack": {
@@ -1429,6 +1457,7 @@
             "file:docs/EPICs/ROADMAP.md",
             "commit:eb4744827f"
           ],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [],
           "packJsonTokens": 2708,
@@ -1445,7 +1474,7 @@
             "retrievalTokens": 1481,
             "readTokensFull": 25156,
             "readTokensFrugal": 25156,
-            "ms": 48.11069999999745
+            "ms": 182.2216999999946
           }
         },
         "ferret-search": {
@@ -1453,6 +1482,7 @@
             "file:docs/EPICs/ROADMAP.md",
             "commit:eb4744827f"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0.3333333333333333,
             "precision5": 0.5,
@@ -1466,7 +1496,7 @@
             "retrievalTokens": 1566,
             "readTokensFull": 25156,
             "readTokensFrugal": 25156,
-            "ms": 40.32519999999931
+            "ms": 96.556700000001
           }
         }
       }
@@ -1502,7 +1532,7 @@
             "retrievalTokens": 137,
             "readTokensFull": 26345,
             "readTokensFrugal": 26345,
-            "ms": 1080.500500000002
+            "ms": 2252.6503000000084
           }
         },
         "ferret-pack": {
@@ -1510,6 +1540,7 @@
             "file:docs/EPICs/ROADMAP.md",
             "file:docs/EPICs/README.md"
           ],
+          "harnessReturned": 0,
           "standingCount": 0,
           "omitted": [],
           "packJsonTokens": 2435,
@@ -1526,7 +1557,7 @@
             "retrievalTokens": 1173,
             "readTokensFull": 40166,
             "readTokensFrugal": 36599,
-            "ms": 54.263300000005984
+            "ms": 107.29879999998957
           }
         },
         "ferret-search": {
@@ -1534,6 +1565,7 @@
             "file:docs/EPICs/ROADMAP.md",
             "file:docs/EPICs/README.md"
           ],
+          "harnessReturned": 0,
           "score": {
             "recall": 0,
             "precision5": 0,
@@ -1547,7 +1579,7 @@
             "retrievalTokens": 1378,
             "readTokensFull": 40166,
             "readTokensFrugal": 36599,
-            "ms": 39.841700000004494
+            "ms": 83.40849999999045
           }
         }
       }

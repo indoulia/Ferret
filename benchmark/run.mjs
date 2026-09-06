@@ -44,6 +44,7 @@ import { estimateTokens } from '../dist/context/budget.js';
 
 import * as baseline from './lib/baseline.mjs';
 import * as ferret from './lib/ferret.mjs';
+import { withinCorpus } from './lib/identity.mjs';
 import { K, READS, score, summarize } from './lib/score.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -91,6 +92,20 @@ function readEntries(artefacts, questionTerms) {
   });
 }
 
+/**
+ * The corpus part of a ranked list, and how much of it was the harness.
+ *
+ * The baseline never greps `benchmark/` at all; Ferret indexes it like any other
+ * directory and can return it, so the same exclusion is applied here to what it
+ * returned. Ferret still paid to retrieve those results — the tokens are already
+ * spent and are not refunded — and the count is reported rather than dropped, so
+ * a run that was retrieving its own answer key says so.
+ */
+function corpusOnly(artefacts) {
+  const kept = artefacts.filter((artefact) => withinCorpus(artefact));
+  return { kept, harnessReturned: artefacts.length - kept.length };
+}
+
 function costFor(artefacts, questionTerms, responseText, ms) {
   const { full, frugal } = baseline.readCost(ROOT, readEntries(artefacts, questionTerms), {
     reads: READS,
@@ -130,10 +145,12 @@ for (const task of tasks) {
   const baselineCost = costFor(found.artefacts, questionTerms, found.artefacts.join('\n'), baselineMs);
 
   const packed = await ferret.pack(client, task.question, { budget: PACK_BUDGET });
-  const packCost = costFor(packed.artefacts, questionTerms, packed.renderedText, packed.ms);
+  const packRanked = corpusOnly(packed.artefacts);
+  const packCost = costFor(packRanked.kept, questionTerms, packed.renderedText, packed.ms);
 
   const searched = await ferret.search(client, task.question, { limit: K });
-  const searchCost = costFor(searched.artefacts, questionTerms, searched.renderedText, searched.ms);
+  const searchRanked = corpusOnly(searched.artefacts);
+  const searchCost = costFor(searchRanked.kept, questionTerms, searched.renderedText, searched.ms);
 
   rows.push({
     task: task.id,
@@ -142,13 +159,18 @@ for (const task of tasks) {
     conditions: {
       baseline: { ranked: found.artefacts, score: score(task, found.artefacts, baselineCost) },
       'ferret-pack': {
-        ranked: packed.artefacts,
+        ranked: packRanked.kept,
+        harnessReturned: packRanked.harnessReturned,
         standingCount: packed.standingCount,
         omitted: packed.omitted,
         packJsonTokens: estimateTokens(packed.jsonText),
-        score: score(task, packed.artefacts, packCost),
+        score: score(task, packRanked.kept, packCost),
       },
-      'ferret-search': { ranked: searched.artefacts, score: score(task, searched.artefacts, searchCost) },
+      'ferret-search': {
+        ranked: searchRanked.kept,
+        harnessReturned: searchRanked.harnessReturned,
+        score: score(task, searchRanked.kept, searchCost),
+      },
     },
   });
 

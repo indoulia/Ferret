@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { EXCLUDED_PREFIXES, withinCorpus } from '../../benchmark/lib/identity.mjs';
 import { score, summarize } from '../../benchmark/lib/score.mjs';
 
 /**
@@ -98,6 +100,33 @@ describe('benchmark task labels', () => {
       });
     });
   }
+});
+
+describe('the corpus the benchmark searches', () => {
+  it('excludes the benchmark, which holds the questions and the answer key', () => {
+    expect(withinCorpus('file:benchmark/tasks.json')).toBe(false);
+    expect(withinCorpus('file:benchmark/results/latest.json')).toBe(false);
+    expect(EXCLUDED_PREFIXES).toContain('benchmark/');
+  });
+
+  it('excludes nothing else', () => {
+    expect(withinCorpus('file:docs/EPICs/ROADMAP.md')).toBe(true);
+    expect(withinCorpus('file:src/context/pack.ts')).toBe(true);
+    expect(withinCorpus('commit:271be926b0')).toBe(true);
+  });
+
+  it('keeps every task question out of the tree the harness greps', () => {
+    // The exclusion covers `benchmark/`. It does not cover a test or a source
+    // comment that quotes a question, and one of each did — each ranking itself
+    // for the task it mentioned. Closed at the source, and guarded here so it
+    // cannot come back through a file no directory rule reaches.
+    const corpus = [...tracked].filter((path) => withinCorpus(`file:${path}`));
+    const leaked = corpus.filter((path) => {
+      const content = readFileSync(join(ROOT, path), 'utf8');
+      return suite.tasks.some((task) => content.includes(task.question));
+    });
+    expect(leaked).toEqual([]);
+  });
 });
 
 describe('derived measurements', () => {

@@ -30,7 +30,7 @@
 
 import { execFileSync } from 'node:child_process';
 
-import { commitArtefact, dedupe, fileArtefact } from './identity.mjs';
+import { EXCLUDED_PREFIXES, commitArtefact, dedupe, fileArtefact } from './identity.mjs';
 
 /**
  * Words carrying no retrieval signal in an engineering question.
@@ -94,11 +94,21 @@ export function terms(question) {
   return [...new Set(tokens)];
 }
 
-/** Files tracked at HEAD, as repository-relative forward-slash paths. */
+/** Whether a repository path is corpus rather than this harness. */
+function inCorpus(path) {
+  return !EXCLUDED_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+/**
+ * Files tracked at HEAD, as repository-relative forward-slash paths.
+ *
+ * Minus the benchmark's own, which hold the questions and the answer key. See
+ * `EXCLUDED_PREFIXES` for what that cost before it was caught.
+ */
 export function trackedFiles(root) {
   return git(root, ['ls-files', '-z'])
     .split('\0')
-    .filter((path) => path.length > 0);
+    .filter((path) => path.length > 0 && inCorpus(path));
 }
 
 /**
@@ -119,7 +129,7 @@ function grepCounts(root, term) {
     if (separator === -1) continue;
     const path = line.slice(0, separator).replace(/\\/g, '/');
     const count = Number.parseInt(line.slice(separator + 1), 10);
-    if (Number.isFinite(count)) counts.set(path, count);
+    if (Number.isFinite(count) && inCorpus(path)) counts.set(path, count);
   }
   return counts;
 }

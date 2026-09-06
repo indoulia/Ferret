@@ -24,6 +24,31 @@
 /** Characters of a commit id an artefact name carries. */
 const ABBREV = 10;
 
+/**
+ * What is not part of the corpus being searched.
+ *
+ * The benchmark lives in the repository it measures, so `tasks.json` holds every
+ * question *and its answer key*, and `results/` holds the ranked artefact names
+ * of previous runs. Found by running it: after the first commit, ten of sixteen
+ * tasks had a `benchmark/` file in the baseline's top ten, matching on the words
+ * of the question it had itself been written from. Ferret was untouched only
+ * because its index predated the commit — so the same contamination was about to
+ * arrive on the other side at the next re-index, and the two conditions were
+ * being scored against different trees in the meantime.
+ *
+ * A question's own answer key is not evidence. It is excluded from **both**
+ * conditions by the same list, and what each condition returned from it is
+ * counted rather than quietly dropped, so the contamination stays visible.
+ */
+export const EXCLUDED_PREFIXES = ['benchmark/'];
+
+/** Whether an artefact is part of the corpus rather than the harness. */
+export function withinCorpus(artefact) {
+  if (!artefact.startsWith('file:')) return true;
+  const path = artefact.slice('file:'.length);
+  return !EXCLUDED_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
 /** `file:<repository-relative path>`, forward slashes. */
 export function fileArtefact(path) {
   return `file:${path.replace(/\\/g, '/')}`;

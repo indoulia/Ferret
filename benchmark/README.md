@@ -112,6 +112,33 @@ used to revise them. Correcting a label after seeing a result is how a benchmark
 stops measuring anything; if one is wrong the correction goes in with the reason
 it was wrong, in its own commit.
 
+## Corrections
+
+Kept here rather than quietly folded in.
+
+**The benchmark was searching itself.** `tasks.json` holds every question *and*
+its answer key, and `results/` holds the ranked artefact names of previous runs.
+Both live in the repository the harness greps. On the run immediately after the
+first commit, **ten of sixteen** tasks had a `benchmark/` file in the baseline's
+top ten — matching, of course, the words of the question it had been written
+from. Ferret was unaffected only because its index predated that commit, so the
+two conditions were being scored against different trees and the same
+contamination was one re-index away from arriving on the other side.
+
+The fix is `EXCLUDED_PREFIXES` in `lib/identity.mjs`, applied to both conditions
+by the same list: the baseline never greps those paths, Ferret's returns are
+filtered to the same corpus, and what each condition returned from the harness is
+**counted** rather than dropped, so a contaminated run says so. Ferret still pays
+the tokens it spent retrieving them; they are not refunded.
+
+The related leak is narrower and was closed at the source rather than by widening
+the list: a regression test and a source comment that quoted a task question
+verbatim would have ranked themselves for that task, from files no exclusion of
+the benchmark directory covers. Both now paraphrase, and say why.
+
+Results measured before the exclusion are not comparable with results after it.
+The first committed run is one of them.
+
 ## What this does not measure
 
 Stated here rather than discovered later.
