@@ -146,6 +146,24 @@ async function call(client, name, args) {
 // The checks.
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether Ferret excludes a path, or `undefined` when it will not say.
+ *
+ * `config.read` is not granted by default and should not be — EPIC-068 makes a
+ * Ferret nobody configured the restricted one. So this reports three outcomes
+ * rather than two, and the caller says which of them it got: a check that
+ * treated "cannot tell" as "not excluded" would report a deliberate decision as
+ * a defect, which is the failure it exists to prevent.
+ */
+async function exclusionFor(client, path) {
+  try {
+    const answer = await call(client, 'ferret_config_exclusions', { path });
+    return typeof answer.excluded === 'boolean' ? answer : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function main() {
   if (!existsSync(CLI)) {
     process.stderr.write('dogfood: dist/cli/main.js is missing. Run `npm run build` first.\n');
@@ -317,15 +335,40 @@ async function main() {
     }
 
     // ...and the other direction: a tracked file Ferret does not know about.
-    const missing = [...tracked].filter((path) => !indexed.has(path));
+    //
+    // A file the operator **excluded** is not one of those. The check compared
+    // `git ls-files` against the index and nothing else, which is right for the
+    // default configuration and wrong for any other: exclude a tracked path and
+    // the oracle reports it as eleven missing files, which is a finding about a
+    // decision somebody made deliberately. Found by configuring exactly that.
+    //
+    // So each candidate is put back to Ferret — "is this path excluded, and by
+    // which rule" — and only what survives is a finding.
+    const candidates = [...tracked].filter((path) => !indexed.has(path));
+    const missing = [];
+    let rulesUnreadable = false;
+    for (const path of candidates) {
+      const verdict = await exclusionFor(client, path);
+      if (verdict === undefined) rulesUnreadable = true;
+      if (verdict?.excluded !== true) missing.push(path);
+    }
+
     if (missing.length > 0) {
       fail(
         'no missing files',
         `${missing.length} tracked file(s) absent from the index: ` +
-          `${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', ...' : ''}`,
+          `${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', ...' : ''}` +
+          (rulesUnreadable
+            ? '\n        The exclusion rules could not be read, so some of these' +
+              ' may be deliberate. Grant `config.read` to tell the two apart.'
+            : ''),
       );
     } else {
-      pass('no missing files', `${tracked.size} tracked`);
+      const excluded = candidates.length;
+      pass(
+        'no missing files',
+        `${tracked.size} tracked${excluded > 0 ? `, ${excluded} excluded` : ''}`,
+      );
     }
 
     // -- Commits must carry content, not just an identifier. --------------
