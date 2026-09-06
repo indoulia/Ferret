@@ -13,7 +13,6 @@ import {
   Direction,
   HitSource,
   type AccessContext,
-  type Neighbour,
   type RetrievalPort,
   type SearchHit,
   type WithheldReport,
@@ -70,7 +69,15 @@ import type { StatedEvidence } from '../domain/index.js';
  * still shows the model a quoted, attributed value rather than an instruction.
  */
 
-export const PACK_FORMAT_VERSION = 1;
+/**
+ * Two: a citation names its observation instead of repeating it.
+ *
+ * `evidenceSelection.selected[]` carried the whole `CanonicalEvidence`, which
+ * `items[].evidence` already carried — the same records, by construction. A
+ * consumer reading the record off a citation now reads it off `evidence` by
+ * `id`, which is what a consumer of `excluded[]` has always had to do.
+ */
+export const PACK_FORMAT_VERSION = 2;
 
 /** Why a pack is smaller than the knowledge behind it. */
 export const TruncationReason = {
@@ -125,7 +132,7 @@ export interface PackItem {
    * not the rest. It also carries the one thing `evidence` cannot: whether a
    * cited record is one Ferret still believes.
    */
-  readonly evidenceSelection: EvidenceSelection;
+  readonly evidenceSelection: PackEvidenceSelection;
   readonly estimatedTokens: number;
   /**
    * True when the item's longest values were shortened to fit.
@@ -134,6 +141,36 @@ export interface PackItem {
    * Ferret holds, and is entitled to know that before it does.
    */
   readonly trimmed: boolean;
+}
+
+/**
+ * A cited observation, named rather than repeated — EPIC-062, F-?? below.
+ *
+ * `SelectedEvidence` carries the whole `CanonicalEvidence`, which is right
+ * inside the selection: `answer.ts` groups claims by the record's own field and
+ * needs it. On the wire it was the same record **twice**, by construction —
+ * `#toItem` builds `PackItem.evidence` as `selection.selected.map(entry =>
+ * entry.evidence)`, so the two were never merely similar. Measured on one real
+ * item: 861 of 2 532 bytes, a third of it, saying nothing the item did not
+ * already say.
+ *
+ * So a citation names its record and the item carries it, which is what
+ * {@link ExcludedEvidence} has always done — an exclusion has never repeated the
+ * record it excluded. `state` and `reason` stay, because those *are* what the
+ * selection adds.
+ */
+export interface CitedEvidence {
+  /** The observation, in `PackItem.evidence`. */
+  readonly id: string;
+  /** Undefined when the caller did not read Ferret's interpretation. */
+  readonly state: EvidenceState | undefined;
+  /** Why this record is cited, naming its authority and its state. */
+  readonly reason: string;
+}
+
+/** {@link EvidenceSelection} as a pack sends it: citations by id. */
+export interface PackEvidenceSelection extends Omit<EvidenceSelection, 'selected'> {
+  readonly selected: readonly CitedEvidence[];
 }
 
 export interface PackOmission {
@@ -573,7 +610,7 @@ export class ContextPackBuilder {
     // with it. `reason` is Ferret's own sentence and is not contained.
     const entity: CanonicalEntity = containEntityContent(hit.entity, safety);
 
-    return {
+    const item = {
       entity,
       reason:
         neighbours.length === 0
@@ -585,14 +622,39 @@ export class ContextPackBuilder {
       score: hit.score,
       evidence,
       evidenceOmitted: selection.excluded.length,
-      evidenceSelection: selection,
-      estimatedTokens: estimateJsonTokens({
-        entity,
-        evidence,
-        neighbours: neighbours.map(summarizeNeighbour),
+      evidenceSelection: Object.freeze({
+        ...selection,
+        selected: Object.freeze(
+          selection.selected.map((entry) =>
+            Object.freeze({ id: entry.evidence.id, state: entry.state, reason: entry.reason }),
+          ),
+        ),
       }),
       trimmed: false,
     };
+
+    // **Charged for what is sent.** This used to estimate
+    // `{ entity, evidence, neighbours }`, which is neither the item nor what
+    // crosses the wire: it charged for a neighbour summary the item does not
+    // carry, and charged nothing at all for `evidenceSelection`, `reason` or
+    // `evidenceOmitted`. Measured on one real pack: five items charged 3 669
+    // tokens against a 4 000 budget and estimated 5 169 as sent, with the whole
+    // response at 6 724 — 68 per cent over a budget it reported keeping.
+    //
+    // `budget.ts` is unambiguous about which direction that error may run:
+    // *"Under-counting means the client truncates the pack itself, silently …
+    // and the thing that gets cut is not the thing Ferret would have chosen to
+    // cut."* An item is now estimated from the item.
+    //
+    // The estimate is a field of the thing being estimated, so it is measured
+    // against the widest number the field can hold. Sixteen digits where the
+    // real one is three costs a handful of tokens and keeps the count on the
+    // over-counting side of exact, which is the side the module chose.
+    const estimatedTokens = estimateJsonTokens({
+      ...item,
+      estimatedTokens: Number.MAX_SAFE_INTEGER,
+    });
+    return { ...item, estimatedTokens };
   }
 
   /**
@@ -768,7 +830,16 @@ function trimItem(item: PackItem, room: number): PackItem | undefined {
     const entity = Object.freeze({ ...item.entity, attributes: Object.freeze(attributes) });
     // Evidence is dropped rather than trimmed: a half-quoted observation is a
     // misquotation, and the entity's own attributes carry the same content.
-    const estimatedTokens = estimateJsonTokens({ entity, evidence: [] });
+    //
+    // Estimated over the whole trimmed item for the same reason `#toItem` is:
+    // `{ entity, evidence: [] }` is not what gets sent, and the difference —
+    // `reason`, the exclusions this trim is about to add, the safety of the
+    // fields — is exactly the part a trim makes bigger rather than smaller.
+    const trimmed = trimmedItem(item, entity);
+    const estimatedTokens = estimateJsonTokens({
+      ...trimmed,
+      estimatedTokens: Number.MAX_SAFE_INTEGER,
+    });
     if (estimatedTokens <= room) {
       // Every observation this item had is now absent, so the account of what is
       // missing has to grow by them — and by the *right* cause. A trimmed item
@@ -776,33 +847,50 @@ function trimItem(item: PackItem, room: number): PackItem | undefined {
       // selection never made; the budget took them, after the selection chose
       // them. A trimmed item reporting zero omissions would be claiming
       // completeness it does not have.
-      const dropped: ExcludedEvidence[] = item.evidenceSelection.selected.map((entry) =>
-        Object.freeze({
-          id: entry.evidence.id,
-          field: entry.evidence.field,
-          cause: EvidenceExclusion.TOKEN_BUDGET,
-          reason: 'cited by the selection, then dropped when this result was shortened to fit',
-        }),
-      );
-
-      return {
-        ...item,
-        entity,
-        reason: `${item.reason} (trimmed to fit)`,
-        evidence: [],
-        evidenceOmitted: item.evidenceOmitted + item.evidence.length,
-        evidenceSelection: Object.freeze({
-          ...item.evidenceSelection,
-          selected: Object.freeze([]),
-          excluded: Object.freeze([...item.evidenceSelection.excluded, ...dropped]),
-        }),
-        estimatedTokens,
-        trimmed: true,
-      };
+      return { ...trimmed, estimatedTokens };
     }
   }
 
   return undefined;
+}
+
+/**
+ * The item a trim produces, without its estimate.
+ *
+ * Split out so the estimate can be taken over the finished thing rather than
+ * over an approximation of it — the caller then adds the one field this cannot
+ * know.
+ *
+ * Every observation this item had is now absent, so the account of what is
+ * missing has to grow by them — and by the *right* cause. A trimmed item that
+ * reported them as ranked-out would be describing a decision the selection never
+ * made; the budget took them, after the selection chose them. A trimmed item
+ * reporting zero omissions would be claiming completeness it does not have.
+ */
+function trimmedItem(item: PackItem, entity: CanonicalEntity): Omit<PackItem, 'estimatedTokens'> {
+  const fieldOf = new Map(item.evidence.map((record) => [record.id, record.field]));
+  const dropped: ExcludedEvidence[] = item.evidenceSelection.selected.map((entry) =>
+    Object.freeze({
+      id: entry.id,
+      field: fieldOf.get(entry.id),
+      cause: EvidenceExclusion.TOKEN_BUDGET,
+      reason: 'cited by the selection, then dropped when this result was shortened to fit',
+    }),
+  );
+
+  return {
+    ...item,
+    entity,
+    reason: `${item.reason} (trimmed to fit)`,
+    evidence: [],
+    evidenceOmitted: item.evidenceOmitted + item.evidence.length,
+    evidenceSelection: Object.freeze({
+      ...item.evidenceSelection,
+      selected: Object.freeze([]),
+      excluded: Object.freeze([...item.evidenceSelection.excluded, ...dropped]),
+    }),
+    trimmed: true,
+  };
 }
 
 /**
@@ -834,15 +922,6 @@ function contained(
     ...candidate,
     evidence: containEvidenceContent(candidate.evidence, safety),
   }));
-}
-
-function summarizeNeighbour(neighbour: Neighbour): Record<string, unknown> {
-  return {
-    id: neighbour.entity.id,
-    kind: neighbour.entity.kind,
-    type: neighbour.relationshipType,
-    direction: neighbour.direction,
-  };
 }
 
 /**
@@ -892,8 +971,10 @@ export function renderPack(pack: ContextPack): string {
     // text can say which observation it rests on and how far Ferret believes it.
     // The reason is Ferret's own sentence; only `statement` is repository content,
     // and it stays quoted by `JSON.stringify` as it already was.
+    const cited = new Map(item.evidence.map((record) => [record.id, record]));
     for (const entry of item.evidenceSelection.selected) {
-      const record = entry.evidence;
+      const record = cited.get(entry.id);
+      if (record === undefined) continue;
       lines.push(
         `evidence: ${record.method} by ${record.producer}@${record.producerVersion} — ` +
           `${JSON.stringify(record.statement)} [${entry.reason}]`,
