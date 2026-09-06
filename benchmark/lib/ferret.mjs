@@ -120,7 +120,8 @@ export async function assertCorpusExcluded(client, probePath) {
   throw new Error(
     `The index holds ${probePath}, which is this benchmark's answer key.\n` +
       'Exclude the harness and re-index, then run again:\n' +
-      "  node dist/cli/main.js config set exclude '[\"benchmark\"]'\n" +
+      '  node dist/cli/main.js config set exclude ' +
+      "'[\"benchmark\",\"docs/evidence/FERRET-DOES-IT-HELP.md\"]'\n" +
       '  node scripts/dogfood-db.mjs --index',
   );
 }

@@ -109,9 +109,21 @@ describe('the corpus the benchmark searches', () => {
     expect(EXCLUDED_PREFIXES).toContain('benchmark/');
   });
 
+  it('excludes the evidence report, which states every answer in prose', () => {
+    // Not in `benchmark/`, and an ordinary document in every other respect —
+    // which is why the rule is "what would not exist but for the benchmark, and
+    // what states its answers" rather than "the benchmark directory". Committed,
+    // it appeared twelve times across the three conditions and cost the pack
+    // five points of `sourced` by displacing the documents it describes.
+    expect(withinCorpus('file:docs/evidence/FERRET-DOES-IT-HELP.md')).toBe(false);
+  });
+
   it('excludes nothing else', () => {
     expect(withinCorpus('file:docs/EPICs/ROADMAP.md')).toBe(true);
     expect(withinCorpus('file:src/context/pack.ts')).toBe(true);
+    // Every other evidence document is corpus, including the ones that discuss
+    // findings. Only the report *about these tasks* is not.
+    expect(withinCorpus('file:docs/evidence/FERRET-REVIEW-PACKAGE.md')).toBe(true);
     expect(withinCorpus('commit:271be926b0')).toBe(true);
   });
 

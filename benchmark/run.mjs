@@ -178,7 +178,9 @@ const client = await ferret.connect({
 
 // Before anything is measured. A run against an index that holds the questions
 // produces numbers, and they mean nothing.
-await ferret.assertCorpusExcluded(client, 'benchmark/tasks.json');
+for (const probe of ['benchmark/tasks.json', 'docs/evidence/FERRET-DOES-IT-HELP.md']) {
+  await ferret.assertCorpusExcluded(client, probe);
+}
 
 const rows = [];
 for (const task of tasks) {
