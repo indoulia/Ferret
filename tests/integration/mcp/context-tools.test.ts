@@ -166,6 +166,7 @@ async function harness(
     guard: createToolGuard({ principal, logger }),
     context: port,
     ...(sessions === undefined ? {} : { sessions }),
+    actorId: principal.id,
     permittedScopes: principal.permittedScopes,
     producer: 'ferret.agent',
     producerVersion: '0.0.0',
@@ -395,7 +396,8 @@ describe('promoting what a session learned — EPIC-129', () => {
   const session = createSession({
     sessionId: 'promote-me',
     provider: 'test-agent',
-    actorId: 'actor-1',
+    // The curator's own id, so promotion is the owner promoting its own work.
+    actorId: CURATOR.id,
     startedAt: PROMOTED_AT,
   });
 

@@ -156,6 +156,15 @@ export interface ContextToolDependencies {
   /** The permission scopes the calling principal holds — EPIC-083. */
   readonly permittedScopes: readonly string[];
   /**
+   * Who is calling, for the one decision that depends on it — EPIC-132.
+   *
+   * Promotion publishes an agent's own working state as shared knowledge, so it
+   * must be that agent's working state. From the **composition root**, never
+   * from tool input, for the same reason `producer` is: a caller that could
+   * name its own identity could name someone else's.
+   */
+  readonly actorId: string;
+  /**
    * The identity recorded as the producer of everything stored through here.
    *
    * Taken from the *composition root*, never from tool input. An agent that
@@ -171,6 +180,7 @@ export function registerContextTools({
   guard,
   context,
   sessions,
+  actorId,
   permittedScopes,
   producer,
   producerVersion,
@@ -276,8 +286,25 @@ export function registerContextTools({
         // decided is recording it durably, not changing what Ferret believes.
         guard('contextPromote', Permission.RECORD, async () => {
           const session = await sessions.getSession(sessionId);
-          if (session === undefined) {
-            return { notice: CONTENT_NOTICE, found: false, sessionId };
+          // **A session may only be promoted by the agent that ran it** —
+          // EPIC-132's isolation requirement, and a defect this Epic found in
+          // EPIC-129's tool. Promotion turns one agent's working state into
+          // shared organizational knowledge; done by anyone else it publishes
+          // notes their owner never offered.
+          //
+          // Refused without saying which case it is. "No session you own"
+          // is true whether the identifier names nothing or names another
+          // agent's work, so a caller learns nothing it did not already know —
+          // and a legitimate owner who mistyped an id still gets an actionable
+          // answer.
+          if (session === undefined || session.actorId !== actorId) {
+            return {
+              notice: CONTENT_NOTICE,
+              found: false,
+              sessionId,
+              detail: 'No session you own has that identifier.',
+              remediation: 'Promote a session this agent ran. Sessions are recorded by ferret_session_start.',
+            };
           }
           const memories = await sessions.memoriesFor(sessionId);
           const report = await promoteMemories(context, session, memories, producerVersion);
