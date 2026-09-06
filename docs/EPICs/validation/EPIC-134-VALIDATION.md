@@ -44,9 +44,27 @@ the rendered response. Ferret is asked; it is not believed.
 
 > Dogfooding can expose defects that ordinary fixture-based tests miss.
 
-**Nine defects across this queue. Every one found by running the system or
+**Ten defects across this queue. Every one found by running the system or
 tripping one of its own controls. None found by writing a test against the
-design.** Every one now has a regression test.
+design.** Every one now has a regression test, except the tenth — which is a
+defect in the oracle rather than in Ferret, and whose regression is a run.
+
+The tenth arrived after the Epic closed, which is the point of a standing
+oracle: `benchmark/` needed excluding from the index because it holds the
+questions a task benchmark asks *and* the artefacts that answer them, and the
+exclusion is what exposed the check. Reproducing it takes one setting:
+
+```
+ferret config set exclude '["benchmark"]'
+node scripts/dogfood-db.mjs --index
+npm run dogfood -- --check
+```
+
+Before: `FAIL no missing files — 10 tracked file(s) absent from the index`.
+After: `ok no missing files (914 tracked, 10 excluded)`. Each candidate is now
+put back to Ferret — *is this path excluded, and by which rule* — and a run
+whose principal lacks `config.read` says it could not tell the two apart rather
+than reporting a decision as a defect.
 
 | # | Defect | Found by | Regression test |
 | --- | --- | --- | --- |
@@ -59,6 +77,7 @@ design.** Every one now has a regression test.
 | 7 | A task question reached **none** of seven statements about it | the EPIC-131 dogfood | `retrieval/task-assembly.test.ts` |
 | 8 | `ferret_context_promote` let any agent publish **another agent's** private session | running two agents (EPIC-132) | `mcp/multi-agent-context.test.ts` — *proven against the unfixed code* |
 | 9 | `ferret_session_recall` and `show` enforced no ownership | recorded by EPIC-132, closed by EPIC-133 | `security/context-governance.test.ts` — *proven against the unfixed code* |
+| 10 | The oracle read a **configured exclusion** as a missing file: it compared `git ls-files` against the index and nothing else, so excluding a tracked path produced ten findings about a decision somebody had made deliberately | configuring `exclude: ["benchmark"]` for `benchmark/` | the oracle itself, *proven against the unfixed code* — see below |
 
 Four of the nine were **proven against the unfixed code**: the fix was reverted
 and the test observed to fail, so the coverage is known to bite rather than
