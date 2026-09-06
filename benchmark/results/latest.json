@@ -1,0 +1,1556 @@
+{
+  "version": "1",
+  "ranAt": "2026-09-06T13:27:56.810Z",
+  "baseCommit": "271be92",
+  "parameters": {
+    "k": 10,
+    "reads": 3,
+    "packBudget": 4000
+  },
+  "summary": {
+    "baseline": {
+      "tasks": 16,
+      "recall": 0.3125,
+      "precision5": 0.1625,
+      "precision10": 0.1125,
+      "ndcg10": 0.30666289417426634,
+      "mrrPrimary": 0.37872023809523814,
+      "sourced": {
+        "rate": 0.375,
+        "of": 16
+      },
+      "staleAboveCurrent": {
+        "rate": 0,
+        "of": 1
+      },
+      "irrelevant5PerTask": 4.0625,
+      "retrievalTokens": 2733,
+      "readTokensFull": 603481,
+      "readTokensFrugal": 563608,
+      "totalTokensFull": 606214,
+      "totalTokensFrugal": 566341,
+      "tokensPerSourcedTask": 101036,
+      "medianMs": 1022.468350000001
+    },
+    "ferret-pack": {
+      "tasks": 16,
+      "recall": 0.171875,
+      "precision5": 0.18611111111111112,
+      "precision10": 0.15965608465608463,
+      "ndcg10": 0.18384654013946913,
+      "mrrPrimary": 0.196875,
+      "sourced": {
+        "rate": 0.1875,
+        "of": 16
+      },
+      "staleAboveCurrent": {
+        "rate": 0,
+        "of": 1
+      },
+      "irrelevant5PerTask": 2.4375,
+      "retrievalTokens": 29684,
+      "readTokensFull": 309663,
+      "readTokensFrugal": 287689,
+      "totalTokensFull": 339347,
+      "totalTokensFrugal": 317373,
+      "tokensPerSourcedTask": 113116,
+      "medianMs": 55.10005000000274
+    },
+    "ferret-search": {
+      "tasks": 16,
+      "recall": 0.203125,
+      "precision5": 0.15,
+      "precision10": 0.12013888888888888,
+      "ndcg10": 0.21771621552727857,
+      "mrrPrimary": 0.246875,
+      "sourced": {
+        "rate": 0.25,
+        "of": 16
+      },
+      "staleAboveCurrent": {
+        "rate": 0,
+        "of": 1
+      },
+      "irrelevant5PerTask": 3.375,
+      "retrievalTokens": 157778,
+      "readTokensFull": 521093,
+      "readTokensFrugal": 475725,
+      "totalTokensFull": 678871,
+      "totalTokensFrugal": 633503,
+      "tokensPerSourcedTask": 169718,
+      "medianMs": 73.36530000000039
+    }
+  },
+  "tasks": [
+    {
+      "task": "macos-runner",
+      "kind": "decision",
+      "question": "Should CI add a macOS runner for the packaging suite?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md",
+            "file:docs/EPICs/EPIC-105-Cross-Platform-Packaging.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/EPIC-100-Security-Regression-Suite.md",
+            "file:docs/EPICs/validation/EPIC-105-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-126-VALIDATION.md",
+            "commit:10531e003a",
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md",
+            "commit:6e74992575",
+            "file:.agent/STATE.md"
+          ],
+          "score": {
+            "recall": 0.25,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "ndcg10": 0.4441718626302019,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 1,
+            "staleAboveCurrent": false,
+            "supersededInWindow": 2,
+            "irrelevant5": 2,
+            "retrievalTokens": 174,
+            "readTokensFull": 32771,
+            "readTokensFrugal": 26614,
+            "ms": 777.0614
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "file:tests/integration/retrieval/task-assembly.test.ts",
+            "file:docs/EPICs/validation/EPIC-131-VALIDATION.md",
+            "file:docs/EPICs/EPIC-131-Context-Assembly.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md",
+            "file:docs/EPICs/validation/EPIC-002-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-019-020-VALIDATION.md"
+          ],
+          "standingCount": 0,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 3,
+              "detail": "3 result(s) did not fit in 4000 estimated tokens"
+            }
+          ],
+          "packJsonTokens": 8102,
+          "score": {
+            "recall": 0.25,
+            "precision5": 0.2,
+            "precision10": 0.14285714285714285,
+            "ndcg10": 0.17182913195308883,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.2,
+            "staleAboveCurrent": false,
+            "supersededInWindow": 0,
+            "irrelevant5": 4,
+            "retrievalTokens": 2781,
+            "readTokensFull": 7466,
+            "readTokensFrugal": 5238,
+            "ms": 86.25540000000001
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:tests/integration/retrieval/task-assembly.test.ts",
+            "file:docs/EPICs/validation/EPIC-131-VALIDATION.md",
+            "file:docs/EPICs/EPIC-131-Context-Assembly.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md",
+            "file:docs/EPICs/validation/EPIC-002-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-019-020-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-012-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-017-VALIDATION.md",
+            "commit:10531e003a"
+          ],
+          "score": {
+            "recall": 0.25,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "ndcg10": 0.17182913195308883,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.2,
+            "staleAboveCurrent": false,
+            "supersededInWindow": 0,
+            "irrelevant5": 4,
+            "retrievalTokens": 25362,
+            "readTokensFull": 7466,
+            "readTokensFrugal": 5238,
+            "ms": 55.500800000000254
+          }
+        }
+      }
+    },
+    {
+      "task": "durable-context-key",
+      "kind": "rationale",
+      "question": "Why is a durable context record identified by its statement rather than by the session that recorded it?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:tests/integration/mcp/context-tools.test.ts",
+            "file:src/storage/durable-context.ts",
+            "file:src/mcp/context-tools.ts",
+            "file:tests/integration/storage/durable-context.test.ts",
+            "file:tests/security/context-governance.test.ts",
+            "file:tests/integration/mcp/multi-agent-context.test.ts",
+            "file:src/mcp/session-tools.ts",
+            "file:tests/integration/mcp/session-tools.test.ts",
+            "file:src/context/durable.ts",
+            "file:docs/EPICs/EPIC-129-Durable-Context-Capture.md"
+          ],
+          "score": {
+            "recall": 0.25,
+            "precision5": 0,
+            "precision10": 0.1,
+            "ndcg10": 0.08913936925442142,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 195,
+            "readTokensFull": 24794,
+            "readTokensFrugal": 24794,
+            "ms": 1088.8450999999995
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "file:src/context/durable.ts",
+            "file:src/mcp/context-tools.ts",
+            "file:src/mcp/session-tools.ts",
+            "file:tests/integration/mcp/multi-agent-context.test.ts",
+            "file:tests/security/context-governance.test.ts",
+            "file:README.md",
+            "file:scripts/dogfood.mjs"
+          ],
+          "standingCount": 0,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 17,
+              "detail": "17 result(s) did not fit in 4000 estimated tokens"
+            }
+          ],
+          "packJsonTokens": 7872,
+          "score": {
+            "recall": 0.25,
+            "precision5": 0.2,
+            "precision10": 0.14285714285714285,
+            "ndcg10": 0.2961145750868013,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 4,
+            "retrievalTokens": 2823,
+            "readTokensFull": 20766,
+            "readTokensFrugal": 20766,
+            "ms": 188.86809999999969
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:src/context/durable.ts",
+            "file:src/mcp/context-tools.ts",
+            "file:src/mcp/session-tools.ts",
+            "file:tests/integration/mcp/multi-agent-context.test.ts",
+            "file:tests/security/context-governance.test.ts",
+            "file:README.md",
+            "file:scripts/dogfood.mjs",
+            "file:src/index.ts",
+            "file:src/context/promotion.ts",
+            "file:tests/integration/mcp/session-tools.test.ts"
+          ],
+          "score": {
+            "recall": 0.25,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "ndcg10": 0.2961145750868013,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 4,
+            "retrievalTokens": 4899,
+            "readTokensFull": 20766,
+            "readTokensFrugal": 20766,
+            "ms": 129.29399999999987
+          }
+        }
+      }
+    },
+    {
+      "task": "merger-boundary",
+      "kind": "constraint",
+      "question": "What constrains a change to the context merger — what is it not allowed to become?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:src/storage/durable-context.ts",
+            "file:src/mcp/context-tools.ts",
+            "file:src/context/pack.ts",
+            "file:docs/EPICs/EPIC-126-Context-Merger.md",
+            "file:src/index.ts",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:tests/unit/boundaries.test.ts",
+            "file:src/indexing/indexer.ts",
+            "file:src/context/standing.ts",
+            "file:src/context/promotion.ts"
+          ],
+          "score": {
+            "recall": 0.25,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "ndcg10": 0.19129440899062336,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.25,
+            "irrelevant5": 4,
+            "retrievalTokens": 153,
+            "readTokensFull": 31492,
+            "readTokensFrugal": 25209,
+            "ms": 852.4805999999999
+          }
+        },
+        "ferret-pack": {
+          "ranked": [],
+          "standingCount": 0,
+          "omitted": [],
+          "packJsonTokens": 469,
+          "score": {
+            "recall": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 0,
+            "retrievalTokens": 635,
+            "readTokensFull": 0,
+            "readTokensFrugal": 0,
+            "ms": 19.661599999999453
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "file:src/retrieval/query.ts",
+            "file:src/index.ts",
+            "file:tests/unit/boundaries.test.ts",
+            "file:src/context/pack.ts",
+            "file:src/mcp/context-tools.ts",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:src/storage/retrieval.ts",
+            "file:README.md",
+            "file:tests/integration/mcp/tools.test.ts"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 4881,
+            "readTokensFull": 42103,
+            "readTokensFrugal": 31873,
+            "ms": 1284.8700999999992
+          }
+        }
+      }
+    },
+    {
+      "task": "dogfood-skip",
+      "kind": "rationale",
+      "question": "Why does the dogfood oracle report a skipped outcome instead of a pass when a check cannot run?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:README.md",
+            "file:scripts/dogfood.mjs",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "commit:6e74992575",
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "commit:10531e003a",
+            "file:docs/EPICs/EPIC-134-Continuous-Self-Dogfooding.md",
+            "file:src/indexing/indexer.ts"
+          ],
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.2,
+            "ndcg10": 0.4139502977142807,
+            "sourced": true,
+            "primaryFound": 2,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.5,
+            "irrelevant5": 4,
+            "retrievalTokens": 150,
+            "readTokensFull": 50621,
+            "readTokensFrugal": 49996,
+            "ms": 1351.0216
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "context:8e13befb-836a-823d-bbe0-c27d5860e62b",
+            "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
+            "file:docs/EPICs/ROADMAP.md"
+          ],
+          "standingCount": 2,
+          "omitted": [],
+          "packJsonTokens": 1712,
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 3,
+            "retrievalTokens": 1053,
+            "readTokensFull": 24808,
+            "readTokensFrugal": 23387,
+            "ms": 55.936799999999494
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 1,
+            "retrievalTokens": 908,
+            "readTokensFull": 24808,
+            "readTokensFrugal": 23387,
+            "ms": 38.70709999999963
+          }
+        }
+      }
+    },
+    {
+      "task": "session-ownership",
+      "kind": "security",
+      "question": "Which agent is allowed to read a session's recorded state, and what changed about that?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:README.md",
+            "file:tests/integration/storage/sessions.test.ts",
+            "file:src/mcp/session-tools.ts",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:src/storage/sessions.ts",
+            "file:tests/integration/mcp/multi-agent-context.test.ts",
+            "file:.agent/STATE.md",
+            "file:docs/EPICs/README.md",
+            "file:src/mcp/context-tools.ts",
+            "file:.agent/FINDINGS.md"
+          ],
+          "score": {
+            "recall": 0.25,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "ndcg10": 0.22208593131510096,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.3333333333333333,
+            "irrelevant5": 4,
+            "retrievalTokens": 142,
+            "readTokensFull": 33139,
+            "readTokensFrugal": 30899,
+            "ms": 1080.3567000000003
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "context:8e13befb-836a-823d-bbe0-c27d5860e62b",
+            "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:src/storage/sessions.ts",
+            "file:src/authorization/authorization.ts",
+            "file:src/mcp/config-tools.ts",
+            "file:tests/integration/mcp/tools.test.ts",
+            "file:src/domain/relationship.ts",
+            "file:docs/EPICs/EPIC-068-AI-Authorization-Model.md"
+          ],
+          "standingCount": 2,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 5,
+              "detail": "5 result(s) did not fit in 4000 estimated tokens"
+            }
+          ],
+          "packJsonTokens": 8020,
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 2943,
+            "readTokensFull": 36374,
+            "readTokensFrugal": 36154,
+            "ms": 124.58920000000035
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "file:src/storage/sessions.ts",
+            "file:src/authorization/authorization.ts",
+            "file:src/mcp/config-tools.ts",
+            "file:tests/integration/mcp/tools.test.ts",
+            "file:src/domain/relationship.ts",
+            "file:docs/EPICs/EPIC-068-AI-Authorization-Model.md",
+            "file:tests/unit/mcp-destructive-tools.test.ts",
+            "file:src/mcp/server.ts",
+            "file:src/cli/commands/mcp.ts"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 4884,
+            "readTokensFull": 36374,
+            "readTokensFrugal": 36154,
+            "ms": 67.15570000000116
+          }
+        }
+      }
+    },
+    {
+      "task": "postgres-coverage",
+      "kind": "constraint",
+      "question": "Which PostgreSQL major versions does CI actually measure, and on which events?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:docs/EPICs/EPIC-114-PostgreSQL-Version-Coverage.md",
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md",
+            "file:.github/workflows/ci.yml",
+            "file:docs/EPICs/validation/EPIC-114-VALIDATION.md",
+            "commit:6e74992575",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:src/index.ts",
+            "file:docs/EPICs/validation/EPIC-089-VALIDATION.md",
+            "file:docs/EPICs/validation/EPIC-002-VALIDATION.md"
+          ],
+          "score": {
+            "recall": 0.75,
+            "precision5": 0.6,
+            "precision10": 0.3,
+            "ndcg10": 0.7094949153925256,
+            "sourced": true,
+            "primaryFound": 2,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.3333333333333333,
+            "irrelevant5": 2,
+            "retrievalTokens": 180,
+            "readTokensFull": 21724,
+            "readTokensFrugal": 18924,
+            "ms": 871.4653999999991
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "context:8e13befb-836a-823d-bbe0-c27d5860e62b",
+            "file:.github/workflows/ci.yml",
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md"
+          ],
+          "standingCount": 1,
+          "omitted": [],
+          "packJsonTokens": 2610,
+          "score": {
+            "recall": 0.25,
+            "precision5": 0.3333333333333333,
+            "precision10": 0.3333333333333333,
+            "ndcg10": 0.2802412438326486,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.5,
+            "irrelevant5": 2,
+            "retrievalTokens": 1260,
+            "readTokensFull": 18869,
+            "readTokensFrugal": 16069,
+            "ms": 35.61739999999918
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:.github/workflows/ci.yml",
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md"
+          ],
+          "score": {
+            "recall": 0.25,
+            "precision5": 0.5,
+            "precision10": 0.5,
+            "ndcg10": 0.4441718626302019,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 1,
+            "retrievalTokens": 1287,
+            "readTokensFull": 18869,
+            "readTokensFrugal": 16069,
+            "ms": 20.379799999998795
+          }
+        }
+      }
+    },
+    {
+      "task": "score-comparability",
+      "kind": "rationale",
+      "question": "Why must a retrieval score never be compared between two different queries?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:src/storage/retrieval.ts",
+            "file:docs/EPICs/EPIC-098-Retrieval-Quality-Harness.md",
+            "file:tests/integration/retrieval/permission.test.ts",
+            "file:tests/unit/retrieval-quality.test.ts",
+            "file:tests/integration/retrieval/retrieval.test.ts",
+            "file:src/retrieval/rank.ts",
+            "file:src/retrieval/query.ts",
+            "file:docs/EPICs/EPIC-056-Ranking-And-Reranking.md",
+            "file:tests/unit/retrieval-rank.test.ts",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
+          ],
+          "score": {
+            "recall": 0.75,
+            "precision5": 0.2,
+            "precision10": 0.3,
+            "ndcg10": 0.4140240129823034,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.14285714285714285,
+            "irrelevant5": 4,
+            "retrievalTokens": 190,
+            "readTokensFull": 38368,
+            "readTokensFrugal": 34292,
+            "ms": 979.3492000000006
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "file:docs/EPICs/EPIC-098-Retrieval-Quality-Harness.md",
+            "file:src/storage/retrieval.ts",
+            "file:docs/EPICs/EPIC-056-Ranking-And-Reranking.md",
+            "file:src/retrieval/query.ts",
+            "file:tests/integration/evaluation/golden-dataset.test.ts",
+            "file:docs/EPICs/EPIC-052-053-Retrieval.md",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
+          ],
+          "standingCount": 0,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 7,
+              "detail": "7 result(s) did not fit in 4000 estimated tokens"
+            }
+          ],
+          "packJsonTokens": 7941,
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.4,
+            "precision10": 0.2857142857142857,
+            "ndcg10": 0.5206052770047669,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.25,
+            "irrelevant5": 3,
+            "retrievalTokens": 2803,
+            "readTokensFull": 34347,
+            "readTokensFrugal": 30601,
+            "ms": 134.04279999999926
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:docs/EPICs/EPIC-098-Retrieval-Quality-Harness.md",
+            "file:src/storage/retrieval.ts",
+            "file:docs/EPICs/EPIC-056-Ranking-And-Reranking.md",
+            "file:src/retrieval/query.ts",
+            "file:tests/integration/evaluation/golden-dataset.test.ts",
+            "file:docs/EPICs/EPIC-052-053-Retrieval.md",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "file:.agent/FINDINGS.md",
+            "file:src/storage/embeddings.ts",
+            "file:docs/EPICs/EPIC-057-Freshness-And-Authority-Ranking.md"
+          ],
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "ndcg10": 0.5206052770047669,
+            "sourced": false,
+            "primaryFound": 1,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.25,
+            "irrelevant5": 3,
+            "retrievalTokens": 4675,
+            "readTokensFull": 34347,
+            "readTokensFrugal": 30601,
+            "ms": 79.57489999999962
+          }
+        }
+      }
+    },
+    {
+      "task": "pack-standing",
+      "kind": "prior-decisions",
+      "question": "What earlier decisions affect a change to how the context pack finds durable context?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:src/context/pack.ts",
+            "file:README.md",
+            "file:tests/unit/context-pack.test.ts",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:tests/integration/packaging.test.ts",
+            "file:docs/EPICs/ROADMAP.md",
+            "commit:6e74992575",
+            "file:src/storage/durable-context.ts",
+            "file:docs/EPICs/EPIC-131-Context-Assembly.md",
+            "file:src/context/durable.ts"
+          ],
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.2,
+            "ndcg10": 0.5778809165118342,
+            "sourced": true,
+            "primaryFound": 2,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 4,
+            "retrievalTokens": 149,
+            "readTokensFull": 43519,
+            "readTokensFrugal": 38101,
+            "ms": 1217.7955000000002
+          }
+        },
+        "ferret-pack": {
+          "ranked": [],
+          "standingCount": 0,
+          "omitted": [],
+          "packJsonTokens": 468,
+          "score": {
+            "recall": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 0,
+            "retrievalTokens": 634,
+            "readTokensFull": 0,
+            "readTokensFrugal": 0,
+            "ms": 19.654900000001362
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:README.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/README.md",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:tests/integration/mcp/tools.test.ts",
+            "file:docs/EPICs/EPIC-131-Context-Assembly.md",
+            "file:docs/EPICs/validation/EPIC-131-VALIDATION.md",
+            "file:src/context/pack.ts",
+            "file:src/mcp/server.ts",
+            "file:src/index.ts"
+          ],
+          "score": {
+            "recall": 0.5,
+            "precision5": 0,
+            "precision10": 0.2,
+            "ndcg10": 0.29833783169635936,
+            "sourced": true,
+            "primaryFound": 2,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0.16666666666666666,
+            "irrelevant5": 5,
+            "retrievalTokens": 4778,
+            "readTokensFull": 57383,
+            "readTokensFrugal": 49139,
+            "ms": 1403.9596999999994
+          }
+        }
+      }
+    },
+    {
+      "task": "ci-concurrency",
+      "kind": "rationale",
+      "question": "Why does a CI run on main group by commit sha instead of by ref?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "commit:6e74992575",
+            "file:tests/integration/mcp/tools.test.ts",
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "file:src/indexing/indexer.ts",
+            "commit:10531e003a",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md",
+            "file:src/storage/retrieval.ts"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 161,
+            "readTokensFull": 58023,
+            "readTokensFrugal": 56089,
+            "ms": 1065.5875000000015
+          }
+        },
+        "ferret-pack": {
+          "ranked": [],
+          "standingCount": 0,
+          "omitted": [],
+          "packJsonTokens": 464,
+          "score": {
+            "recall": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 0,
+            "retrievalTokens": 629,
+            "readTokensFull": 0,
+            "readTokensFrugal": 0,
+            "ms": 24.23530000000028
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md",
+            "commit:6e74992575",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "file:.agent/FINDINGS.md",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:src/storage/retrieval.ts",
+            "file:README.md",
+            "file:src/git/history.ts",
+            "file:src/domain/attributes.ts"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 22877,
+            "readTokensFull": 52458,
+            "readTokensFrugal": 52458,
+            "ms": 1830.5866999999998
+          }
+        }
+      }
+    },
+    {
+      "task": "dogfood-db-separate",
+      "kind": "rationale",
+      "question": "Why is the dogfood database separate from the test database?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:README.md",
+            "file:scripts/dogfood-db.mjs",
+            "file:tests/integration/diagnostics/health-database.test.ts",
+            "file:tests/integration/mcp/tools.test.ts",
+            "file:tests/integration/indexing/content-indexing.test.ts",
+            "file:tests/integration/storage/durable-context.test.ts",
+            "file:docs/EPICs/EPIC-134-Continuous-Self-Dogfooding.md",
+            "file:tests/integration/domain/evidence-store.test.ts",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:tests/integration/indexing/repository-indexer.test.ts"
+          ],
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "ndcg10": 0.44412286644879784,
+            "sourced": true,
+            "primaryFound": 1,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0.5,
+            "irrelevant5": 4,
+            "retrievalTokens": 196,
+            "readTokensFull": 24329,
+            "readTokensFrugal": 20317,
+            "ms": 758.0511999999981
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "context:8e13befb-836a-823d-bbe0-c27d5860e62b",
+            "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
+            "file:README.md",
+            "file:tests/integration/storage/durable-context.test.ts",
+            "file:scripts/dogfood-db.mjs",
+            "file:docs/EPICs/validation/EPIC-126-VALIDATION.md",
+            "file:tests/integration/indexing/content-indexing.test.ts",
+            "file:tests/integration/storage/context-lifecycle.test.ts",
+            "commit:355a833064"
+          ],
+          "standingCount": 2,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 1,
+              "detail": "1 observation(s) not cited — the result carrying them was shortened to fit the token budget"
+            },
+            {
+              "reason": "content-trimmed",
+              "count": 1,
+              "detail": "1 result(s) had their longest values shortened to fit"
+            },
+            {
+              "reason": "token-budget",
+              "count": 21,
+              "detail": "21 result(s) did not fit in 4000 estimated tokens"
+            }
+          ],
+          "packJsonTokens": 7977,
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.1111111111111111,
+            "ndcg10": 0.272312688806029,
+            "sourced": true,
+            "primaryFound": 1,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0.2,
+            "irrelevant5": 4,
+            "retrievalTokens": 3199,
+            "readTokensFull": 25204,
+            "readTokensFrugal": 18330,
+            "ms": 245.64830000000075
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:README.md",
+            "file:tests/integration/storage/durable-context.test.ts",
+            "file:scripts/dogfood-db.mjs",
+            "file:docs/EPICs/validation/EPIC-126-VALIDATION.md",
+            "file:tests/integration/indexing/content-indexing.test.ts",
+            "file:tests/integration/storage/context-lifecycle.test.ts",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "commit:355a833064",
+            "file:docs/EPICs/EPIC-134-Continuous-Self-Dogfooding.md",
+            "file:docs/EPICs/validation/EPIC-058-VALIDATION.md"
+          ],
+          "score": {
+            "recall": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "ndcg10": 0.35195904451706733,
+            "sourced": true,
+            "primaryFound": 1,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0.3333333333333333,
+            "irrelevant5": 4,
+            "retrievalTokens": 6075,
+            "readTokensFull": 25204,
+            "readTokensFrugal": 18330,
+            "ms": 124.14619999999923
+          }
+        }
+      }
+    },
+    {
+      "task": "settings-local-ignored",
+      "kind": "gotcha",
+      "question": "Why is the per-developer Claude Code settings file ignored by git?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:src/git/provider.ts",
+            "file:src/git/files.ts",
+            "file:README.md",
+            "file:src/git/runner.ts",
+            "commit:10531e003a",
+            "file:tests/unit/boundaries.test.ts",
+            "file:tests/integration/git/files.test.ts",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "file:tests/integration/git/blob-content.test.ts",
+            "file:tests/integration/git/discovery.test.ts"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 148,
+            "readTokensFull": 46565,
+            "readTokensFrugal": 42226,
+            "ms": 958.4858000000022
+          }
+        },
+        "ferret-pack": {
+          "ranked": [],
+          "standingCount": 0,
+          "omitted": [],
+          "packJsonTokens": 461,
+          "score": {
+            "recall": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 0,
+            "retrievalTokens": 627,
+            "readTokensFull": 0,
+            "readTokensFrugal": 0,
+            "ms": 20.20560000000114
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:README.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md",
+            "commit:10531e003a",
+            "file:tests/integration/domain/entity-store.test.ts",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:docs/EPICs/validation/EPIC-017-VALIDATION.md",
+            "file:docs/EPICs/EPIC-081-Credential-Isolation.md",
+            "file:tests/integration/mcp/tools.test.ts",
+            "file:tests/integration/git/discovery.test.ts"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 25613,
+            "readTokensFull": 59486,
+            "readTokensFrugal": 54566,
+            "ms": 1448.4752000000008
+          }
+        }
+      }
+    },
+    {
+      "task": "writing-a-provider",
+      "kind": "constraint",
+      "question": "What must a new Ferret provider implement, and what is it forbidden from doing?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:tests/unit/github-provider.test.ts",
+            "file:tests/unit/boundaries.test.ts",
+            "file:tests/unit/provider-sdk.test.ts",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "file:tests/unit/jira-provider.test.ts",
+            "file:src/providers/sdk/operation.ts",
+            "file:src/git/provider.ts",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md",
+            "file:tests/integration/provider-sdk/concurrency.test.ts"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 192,
+            "readTokensFull": 43865,
+            "readTokensFrugal": 43311,
+            "ms": 740.7697999999982
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "context:8e13befb-836a-823d-bbe0-c27d5860e62b",
+            "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
+            "file:tests/unit/boundaries.test.ts",
+            "file:src/providers/sdk/operation.ts",
+            "file:tests/unit/github-provider.test.ts",
+            "file:tests/unit/jira-provider.test.ts",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:tests/unit/source-connector.test.ts",
+            "file:docs/EPICs/validation/EPIC-001-VALIDATION.md"
+          ],
+          "standingCount": 2,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 2,
+              "detail": "2 result(s) did not fit in 4000 estimated tokens"
+            }
+          ],
+          "packJsonTokens": 8214,
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 3006,
+            "readTokensFull": 35135,
+            "readTokensFrugal": 34581,
+            "ms": 100.4948000000004
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:tests/unit/boundaries.test.ts",
+            "file:src/providers/sdk/operation.ts",
+            "file:tests/unit/github-provider.test.ts",
+            "file:tests/unit/jira-provider.test.ts",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:tests/unit/source-connector.test.ts",
+            "file:docs/EPICs/validation/EPIC-001-VALIDATION.md",
+            "file:tests/integration/mcp/tools.test.ts",
+            "file:tests/integration/connectors/confluence-connector.test.ts"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 4649,
+            "readTokensFull": 35135,
+            "readTokensFrugal": 34581,
+            "ms": 56.49699999999939
+          }
+        }
+      }
+    },
+    {
+      "task": "token-estimate",
+      "kind": "rationale",
+      "question": "Why does Ferret estimate tokens rather than counting them, and which way does the estimate err?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "file:tests/unit/context-pack.test.ts",
+            "file:src/context/pack.ts",
+            "file:src/mcp/server.ts",
+            "file:src/context/answer.ts",
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md",
+            "file:docs/evidence/FERRET-BATCH-6-CREDENTIAL-AND-SAFETY-ENUMERATION.md",
+            "file:README.md",
+            "commit:10531e003a"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 165,
+            "readTokensFull": 53316,
+            "readTokensFrugal": 51881,
+            "ms": 1121.0842000000011
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "context:8e13befb-836a-823d-bbe0-c27d5860e62b",
+            "context:622e1122-1629-8a45-9306-1c122fa6ac5c",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
+          ],
+          "standingCount": 2,
+          "omitted": [],
+          "packJsonTokens": 1797,
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 3,
+            "retrievalTokens": 1081,
+            "readTokensFull": 27014,
+            "readTokensFrugal": 26450,
+            "ms": 47.68340000000171
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 1,
+            "retrievalTokens": 883,
+            "readTokensFull": 27014,
+            "readTokensFrugal": 26450,
+            "ms": 31.402600000001257
+          }
+        }
+      }
+    },
+    {
+      "task": "required-groups",
+      "kind": "rationale",
+      "question": "Why does the test run fail when the packaging suite was collected but did not execute?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:docs/evidence/FERRET-F73-RELEASE-GATE-INTEGRITY.md",
+            "file:tests/required-groups.ts",
+            "commit:6e74992575",
+            "file:tests/integration/required-groups.test.ts",
+            "file:docs/evidence/FERRET-REVIEW-PACKAGE.md",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "commit:10531e003a",
+            "file:docs/EPICs/EPIC-100-Security-Regression-Suite.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md",
+            "file:docs/EPICs/EPIC-016-Provider-Conformance-Testing.md"
+          ],
+          "score": {
+            "recall": 0.6666666666666666,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "ndcg10": 0.8303010754742701,
+            "sourced": true,
+            "primaryFound": 2,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 3,
+            "retrievalTokens": 189,
+            "readTokensFull": 30530,
+            "readTokensFrugal": 30530,
+            "ms": 1198.672000000006
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "file:docs/evidence/FERRET-F73-RELEASE-GATE-INTEGRITY.md",
+            "file:tests/required-groups.ts",
+            "file:tests/integration/required-groups.test.ts",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "commit:6e74992575"
+          ],
+          "standingCount": 0,
+          "omitted": [
+            {
+              "reason": "token-budget",
+              "count": 1,
+              "detail": "1 observation(s) not cited — the result carrying them was shortened to fit the token budget"
+            },
+            {
+              "reason": "content-trimmed",
+              "count": 1,
+              "detail": "1 result(s) had their longest values shortened to fit"
+            },
+            {
+              "reason": "token-budget",
+              "count": 4,
+              "detail": "4 result(s) did not fit in 4000 estimated tokens"
+            }
+          ],
+          "packJsonTokens": 6638,
+          "score": {
+            "recall": 0.6666666666666666,
+            "precision5": 0.4,
+            "precision10": 0.4,
+            "ndcg10": 0.8303010754742701,
+            "sourced": true,
+            "primaryFound": 2,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 3,
+            "retrievalTokens": 3556,
+            "readTokensFull": 14358,
+            "readTokensFrugal": 14358,
+            "ms": 134.70760000000155
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:docs/evidence/FERRET-F73-RELEASE-GATE-INTEGRITY.md",
+            "file:tests/required-groups.ts",
+            "file:tests/integration/required-groups.test.ts",
+            "file:docs/evidence/FERRET-POST-ROADMAP-FORENSIC.md",
+            "commit:6e74992575",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-TRIAGE.md",
+            "file:docs/evidence/FERRET-POST-FORENSIC-FINAL-AUDIT.md",
+            "commit:10531e003a"
+          ],
+          "score": {
+            "recall": 0.6666666666666666,
+            "precision5": 0.4,
+            "precision10": 0.2222222222222222,
+            "ndcg10": 0.8303010754742701,
+            "sourced": true,
+            "primaryFound": 2,
+            "primaryTotal": 2,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 3,
+            "retrievalTokens": 43063,
+            "readTokensFull": 14358,
+            "readTokensFrugal": 14358,
+            "ms": 126.83140000000276
+          }
+        }
+      }
+    },
+    {
+      "task": "epic-125-gap",
+      "kind": "supersession",
+      "question": "Why does EPIC-125 have no row in the Epic catalog?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/README.md",
+            "file:docs/EPICs/validation/EPIC-090-VALIDATION.md",
+            "file:docs/EPICs/EPIC-070-AI-Client-Capability-Discovery.md",
+            "file:tests/unit/registry-catalog.test.ts",
+            "file:docs/EPICs/EPIC-095-Operational-Diagnostics.md",
+            "file:docs/EPICs/EPIC-108-Content-Indexing-Integration.md",
+            "file:docs/EPICs/validation/EPIC-070-VALIDATION.md",
+            "file:docs/EPICs/EPIC-094-Index-Integrity-And-Recovery.md",
+            "file:docs/EPICs/validation/EPIC-118-VALIDATION.md"
+          ],
+          "score": {
+            "recall": 0.3333333333333333,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "ndcg10": 0.5701406500739014,
+            "sourced": true,
+            "primaryFound": 1,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 4,
+            "retrievalTokens": 212,
+            "readTokensFull": 44080,
+            "readTokensFrugal": 44080,
+            "ms": 792.7911000000022
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "commit:eb4744827f"
+          ],
+          "standingCount": 0,
+          "omitted": [],
+          "packJsonTokens": 2708,
+          "score": {
+            "recall": 0.3333333333333333,
+            "precision5": 0.5,
+            "precision10": 0.5,
+            "ndcg10": 0.5701406500739014,
+            "sourced": true,
+            "primaryFound": 1,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 1,
+            "retrievalTokens": 1481,
+            "readTokensFull": 25156,
+            "readTokensFrugal": 25156,
+            "ms": 48.11069999999745
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "commit:eb4744827f"
+          ],
+          "score": {
+            "recall": 0.3333333333333333,
+            "precision5": 0.5,
+            "precision10": 0.5,
+            "ndcg10": 0.5701406500739014,
+            "sourced": true,
+            "primaryFound": 1,
+            "primaryTotal": 1,
+            "reciprocalRankPrimary": 1,
+            "irrelevant5": 1,
+            "retrievalTokens": 1566,
+            "readTokensFull": 25156,
+            "readTokensFrugal": 25156,
+            "ms": 40.32519999999931
+          }
+        }
+      }
+    },
+    {
+      "task": "resume-dogfood",
+      "kind": "continuity",
+      "question": "What would a new session need to know to continue the self-dogfooding work?",
+      "conditions": {
+        "baseline": {
+          "ranked": [
+            "file:src/mcp/session-tools.ts",
+            "file:src/cli/commands/session.ts",
+            "file:tests/integration/mcp/session-tools.test.ts",
+            "file:docs/EPICs/ROADMAP.md",
+            "file:README.md",
+            "file:src/git/provider.ts",
+            "file:src/storage/export.ts",
+            "commit:10531e003a",
+            "file:src/storage/retrieval.ts",
+            "file:tests/integration/storage/sessions.test.ts"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 3,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 5,
+            "retrievalTokens": 137,
+            "readTokensFull": 26345,
+            "readTokensFrugal": 26345,
+            "ms": 1080.500500000002
+          }
+        },
+        "ferret-pack": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/README.md"
+          ],
+          "standingCount": 0,
+          "omitted": [],
+          "packJsonTokens": 2435,
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 3,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 2,
+            "retrievalTokens": 1173,
+            "readTokensFull": 40166,
+            "readTokensFrugal": 36599,
+            "ms": 54.263300000005984
+          }
+        },
+        "ferret-search": {
+          "ranked": [
+            "file:docs/EPICs/ROADMAP.md",
+            "file:docs/EPICs/README.md"
+          ],
+          "score": {
+            "recall": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "ndcg10": 0,
+            "sourced": false,
+            "primaryFound": 0,
+            "primaryTotal": 3,
+            "reciprocalRankPrimary": 0,
+            "irrelevant5": 2,
+            "retrievalTokens": 1378,
+            "readTokensFull": 40166,
+            "readTokensFrugal": 36599,
+            "ms": 39.841700000004494
+          }
+        }
+      }
+    }
+  ]
+}

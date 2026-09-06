@@ -45,7 +45,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**/*.mjs', 'tests/fixtures/**/*.mjs', 'eslint.config.js'],
+    files: [
+      'scripts/**/*.mjs',
+      'benchmark/**/*.mjs',
+      'tests/fixtures/**/*.mjs',
+      'eslint.config.js',
+    ],
     extends: [tseslint.configs.disableTypeChecked],
     rules: { 'no-console': 'off' },
   },
