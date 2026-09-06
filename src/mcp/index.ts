@@ -51,3 +51,4 @@ export {
   type SessionAccess,
   type SessionToolDependencies,
 } from './session-tools.js';
+export { registerContextTools, type ContextToolDependencies } from './context-tools.js';

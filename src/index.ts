@@ -427,6 +427,22 @@ export {
   type PairVerdict,
 } from './context/index.js';
 
+// EPIC-128. The agent-facing durable context port, so an MCP server, a CLI or an
+// HTTP surface are all adapters and none of them owns the model.
+export {
+  CONTEXT_TRANSITIONS,
+  ContextTransition,
+  DEFAULT_CONTEXT_PRODUCER,
+  MAX_CONTEXT_PAGE,
+  type AgentProvenance,
+  type ContextBelief,
+  type ContextRead,
+  type DurableContextPort,
+  type FindContextRequest,
+  type StoreContextRequest,
+  type StoredContext,
+} from './context/index.js';
+
 // EPIC-124. The cross-source join a connector cannot make.
 export {
   DEFAULT_EXAMINE_LIMIT,

@@ -343,9 +343,10 @@ describe('the tools an AI client can see', () => {
   });
 
   it('declares every tool read-only', async () => {
-    // Ferret writes nothing through MCP. Indexing is a command a person runs,
-    // and until EPIC-069 provides confirmation for destructive operations the
-    // safest number of destructive tools is none.
+    // This composition wires knowledge tools only. Ferret's *writing* tools —
+    // configuration, sessions, durable context — are registered by their own
+    // dependencies and are asserted where they are composed. The number of
+    // destructive tools on any composition is still none.
     const { tools } = await client.listTools();
     for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
   });
