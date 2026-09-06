@@ -8,7 +8,7 @@ import { createNullLogger } from '../../../src/index.js';
 import { migrate } from '../../../src/storage/index.js';
 import { createRepository, createWorkspace, git, gitVersion } from '../../support/git-fixtures.js';
 import { SKIP_REASON, createTestDatabase, databaseAvailable, type TestDatabase } from '../../support/postgres.js';
-import { runCli } from '../../helpers/cli.js';
+import { parseEnvelope, runCli } from '../../helpers/cli.js';
 
 /**
  * `ferret reconcile` end to end — EPIC-078.
@@ -48,7 +48,11 @@ interface Envelope {
 
 async function reconcile(args: readonly string[] = []): Promise<{ code: number; body: Envelope['data'] }> {
   const result = await runCli(['reconcile', '--json', ...args], { env: db.env });
-  return { code: result.code, body: (JSON.parse(result.stdout) as Envelope).data };
+  // Through `parseEnvelope`, so a run that timed out under load says so rather
+  // than surfacing as `JSON.parse('')`. Observed once on 2026-09-06 in a
+  // full-suite run that took 787s against a usual 520s; the command passes in
+  // isolation, and what was missing was never the failure — it was the reason.
+  return { code: result.code, body: parseEnvelope<Envelope>(result, 'reconcile').data };
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   truncateContained,
   type ContentSafetyReport,
 } from '../security/index.js';
-import type { CanonicalEntity, CanonicalEvidence } from '../domain/index.js';
+import { EvidenceState, type CanonicalEntity, type CanonicalEvidence } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import {
   Direction,
@@ -21,6 +21,14 @@ import {
 import { VERSION } from '../version.js';
 
 import { TokenBudget, estimateJsonTokens } from './budget.js';
+import { DURABLE_CONTEXT_KIND } from './durable.js';
+import {
+  MAX_STANDING_CONTEXT,
+  isStandingContext,
+  orderStanding,
+  standingContextOf,
+  type StandingContext,
+} from './standing.js';
 import {
   EVIDENCE_CANDIDATE_WINDOW,
   MAX_EVIDENCE_PER_ITEM,
@@ -140,6 +148,17 @@ export interface ContextPack {
   readonly producerVersion: string;
   readonly builtAt: string;
   readonly question: string;
+  /**
+   * What Ferret currently holds that bears on this task — EPIC-131.
+   *
+   * Separate from `items` because a decision sitting seventh in a list of files
+   * is not task-ready: an agent about to act needs what constrains it before it
+   * needs which file matched. The source records are unchanged below.
+   *
+   * Assembly arranges; it does not merge. The restatements EPIC-130 folded are
+   * carried on each entry as `restates` rather than re-decided here.
+   */
+  readonly standing: readonly StandingContext[];
   readonly items: readonly PackItem[];
   /**
    * What was left out, and why.
@@ -241,6 +260,66 @@ export class ContextPackBuilder {
   }
 
   /**
+   * The durable context that bears on this task — EPIC-131.
+   *
+   * One widened query restricted to durable context, plus whatever the record
+   * search already returned, deduplicated. Bounded twice: the query takes a
+   * limit, and the caller's budget and `MAX_STANDING_CONTEXT` bound what
+   * survives.
+   *
+   * A build whose store predates durable context returns nothing here rather
+   * than failing — the kind is registered, so the query is valid and empty.
+   */
+  async #standingFor(
+    question: string,
+    hits: readonly SearchHit[],
+  ): Promise<readonly SearchHit[]> {
+    const fromRecords = hits.filter((hit) => isStandingContext(hit.entity));
+    const { hits: widened } = await this.#retrieval.search(
+      {
+        text: question,
+        kinds: [DURABLE_CONTEXT_KIND],
+        relax: true,
+        limit: MAX_STANDING_CONTEXT * 2,
+      },
+      this.#access,
+    );
+
+    // The record search first: those hits carry the fold EPIC-130 computed over
+    // the whole pool, and re-fetching would discard it.
+    const found: SearchHit[] = [...fromRecords];
+    const held = new Set(found.map((hit) => hit.entity.id));
+    for (const hit of widened) {
+      // The query asked for durable context; this does not assume it got it.
+      // `RetrievalPort` is a port, and a build may satisfy it with something
+      // that does not filter by kind — a fixture, a cache, a future adapter.
+      // Reading a `commit` as a durable statement would throw mid-pack.
+      if (!isStandingContext(hit.entity)) continue;
+      if (held.has(hit.entity.id)) continue;
+      held.add(hit.entity.id);
+      found.push(hit);
+    }
+    return found;
+  }
+
+  /**
+   * What supports one durable statement, as far as this caller may see.
+   *
+   * Through the same `EvidenceReader` the items use, so a pack cannot report a
+   * statement as supported by evidence the caller was refused. A build composed
+   * without an evidence reader reports no support rather than guessing — which
+   * is the same answer `ferret_why` gives when it is not wired.
+   */
+  async #supportFor(contextId: string): Promise<readonly CanonicalEvidence[]> {
+    if (this.#evidence === undefined) return [];
+    return this.#evidence.forSubject(contextId, {
+      permittedScopes: this.#access.permittedScopes,
+      state: EvidenceState.CURRENT,
+      limit: MAX_EVIDENCE_PER_ITEM,
+    });
+  }
+
+  /**
    * Builds a pack for a question.
    *
    * Highest-scoring first, each item admitted only if it fits. Ranked order
@@ -275,6 +354,44 @@ export class ContextPackBuilder {
     const seen = new Set<string>();
     let droppedForBudget = 0;
     let trimmedCount = 0;
+
+    // EPIC-131. Durable context is read for the task with its **own** query,
+    // and this is the substantive decision of the Epic.
+    //
+    // A task is a sentence — "Should CI add a macOS runner for the storage
+    // suites?" — and full text ANDs every term. Measured on Ferret's own index:
+    // seven durable statements directly about that question, and the strict
+    // query reached **none** of them while matching one incidental commit. The
+    // planner's own widening did not fire either, because it relaxes only when
+    // *nothing* matched and something had.
+    //
+    // So the standing read widens deliberately, and only here. It is safe here
+    // in a way a global relaxation is not: the corpus is curated statements
+    // rather than file contents, EPIC-130 has already folded the restatements,
+    // the order is by what acting against one costs rather than by score, and
+    // the whole section is capped at `MAX_STANDING_CONTEXT`. `ferret_search` is
+    // untouched.
+    const standing: StandingContext[] = [];
+    let standingDropped = 0;
+    const standingHits = await this.#standingFor(question, hits);
+    for (const hit of standingHits) {
+      seen.add(hit.entity.id);
+      if (standing.length >= MAX_STANDING_CONTEXT) {
+        standingDropped += 1;
+        continue;
+      }
+      const entry = standingContextOf(
+        {
+          entity: hit.entity,
+          subsumed: hit.ranking?.subsumed ?? [],
+          evidence: await this.#supportFor(hit.entity.id),
+        },
+        estimateJsonTokens,
+        safety,
+      );
+      if (budget.admit(entry.estimatedTokens)) standing.push(entry);
+      else standingDropped += 1;
+    }
 
     for (const hit of hits) {
       if (items.length >= maxItems) break;
@@ -313,6 +430,13 @@ export class ContextPackBuilder {
     // more. The breakdown by cause is the §18 part: an integer says how much was
     // left out, and only a cause says why.
     const omitted: PackOmission[] = evidenceOmissions(items);
+    if (standingDropped > 0) {
+      omitted.push({
+        reason: TruncationReason.BUDGET,
+        count: standingDropped,
+        detail: `${String(standingDropped)} durable statement(s) did not fit the pack`,
+      });
+    }
     if (trimmedCount > 0) {
       omitted.push({
         reason: TruncationReason.CONTENT,
@@ -359,6 +483,7 @@ export class ContextPackBuilder {
       producerVersion: VERSION,
       builtAt: new Date().toISOString(),
       question,
+      standing: orderStanding(standing),
       items,
       omitted,
       contentSafety: safety.report,
@@ -696,6 +821,26 @@ export function renderPack(pack: ContextPack): string {
     `> ${pack.contentNotice}`,
     ``,
   ];
+
+  // EPIC-131. What constrains the task, before the records that inform it. A
+  // reader who stops early has still read the part that changes what they may
+  // do. Only Ferret's own words are interpolated; the statement stays quoted by
+  // `JSON.stringify`, contained, as every other value here does.
+  if (pack.standing.length > 0) {
+    lines.push(`## What Ferret currently holds`);
+    for (const entry of pack.standing) {
+      const flags = [
+        entry.current ? undefined : `state: ${entry.state}`,
+        entry.undecided ? 'nothing in the evidence decides between its sources' : undefined,
+        entry.restates.length === 0
+          ? undefined
+          : `restates ${String(entry.restates.length)} other record(s)`,
+        `support: ${String(entry.supportCount)}`,
+      ].filter((one): one is string => one !== undefined);
+      lines.push(`- ${entry.contextKind}: ${JSON.stringify(entry.statement)} [${flags.join('; ')}]`);
+    }
+    lines.push(``);
+  }
 
   for (const [index, item] of pack.items.entries()) {
     lines.push(`## ${String(index + 1)}. ${item.entity.kind}`);
