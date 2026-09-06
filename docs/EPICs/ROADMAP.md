@@ -30,8 +30,8 @@ queue alive.
 ## Why this document exists
 
 Registry v3.0 closed 108 Epics when this document was reconstructed: 107
-`VALIDATED`, 1 `DONE`, 76/76 P0. The catalog now carries 130 rows — EPIC-109 to
-EPIC-131 delivered since — of which 128 are `VALIDATED`, 1 `DONE` and 1 `CLOSED`
+`VALIDATED`, 1 `DONE`, 76/76 P0. The catalog now carries 131 rows — EPIC-109 to
+EPIC-132 delivered since — of which 129 are `VALIDATED`, 1 `DONE` and 1 `CLOSED`
 with coverage deferred, and 80/80 P0. EPIC-125 is the one number in that range
 with no catalog row: it shipped as [#198](https://github.com/indoulia/Ferret/pull/198)
 with its evidence recorded on EPIC-119 and EPIC-120 rather than under its own

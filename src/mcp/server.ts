@@ -329,6 +329,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       // EPIC-129. The same store the session tools take, narrowed to the two
       // reads promotion needs; absent means no promotion tool is offered.
       ...(dependencies.sessions === undefined ? {} : { sessions: dependencies.sessions }),
+      // EPIC-132. Who is calling, so promotion cannot publish another agent's
+      // working state. From the principal, never from tool input.
+      actorId: principal.id,
       permittedScopes: access.permittedScopes,
       producer: dependencies.contextProducer ?? DEFAULT_CONTEXT_PRODUCER,
       producerVersion: VERSION,
