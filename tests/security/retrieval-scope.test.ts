@@ -114,15 +114,42 @@ describe('the withheld count discloses nothing — EPIC-058 AC-5', () => {
  * Structural for the same reason as the block above: the behavioural proof is in
  * `tests/integration/retrieval/permission.test.ts`, and what cannot be proved
  * there is that nobody later moved the two lines.
+ *
+ * **EPIC-130 made it three lines, and this control caught the insertion.**
+ * Duplicate suppression added a clustering step between the filter and the
+ * ranker, and the assertion — which grepped for `rank(permitted` — failed
+ * because the ranker was handed a different name. That is the control working:
+ * a step inserted there is exactly what it exists to notice.
+ *
+ * It is not relaxed to accept the new name. Widening it to `rank(` would let
+ * the ranker be handed anything at all, which is the property being protected.
+ * Instead it now asserts the whole chain: the filter runs first, the clustering
+ * is derived **from the filtered set**, and the ranker is handed the result of
+ * that. A cluster therefore cannot be formed through a row the caller may not
+ * see, and a withheld hit cannot reach one of the `limit` places by being
+ * folded into a visible one.
  */
 describe('ranking runs after authorization, and can only ever narrow — EPIC-056', () => {
-  it('filters before it ranks', () => {
+  it('filters, then clusters what survived, then ranks', () => {
     const filter = source.indexOf('visibleEntities(candidates');
-    const ranked = source.indexOf('rank(permitted');
+    const clustered = source.indexOf('#equivalenceOf(permitted');
+    const derived = source.indexOf('const clustered = permitted.map');
+    const ranked = source.indexOf('rank(clustered');
 
-    expect(filter).toBeGreaterThan(-1);
-    expect(ranked).toBeGreaterThan(-1);
-    expect(filter).toBeLessThan(ranked);
+    for (const [name, at] of [
+      ['visibleEntities(candidates', filter],
+      ['#equivalenceOf(permitted', clustered],
+      ['const clustered = permitted.map', derived],
+      ['rank(clustered', ranked],
+    ] as const) {
+      expect(at, `${name} is not in retrieval.ts`).toBeGreaterThan(-1);
+    }
+
+    // The order is the security property. Equivalence is computed from the
+    // permitted set and nothing else, and only then is anything ranked.
+    expect(filter).toBeLessThan(clustered);
+    expect(clustered).toBeLessThan(derived);
+    expect(derived).toBeLessThan(ranked);
   });
 
   it('gives the ranker no way to read a row it was not handed', () => {

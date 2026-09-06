@@ -36,6 +36,8 @@ import {
   type TraversalResult,
 } from '../retrieval/index.js';
 
+import { CONTEXT_RELATES_TO_CONTEXT, DURABLE_CONTEXT_KIND } from '../context/index.js';
+
 import { classifyDatabaseError } from './connection.js';
 import type { FerretDatabase } from './entities.js';
 
@@ -1038,8 +1040,17 @@ export class RetrievalStore implements RetrievalPort {
       // occupy one of the `limit` places, and a constituent must not be folded
       // into a container the caller cannot see.
       const permitted = visibleEntities(candidates, (hit) => hit.entity, access, tally);
+      // EPIC-130. What the merger already knows about which of these say the
+      // same thing. After the permission filter, so a cluster is never formed
+      // through a record the caller may not see.
+      const equivalence = await this.#equivalenceOf(permitted.map((hit) => hit.entity));
+      const clustered = permitted.map((hit) => {
+        const key = equivalence.get(hit.entity.id);
+        return key === undefined ? hit : { ...hit, equivalenceKey: key };
+      });
+
       const visible: SearchHit[] = [];
-      for (const { evidenceId, authority: _authority, ...hit } of rank(permitted, limit)) {
+      for (const { evidenceId, authority: _authority, ...hit } of rank(clustered, limit)) {
         visible.push({
           ...hit,
           evidence: evidenceId === null ? undefined : await this.#readEvidence(evidenceId),
@@ -1051,6 +1062,70 @@ export class RetrievalStore implements RetrievalPort {
     } catch (error) {
       throw classifyDatabaseError(error, 'retrieval.search');
     }
+  }
+
+  /**
+   * Which of these hits the merger recorded as restatements of one another —
+   * EPIC-130.
+   *
+   * One query over the candidate pool, never over the corpus: the edges are
+   * read *between the ids already retrieved*, so the cost is bounded by the
+   * page and does not grow with what Ferret holds.
+   *
+   * The cluster's key is its lowest member id — deterministic, needs no tuning,
+   * and is only an identity for the group. Which member *survives* is
+   * `rank`'s decision, made with the same ordering the answer is sorted by.
+   *
+   * Only `context_relates_to_context`. A contradiction is emphatically not an
+   * equivalence: two records that disagree are two answers, and folding one
+   * into the other would be Ferret picking a winner it has already said it
+   * cannot pick.
+   */
+  async #equivalenceOf(entities: readonly CanonicalEntity[]): Promise<ReadonlyMap<string, string>> {
+    const ids = entities.filter((one) => one.kind === DURABLE_CONTEXT_KIND).map((one) => one.id);
+    if (ids.length < 2) return new Map();
+
+    const rows = await this.#db.execute<{ [column: string]: unknown; from_id: string; to_id: string }>(sql`
+      SELECT from_id, to_id FROM ferret.relationship
+       WHERE type = ${CONTEXT_RELATES_TO_CONTEXT}
+         AND valid_to IS NULL
+         AND from_id::text = ANY(${sql.raw('ARRAY[')}${sql.join(ids.map((id) => sql`${id}`), sql`, `)}${sql.raw(']::text[]')})
+         AND to_id::text = ANY(${sql.raw('ARRAY[')}${sql.join(ids.map((id) => sql`${id}`), sql`, `)}${sql.raw(']::text[]')})
+    `);
+
+    // Union-find over the pool. A restatement of a restatement is one cluster,
+    // which is what a reader means by "these all say the same thing".
+    const parent = new Map<string, string>(ids.map((id) => [id, id]));
+    const find = (id: string): string => {
+      let root = id;
+      while ((parent.get(root) ?? root) !== root) root = parent.get(root) ?? root;
+      let walk = id;
+      while (walk !== root) {
+        const next = parent.get(walk) ?? walk;
+        parent.set(walk, root);
+        walk = next;
+      }
+      return root;
+    };
+    for (const row of rows.rows) {
+      const left = find(row.from_id);
+      const right = find(row.to_id);
+      if (left === right) continue;
+      // Lowest id wins, so the key is the same whichever order the edges arrive.
+      if (left < right) parent.set(right, left);
+      else parent.set(left, right);
+    }
+
+    const clustered = new Map<string, string>();
+    const sized = new Map<string, number>();
+    for (const id of ids) sized.set(find(id), (sized.get(find(id)) ?? 0) + 1);
+    for (const id of ids) {
+      const root = find(id);
+      // A cluster of one is not a cluster; keying it would fold nothing and
+      // report an equivalence nobody asserted.
+      if ((sized.get(root) ?? 0) > 1) clustered.set(id, root);
+    }
+    return clustered;
   }
 
   /**

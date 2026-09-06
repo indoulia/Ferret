@@ -200,6 +200,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-127 — Context Lifecycle & Authority** — P1 — VALIDATED ([spec](EPIC-127-Context-Lifecycle-And-Authority.md), [evidence](validation/EPIC-127-VALIDATION.md))
 - **EPIC-128 — Agent Context Bridge** — P1 — VALIDATED ([spec](EPIC-128-Agent-Context-Bridge.md), [evidence](validation/EPIC-128-VALIDATION.md))
 - **EPIC-129 — Durable Context Capture** — P1 — VALIDATED ([spec](EPIC-129-Durable-Context-Capture.md), [evidence](validation/EPIC-129-VALIDATION.md))
+- **EPIC-130 — Retrieval Quality** — P1 — VALIDATED ([spec](EPIC-130-Retrieval-Quality.md), [evidence](validation/EPIC-130-VALIDATION.md))
 
 ### Security & Authorization
 

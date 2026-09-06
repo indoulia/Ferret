@@ -6,6 +6,7 @@ import {
   OVERFETCH,
   overfetchLimit,
   rank,
+  type RankSignals,
   type SearchHit,
 } from '../../src/retrieval/index.js';
 
@@ -25,6 +26,9 @@ interface Candidate {
   readonly path?: string;
   readonly source?: SearchHit['source'];
   readonly score: number;
+  readonly lifecycle?: string;
+  /** EPIC-130. Hits sharing one are restatements of each other. */
+  readonly equivalenceKey?: string;
 }
 
 function entity(candidate: Candidate): CanonicalEntity {
@@ -38,7 +42,7 @@ function entity(candidate: Candidate): CanonicalEntity {
       id: candidate.path ?? candidate.id,
       ...(candidate.scope === undefined ? {} : { scope: candidate.scope }),
     }),
-    lifecycle: 'active',
+    lifecycle: (candidate.lifecycle ?? 'active') as CanonicalEntity['lifecycle'],
     attributes: Object.freeze(candidate.path === undefined ? {} : { path: candidate.path }),
     unknownFields: Object.freeze({}),
     externalIds: Object.freeze([]),
@@ -47,13 +51,14 @@ function entity(candidate: Candidate): CanonicalEntity {
   });
 }
 
-function hit(candidate: Candidate): SearchHit {
+function hit(candidate: Candidate): SearchHit & RankSignals {
   return {
     source: candidate.source ?? 'entity',
     entity: entity(candidate),
     evidence: undefined,
     score: candidate.score,
     highlight: `<b>${candidate.id}</b>`,
+    ...(candidate.equivalenceKey === undefined ? {} : { equivalenceKey: candidate.equivalenceKey }),
   };
 }
 
@@ -291,5 +296,104 @@ describe('a malformed pool ranks rather than throws', () => {
 
   it('returns nothing for an empty pool', () => {
     expect(rank([], 10)).toStrictEqual([]);
+  });
+});
+
+describe('restatements fold into the one a reader should get — EPIC-130', () => {
+  /**
+   * The measured problem, on Ferret's own index: one question returned four
+   * durable context records saying two things, while the merger had already
+   * recorded five `context_relates_to_context` edges naming them as
+   * restatements. The knowledge was in the graph and the answer did not use it.
+   */
+  it('returns one hit for a cluster and names what it folded', () => {
+    const ranked = rank(
+      [
+        hit({ id: 'a', score: 0.9, kind: 'context', equivalenceKey: 'a' }),
+        hit({ id: 'b', score: 0.8, kind: 'context', equivalenceKey: 'a' }),
+        hit({ id: 'c', score: 0.7, kind: 'context', equivalenceKey: 'a' }),
+      ],
+      10,
+    );
+
+    expect(ranked.map((one) => one.entity.id)).toStrictEqual(['a']);
+    // Nothing is hidden: a folded id is reported exactly as a folded part is.
+    expect(ranked[0]?.ranking.subsumed).toStrictEqual(['b', 'c']);
+  });
+
+  it('lets a current record survive a better-matching retired restatement', () => {
+    // Picking the survivor by score alone would return the retired wording.
+    // Standing leads the ordering, so the cluster keeps the live one.
+    const ranked = rank(
+      [
+        hit({ id: 'retired', score: 0.99, kind: 'context', lifecycle: 'superseded', equivalenceKey: 'live' }),
+        hit({ id: 'live', score: 0.10, kind: 'context', equivalenceKey: 'live' }),
+      ],
+      10,
+    );
+
+    expect(ranked.map((one) => one.entity.id)).toStrictEqual(['live']);
+    expect(ranked[0]?.ranking.subsumed).toStrictEqual(['retired']);
+  });
+
+  it('leaves a hit with no cluster as its own answer', () => {
+    const ranked = rank(
+      [
+        hit({ id: 'alone', score: 0.9, kind: 'context' }),
+        hit({ id: 'also-alone', score: 0.8, kind: 'context' }),
+      ],
+      10,
+    );
+
+    expect(ranked.map((one) => one.entity.id)).toStrictEqual(['alone', 'also-alone']);
+    expect(ranked[0]?.ranking.subsumed).toStrictEqual([]);
+  });
+
+  it('never folds one kind of thing into another', () => {
+    // A cluster key only ever reaches durable context, but the fold must not
+    // depend on that: it folds what shares a key and nothing else.
+    const ranked = rank(
+      [
+        hit({ id: 'context', score: 0.9, kind: 'context', equivalenceKey: 'k' }),
+        hit({ id: 'file', score: 0.8, kind: 'file' }),
+      ],
+      10,
+    );
+
+    expect(ranked.map((one) => one.entity.id)).toStrictEqual(['context', 'file']);
+  });
+
+  it('credits a folded restatement to the survivor rather than discarding it', () => {
+    // The relevance moves; two records saying one thing is more evidence for
+    // that thing, not less.
+    const alone = rank([hit({ id: 'a', score: 0.5, kind: 'context' })], 10);
+    const clustered = rank(
+      [
+        hit({ id: 'a', score: 0.5, kind: 'context', equivalenceKey: 'a' }),
+        hit({ id: 'b', score: 0.5, kind: 'context', equivalenceKey: 'a' }),
+      ],
+      10,
+    );
+
+    expect(clustered[0]?.score).toBeGreaterThan(alone[0]?.score ?? 1);
+  });
+
+  it('folds a chain, and the chain cannot outrun the page it was built from', () => {
+    // Transitive: a restatement of a restatement is one cluster, which is what
+    // a reader means by "these all say the same thing". The closure is computed
+    // over the retrieved page only — `RetrievalStore` reads the edges *between
+    // the ids already returned* — so a long drift chain cannot form across a
+    // corpus, only within one answer.
+    const ranked = rank(
+      [
+        hit({ id: 'first', score: 0.9, kind: 'context', equivalenceKey: 'first' }),
+        hit({ id: 'middle', score: 0.8, kind: 'context', equivalenceKey: 'first' }),
+        hit({ id: 'last', score: 0.7, kind: 'context', equivalenceKey: 'first' }),
+      ],
+      10,
+    );
+
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0]?.ranking.subsumed).toStrictEqual(['last', 'middle']);
   });
 });
