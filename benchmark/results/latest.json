@@ -1,10 +1,10 @@
 {
   "version": "1",
-  "ranAt": "2026-09-06T16:03:21.935Z",
+  "ranAt": "2026-09-06T16:18:28.677Z",
   "baseCommit": "271be92",
   "measured": {
-    "commit": "cffcaa9c3cee886e9ea98187684d83a2c6bd6a40",
-    "dirty": true
+    "commit": "ddcf4b54aa155ebcddf54fc18c1fa7608f576441",
+    "dirty": false
   },
   "parameters": {
     "k": 10,
@@ -34,7 +34,7 @@
       "totalTokensFull": 793309,
       "totalTokensFrugal": 729119,
       "tokensPerSourcedTask": 99164,
-      "medianMs": 854.5250000000015
+      "medianMs": 813.1231999999982
     },
     "ferret-pack": {
       "tasks": 19,
@@ -58,7 +58,7 @@
       "totalTokensFull": 712499,
       "totalTokensFrugal": 643439,
       "tokensPerSourcedTask": 142500,
-      "medianMs": 94.04849999999715
+      "medianMs": 88.07060000000274
     },
     "ferret-search": {
       "tasks": 19,
@@ -82,7 +82,7 @@
       "totalTokensFull": 1060329,
       "totalTokensFrugal": 976917,
       "tokensPerSourcedTask": 132541,
-      "medianMs": 178.35840000000098
+      "medianMs": 158.64770000000135
     }
   },
   "tasks": [
@@ -119,7 +119,7 @@
             "retrievalTokens": 174,
             "readTokensFull": 32771,
             "readTokensFrugal": 26614,
-            "ms": 729.8568999999998
+            "ms": 616.2239000000002
           }
         },
         "ferret-pack": {
@@ -171,7 +171,7 @@
             "retrievalTokens": 2683,
             "readTokensFull": 7466,
             "readTokensFrugal": 5238,
-            "ms": 92.26029999999992
+            "ms": 69.10019999999986
           }
         },
         "ferret-search": {
@@ -203,7 +203,7 @@
             "retrievalTokens": 25362,
             "readTokensFull": 7466,
             "readTokensFrugal": 5238,
-            "ms": 50.13809999999967
+            "ms": 47.483999999999924
           }
         }
       }
@@ -239,7 +239,7 @@
             "retrievalTokens": 195,
             "readTokensFull": 24794,
             "readTokensFrugal": 24794,
-            "ms": 1071.8766
+            "ms": 929.6474999999996
           }
         },
         "ferret-pack": {
@@ -279,7 +279,7 @@
             "retrievalTokens": 2589,
             "readTokensFull": 20766,
             "readTokensFrugal": 20766,
-            "ms": 161.96479999999974
+            "ms": 139.75950000000012
           }
         },
         "ferret-search": {
@@ -309,7 +309,7 @@
             "retrievalTokens": 4899,
             "readTokensFull": 20766,
             "readTokensFrugal": 20766,
-            "ms": 50.77949999999964
+            "ms": 43.46559999999954
           }
         }
       }
@@ -345,7 +345,7 @@
             "retrievalTokens": 153,
             "readTokensFull": 34240,
             "readTokensFrugal": 26216,
-            "ms": 853.4196000000002
+            "ms": 667.9164000000001
           }
         },
         "ferret-pack": {
@@ -385,7 +385,7 @@
             "retrievalTokens": 2479,
             "readTokensFull": 42119,
             "readTokensFrugal": 31890,
-            "ms": 413.0663999999997
+            "ms": 328.26969999999983
           }
         },
         "ferret-search": {
@@ -415,7 +415,7 @@
             "retrievalTokens": 4881,
             "readTokensFull": 42119,
             "readTokensFrugal": 31890,
-            "ms": 203.76660000000084
+            "ms": 168.9378000000006
           }
         }
       }
@@ -451,7 +451,7 @@
             "retrievalTokens": 150,
             "readTokensFull": 51364,
             "readTokensFrugal": 50739,
-            "ms": 1223.087599999999
+            "ms": 970.5725000000002
           }
         },
         "ferret-pack": {
@@ -483,7 +483,7 @@
             "retrievalTokens": 1130,
             "readTokensFull": 24808,
             "readTokensFrugal": 23387,
-            "ms": 40.35200000000077
+            "ms": 35.183899999999994
           }
         },
         "ferret-search": {
@@ -513,7 +513,7 @@
             "retrievalTokens": 4795,
             "readTokensFull": 52879,
             "readTokensFrugal": 51365,
-            "ms": 185.73580000000038
+            "ms": 159.00370000000112
           }
         }
       }
@@ -549,7 +549,7 @@
             "retrievalTokens": 142,
             "readTokensFull": 33139,
             "readTokensFrugal": 30899,
-            "ms": 912.3834999999999
+            "ms": 792.0648000000001
           }
         },
         "ferret-pack": {
@@ -591,7 +591,7 @@
             "retrievalTokens": 2658,
             "readTokensFull": 36374,
             "readTokensFrugal": 36154,
-            "ms": 101.77280000000064
+            "ms": 93.03809999999976
           }
         },
         "ferret-search": {
@@ -621,7 +621,7 @@
             "retrievalTokens": 4884,
             "readTokensFull": 36374,
             "readTokensFrugal": 36154,
-            "ms": 55.8156999999992
+            "ms": 48.58230000000003
           }
         }
       }
@@ -657,7 +657,7 @@
             "retrievalTokens": 180,
             "readTokensFull": 21724,
             "readTokensFrugal": 18924,
-            "ms": 815.0005999999994
+            "ms": 735.9418000000005
           }
         },
         "ferret-pack": {
@@ -689,7 +689,7 @@
             "retrievalTokens": 1337,
             "readTokensFull": 18869,
             "readTokensFrugal": 16069,
-            "ms": 36.209899999999834
+            "ms": 32.07759999999871
           }
         },
         "ferret-search": {
@@ -719,7 +719,7 @@
             "retrievalTokens": 22826,
             "readTokensFull": 43677,
             "readTokensFrugal": 28902,
-            "ms": 167.09619999999995
+            "ms": 135.1875
           }
         }
       }
@@ -755,7 +755,7 @@
             "retrievalTokens": 195,
             "readTokensFull": 55816,
             "readTokensFrugal": 53042,
-            "ms": 930.3562000000002
+            "ms": 759.6463999999996
           }
         },
         "ferret-pack": {
@@ -807,7 +807,7 @@
             "retrievalTokens": 2802,
             "readTokensFull": 34379,
             "readTokensFrugal": 32385,
-            "ms": 139.71960000000036
+            "ms": 120.85119999999915
           }
         },
         "ferret-search": {
@@ -837,7 +837,7 @@
             "retrievalTokens": 4770,
             "readTokensFull": 34379,
             "readTokensFrugal": 32385,
-            "ms": 55.777099999999336
+            "ms": 49.71209999999883
           }
         }
       }
@@ -873,7 +873,7 @@
             "retrievalTokens": 149,
             "readTokensFull": 49060,
             "readTokensFrugal": 43466,
-            "ms": 1064.1702000000005
+            "ms": 830.1052999999993
           }
         },
         "ferret-pack": {
@@ -913,7 +913,7 @@
             "retrievalTokens": 2461,
             "readTokensFull": 57383,
             "readTokensFrugal": 49139,
-            "ms": 380.59259999999995
+            "ms": 316.89370000000054
           }
         },
         "ferret-search": {
@@ -943,7 +943,7 @@
             "retrievalTokens": 4750,
             "readTokensFull": 57383,
             "readTokensFrugal": 49139,
-            "ms": 178.35840000000098
+            "ms": 154.15489999999954
           }
         }
       }
@@ -979,7 +979,7 @@
             "retrievalTokens": 161,
             "readTokensFull": 58023,
             "readTokensFrugal": 56089,
-            "ms": 854.5250000000015
+            "ms": 824.9020999999975
           }
         },
         "ferret-pack": {
@@ -1026,7 +1026,7 @@
             "retrievalTokens": 3598,
             "readTokensFull": 52458,
             "readTokensFrugal": 52458,
-            "ms": 357.79469999999856
+            "ms": 327.22060000000056
           }
         },
         "ferret-search": {
@@ -1056,7 +1056,7 @@
             "retrievalTokens": 22908,
             "readTokensFull": 52458,
             "readTokensFrugal": 52458,
-            "ms": 162.47179999999935
+            "ms": 156.74009999999907
           }
         }
       }
@@ -1092,7 +1092,7 @@
             "retrievalTokens": 196,
             "readTokensFull": 24329,
             "readTokensFrugal": 20317,
-            "ms": 617.3472000000002
+            "ms": 526.1322
           }
         },
         "ferret-pack": {
@@ -1144,7 +1144,7 @@
             "retrievalTokens": 2823,
             "readTokensFull": 25204,
             "readTokensFrugal": 18330,
-            "ms": 198.4336000000003
+            "ms": 156.80940000000192
           }
         },
         "ferret-search": {
@@ -1174,7 +1174,7 @@
             "retrievalTokens": 6075,
             "readTokensFull": 25204,
             "readTokensFrugal": 18330,
-            "ms": 45.30260000000271
+            "ms": 40.07840000000215
           }
         }
       }
@@ -1210,7 +1210,7 @@
             "retrievalTokens": 148,
             "readTokensFull": 46565,
             "readTokensFrugal": 42226,
-            "ms": 814.1970000000001
+            "ms": 829.1468999999997
           }
         },
         "ferret-pack": {
@@ -1257,7 +1257,7 @@
             "retrievalTokens": 3591,
             "readTokensFull": 59486,
             "readTokensFrugal": 54566,
-            "ms": 438.1043000000027
+            "ms": 408.9621999999981
           }
         },
         "ferret-search": {
@@ -1287,7 +1287,7 @@
             "retrievalTokens": 25613,
             "readTokensFull": 59486,
             "readTokensFrugal": 54566,
-            "ms": 257.6106
+            "ms": 221.47079999999914
           }
         }
       }
@@ -1323,7 +1323,7 @@
             "retrievalTokens": 192,
             "readTokensFull": 43865,
             "readTokensFrugal": 43311,
-            "ms": 751.7667999999976
+            "ms": 641.0856999999996
           }
         },
         "ferret-pack": {
@@ -1364,7 +1364,7 @@
             "retrievalTokens": 2448,
             "readTokensFull": 35135,
             "readTokensFrugal": 34581,
-            "ms": 80.41669999999795
+            "ms": 88.07060000000274
           }
         },
         "ferret-search": {
@@ -1394,7 +1394,7 @@
             "retrievalTokens": 5142,
             "readTokensFull": 35135,
             "readTokensFrugal": 34581,
-            "ms": 199.03859999999986
+            "ms": 220.66849999999977
           }
         }
       }
@@ -1430,7 +1430,7 @@
             "retrievalTokens": 165,
             "readTokensFull": 58857,
             "readTokensFrugal": 57320,
-            "ms": 946.345400000002
+            "ms": 874.3171000000002
           }
         },
         "ferret-pack": {
@@ -1462,7 +1462,7 @@
             "retrievalTokens": 1158,
             "readTokensFull": 27014,
             "readTokensFrugal": 26450,
-            "ms": 40.277900000000955
+            "ms": 40.65929999999935
           }
         },
         "ferret-search": {
@@ -1492,7 +1492,7 @@
             "retrievalTokens": 4836,
             "readTokensFull": 65084,
             "readTokensFrugal": 63024,
-            "ms": 187.02430000000095
+            "ms": 174.7512999999999
           }
         }
       }
@@ -1528,7 +1528,7 @@
             "retrievalTokens": 189,
             "readTokensFull": 30530,
             "readTokensFrugal": 30530,
-            "ms": 1055.0850000000028
+            "ms": 837.1856999999982
           }
         },
         "ferret-pack": {
@@ -1577,7 +1577,7 @@
             "retrievalTokens": 3236,
             "readTokensFull": 14358,
             "readTokensFrugal": 14358,
-            "ms": 104.4816000000028
+            "ms": 90.38299999999799
           }
         },
         "ferret-search": {
@@ -1607,7 +1607,7 @@
             "retrievalTokens": 43553,
             "readTokensFull": 14358,
             "readTokensFrugal": 14358,
-            "ms": 301.8011000000006
+            "ms": 224.49129999999786
           }
         }
       }
@@ -1643,7 +1643,7 @@
             "retrievalTokens": 212,
             "readTokensFull": 44080,
             "readTokensFrugal": 44080,
-            "ms": 729.0089000000007
+            "ms": 573.8775999999998
           }
         },
         "ferret-pack": {
@@ -1674,7 +1674,7 @@
             "retrievalTokens": 1557,
             "readTokensFull": 25156,
             "readTokensFrugal": 25156,
-            "ms": 41.225100000003295
+            "ms": 31.73029999999926
           }
         },
         "ferret-search": {
@@ -1704,7 +1704,7 @@
             "retrievalTokens": 5517,
             "readTokensFull": 40514,
             "readTokensFrugal": 40514,
-            "ms": 242.04430000000139
+            "ms": 160.5650999999998
           }
         }
       }
@@ -1740,7 +1740,7 @@
             "retrievalTokens": 137,
             "readTokensFull": 26345,
             "readTokensFrugal": 26345,
-            "ms": 1058.7952000000005
+            "ms": 813.1231999999982
           }
         },
         "ferret-pack": {
@@ -1771,7 +1771,7 @@
             "retrievalTokens": 1250,
             "readTokensFull": 40166,
             "readTokensFrugal": 36599,
-            "ms": 35.50830000000133
+            "ms": 32.32869999999821
           }
         },
         "ferret-search": {
@@ -1801,7 +1801,7 @@
             "retrievalTokens": 25527,
             "readTokensFull": 57383,
             "readTokensFrugal": 53028,
-            "ms": 177.17280000000028
+            "ms": 181.08660000000236
           }
         }
       }
@@ -1839,7 +1839,7 @@
             "retrievalTokens": 188,
             "readTokensFull": 51619,
             "readTokensFrugal": 38877,
-            "ms": 847.2778000000035
+            "ms": 836.7630000000026
           }
         },
         "ferret-pack": {
@@ -1875,7 +1875,7 @@
             "retrievalTokens": 1678,
             "readTokensFull": 62347,
             "readTokensFrugal": 44328,
-            "ms": 50.4626999999964
+            "ms": 50.2996000000021
           }
         },
         "ferret-search": {
@@ -1907,7 +1907,7 @@
             "retrievalTokens": 4815,
             "readTokensFull": 62347,
             "readTokensFrugal": 44328,
-            "ms": 192.82080000000133
+            "ms": 158.64770000000135
           }
         }
       }
@@ -1943,7 +1943,7 @@
             "retrievalTokens": 174,
             "readTokensFull": 55530,
             "readTokensFrugal": 54973,
-            "ms": 1061.1587
+            "ms": 909.8585000000021
           }
         },
         "ferret-pack": {
@@ -1994,7 +1994,7 @@
             "retrievalTokens": 3241,
             "readTokensFull": 50891,
             "readTokensFrugal": 50891,
-            "ms": 94.04849999999715
+            "ms": 80.89800000000105
           }
         },
         "ferret-search": {
@@ -2024,7 +2024,7 @@
             "retrievalTokens": 43536,
             "readTokensFull": 50891,
             "readTokensFrugal": 50891,
-            "ms": 214.39510000000155
+            "ms": 193.59509999999864
           }
         }
       }
@@ -2060,7 +2060,7 @@
             "retrievalTokens": 169,
             "readTokensFull": 47389,
             "readTokensFrugal": 37088,
-            "ms": 475.16889999999694
+            "ms": 411.0426000000007
           }
         },
         "ferret-pack": {
@@ -2095,7 +2095,7 @@
             "retrievalTokens": 2374,
             "readTokensFull": 33027,
             "readTokensFrugal": 25601,
-            "ms": 47.49860000000626
+            "ms": 48.11000000000058
           }
         },
         "ferret-search": {
@@ -2125,7 +2125,7 @@
             "retrievalTokens": 4710,
             "readTokensFull": 33027,
             "readTokensFrugal": 25601,
-            "ms": 145.95219999999972
+            "ms": 140.05399999999645
           }
         }
       }
