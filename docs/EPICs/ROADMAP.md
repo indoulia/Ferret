@@ -30,9 +30,12 @@ queue alive.
 ## Why this document exists
 
 Registry v3.0 closed 108 Epics when this document was reconstructed: 107
-`VALIDATED`, 1 `DONE`, 76/76 P0. The catalog now carries 118 rows — EPIC-109 to
-EPIC-118 delivered since, and reconciled into it on 2026-09-05 — of which 116
-are `VALIDATED`, 1 `DONE` and 1 `CLOSED` with coverage deferred. It is a
+`VALIDATED`, 1 `DONE`, 76/76 P0. The catalog now carries 130 rows — EPIC-109 to
+EPIC-131 delivered since — of which 128 are `VALIDATED`, 1 `DONE` and 1 `CLOSED`
+with coverage deferred, and 80/80 P0. EPIC-125 is the one number in that range
+with no catalog row: it shipped as [#198](https://github.com/indoulia/Ferret/pull/198)
+with its evidence recorded on EPIC-119 and EPIC-120 rather than under its own
+number, and the completion record below says so. It is a
 delivery map for work that is finished, and it does not say what comes next.
 This document derives the next roadmap **from the repository itself** — the
 implementation, the tests, the Epic non-scope statements, the CLI surface and
@@ -828,7 +831,7 @@ Filled in as Epics land.
 | EPIC-114 | `78406f6` | [#166](https://github.com/indoulia/Ferret/pull/166) | `c9916bd` | [record](validation/EPIC-114-VALIDATION.md) | COMPLETE |
 | EPIC-115 | `bf02fd2` | [#167](https://github.com/indoulia/Ferret/pull/167) | `1072c3d` | [record](validation/EPIC-115-VALIDATION.md) | CLOSED — coverage deferred |
 | EPIC-118 | `4aa5fae` | [#173](https://github.com/indoulia/Ferret/pull/173) | `f4e5997` | [record](validation/EPIC-118-VALIDATION.md) | COMPLETE — directed outside this queue |
-| EPIC-119 | `1aeffcc` | [#176](https://github.com/indoulia/Ferret/pull/176) | `1aeffcc` | [record](validation/EPIC-119-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-119 | `2bf1afa` | [#176](https://github.com/indoulia/Ferret/pull/176) | `1aeffcc` | [record](validation/EPIC-119-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-120 | `6c810c8` | [#178](https://github.com/indoulia/Ferret/pull/178) | `6c810c8` | [record](validation/EPIC-120-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-121 | `62f6c89` | [#180](https://github.com/indoulia/Ferret/pull/180) | `62f6c89` | [record](validation/EPIC-121-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-122 | `7db2ba9` | [#182](https://github.com/indoulia/Ferret/pull/182) | `7db2ba9` | [record](validation/EPIC-122-VALIDATION.md) | COMPLETE — directed outside this queue |
@@ -840,6 +843,7 @@ Filled in as Epics land.
 | EPIC-128 | `b1a5516` | [#202](https://github.com/indoulia/Ferret/pull/202) | `b1a5516` | [record](validation/EPIC-128-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-129 | `31e392c` | [#203](https://github.com/indoulia/Ferret/pull/203) | `31e392c` | [record](validation/EPIC-129-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-130 | `8830d20` | [#204](https://github.com/indoulia/Ferret/pull/204) | `8830d20` | [record](validation/EPIC-130-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-131 | `a5a8049` | [#205](https://github.com/indoulia/Ferret/pull/205) | `a5a8049` | [record](validation/EPIC-131-VALIDATION.md) | COMPLETE — directed outside this queue |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:
