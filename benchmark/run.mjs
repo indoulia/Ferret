@@ -35,8 +35,7 @@
  * database `scripts/dogfood-db.mjs` builds.
  */
 
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
@@ -44,8 +43,9 @@ import { performance } from 'node:perf_hooks';
 import { estimateTokens } from '../dist/context/budget.js';
 
 import * as baseline from './lib/baseline.mjs';
+import { assertBuildIsCurrent, describeTree } from './lib/build.mjs';
 import * as ferret from './lib/ferret.mjs';
-import { withinCorpus } from './lib/identity.mjs';
+import { EXCLUDED_PREFIXES, withinCorpus } from './lib/identity.mjs';
 import { K, READS, score, summarize } from './lib/score.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -74,48 +74,7 @@ function flag(name, fallback) {
 const only = flag('task', undefined);
 const outPath = flag('out', join(HERE, 'results', 'latest.json'));
 
-/**
- * Refuse to attribute numbers to a build that does not exist yet.
- *
- * The harness runs against `dist/`, and nothing made it check that `dist/` was
- * built from the working tree. Hit while doing exactly that: a run made after a
- * rebase failed measured a build from before a merged retrieval fix, and its
- * numbers were committed as the current ones — `ferret_search` reported as
- * sourcing 32% of tasks where the build under test scores 37%. Nothing was
- * wrong with the run; it measured what it was pointed at, and said nothing
- * about what that was.
- *
- * So the newest source file is compared with the built entrypoint, and the
- * report carries the commit and whether the tree was dirty. A stale result is
- * indistinguishable from a regression, which is the failure the golden dataset's
- * own guard exists to prevent one layer down.
- */
-function newestSourceTime(directory) {
-  let newest = 0;
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    newest = Math.max(newest, entry.isDirectory() ? newestSourceTime(path) : statSync(path).mtimeMs);
-  }
-  return newest;
-}
-
-function assertBuildIsCurrent() {
-  const built = statSync(CLI).mtimeMs;
-  const newest = newestSourceTime(join(ROOT, 'src'));
-  if (built >= newest) return;
-  throw new Error(
-    'dist/ is older than src/, so this would measure a build that is not the ' +
-      'working tree.\nRun `npm run build` first.',
-  );
-}
-
-function describeTree() {
-  const git = (...args) =>
-    execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }).trim();
-  return { commit: git('rev-parse', 'HEAD'), dirty: git('status', '--porcelain').length > 0 };
-}
-
-assertBuildIsCurrent();
+assertBuildIsCurrent({ root: ROOT, cli: CLI });
 
 const suite = JSON.parse(readFileSync(join(HERE, 'tasks.json'), 'utf8'));
 const tasks = suite.tasks.filter((task) => only === undefined || task.id === only);
@@ -178,7 +137,10 @@ const client = await ferret.connect({
 
 // Before anything is measured. A run against an index that holds the questions
 // produces numbers, and they mean nothing.
-for (const probe of ['benchmark/tasks.json', 'docs/evidence/FERRET-DOES-IT-HELP.md']) {
+// Derived from the exclusion list rather than written out again: the list has
+// grown once, and a probe that names its members separately is a probe that
+// will stop covering them.
+for (const probe of ['benchmark/tasks.json', ...EXCLUDED_PREFIXES.filter((one) => !one.endsWith('/'))]) {
   await ferret.assertCorpusExcluded(client, probe);
 }
 
@@ -244,7 +206,7 @@ const report = {
   baseCommit: suite.baseCommit,
   // What produced these numbers. A result that cannot name its build is a
   // result nobody can reproduce or contradict.
-  measured: describeTree(),
+  measured: describeTree(ROOT),
   parameters: { k: K, reads: READS, packBudget: PACK_BUDGET },
   summary,
   tasks: rows,

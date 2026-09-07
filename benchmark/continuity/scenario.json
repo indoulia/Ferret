@@ -1,0 +1,331 @@
+{
+  "version": "1",
+  "description": "Eight sessions run by two agents, replaying engineering knowledge this repository actually produced. Every statement carries the place in the repository, the pull request or the owner decision it was drawn from, so a reviewer checks the scenario rather than trusting it. Nothing here is invented: a statement that could not be sourced was left out.",
+  "baseCommit": "d809ba4",
+  "agents": {
+    "alpha": {
+      "principalId": "agent.alpha",
+      "role": "The agent that built session recording, evidence, lifecycle and context assembly.",
+      "permissions": [
+        "read",
+        "record",
+        "mutate"
+      ]
+    },
+    "beta": {
+      "principalId": "agent.beta",
+      "role": "A second agent, arriving later, working on packaging, CI and the benchmark. It has never spoken to alpha.",
+      "permissions": [
+        "read",
+        "record",
+        "mutate"
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "id": "s1",
+      "agent": "alpha",
+      "branch": "epic/117-session-recording",
+      "parent": null,
+      "summary": "EPIC-117: the write half of session recording, and who owns a session's identity."
+    },
+    {
+      "id": "s2",
+      "agent": "alpha",
+      "branch": "epic/127-context-lifecycle",
+      "parent": "s1",
+      "summary": "EPIC-126 and EPIC-127: what evidence is keyed on, and how a statement is retired."
+    },
+    {
+      "id": "s3",
+      "agent": "beta",
+      "branch": "epic/105-cross-platform-packaging",
+      "parent": null,
+      "summary": "EPIC-105: packaging measured on every platform the matrix covers."
+    },
+    {
+      "id": "s4",
+      "agent": "alpha",
+      "branch": "epic/131-context-assembly",
+      "parent": "s2",
+      "summary": "EPIC-131: assembling what bears on a task, inside a budget."
+    },
+    {
+      "id": "s5",
+      "agent": "beta",
+      "branch": "bench/task-benchmark",
+      "parent": "s3",
+      "summary": "The task benchmark: three conditions, nineteen questions, and the harness's own defects."
+    },
+    {
+      "id": "s6",
+      "agent": "alpha",
+      "branch": "fix/retrieval-and-budget",
+      "parent": "s4",
+      "summary": "The four defects the benchmark found in retrieval and assembly.",
+      "private": [
+        {
+          "kind": "next-step",
+          "statement": "Measure the pack at 8 000 tokens before deciding whether provenance should cost slots.",
+          "rationale": "The budget sweep stopped at 12 000 and the curve had already flattened at 8 000."
+        },
+        {
+          "kind": "gotcha",
+          "statement": "The partial-fill widening was tried twice and reverted twice; do not propose it a third time without a new measurement.",
+          "rationale": "Recall moved 0.19 to 0.20 for 23% more context and p50 85 ms to 401 ms, sourcing no additional task."
+        }
+      ],
+      "checkpoint": {
+        "summary": "Four defects fixed and measured: ts_headline over file bodies, the widening guard, the pack's budget charge, and the empty pack. The provenance-per-slot trade-off is open and is an owner decision.",
+        "continuationState": {
+          "openQuestion": "pack budget versus provenance",
+          "nextTask": "measure the pack at 8 000 tokens",
+          "branch": "fix/retrieval-and-budget"
+        }
+      }
+    },
+    {
+      "id": "s7",
+      "agent": "beta",
+      "branch": "fix/benchmark-corrections",
+      "parent": "s5",
+      "summary": "Three corrections the benchmark forced, two of which reversed a decision this repository had already taken."
+    },
+    {
+      "id": "s8",
+      "agent": "alpha",
+      "branch": "main",
+      "parent": "s6",
+      "summary": "Working practice learned the hard way, which is written down nowhere in the source tree."
+    }
+  ],
+  "statements": [
+    {
+      "key": "session-id-minted",
+      "session": "s1",
+      "kind": "constraint",
+      "statement": "Ferret mints a session identifier and there is no input field a client could supply one in.",
+      "rationale": "A client that supplied its own would make session identifiers a shared namespace, and nothing would stop it writing into another client's session.",
+      "basis": "src/mcp/session-tools.ts, decision D-117.1."
+    },
+    {
+      "key": "transport-not-end",
+      "session": "s1",
+      "kind": "decision",
+      "statement": "A closed transport does not end a session; only an explicit end call ends one.",
+      "rationale": "An editor restarting is the common case and it is not the user finishing their work. Reclaiming a crashed client's session is left to pruning on an age an operator supplies.",
+      "basis": "src/mcp/session-tools.ts, decision D-117.2."
+    },
+    {
+      "key": "record-permission",
+      "session": "s1",
+      "kind": "constraint",
+      "statement": "Recording takes the RECORD permission, raised as its own rather than overloaded onto INDEX.",
+      "rationale": "Storing what an agent learned is not the same act as ingesting a source, and both overload candidates were worse.",
+      "basis": "src/mcp/session-tools.ts, decision D-117.3."
+    },
+    {
+      "key": "evidence-key",
+      "session": "s2",
+      "kind": "decision",
+      "statement": "Evidence is keyed on who said it and durable context is keyed on what is said.",
+      "rationale": "Two producers stating the same thing are two observations supporting one record, not two records.",
+      "basis": "Commit 659c69b, EPIC-126."
+    },
+    {
+      "key": "supersede-not-delete",
+      "session": "s2",
+      "kind": "constraint",
+      "statement": "A durable statement that has stopped being true is replaced by recording its replacement with a supersedes link; nothing is deleted and no observation is rewritten.",
+      "rationale": "Why the position changed is worth answering, and a store that drops the replaced half cannot answer it.",
+      "basis": "src/mcp/context-tools.ts, the ferret_context_lifecycle description."
+    },
+    {
+      "key": "lifecycle-mutate",
+      "session": "s2",
+      "kind": "constraint",
+      "statement": "Moving a statement through its lifecycle takes MUTATE, which is never granted by default, while recording one takes only RECORD.",
+      "rationale": "An agent may record freely and must be trusted deliberately before it can retire knowledge other people rely on.",
+      "basis": "src/mcp/context-tools.ts, the permission split above registerContextTools."
+    },
+    {
+      "key": "score-scoped",
+      "session": "s2",
+      "kind": "fact",
+      "statement": "A retrieval score is comparable within one result set and nowhere else, so two queries' scores must never be compared.",
+      "rationale": "The score is the ranking function's raw output and its scale depends on the query.",
+      "basis": "src/evaluation/metrics.ts:7 quotes this claim as the one it used to make. True when written.",
+      "supersededLater": true
+    },
+    {
+      "key": "macos-validated",
+      "session": "s3",
+      "kind": "fact",
+      "statement": "macOS packaging was measured rather than assumed: the packaging job ran on a macOS host in 3m47s and passed.",
+      "rationale": "Nineteen validation records had carried the admission that no macOS host was available to validate against.",
+      "basis": "EPIC-105, quoted in the no-macos-ci owner decision of 2026-09-05."
+    },
+    {
+      "key": "macos-runner",
+      "session": "s3",
+      "kind": "decision",
+      "statement": "The verify matrix keeps a macOS job so the POSIX global-install path and the shutdown contract stay covered.",
+      "rationale": "The seven signal tests are skipped on Windows, so dropping macOS would leave them unrun anywhere.",
+      "basis": ".github/workflows/ci.yml, the matrix comment recording what EPIC-105 added. True when written, reversed on 2026-09-05.",
+      "supersededLater": true
+    },
+    {
+      "key": "standing-own-query",
+      "session": "s4",
+      "kind": "decision",
+      "statement": "Durable context is read for a task with its own widened query, separate from the record search.",
+      "rationale": "Full text ANDs every term and a task is a sentence: seven statements bore directly on one question and the strict query reached none of them while matching one incidental commit.",
+      "basis": "src/context/pack.ts, the EPIC-131 note above the standing read."
+    },
+    {
+      "key": "planner-routing-rejected",
+      "session": "s4",
+      "kind": "decision",
+      "statement": "Routing the context pack through the query planner is rejected; the pack's deficit is budget rather than retrieval.",
+      "rationale": "It was tried against the standing defect, where the strict query returned one incidental commit so widening never fired, and it did not fix what it claimed to. The pack's results are a prefix of the search's.",
+      "basis": "src/context/pack.ts and EPIC-131's Rejected section."
+    },
+    {
+      "key": "standing-order",
+      "session": "s4",
+      "kind": "decision",
+      "statement": "Standing context is ordered by what acting against it costs, not by relevance score.",
+      "rationale": "Retrieval already decided which statements belong to the question, and re-ranking them by score would put a well-worded fact above a constraint.",
+      "basis": "src/context/standing.ts, orderStanding and KIND_ORDER."
+    },
+    {
+      "key": "answer-key-excluded",
+      "session": "s5",
+      "kind": "gotcha",
+      "statement": "A benchmark that greps the repository it lives in retrieves its own answer key: ten of sixteen tasks had a harness file in the baseline's top ten.",
+      "rationale": "The task file holds every question and the artefacts that answer it, and the results hold the ranked names of previous runs.",
+      "basis": "benchmark/lib/identity.mjs, the note on EXCLUDED_PREFIXES."
+    },
+    {
+      "key": "exclusion-dir",
+      "session": "s5",
+      "kind": "decision",
+      "statement": "Excluding the benchmark's own directory keeps the answer key out of the corpus both conditions search.",
+      "rationale": "The questions and the previous runs' ranked output are the only files that would not exist but for the harness.",
+      "basis": "benchmark/lib/identity.mjs. The rule as first written, before the evidence report was committed.",
+      "supersededLater": true
+    },
+    {
+      "key": "dist-staleness",
+      "session": "s5",
+      "kind": "gotcha",
+      "statement": "A run measured against a build older than the source measures a tree that is not the working tree, and a stale result is indistinguishable from a regression.",
+      "rationale": "A run made after a failed rebase reported a search condition at 32% where the build under test scores 42%, and nothing about the run said which tree it had measured.",
+      "basis": "benchmark/run.mjs, assertBuildIsCurrent."
+    },
+    {
+      "key": "windows-post-merge",
+      "session": "s5",
+      "kind": "gotcha",
+      "statement": "Windows continuous integration runs on push to the main branch rather than on a pull request, so a Windows-only break appears just after a merge rather than before it.",
+      "rationale": "Pull requests were cut to about three minutes from twelve. Windows was moved rather than deleted because this repository has real Windows-only history: a digest that failed only there, and a line-ending regression test that failed on the one platform it existed for.",
+      "basis": "Pull request #105, recorded in the fast-iteration-loop working memory. True when written and reversed on 2026-09-05; the memory was not updated, which is how it reached this scenario as though it were current.",
+      "supersededLater": true
+    },
+    {
+      "key": "headline-cost",
+      "session": "s6",
+      "kind": "gotcha",
+      "statement": "A widened search spent 1128 ms of its 1139 ms marking up rows that the row limit then discarded.",
+      "rationale": "The highlight was computed over whole file bodies before the limit was applied.",
+      "basis": "Pull request #213."
+    },
+    {
+      "key": "widening-guard",
+      "session": "s6",
+      "kind": "gotcha",
+      "statement": "The fallback that widens a search fired only when nothing at all had matched, so a single incidental match suppressed it.",
+      "rationale": "Five of sixteen questions filled one or two of ten slots and the widening never ran.",
+      "basis": "Pull request #214."
+    },
+    {
+      "key": "budget-undercharge",
+      "session": "s6",
+      "kind": "gotcha",
+      "statement": "The context pack charged its budget for about a third less than it actually sent, and cited every observation twice by construction.",
+      "rationale": "The charge was computed on the item before provenance was attached.",
+      "basis": "Pull request #215."
+    },
+    {
+      "key": "standing-own-query-restated",
+      "session": "s6",
+      "kind": "decision",
+      "statement": "The pack runs a second relaxed query restricted to durable statements, because ANDing every word of a task sentence reaches none of them.",
+      "rationale": "Restated here in a later session, in different words, without the earlier record being consulted.",
+      "basis": "The same decision as standing-own-query, reworded. Present to exercise whether four wordings of one thing come back as one answer.",
+      "restatementOf": "standing-own-query"
+    },
+    {
+      "key": "exclusion-rule",
+      "session": "s7",
+      "kind": "decision",
+      "statement": "What is kept out of the corpus is whatever would not exist but for the benchmark and whatever states its answers, rather than whatever sits in the benchmark's directory.",
+      "rationale": "The evidence report is an ordinary document in the docs tree and real repository knowledge, and it states every task's answer in prose. Indexed, it appeared twelve times across the three conditions and cost the pack five points of sourced by displacing the documents it described.",
+      "basis": "benchmark/lib/identity.mjs, the widened rule.",
+      "supersedes": "exclusion-dir"
+    },
+    {
+      "key": "no-macos-ci",
+      "session": "s7",
+      "kind": "decision",
+      "statement": "Do not add a macOS job to continuous integration; correct the records that claim macOS is verified instead.",
+      "rationale": "The owner asked for macOS packaging validation on 2026-09-05 and the same day said not to enable remote CI for it, because hosted macOS runners cost more than they want to spend on a platform that is not their priority. The coverage question was settled separately from the honesty question.",
+      "basis": "Owner decision of 2026-09-05, recorded in the no-macos-ci project memory and in .github/workflows/ci.yml.",
+      "supersedes": "macos-runner"
+    },
+    {
+      "key": "score-comparable",
+      "session": "s7",
+      "kind": "fact",
+      "statement": "Every retrieval branch was normalised to the zero-to-one range, so a search hit's score is comparable across queries.",
+      "rationale": "The rank-order rule in the metrics module was still justifying itself with the reversed claim, and citing a line number that by then held a traversal bound.",
+      "basis": "src/evaluation/metrics.ts:11 and EPIC-056.",
+      "supersedes": "score-scoped"
+    },
+    {
+      "key": "windows-gates-prs",
+      "session": "s7",
+      "kind": "decision",
+      "statement": "Windows runs on every event including a pull request, so a Windows-only break blocks the pull request rather than appearing after a merge.",
+      "rationale": "Windows had been moved off the pull-request gate because it was the whole of the wait — Ubuntu verify took 1m52s to 2m55s against Windows at 6m41s to 11m54s, on every one of six pull requests — and reinstating it brings that cost back. Ubuntu and macOS are dropped from the verify matrix entirely.",
+      "basis": ".github/workflows/ci.yml, the verify matrix comment recording the owner decision of 2026-09-05.",
+      "supersedes": "windows-post-merge"
+    },
+    {
+      "key": "unit-then-verify",
+      "session": "s8",
+      "kind": "preference",
+      "statement": "Run the unit tests while iterating and the full verification once immediately before a commit.",
+      "rationale": "Four integration files are eighty per cent of the full run and they spawn real git and real CLI processes. Measured on 2026-09-02: the full suite was run about fifteen times in one session where the unit tests would have caught the same failures in a tenth of the time.",
+      "basis": "The fast-iteration-loop working memory. Written down in no source file."
+    },
+    {
+      "key": "reverify-after-rebase",
+      "session": "s8",
+      "kind": "constraint",
+      "statement": "Re-run the linter, the type check and the unit tests after a rebase and before pushing, because a green run from before the rebase proves nothing about the rebased tree.",
+      "rationale": "Twice in one session continuous integration caught what local verification would have, both from a sibling branch's edits vanishing when the base moved. The failure mode is silent: nothing in the rebase output says an edit disappeared.",
+      "basis": "The reverify-after-rebase working memory. Written down in no source file."
+    },
+    {
+      "key": "transport-not-end-restated",
+      "session": "s8",
+      "kind": "decision",
+      "statement": "A closed transport does not end a session, and only an explicit end call ends one.",
+      "rationale": "Recorded again, months later, by an agent that did not check whether the store already held it.",
+      "basis": "The same decision as transport-not-end, reworded only slightly. Present to locate the line between a restatement the merger folds and one it does not; standing-own-query-restated is the same decision reworded completely.",
+      "restatementOf": "transport-not-end"
+    }
+  ]
+}

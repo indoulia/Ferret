@@ -47,8 +47,22 @@ const ABBREV = 10;
  * five points of `sourced` by displacing the documents it was describing. The
  * rule is not "the benchmark directory"; it is **what would not exist but for
  * the benchmark, and what states its answers**.
+ *
+ * It is a list rather than a directory rule for exactly that reason, and it has
+ * grown once since: a second benchmark produced a second evidence report, and
+ * the rule caught it before it was indexed rather than after its numbers had
+ * been published.
  */
-export const EXCLUDED_PREFIXES = ['benchmark/', 'docs/evidence/FERRET-DOES-IT-HELP.md'];
+export const EXCLUDED_PREFIXES = [
+  'benchmark/',
+  'docs/evidence/FERRET-DOES-IT-HELP.md',
+  // The continuity benchmark's report, on the same rule and for the same
+  // reason. It would not exist but for a benchmark, it states that benchmark's
+  // answers in prose, and it discusses several of *this* one's subjects — the
+  // macOS reversal, score comparability, what the pack does with standing
+  // context — in enough detail to displace the documents it is describing.
+  'docs/evidence/FERRET-DOES-CONTEXT-CARRY.md',
+];
 
 /** Whether an artefact is part of the corpus rather than the harness. */
 export function withinCorpus(artefact) {

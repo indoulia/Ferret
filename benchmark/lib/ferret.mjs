@@ -28,7 +28,7 @@ import { performance } from 'node:perf_hooks';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
-import { contextArtefact, dedupe, entityArtefact } from './identity.mjs';
+import { EXCLUDED_PREFIXES, contextArtefact, dedupe, entityArtefact } from './identity.mjs';
 
 /** The text an MCP result puts in front of the model. */
 function textOf(result) {
@@ -117,11 +117,15 @@ export async function assertCorpusExcluded(client, probePath) {
   });
   const found = (JSON.parse(text).results ?? []).length > 0;
   if (!found) return;
+  // The remediation quotes the live list rather than a copy of it, so a run
+  // refused because the list grew tells the reader the whole rule.
+  const rule = JSON.stringify(
+    EXCLUDED_PREFIXES.map((one) => (one.endsWith('/') ? one.slice(0, -1) : one)),
+  );
   throw new Error(
     `The index holds ${probePath}, which is this benchmark's answer key.\n` +
       'Exclude the harness and re-index, then run again:\n' +
-      '  node dist/cli/main.js config set exclude ' +
-      "'[\"benchmark\",\"docs/evidence/FERRET-DOES-IT-HELP.md\"]'\n" +
+      `  node dist/cli/main.js config set exclude '${rule}'\n` +
       '  node scripts/dogfood-db.mjs --index',
   );
 }

@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { CONTENT_CLOSE, CONTENT_OPEN } from '../../src/security/index.js';
 import {
   CONTENT_NOTICE,
+  ContextKind,
   ContextPackBuilder,
+  createDurableContext,
+  registerDurableContextKind,
   EVIDENCE_CANDIDATE_WINDOW,
   ErrorCode,
   HitSource,
@@ -852,5 +855,64 @@ describe('a task question that no single document contains every word of', () =>
 
     expect(pack.items).toStrictEqual([]);
     expect(retrieval.relaxed).toStrictEqual([false, true]);
+  });
+});
+
+/**
+ * A statement delivered in the standing section is not a statement omitted.
+ *
+ * Found by `benchmark/continuity/`, on **fourteen of fourteen** packs: every one
+ * reported `result-limit` — *"stopped after 20 results"* — and the count was
+ * exactly the number of durable statements the pack had just delivered. The
+ * cause is that a durable statement reaches `standing` through the same `hits`
+ * list the items are drawn from, is marked seen so it is not sent twice, and
+ * then fails the arithmetic that infers how many hits the item limit cut off.
+ *
+ * It is the inverse of the defect the widening fallback fixed. That pack said
+ * it was complete when it was empty; this one says it is truncated when it is
+ * complete, and both leave a client unable to believe the field. A careful agent
+ * reading `omitted` re-asks with a larger budget and spends the context for
+ * nothing — and the claim reaches the model in prose, because `renderPack`
+ * prints the detail line verbatim.
+ */
+describe('what a pack says it left out', () => {
+  registerDurableContextKind();
+
+  const standingHit = (statement: string): SearchHit => ({
+    source: HitSource.ENTITY,
+    entity: { ...createDurableContext({ statement, contextKind: ContextKind.DECISION }).entity },
+    evidence: undefined,
+    score: 1,
+    highlight: undefined,
+  });
+
+  it('does not report a result limit for statements it delivered as standing context', async () => {
+    const retrieval = new FakeRetrieval([standingHit('a closed transport does not end a session')]);
+
+    const pack = await new ContextPackBuilder(retrieval, PUBLIC_ACCESS).build({
+      question: 'does a dropped connection end the work',
+    });
+
+    expect(pack.standing).toHaveLength(1);
+    expect(pack.items).toStrictEqual([]);
+    expect(pack.omitted.filter((one) => one.reason === TruncationReason.LIMIT)).toStrictEqual([]);
+    expect(renderPack(pack)).not.toContain('stopped after');
+  });
+
+  it('still reports a result limit when one genuinely cut the items off', async () => {
+    const many = Array.from({ length: 6 }, (_, at) => hit(`c${String(at)}`, { message: `commit ${String(at)}` }));
+    const retrieval = new FakeRetrieval(many);
+
+    const pack = await new ContextPackBuilder(retrieval, PUBLIC_ACCESS).build({
+      question: 'commit',
+      maxItems: 2,
+    });
+
+    expect(pack.items).toHaveLength(2);
+    expect(pack.omitted).toContainEqual({
+      reason: TruncationReason.LIMIT,
+      count: 4,
+      detail: 'stopped after 2 results',
+    });
   });
 });

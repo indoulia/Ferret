@@ -92,6 +92,7 @@
     "test:security": "vitest run tests/security",
     "baseline": "node scripts/baseline.mjs",
     "bench": "node benchmark/run.mjs",
+    "bench:continuity": "node benchmark/continuity/run.mjs",
     "dogfood": "node scripts/dogfood.mjs",
     "dogfood:db": "node scripts/dogfood-db.mjs",
     "verify": "npm run lint && npm run typecheck && npm run build && npm run test",

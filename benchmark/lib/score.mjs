@@ -48,12 +48,18 @@ export function supersededOf(task) {
  * Score one ranked list against one task.
  *
  * `ranked` is artefact names, best first, already deduplicated.
+ *
+ * `window` overrides how many results are read, and exists for the continuity
+ * benchmark's whole-read conditions: an agent that loads its entire notes file
+ * has not ranked anything, and scoring it through a ten-result window would
+ * report it as having missed what it is holding. The task benchmark passes
+ * nothing and gets {@link K}, unchanged.
  */
-export function score(task, ranked, cost) {
+export function score(task, ranked, cost, { window: windowSize = K } = {}) {
   const grades = gradesOf(task);
   const primary = primaryOf(task);
   const superseded = new Set(supersededOf(task));
-  const window = ranked.slice(0, K);
+  const window = ranked.slice(0, windowSize);
 
   const firstPrimaryAt = window.findIndex((artefact) => primary.includes(artefact));
   const firstSupersededAt = window.findIndex((artefact) => superseded.has(artefact));
@@ -62,8 +68,8 @@ export function score(task, ranked, cost) {
     /** How much of what should have been found was, inside the window. */
     recall: recallOf(window, grades),
     precision5: precisionAtK(window, grades, 5),
-    precision10: precisionAtK(window, grades, K),
-    ndcg10: ndcgAtK(window, grades, K),
+    precision10: precisionAtK(window, grades, windowSize),
+    ndcg10: ndcgAtK(window, grades, windowSize),
 
     /**
      * Whether the answer is *sourced*: every artefact a correct answer rests on

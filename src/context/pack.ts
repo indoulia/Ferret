@@ -470,8 +470,16 @@ export class ContextPackBuilder {
       else standingDropped += 1;
     }
 
-    for (const hit of hits) {
-      if (items.length >= maxItems) break;
+    // What the item limit actually cut off, counted where it happens rather
+    // than inferred afterwards. See the omission below for what inferring it
+    // cost.
+    let stoppedAtLimit = 0;
+
+    for (const [at, hit] of hits.entries()) {
+      if (items.length >= maxItems) {
+        stoppedAtLimit = hits.slice(at).filter((one) => !seen.has(one.entity.id)).length;
+        break;
+      }
       // One entity, one item. A hit through evidence and a hit through the
       // entity's own name are the same subject, and sending it twice spends the
       // budget on a duplicate.
@@ -528,10 +536,26 @@ export class ContextPackBuilder {
         detail: `${String(droppedForBudget)} result(s) did not fit in ${String(budget.total)} estimated tokens`,
       });
     }
-    if (hits.length > items.length + droppedForBudget) {
+    // A statement delivered in the standing section is not a statement omitted.
+    //
+    // This was `hits.length > items.length + droppedForBudget`, which infers the
+    // limit's effect from a subtraction — and the subtraction has no term for a
+    // hit that was delivered somewhere other than `items`. Durable context is
+    // exactly that: it reaches `standing` from this same list and is marked seen
+    // so it is not sent twice, so every standing entry was counted as a result
+    // the limit had cut off.
+    //
+    // Measured by `benchmark/continuity/` on **fourteen of fourteen** packs: each
+    // reported `result-limit` with a count exactly equal to the number of durable
+    // statements it had just delivered, and `renderPack` printed *"stopped after
+    // 20 results"* into the prose the model reads. It is the inverse of the
+    // defect the widening fallback fixed — that pack claimed completeness while
+    // empty, this one claimed truncation while complete — and either way a client
+    // that cannot believe `omitted` has lost the field EPIC-048 AC-7 exists for.
+    if (stoppedAtLimit > 0) {
       omitted.push({
         reason: TruncationReason.LIMIT,
-        count: hits.length - items.length - droppedForBudget,
+        count: stoppedAtLimit,
         detail: `stopped after ${String(maxItems)} results`,
       });
     }
