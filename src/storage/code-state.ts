@@ -56,8 +56,6 @@ export class CodeStateStore implements CodeStatePort {
   readonly #access: AccessContext;
   readonly #worktree: WorktreeReader | undefined;
   readonly #cwd: string | undefined;
-  /** One worktree read per scope per instance; the instance is per request. */
-  readonly #corresponds = new Map<string, Promise<Correspondence>>();
 
   constructor(
     db: FerretDatabase,
@@ -124,11 +122,14 @@ export class CodeStateStore implements CodeStatePort {
   async currentContent(
     scope: string | undefined,
     paths: readonly string[],
+    known?: Correspondence,
   ): Promise<ReadonlyMap<string, CurrentContent>> {
     const out = new Map<string, CurrentContent>();
     if (scope === undefined || paths.length === 0) return out;
 
-    const correspondence = await this.correspondence(scope);
+    // Reuse the caller's reading rather than running `git status` twice for one
+    // verdict. Never cached beyond the call.
+    const correspondence = known ?? (await this.correspondence(scope));
     const files = await this.#filesByPath(scope, paths);
     const versions = await this.#currentVersions([...files.values()].map((one) => one.id));
 
@@ -159,13 +160,18 @@ export class CodeStateStore implements CodeStatePort {
     return out;
   }
 
+  /**
+   * Not cached, deliberately.
+   *
+   * An earlier draft memoised this per instance, and the composition root
+   * builds one instance for the life of the server — so a session that
+   * committed would keep being told `verified` against the head this process
+   * first saw. Caching the answer to "is the index still current" is the one
+   * thing this Epic cannot do. Callers that need it twice pass it along.
+   */
   async correspondence(scope: string | undefined): Promise<Correspondence> {
     if (scope === undefined) return CORRESPONDENCE_UNAVAILABLE;
-    const cached = this.#corresponds.get(scope);
-    if (cached !== undefined) return cached;
-    const pending = this.#establish(scope);
-    this.#corresponds.set(scope, pending);
-    return pending;
+    return this.#establish(scope);
   }
 
   async #establish(scope: string): Promise<Correspondence> {

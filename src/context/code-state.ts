@@ -97,8 +97,16 @@ export interface CodeStatePort {
     scope: string | undefined,
     anchors: readonly ContextAnchorInput[],
   ): Promise<readonly AnchorResolution[]>;
-  /** The access policy belongs to the adapter — the same object retrieval filters with. */
-  currentContent(scope: string | undefined, paths: readonly string[]): Promise<ReadonlyMap<string, CurrentContent>>;
+  /**
+   * The access policy belongs to the adapter — the same object retrieval
+   * filters with. `known` passes an already-read correspondence so one verdict
+   * costs one working-tree read.
+   */
+  currentContent(
+    scope: string | undefined,
+    paths: readonly string[],
+    known?: Correspondence,
+  ): Promise<ReadonlyMap<string, CurrentContent>>;
   correspondence(scope: string | undefined): Promise<Correspondence>;
 }
 

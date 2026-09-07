@@ -442,10 +442,8 @@ export class ContextPackBuilder {
     const observations = anchoredObservations(evidence);
     if (observations.length === 0) return undefined;
     const paths = [...new Set(observations.flatMap((one) => one.anchors.map((anchor) => anchor.path)))];
-    const [current, correspondence] = await Promise.all([
-      reader.currentContent(scope, paths),
-      reader.correspondence(scope),
-    ]);
+    const correspondence = await reader.correspondence(scope);
+    const current = await reader.currentContent(scope, paths, correspondence);
     return verifyAnchors({ lifecycle, supersededBy: undefined, observations, current, correspondence });
   }
 

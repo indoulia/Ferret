@@ -531,10 +531,9 @@ export class DurableContextStore {
         correspondence: CORRESPONDENCE_UNAVAILABLE,
       });
     }
-    const [current, correspondence] = await Promise.all([
-      reader.currentContent(held.scope, paths),
-      reader.correspondence(held.scope),
-    ]);
+    // One working-tree read per verdict: fetched here, passed down.
+    const correspondence = await reader.correspondence(held.scope);
+    const current = await reader.currentContent(held.scope, paths, correspondence);
     return verifyAnchors({ lifecycle: held.entity.lifecycle, supersededBy, observations, current, correspondence });
   }
 

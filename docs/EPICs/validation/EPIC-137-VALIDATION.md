@@ -54,6 +54,7 @@ Correctness evidence only. Productivity measurements are in
 | 4 | A changed file keeps **two open** `file_has_version` edges, so `stale` was unreachable | dogfood | take the newest open edge; matching any would verify against superseded bytes |
 | 5 | `locator.detail` was not redacted | AC-18 test, observed failing first | `redactSecrets` |
 | 6 | Benchmark: verdict key was `correct`, not `expected`, so T1 graded both arms wrong | inspecting T1 answers | key corrected, T1 regraded from kept transcripts |
+| 7 | Correspondence was memoised per `CodeStateStore`, and the composition root builds one per server — a session that committed would keep being told `verified` against the head the process first saw | self-review of the diff while CI ran | cache removed; the reading is fetched once per verdict and passed down. Regression test observed failing against a reintroduced cache (5 tests fail) |
 
 ## Out of scope, surfaced
 

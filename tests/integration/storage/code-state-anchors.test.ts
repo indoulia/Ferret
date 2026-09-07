@@ -351,6 +351,32 @@ describeDb(`code-state anchors (${databaseAvailable() ? 'real PostgreSQL' : SKIP
     expect(belief?.verification?.anchors[0]?.currentHash).toBe('git-blob:open-2');
   });
 
+  it('a moved head changes the verdict on the same store instance — correspondence is never cached', async () => {
+    // An earlier draft memoised correspondence per instance, and the
+    // composition root builds one per server: a session that committed would
+    // keep being told `verified` against the head the process first saw.
+    const store = storeWith();
+    const stored = await store.record({
+      statement: 'Correspondence must be re-read, not remembered',
+      contextKind: ContextKind.FACT,
+      scope: repository,
+      provenance: by('agent-a', { anchors: [{ path: ANCHOR }] }),
+    });
+    expect((await store.trust(stored.context.entity.id, { permittedScopes: [] }))?.verification?.verdict).toBe(
+      AnchorVerdict.VERIFIED,
+    );
+
+    live = { ...live, headCommit: 'c'.repeat(40) };
+    const moved = await store.trust(stored.context.entity.id, { permittedScopes: [] });
+    expect(moved?.verification?.verdict).toBe(AnchorVerdict.UNKNOWN);
+    expect(moved?.verification?.reason).toBe(UnknownReason.NO_CORRESPONDENCE);
+
+    live = { ...live, headCommit: HEAD };
+    expect((await store.trust(stored.context.entity.id, { permittedScopes: [] }))?.verification?.verdict).toBe(
+      AnchorVerdict.VERIFIED,
+    );
+  });
+
   it('AC-12: an unanchored statement is unanchored, never verified', async () => {
     const store = storeWith();
     const stored = await store.record({
