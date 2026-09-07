@@ -67,6 +67,10 @@ export const EXCLUDED_PREFIXES = [
   // prose, so leaving it out would repeat the contamination the paragraph above
   // describes. Added before it was indexed rather than after.
   'docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md',
+  // EPIC-136's report, on the same rule. It restates this benchmark's
+  // `ferret-pack` numbers and why they moved, so indexing it would let a
+  // question match the document describing its own answer.
+  'docs/evidence/FERRET-DELIVERY-COST-MEASURED.md',
 ];
 
 /** Whether an artefact is part of the corpus rather than the harness. */
