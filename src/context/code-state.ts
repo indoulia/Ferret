@@ -173,6 +173,9 @@ const UNANCHORED_DETAIL =
  * one unestablished is `unknown`, never a match. The failure direction is
  * chosen: over-reporting costs a re-verification, under-reporting costs a
  * confident wrong answer.
+ *
+ * Called by both the trust surface and the context pack, so the two cannot
+ * disagree about whether the code still matches.
  */
 export function verifyAnchors(input: VerifyInput): Verification {
   // Lifecycle first. A matching anchor must never make a retired statement
