@@ -12,6 +12,7 @@ import { ErrorCode, FerretError } from '../errors/index.js';
 import {
   Direction,
   HitSource,
+  WithholdReason,
   type AccessContext,
   type RetrievalPort,
   type SearchHit,
@@ -103,9 +104,69 @@ export const TruncationReason = {
    * budget problem where there is an authorization boundary.
    */
   PERMISSION: 'permission-withheld',
+  /**
+   * Held, and outside the caller's scope selector — EPIC-009.
+   *
+   * Not the same as lacking a permission. A scope selector says which
+   * repositories, worktrees and sessions this caller is looking at; something
+   * outside it is not forbidden, it is not being asked about.
+   */
+  SCOPE: 'out-of-scope',
+  /**
+   * Held, and an exclusion rule covers its path — EPIC-003 D-003.
+   *
+   * Reported apart from {@link PERMISSION} because the two invite opposite
+   * responses. "You are not permitted to see this" invites escalation: ask for
+   * the scope, ask a person, treat the answer as blocked. "A rule excludes this
+   * path" invites nothing — it is the operator's intent, working, and per
+   * EPIC-135 it is the one of the three an operator configures expecting it to
+   * be routine. Reporting an exclusion as a permission denial was measured by
+   * the continuity benchmark's repository arm: fourteen of fourteen packs said
+   * the caller was not permitted to see what a configured `exclude` rule had
+   * quite deliberately hidden.
+   */
+  EXCLUSION: 'exclusion-rule',
 } as const;
 
 export type TruncationReason = (typeof TruncationReason)[keyof typeof TruncationReason];
+
+/**
+ * How each withholding rule is reported, and in what order.
+ *
+ * A table rather than a switch so that the three cases sit beside each other:
+ * the point of this shape is that the reasons are *not* interchangeable, and a
+ * reader checking that should not have to hold three branches in their head.
+ * The order is fixed here so two packs over the same result compare equal.
+ */
+const WITHHELD_REPORTING: ReadonlyArray<
+  readonly [WithholdReason, { readonly reason: TruncationReason; readonly detail: (count: number) => string }]
+> = Object.freeze([
+  [
+    WithholdReason.EXCLUSION,
+    {
+      reason: TruncationReason.EXCLUSION,
+      detail: (count: number) =>
+        `${String(count)} result(s) are covered by an exclusion rule and are not in this answer`,
+    },
+  ],
+  [
+    WithholdReason.PERMISSION,
+    {
+      reason: TruncationReason.PERMISSION,
+      detail: (count: number) =>
+        `${String(count)} result(s) were withheld because this caller is not ` +
+        'permitted to see them; an answer built from this pack is partial',
+    },
+  ],
+  [
+    WithholdReason.SCOPE,
+    {
+      reason: TruncationReason.SCOPE,
+      detail: (count: number) =>
+        `${String(count)} result(s) sit outside this caller's scope and are not in this answer`,
+    },
+  ],
+] as const);
 
 export interface PackItem {
   readonly entity: CanonicalEntity;
@@ -562,14 +623,17 @@ export class ContextPackBuilder {
     // EPIC-058 AC-13. A count and nothing else: no id, no kind, no path, no
     // source, no rule. It says the answer is short; it does not say what is
     // missing, which is the question the filter exists to refuse.
-    if (withheld.total > 0) {
-      omitted.push({
-        reason: TruncationReason.PERMISSION,
-        count: withheld.total,
-        detail:
-          `${String(withheld.total)} result(s) were withheld because this caller is not ` +
-          'permitted to see them; an answer built from this pack is partial',
-      });
+    //
+    // One entry per rule that hid something. The tally has always carried
+    // `byReason`; reading `total` and naming a single reason for the sum
+    // reported whichever reason was named for all three, and the reason named
+    // was the one that reads as an authorization boundary. Order is fixed here
+    // rather than taken from the tally so that two packs over the same result
+    // compare equal.
+    for (const [reason, describe] of WITHHELD_REPORTING) {
+      const count = withheld.byReason[reason] ?? 0;
+      if (count === 0) continue;
+      omitted.push({ reason: describe.reason, count, detail: describe.detail(count) });
     }
 
     return {
