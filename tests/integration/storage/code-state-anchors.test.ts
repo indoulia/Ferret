@@ -50,7 +50,7 @@ let repository: string;
 /** Mutable so a test can move the tree under a recorded statement. */
 let live: { headCommit: string | undefined; dirtyPaths: string[]; dirtySampleTruncated: boolean };
 
-const worktree: WorktreeReader = { read: async () => ({ ...live, dirtyPaths: [...live.dirtyPaths] }) };
+const worktree: WorktreeReader = { read: () => Promise.resolve({ ...live, dirtyPaths: [...live.dirtyPaths] }) };
 
 function by(producer: string, overrides: Partial<ContextProvenance> = {}): ContextProvenance {
   return { producer, producerVersion: '1.0.0', sourceSystem: 'ferret', ...overrides };
