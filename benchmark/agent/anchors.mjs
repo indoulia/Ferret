@@ -192,7 +192,7 @@ if (phase === 'drop') {
   process.exit(0);
 }
 
-if (phase === 'a') {
+if (phase === 'a' || phase === 'maintain') {
   const task = suite.sessions.a;
   const home = configFor({ root: ROOT, ...RECORDER });
   await assertAnswerKeyUnreachable(home);
@@ -204,7 +204,7 @@ if (phase === 'a') {
     cli: CLI,
     connection: CONNECTION,
     configHome: home,
-    workdir: join(WORKDIR, 'a'),
+    workdir: join(WORKDIR, phase),
     model,
     effort,
   });
@@ -226,7 +226,7 @@ if (phase === 'a') {
   const anchoredPaths = [...new Set(anchored)];
   say(anchoredPaths.length === 0 ? 'NO ANCHOR WAS RECORDED — T1..T5 cannot measure inheritance' : `anchored paths: ${anchoredPaths.join(', ')}`);
 
-  state.phases.a = {
+  state.phases[phase] = {
     tree: describeTree(ROOT),
     model,
     effort,
@@ -239,6 +239,29 @@ if (phase === 'a') {
   saveState(state);
   writeFileSync(join(WORKDIR, 'a-transcript.json'), `${JSON.stringify(result, null, 2)}\n`);
   if (existsSync(HANDOVER)) rmSync(HANDOVER);
+  process.exit(0);
+}
+
+if (phase === 'supersede') {
+  // A product call rather than an agent session: what T4 measures is what the
+  // *reading* agent does with a replacement, not who wrote it.
+  const home = configFor({ root: ROOT, ...RECORDER });
+  const client = await connect(home);
+  const held = (await call(client, 'ferret_context_find', { limit: 100 })).context ?? [];
+  const target = held.find((one) => (one.verification?.anchors ?? []).length > 0);
+  if (target === undefined) throw new Error('No anchored statement to supersede.');
+  const replacement = await call(client, 'ferret_context_record', {
+    statement:
+      'Ferret reports a durable statement as verified only when every anchored path still holds the observed content hash AND the indexed head of the checked-out branch equals the live worktree head; any condition it cannot establish yields unknown, never verified',
+    contextKind: 'fact',
+    scope: target.scope,
+    supersedes: target.id,
+    anchors: (target.verification?.anchors ?? []).map((one) => ({ path: one.path })),
+  });
+  await client.close();
+  say(`superseded ${target.id} with ${replacement.context.id}`);
+  state.supersede = { retired: target.id, replacement: replacement.context.id, anchors: replacement.anchors };
+  saveState(state);
   process.exit(0);
 }
 
