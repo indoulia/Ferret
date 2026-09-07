@@ -48,7 +48,7 @@ let evidence: EvidenceStore;
 let relationships: RelationshipStore;
 let repository: string;
 /** Mutable so a test can move the tree under a recorded statement. */
-let live: { headCommit: string | undefined; dirtyPaths: string[]; dirtySampleTruncated: boolean };
+let live: { headCommit: string | undefined; branch: string | undefined; dirtyPaths: string[]; dirtySampleTruncated: boolean };
 
 const worktree: WorktreeReader = { read: () => Promise.resolve({ ...live, dirtyPaths: [...live.dirtyPaths] }) };
 
@@ -117,7 +117,7 @@ describeDb(`code-state anchors (${databaseAvailable() ? 'real PostgreSQL' : SKIP
     });
     await setContent(ANCHOR, 'git-blob:aaa');
     await setContent('README.md', 'git-blob:readme');
-    live = { headCommit: HEAD, dirtyPaths: [], dirtySampleTruncated: false };
+    live = { headCommit: HEAD, branch: 'main', dirtyPaths: [], dirtySampleTruncated: false };
   });
 
   afterAll(async () => {
@@ -264,6 +264,37 @@ describeDb(`code-state anchors (${databaseAvailable() ? 'real PostgreSQL' : SKIP
     expect(dirty?.verification?.reason).toBe(UnknownReason.PATH_DIRTY);
 
     live = { ...live, dirtyPaths: [] };
+  });
+
+  it('AC-11: a detached HEAD cannot establish correspondence', async () => {
+    const store = storeWith();
+    const stored = await store.record({
+      statement: 'A detached head has no branch to compare',
+      contextKind: ContextKind.FACT,
+      scope: repository,
+      provenance: by('agent-a', { anchors: [{ path: ANCHOR }] }),
+    });
+
+    live = { ...live, branch: undefined };
+    const belief = await storeWith().trust(stored.context.entity.id, { permittedScopes: [] });
+    expect(belief?.verification?.verdict).toBe(AnchorVerdict.UNKNOWN);
+    expect(belief?.verification?.reason).toBe(UnknownReason.NOT_INDEXED);
+    live = { ...live, branch: 'main' };
+  });
+
+  it('AC-11: a branch the index has never seen cannot establish correspondence', async () => {
+    const store = storeWith();
+    const stored = await store.record({
+      statement: 'An unindexed branch is not a correspondence',
+      contextKind: ContextKind.FACT,
+      scope: repository,
+      provenance: by('agent-a', { anchors: [{ path: ANCHOR }] }),
+    });
+
+    live = { ...live, branch: 'feature/never-indexed' };
+    const belief = await storeWith().trust(stored.context.entity.id, { permittedScopes: [] });
+    expect(belief?.verification?.verdict).toBe(AnchorVerdict.UNKNOWN);
+    live = { ...live, branch: 'main' };
   });
 
   it('AC-12: an unanchored statement is unanchored, never verified', async () => {

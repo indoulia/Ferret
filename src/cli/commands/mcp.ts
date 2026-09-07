@@ -87,6 +87,7 @@ export function mcpCommand(): Command {
               const live = await readWorktreeState({ cwd, signal: context.signal, logger: context.logger });
               return {
                 headCommit: live.headCommit,
+                branch: live.branch,
                 dirtyPaths: live.state.sample,
                 dirtySampleTruncated: live.state.sampleTruncated,
               };

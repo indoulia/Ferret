@@ -31,6 +31,8 @@ import { entity } from './schema/entities.js';
 export interface WorktreeReader {
   read(cwd: string): Promise<{
     readonly headCommit: string | undefined;
+    /** The checked-out branch. Absent when HEAD is detached. */
+    readonly branch: string | undefined;
     readonly dirtyPaths: readonly string[];
     readonly dirtySampleTruncated: boolean;
   }>;
@@ -175,8 +177,16 @@ export class CodeStateStore implements CodeStatePort {
       return CORRESPONDENCE_UNAVAILABLE;
     }
 
-    const indexedHead = await this.#indexedHead(scope);
-    if (indexedHead === undefined || live.headCommit === undefined) {
+    // The branch that is *checked out*, not the default one. An agent works on
+    // a feature branch, and comparing against `main` would make every verdict
+    // `unknown` exactly where the capability is used.
+    if (live.branch === undefined || live.headCommit === undefined) {
+      // Detached HEAD: no branch to compare, so correspondence is not
+      // establishable rather than failed.
+      return unestablished(UnknownReason.NOT_INDEXED);
+    }
+    const indexedHead = await this.#indexedHead(scope, live.branch);
+    if (indexedHead === undefined) {
       return unestablished(UnknownReason.NOT_INDEXED);
     }
     if (indexedHead !== live.headCommit) {
@@ -191,23 +201,21 @@ export class CodeStateStore implements CodeStatePort {
   }
 
   /**
-   * The commit Ferret's index says this repository is at.
+   * The commit Ferret's index says one named branch points at.
    *
-   * The default branch, or the only branch. Two branches with no default is not
-   * a head Ferret may choose between, so it returns nothing and the verdict is
-   * `unknown` — the direction §8 requires.
+   * Exactly one match, or nothing. Two rows disagreeing about a branch's head
+   * is not a head Ferret may choose between, so the verdict becomes `unknown` —
+   * the direction §8 requires.
    */
-  async #indexedHead(scope: string): Promise<string | undefined> {
+  async #indexedHead(scope: string, branch: string): Promise<string | undefined> {
     const rows = await this.#db
       .select({ attributes: entity.attributes })
       .from(entity)
       .where(and(eq(entity.kind, EntityKind.BRANCH), eq(entity.sourceScope, scope)));
 
-    const branches = rows.map((row) => (row.attributes as Record<string, unknown> | null) ?? {});
-    const heads = (branches.filter((one) => one['isDefault'] === true).length > 0
-      ? branches.filter((one) => one['isDefault'] === true)
-      : branches
-    )
+    const heads = rows
+      .map((row) => (row.attributes as Record<string, unknown> | null) ?? {})
+      .filter((one) => one['shortName'] === branch || one['ref'] === `refs/heads/${branch}`)
       .map((one) => one['headCommit'])
       .filter((head): head is string => typeof head === 'string' && head.length > 0);
 
