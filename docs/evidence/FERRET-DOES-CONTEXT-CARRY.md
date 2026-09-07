@@ -6,7 +6,7 @@ created and dropped by the harness, 27 graded statements + 0/40/123 padding ·
 
 The repository A/B that closes §2 was measured separately and is labelled with
 its own tree, because it needs a merge commit the harness change is already in:
-**Tree:** `9feac2e` (`main`), clean · **Command:**
+**Tree:** `6e26e97` (`main`), clean · **Command:**
 `node benchmark/continuity/run.mjs --repository --padding 0`, content indexing on
 · `benchmark/continuity/results/repository-ab.json`
 
@@ -194,15 +194,23 @@ of one budget had never been observed.
 `node benchmark/continuity/run.mjs --repository` measures the same store and the
 same fourteen questions **twice** — once with this repository indexed beside the
 scenario and once without — with content indexing on, 369 s to index, and
-nothing else differing between the arms. `results/repository-ab.json`, 454 s to
-index. Three consecutive runs of it are identical apart from wall-clock timings.
+nothing else differing between the arms. `results/repository-ab.json`, 399 s to
+index.
+
+It reproduces. Three consecutive runs at `9feac2e` were identical apart from
+wall-clock timings, and this one — at `6e26e97`, a commit later — differs from
+them only in the two conditions that read repository content, because the
+repository it indexes now contains one more commit. `ferret-find` and
+`ferret-search-context` read durable context only and are identical to the
+token: 41 986 and 37 222 in every run. `results/before-exclusion-reason-fix.json`
+is the `9feac2e` run, kept, because §3's second defect is measured against it.
 
 | condition | sourced | answered | facts | tokens/task | p50 |
 | --- | --- | --- | --- | --- | --- |
-| `ferret-pack` | 93% → **93%** | 64% → **64%** | 20/26 → **20/26** | 1 102 → **2 632** | 57 → 78 ms |
-| `ferret-search` | 93% → **0%** | 57% → **0%** | 19/26 → **2/26** | 2 659 → **17 221** | 24 → 172 ms |
-| `ferret-find` *(control)* | 100% → 100% | 64% → 64% | 21/26 → 21/26 | 2 999 → 2 999 | 69 → 48 ms |
-| `ferret-search-context` | — → **93%** | — → **57%** | — → **19/26** | — → **2 659** | — → 16 ms |
+| `ferret-pack` | 93% → **93%** | 64% → **64%** | 20/26 → **20/26** | 1 102 → **2 612** | 47 → 91 ms |
+| `ferret-search` | 93% → **0%** | 57% → **0%** | 19/26 → **2/26** | 2 659 → **17 143** | 18 → 186 ms |
+| `ferret-find` *(control)* | 100% → 100% | 64% → 64% | 21/26 → 21/26 | 2 999 → 2 999 | 55 → 58 ms |
+| `ferret-search-context` | — → **93%** | — → **57%** | — → **19/26** | — → **2 659** | — → 18 ms |
 
 The notes conditions are unchanged and are omitted: they never touch the store,
 so a repository indexed into it cannot reach them.
@@ -212,12 +220,12 @@ so a repository indexed into it cannot reach them.
 identical order, with identical `sourced`, `answered` and irrelevant-slot counts:
 78 standing entries in each arm, task by task. What arrived beside them is
 repository material — 0 items across the fourteen packs without a repository, 50
-with one — and that is the whole of the cost difference: 1 102 → 2 632 tokens per
+with one — and that is the whole of the cost difference: 1 102 → 2 612 tokens per
 task, 2.4×, inside the same 4 000-token budget.
 
 That budget is the thing to watch rather than the ranking. Without a repository
 it never bound: the largest pack was 1 353 tokens and no pack reported a
-budget omission. With one the largest is 3 719, **nine of the fourteen packs
+budget omission. With one the largest is 3 702, **nine of the fourteen packs
 report a budget omission** and seven of them report whole results that did not
 fit — the largest, 37 of them. What was dropped to fit was never a standing
 statement: the count stayed at 78, task by task, while results were being cut,
@@ -312,11 +320,11 @@ condition's ranked set; its baseline nDCG moves 0.339 → 0.331 because that
 condition greps the working tree and this work edited a file it ranks — the
 caveat that benchmark records its own commit for.
 
-### And a configured exclusion is reported to the model as a permission denial
+### And a configured exclusion was reported to the model as a permission denial
 
 Found by the repository arm, which is the only place it can appear: without a
 repository there is nothing to exclude, and in that arm no pack withholds
-anything at all. With one, **all fourteen packs report withheld results** — 94
+anything at all. With one, **all fourteen packs reported withheld results** — 94
 across the set, three to eighteen per pack — each in this wording, quoted from
 the largest of them:
 
@@ -334,25 +342,51 @@ boundary.
 The retrieval layer keeps the three apart deliberately. `WithholdReason` is
 `permission` — *"it carries a permission scope the caller does not hold"* —
 `scope`, and `exclusion` — *"an exclusion rule covers its path"* — and
-`WithheldReport` already carries `byReason` beside `total`. `src/context/pack.ts`
-reads `withheld.total` and renders all three as `TruncationReason.PERMISSION`,
+`WithheldReport` already carried `byReason` beside `total`. `src/context/pack.ts`
+read `withheld.total` and rendered all three as `TruncationReason.PERMISSION`,
 whose own comment says it is *"distinct from every other reason here… a client
 that treated them alike would report a budget problem where there is an
-authorization boundary."* The pack makes the mirror image of that mistake: it
-reports an authorization boundary where there is a configured path exclusion, and
-it does so while holding the breakdown that would have said which.
+authorization boundary."* The pack made the mirror image of that mistake: it
+reported an authorization boundary where there was a configured path exclusion,
+while holding the breakdown that would have said which.
 
-What it costs is the reading a careful agent takes from it. "You are not
+What it cost is the reading a careful agent takes from it. "You are not
 permitted to see this" invites escalation — ask for the scope, ask a human, treat
 the answer as blocked. "A rule excludes this path" invites nothing; it is the
 operator's intent, working. An agent that cannot tell them apart cannot act
 correctly on either, and per EPIC-135 an exclusion is the *only* one of the three
 that an operator configures expecting it to be routine.
 
-**Not fixed here, and deliberately.** The breakdown exists, so the fix is small,
-but it changes the text of every pack and therefore every token count in §2 and
-in the A/B above. Landing the measurement first and correcting the report against
-it is the order this benchmark has used for both of its defects.
+Fixed in `src/context/pack.ts` by reporting one omission per rule that actually
+hid something, `TruncationReason` gaining `exclusion-rule` and `out-of-scope`.
+The wording for a genuine permission denial is unchanged, and nothing enumerates
+these values in a schema, so no read surface changed shape.
+
+| | before | after |
+| --- | --- | --- |
+| packs claiming a permission denial | 14 of 14 | **0 of 14** |
+| packs naming the exclusion rule | 0 of 14 | **14 of 14** |
+| `ferret-pack` tokens, repository arm | 36 850 | 36 573 |
+| `sourced` / `answered` | 93% / 64% | 93% / 64% |
+| no-repository arm, unchanged | 15 425 | 15 425 |
+
+Retrieval quality is unchanged, which is what should happen: the fix corrects a
+report, not a result. The no-repository arm is unchanged to the token, because
+nothing is withheld there and a pack that hides nothing says nothing about
+hiding.
+
+**Why it survived.** The pack's withheld path had no unit coverage at all —
+every retrieval double in `tests/unit/context-pack.test.ts` returned
+`NOTHING_WITHHELD`, so no test had ever built a pack that hid something. Three
+now cover an exclusion, a genuine permission denial, and a mix of all three; the
+first and third were observed to fail against the unfixed code.
+
+The two runs are a commit apart and the later one indexes the fix, so the
+withheld counts are not the same corpus: 94 results in the `9feac2e` run and 108
+in the `6e26e97` one. That the count moves is the benchmark indexing this
+repository, which the task benchmark records the same caveat for. What the fix
+changed is which of three rules each of those counts is attributed to, and that
+went from wrong on all fourteen packs to right on all fourteen.
 
 ---
 
@@ -427,9 +461,7 @@ it is the order this benchmark has used for both of its defects.
 
 ### Remaining gaps
 
-**Product.** A configured path exclusion is reported to the model as a
-permission denial, and the pack holds the breakdown that would have distinguished
-them. Durable context carries no reasoning and promotion drops it.
+**Product.** Durable context carries no reasoning and promotion drops it.
 Promotion's granularity is the whole session, so an agent holding four memories
 of which it wants to publish two cannot say so — here that was worked around by
 declining to promote a session at all. A `fact` is a durable kind and not a
