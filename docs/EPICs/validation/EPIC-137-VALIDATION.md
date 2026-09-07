@@ -43,6 +43,28 @@ Correctness evidence only. Productivity measurements are in
 | `tests/integration` | 1 608 pass, 7 skipped, 1 fail → fixed (package-size gate raised with accounting) |
 | lint, typecheck, build | clean |
 | `boundaries.test.ts` | 125 pass — core still imports no `storage/` |
+| full suite, local | 212 files, **4 280 pass**, 7 skipped, run twice |
+| CI `verify (windows-latest, node 22)` | pass, 9m05s |
+| CI `dependency audit` | pass |
+| CI `storage integration (PostgreSQL 17 + pgvector)` | **1 failure in 4 287** — [issue #21](https://github.com/indoulia/Ferret/issues/21), see below |
+
+### The one CI failure
+
+`tests/integration/domain/relationship-store.test.ts > performance > asserts a
+relationship in under 300 ms at p95` failed with
+`PostgreSQL is not accepting work: Failed query: begin`
+([run 34164259008](https://github.com/indoulia/Ferret/actions/runs/34164259008)).
+
+This is [issue #21](https://github.com/indoulia/Ferret/issues/21), the open
+intermittent recorded during EPIC-019/020, EPIC-052/053, EPIC-057 and
+EPIC-059–065: a connection refusal under a high parallel file count, in a test
+this Epic does not touch. `tests/support/postgres.ts:100` documents the same
+signature and the pool cap that mitigates it. 4 282 of 4 287 passed in that run,
+and the same suite passed twice locally.
+
+Recorded rather than dismissed, per the precedent EPIC-057 set: *"a green figure
+quoted from a run that had a red line in it should say which line."* It is not
+attributed to this Epic, and this Epic did not attempt to fix it.
 
 ## Defects found and fixed during implementation
 
