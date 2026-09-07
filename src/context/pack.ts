@@ -21,7 +21,13 @@ import {
 import { VERSION } from '../version.js';
 
 import { TokenBudget, estimateDeliveredTokens, estimateJsonTokens } from './budget.js';
-import { anchoredObservations, verifyAnchors, type CodeStatePort, type Verification } from './code-state.js';
+import {
+  anchoredObservations,
+  verifyAnchors,
+  type CodeStatePort,
+  type Correspondence,
+  type Verification,
+} from './code-state.js';
 import { DURABLE_CONTEXT_KIND } from './durable.js';
 import {
   MAX_STANDING_CONTEXT,
@@ -436,13 +442,17 @@ export class ContextPackBuilder {
     scope: string | undefined,
     lifecycle: LifecycleState,
     evidence: readonly CanonicalEvidence[],
+    memo: Map<string, Promise<Correspondence>>,
   ): Promise<Verification | undefined> {
     const reader = this.#codeState;
     if (reader === undefined) return undefined;
     const observations = anchoredObservations(evidence);
     if (observations.length === 0) return undefined;
     const paths = [...new Set(observations.flatMap((one) => one.anchors.map((anchor) => anchor.path)))];
-    const correspondence = await reader.correspondence(scope);
+    const key = scope ?? '';
+    const pending = memo.get(key) ?? reader.correspondence(scope);
+    memo.set(key, pending);
+    const correspondence = await pending;
     const current = await reader.currentContent(scope, paths, correspondence);
     return verifyAnchors({ lifecycle, supersededBy: undefined, observations, current, correspondence });
   }
@@ -603,6 +613,8 @@ export class ContextPackBuilder {
     // the whole section is capped at `MAX_STANDING_CONTEXT`. `ferret_search` is
     // untouched.
     const standing: StandingContext[] = [];
+    // One working-tree read per pack, not per standing statement.
+    const correspondenceMemo = new Map<string, Promise<Correspondence>>();
     let standingDropped = 0;
     const standingHits = await this.#standingFor(question, hits);
     for (const hit of standingHits) {
@@ -613,7 +625,7 @@ export class ContextPackBuilder {
       }
       const support = await this.#supportFor(hit.entity.id);
       const scope = hit.entity.source.scope;
-      const verification = await this.#verificationFor(scope, hit.entity.lifecycle, support);
+      const verification = await this.#verificationFor(scope, hit.entity.lifecycle, support, correspondenceMemo);
       const entry = standingContextOf(
         {
           entity: hit.entity,

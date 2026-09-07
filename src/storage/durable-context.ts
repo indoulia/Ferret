@@ -27,6 +27,7 @@ import {
   type AnchorResolution,
   type CodeStatePort,
   type ContextAnchorInput,
+  type Correspondence,
   type ResolvedAnchor,
   type Verification,
 } from '../context/code-state.js';
@@ -461,7 +462,14 @@ export class DurableContextStore {
    * `permittedScopes` is required rather than defaulted, for the reason
    * EPIC-083 gives: a read that can forget to say who is asking will.
    */
-  async trust(contextId: string, read: ScopedRead & { readonly permittedScopes: readonly string[] }): Promise<ContextTrust | undefined> {
+  async trust(
+    contextId: string,
+    read: ScopedRead & {
+      readonly permittedScopes: readonly string[];
+      /** A per-call memo, so a batch of verdicts costs one working-tree read. */
+      readonly correspondence?: Map<string, Promise<Correspondence>>;
+    },
+  ): Promise<ContextTrust | undefined> {
     const held = await this.get(contextId);
     if (held === undefined) return undefined;
 
@@ -502,7 +510,7 @@ export class DurableContextStore {
       ...(this.#codeState === undefined
         ? {}
         : {
-            verification: await this.#verify(held, support, superseding[0]?.fromId),
+            verification: await this.#verify(held, support, superseding[0]?.fromId, read.correspondence ?? new Map<string, Promise<Correspondence>>()),
           }),
     };
   }
@@ -518,6 +526,7 @@ export class DurableContextStore {
     held: DurableContext,
     support: readonly CanonicalEvidence[],
     supersededBy: string | undefined,
+    memo: Map<string, Promise<Correspondence>>,
   ): Promise<Verification> {
     const observations = anchoredObservations(support);
     const paths = [...new Set(observations.flatMap((one) => one.anchors.map((anchor) => anchor.path)))];
@@ -531,8 +540,14 @@ export class DurableContextStore {
         correspondence: CORRESPONDENCE_UNAVAILABLE,
       });
     }
-    // One working-tree read per verdict: fetched here, passed down.
-    const correspondence = await reader.correspondence(held.scope);
+    // One working-tree read per *call*, not per statement: `git status` costs
+    // ~120 ms and a default `ferret_context_find` page is 200 statements. The
+    // memo lives for this call only — caching it across calls is the one thing
+    // this capability cannot do.
+    const key = held.scope ?? '';
+    const pending = memo.get(key) ?? reader.correspondence(held.scope);
+    memo.set(key, pending);
+    const correspondence = await pending;
     const current = await reader.currentContent(held.scope, paths, correspondence);
     return verifyAnchors({ lifecycle: held.entity.lifecycle, supersededBy, observations, current, correspondence });
   }

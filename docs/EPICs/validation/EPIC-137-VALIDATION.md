@@ -1,7 +1,7 @@
 # EPIC-137 — validation record
 
 **Branch:** `epic-137-code-state-anchors` · **Store:** `ferret_agent_ab` (benchmark), `ferret` (dogfood)
-**Suites:** `tests/unit/code-state-verification.test.ts` (16), `tests/integration/storage/code-state-anchors.test.ts` (22)
+**Suites:** `tests/unit/code-state-verification.test.ts` (16), `tests/integration/storage/code-state-anchors.test.ts` (23)
 
 Correctness evidence only. Productivity measurements are in
 [the evidence report](../../evidence/FERRET-DOES-AN-ANCHOR-CARRY.md).
@@ -29,7 +29,7 @@ Correctness evidence only. Productivity measurements are in
 | AC-17 MCP refusal contracts unchanged | PASS | `tests/integration/mcp/` 217 pass |
 | AC-18 `locator.detail` redacted | PASS | integration `AC-18` — observed failing first; `redactStatement` did not cover free text, `redactSecrets` does |
 | AC-19 both surfaces render, pack charges it | PASS | `context-pack` and `context-standing` suites; T1 pack carried `verification` with 3 verdicts |
-| AC-20 verification cost flat in store size | PARTIAL | per-statement cost is one file + one version lookup per anchor plus one cached worktree read per scope; **not** measured at 27/67/150 statements |
+| AC-20 verification cost flat in store size | PARTIAL | per statement: one file + one version lookup per anchor. One working-tree read **per call**, memoised for the call only — measured at 122 ms per `git status`, so a 200-statement page costs one read rather than 200 (~24 s avoided). **Not** measured at 27/67/150 statements |
 | AC-21 re-anchor at a new hash → second observation, verified | PASS | integration `AC-21`; `--phase maintain` re-verified two stale statements with no supersession |
 | AC-22 re-anchor at an unchanged hash dedupes | PASS | integration `AC-22` |
 | AC-23 `evidenceKey` inputs unchanged | PASS | integration `AC-23` — fixed-input key pinned |
@@ -54,7 +54,7 @@ Correctness evidence only. Productivity measurements are in
 | 4 | A changed file keeps **two open** `file_has_version` edges, so `stale` was unreachable | dogfood | take the newest open edge; matching any would verify against superseded bytes |
 | 5 | `locator.detail` was not redacted | AC-18 test, observed failing first | `redactSecrets` |
 | 6 | Benchmark: verdict key was `correct`, not `expected`, so T1 graded both arms wrong | inspecting T1 answers | key corrected, T1 regraded from kept transcripts |
-| 7 | Correspondence was memoised per `CodeStateStore`, and the composition root builds one per server — a session that committed would keep being told `verified` against the head the process first saw | self-review of the diff while CI ran | cache removed; the reading is fetched once per verdict and passed down. Regression test observed failing against a reintroduced cache (5 tests fail) |
+| 7 | Correspondence was memoised per `CodeStateStore`, and the composition root builds one per server — a session that committed would keep being told `verified` against the head the process first saw | self-review of the diff while CI ran | cache removed; correspondence is now memoised **per call** (`ContextRead.correspondence`), so a page costs one read and nothing is remembered between calls. Regression test observed failing against a reintroduced cross-call cache (5 tests fail) |
 
 ## Out of scope, surfaced
 
@@ -68,7 +68,8 @@ taking the newest edge and records the gap here rather than changing indexing.
 - AC-20 is partial: the per-read cost is bounded by construction but was not
   measured across store sizes.
 - `ferret_context_find` computes one verdict per listed statement; at
-  `MAX_CONTEXT_PAGE` = 200 that is 200 verdicts in one call. Bounded by the page,
-  not by the store, and not benchmarked at that page size.
+  `MAX_CONTEXT_PAGE` = 200 that is 200 verdicts in one call, sharing one
+  working-tree read. The per-statement database lookups are not batched and were
+  not benchmarked at that page size.
 - Verification is file-granular. An unrelated edit inside an anchored file
   reports `stale`. Deliberate: over-reporting costs a re-verification.

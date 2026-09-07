@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { Permission } from '../authorization/index.js';
-import { AnchorVerdict, MAX_ANCHORS, type Verification } from '../context/code-state.js';
+import { AnchorVerdict, MAX_ANCHORS, type Correspondence, type Verification } from '../context/code-state.js';
 import {
   CONTENT_NOTICE,
   CONTEXT_KINDS,
@@ -409,8 +409,11 @@ export function registerContextTools({
         // EPIC-137. One verdict per listed statement. Correspondence is read
         // once per repository by the code-state reader, so this is bounded by
         // the page rather than by the size of the store.
+        // One memo for the whole page: `git status` is ~120 ms and this page
+        // holds up to MAX_CONTEXT_PAGE statements.
+        const correspondence = new Map<string, Promise<Correspondence>>();
         const beliefs = await Promise.all(
-          found.map(async (held) => context.trust(held.entity.id, { permittedScopes })),
+          found.map(async (held) => context.trust(held.entity.id, { permittedScopes, correspondence })),
         );
 
         const safety = new ContentSafety();

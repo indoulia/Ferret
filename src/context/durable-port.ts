@@ -1,6 +1,6 @@
 import type { LifecycleState } from '../domain/index.js';
 
-import type { AnchorResolution, ContextAnchorInput, Verification } from './code-state.js';
+import type { AnchorResolution, ContextAnchorInput, Correspondence, Verification } from './code-state.js';
 import type { ContextKind, DurableContext } from './durable.js';
 
 /**
@@ -40,6 +40,15 @@ export const DEFAULT_CONTEXT_PRODUCER = 'ferret.agent';
 /** A read that states which permission scopes the caller holds — EPIC-083. */
 export interface ContextRead {
   readonly permittedScopes: readonly string[];
+  /**
+   * A per-call memo for code-state correspondence — EPIC-137.
+   *
+   * One `git status` costs ~120 ms and a listing verifies a whole page, so a
+   * caller reading many statements passes one map and pays for one read. It
+   * must not outlive the call: a remembered answer to "is the index still
+   * current" is exactly the staleness this capability exists to report.
+   */
+  readonly correspondence?: Map<string, Promise<Correspondence>>;
 }
 
 /** Where a statement came from, as an agent reports it. */
