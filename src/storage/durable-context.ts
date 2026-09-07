@@ -42,6 +42,7 @@ import {
 } from '../domain/index.js';
 import { encodeKeyParts } from '../domain/identity.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
+import { redactSecrets } from '../security/index.js';
 
 import { classifyDatabaseError } from './connection.js';
 import { EntityStore, UpsertOutcome, recomputeEntityHash, type FerretDatabase } from './entities.js';
@@ -652,6 +653,8 @@ export interface ContextTrust {
   readonly supersedes: readonly string[];
   /** One sentence a person can read. Never built from indexed text. */
   readonly reason: string;
+  /** Whether the anchored code still matches — EPIC-137. Absent when unreadable. */
+  readonly verification?: Verification | undefined;
 }
 
 /**
@@ -716,11 +719,18 @@ function scopeMatches(scope: string | undefined) {
   return scope === undefined ? sql`e.source_scope IS NULL` : sql`e.source_scope = ${scope}`;
 }
 
-/** `kind: 'path'` with the symbol or line range as the area, never the key — EPIC-137. */
+/**
+ * `kind: 'path'` with the symbol or line range as the area, never the key.
+ *
+ * `detail` is producer-supplied free text, so it goes through the same masking
+ * a statement does — EPIC-137 AC-18. The path is not masked: it is compared
+ * against the index, and a masked one would resolve to nothing.
+ */
 function locatorFor(anchor: ResolvedAnchor): { kind: string; start: string; detail?: string } {
   const range = anchor.lineRange === undefined ? undefined : `L${String(anchor.lineRange.start)}-${String(anchor.lineRange.end)}`;
   const detail = [anchor.symbol, range].filter((one): one is string => one !== undefined).join(' ');
-  return { kind: 'path', start: anchor.path, ...(detail === '' ? {} : { detail }) };
+  if (detail === '') return { kind: 'path', start: anchor.path };
+  return { kind: 'path', start: anchor.path, detail: redactSecrets(detail).text };
 }
 
 /**
