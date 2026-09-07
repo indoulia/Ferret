@@ -60,8 +60,13 @@ const STOP_WORDS = new Set([
 /** Fewest characters a term may have. Two-letter tokens match everywhere. */
 const MIN_TERM = 3;
 
-/** Weight of a term appearing in a path, relative to one content hit. */
-const PATH_WEIGHT = 3;
+/**
+ * Weight of a term appearing in a path, relative to one content hit.
+ *
+ * Exported for the reason `damp` is: the continuity benchmark weights a note's
+ * own heading the same way, and one constant is better than two.
+ */
+export const PATH_WEIGHT = 3;
 
 /** How many commits `git log --grep` is modelled over. */
 const COMMIT_WINDOW = 500;
@@ -156,8 +161,14 @@ function commitWindow(root) {
     });
 }
 
-/** `1 + ln(1 + lines)`, the damped contribution of one term's content hits. */
-function damp(lines) {
+/**
+ * `1 + ln(1 + lines)`, the damped contribution of one term's content hits.
+ *
+ * Exported so the continuity benchmark's notes baseline ranks by the same
+ * formula rather than by a second one that could drift from it. Nothing about
+ * this benchmark's numbers changes.
+ */
+export function damp(lines) {
   return 1 + Math.log(1 + lines);
 }
 

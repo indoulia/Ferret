@@ -1,0 +1,549 @@
+{
+  "version": "1",
+  "description": "Questions a later session asks, and the statements a correct answer has to rest on. Every question is asked in a session that holds no transcript of the one that learned the answer, and `askedBy` says which agent asks — half are asked by the agent that never recorded any of it. Labels were written from the scenario before any condition was run.",
+  "grades": {
+    "3": "The statement that answers the question. An answer not resting on it is not sourced.",
+    "2": "Supporting. Completes or qualifies the answer; a reader wants it.",
+    "1": "Marginal. Returning it is not wrong; ranking it above a 3 is.",
+    "requiredFacts": "Substrings a complete answer must contain, matched case-insensitively against the text the condition actually put in front of the agent. Artefact recall alone cannot tell a condition that returned the right record from one that returned the right record with the reasoning stripped out, and the cheaper of those two looks better on every cost measure. Each fact lists the surface forms that count, and `basis` says where in the scenario it lives - several live only in a rationale."
+  },
+  "tasks": [
+    {
+      "id": "session-transport",
+      "kind": "cross-session",
+      "askedBy": "alpha",
+      "question": "If the editor restarts and the connection drops, is my session over?",
+      "answerBasis": "No. Only an explicit end call ends a session; a dropped transport does not, deliberately, so a restart resumes the same work.",
+      "expected": [
+        {
+          "artefact": "transport-not-end",
+          "relevance": 3,
+          "basis": "States the rule and why a restart is not the user finishing."
+        },
+        {
+          "artefact": "session-id-minted",
+          "relevance": 1,
+          "basis": "The identity half of the same decision; a reader resuming needs to know it cannot invent one."
+        }
+      ],
+      "superseded": [],
+      "requiredFacts": [
+        {
+          "id": "rule",
+          "any": [
+            "does not end a session"
+          ],
+          "basis": "The statement itself."
+        },
+        {
+          "id": "why-a-restart-is-not-an-ending",
+          "any": [
+            "editor restarting",
+            "editor restart"
+          ],
+          "basis": "Only in the rationale. A reader told the rule without it does not know a restart is the case it was written for."
+        }
+      ],
+      "answerGroup": [
+        "transport-not-end",
+        "transport-not-end-restated"
+      ]
+    },
+    {
+      "id": "macos-runner-now",
+      "kind": "supersession",
+      "askedBy": "alpha",
+      "question": "Should we add a macOS job to the CI matrix?",
+      "answerBasis": "No. The owner reversed that on 2026-09-05; the obligation that replaced it is to stop claiming macOS is verified.",
+      "expected": [
+        {
+          "artefact": "no-macos-ci",
+          "relevance": 3,
+          "basis": "The current decision, and the one that reversed the earlier one."
+        }
+      ],
+      "superseded": [
+        {
+          "artefact": "macos-runner",
+          "basis": "The matrix decision the owner reversed. An agent that reads it first and stops answers confidently and wrongly."
+        }
+      ],
+      "requiredFacts": [
+        {
+          "id": "the-decision",
+          "any": [
+            "do not add a macos job"
+          ],
+          "basis": "The statement itself."
+        },
+        {
+          "id": "why",
+          "any": [
+            "not their priority",
+            "cost more"
+          ],
+          "basis": "Only in the rationale. Without it the decision reads as arbitrary and will be re-litigated."
+        }
+      ]
+    },
+    {
+      "id": "macos-ever-measured",
+      "kind": "history",
+      "askedBy": "beta",
+      "question": "Has macOS packaging ever actually been measured, and why is there no macOS job now?",
+      "answerBasis": "It was measured and it passed; the job was then dropped by owner decision on cost. Both halves are needed: the fact is still true and the decision that removed the job is a different statement.",
+      "expected": [
+        {
+          "artefact": "macos-validated",
+          "relevance": 3,
+          "basis": "The measurement half. Still true, never superseded."
+        },
+        {
+          "artefact": "no-macos-ci",
+          "relevance": 3,
+          "basis": "The decision half, and the current one."
+        }
+      ],
+      "superseded": [
+        {
+          "artefact": "macos-runner",
+          "basis": "The reversed decision. Retrieving it is not wrong here — the question asks about history — but ranking it above the current decision is."
+        }
+      ],
+      "requiredFacts": [
+        {
+          "id": "it-was-measured",
+          "any": [
+            "3m47s"
+          ],
+          "basis": "The measurement, in the statement of macos-validated."
+        },
+        {
+          "id": "and-was-then-dropped",
+          "any": [
+            "do not add a macos job"
+          ],
+          "basis": "The current decision, in the statement of no-macos-ci."
+        }
+      ]
+    },
+    {
+      "id": "score-across-queries",
+      "kind": "supersession",
+      "askedBy": "beta",
+      "question": "Can I compare the relevance score of a hit from one query against a hit from another?",
+      "answerBasis": "Yes, now. Normalising every branch to the zero-to-one range reversed the earlier rule, and the earlier rule survived in a source comment long enough to make a benchmark label wrong.",
+      "expected": [
+        {
+          "artefact": "score-comparable",
+          "relevance": 3,
+          "basis": "The current answer."
+        }
+      ],
+      "superseded": [
+        {
+          "artefact": "score-scoped",
+          "basis": "The reversed rule. It is the one that reached a benchmark label through the person writing it."
+        }
+      ],
+      "requiredFacts": [
+        {
+          "id": "normalised",
+          "any": [
+            "zero-to-one",
+            "normalised"
+          ],
+          "basis": "The statement itself."
+        }
+      ]
+    },
+    {
+      "id": "benchmark-exclusions",
+      "kind": "supersession",
+      "askedBy": "alpha",
+      "question": "What has to be kept out of the corpus a benchmark searches, and why is the directory rule not enough?",
+      "answerBasis": "Whatever would not exist but for the benchmark and whatever states its answers. The directory rule missed the evidence report, an ordinary document that states every answer in prose.",
+      "expected": [
+        {
+          "artefact": "exclusion-rule",
+          "relevance": 3,
+          "basis": "The widened rule, and the current one."
+        },
+        {
+          "artefact": "answer-key-excluded",
+          "relevance": 2,
+          "basis": "The observation that made an exclusion necessary at all."
+        }
+      ],
+      "superseded": [
+        {
+          "artefact": "exclusion-dir",
+          "basis": "The narrower rule, true when written and insufficient once the evidence report was committed."
+        }
+      ],
+      "requiredFacts": [
+        {
+          "id": "the-rule",
+          "any": [
+            "would not exist but for the benchmark"
+          ],
+          "basis": "The statement itself."
+        },
+        {
+          "id": "what-the-directory-rule-missed",
+          "any": [
+            "twelve times",
+            "ordinary document"
+          ],
+          "basis": "Only in the rationale. It is the evidence that the narrower rule was insufficient."
+        }
+      ]
+    },
+    {
+      "id": "replace-a-statement",
+      "kind": "constraint",
+      "askedBy": "beta",
+      "question": "One of our recorded facts has stopped being true. How do I retire it?",
+      "answerBasis": "Record the replacement with a supersedes link. Nothing is deleted, because why the position changed is worth answering.",
+      "expected": [
+        {
+          "artefact": "supersede-not-delete",
+          "relevance": 3,
+          "basis": "States the mechanism and the reason nothing is deleted."
+        },
+        {
+          "artefact": "lifecycle-mutate",
+          "relevance": 2,
+          "basis": "The permission the archiving route needs, which the asker will hit next."
+        }
+      ],
+      "superseded": [],
+      "requiredFacts": [
+        {
+          "id": "mechanism",
+          "any": [
+            "supersedes"
+          ],
+          "basis": "The statement itself."
+        },
+        {
+          "id": "permission",
+          "any": [
+            "mutate"
+          ],
+          "basis": "In the statement of lifecycle-mutate, which the asker needs next."
+        }
+      ]
+    },
+    {
+      "id": "pack-reads-context",
+      "kind": "convergence",
+      "askedBy": "beta",
+      "question": "How does assembly find the durable statements that bear on a task?",
+      "answerBasis": "With a second, relaxed query restricted to durable statements, separate from the record search, because ANDing every word of a task sentence reaches none of them.",
+      "expected": [
+        {
+          "artefact": "standing-own-query",
+          "relevance": 3,
+          "basis": "The decision. Recorded once by alpha and restated later in different words, so a reader should get one answer rather than two."
+        },
+        {
+          "artefact": "standing-order",
+          "relevance": 1,
+          "basis": "What happens to the statements once found."
+        }
+      ],
+      "superseded": [],
+      "answerGroup": [
+        "standing-own-query",
+        "standing-own-query-restated"
+      ],
+      "requiredFacts": [
+        {
+          "id": "a-separate-query",
+          "any": [
+            "own widened query",
+            "relaxed query"
+          ],
+          "basis": "In the statement, in either wording."
+        },
+        {
+          "id": "why",
+          "any": [
+            "ands every term",
+            "anding every word"
+          ],
+          "basis": "In alpha's rationale and in beta's restated statement. Reachable two ways, which is what a restatement is for."
+        }
+      ]
+    },
+    {
+      "id": "which-tests-while-iterating",
+      "kind": "preference",
+      "askedBy": "beta",
+      "question": "Do I need to run the whole test suite after every edit?",
+      "answerBasis": "No. Unit tests while iterating, the full verification once before a commit; four integration files are most of the full run.",
+      "expected": [
+        {
+          "artefact": "unit-then-verify",
+          "relevance": 3,
+          "basis": "The practice and the measurement behind it. Recorded in no source file."
+        }
+      ],
+      "superseded": [],
+      "requiredFacts": [
+        {
+          "id": "the-practice",
+          "any": [
+            "unit tests while iterating"
+          ],
+          "basis": "The statement itself."
+        },
+        {
+          "id": "the-measurement",
+          "any": [
+            "eighty per cent",
+            "fifteen times"
+          ],
+          "basis": "Only in the rationale. It is what makes the practice worth following rather than a preference."
+        }
+      ]
+    },
+    {
+      "id": "windows-break",
+      "kind": "gotcha",
+      "askedBy": "beta",
+      "question": "My pull request is green. Can a Windows-only failure still be waiting for me?",
+      "answerBasis": "Yes. Windows runs on push to main rather than on a pull request, so the break appears just after a merge.",
+      "expected": [
+        {
+          "artefact": "windows-post-merge",
+          "relevance": 3,
+          "basis": "States exactly when a Windows-only break surfaces. Recorded in no source file."
+        }
+      ],
+      "superseded": [],
+      "requiredFacts": [
+        {
+          "id": "when",
+          "any": [
+            "push to the main branch",
+            "after a merge"
+          ],
+          "basis": "The statement itself."
+        }
+      ]
+    },
+    {
+      "id": "after-a-rebase",
+      "kind": "constraint",
+      "askedBy": "beta",
+      "question": "I rebased onto a base that had moved. Is my earlier green run still good?",
+      "answerBasis": "No. Re-run the linter, the type check and the unit tests before pushing; the failure mode is silent.",
+      "expected": [
+        {
+          "artefact": "reverify-after-rebase",
+          "relevance": 3,
+          "basis": "The rule and the two occasions that produced it. Recorded in no source file."
+        }
+      ],
+      "superseded": [],
+      "requiredFacts": [
+        {
+          "id": "what-to-rerun",
+          "any": [
+            "re-run the linter"
+          ],
+          "basis": "The statement itself."
+        },
+        {
+          "id": "why-green-is-stale",
+          "any": [
+            "proves nothing"
+          ],
+          "basis": "The statement itself."
+        }
+      ]
+    },
+    {
+      "id": "who-may-curate",
+      "kind": "security",
+      "askedBy": "beta",
+      "question": "Which permission does an agent need before it can archive knowledge other people rely on?",
+      "answerBasis": "MUTATE, which is never granted by default. Recording is a separate, freely granted permission.",
+      "expected": [
+        {
+          "artefact": "lifecycle-mutate",
+          "relevance": 3,
+          "basis": "The split, and the default."
+        },
+        {
+          "artefact": "record-permission",
+          "relevance": 1,
+          "basis": "The other half of the split."
+        }
+      ],
+      "superseded": [],
+      "requiredFacts": [
+        {
+          "id": "the-permission",
+          "any": [
+            "mutate"
+          ],
+          "basis": "The statement itself."
+        },
+        {
+          "id": "the-default",
+          "any": [
+            "never granted by default"
+          ],
+          "basis": "The statement itself. A reader who does not know it is not granted will assume it is."
+        }
+      ]
+    },
+    {
+      "id": "stale-benchmark-build",
+      "kind": "gotcha",
+      "askedBy": "alpha",
+      "question": "What goes wrong if the build being measured is older than the source it is supposed to represent?",
+      "answerBasis": "The run measures a tree that is not the working tree, and the result is indistinguishable from a regression.",
+      "expected": [
+        {
+          "artefact": "dist-staleness",
+          "relevance": 3,
+          "basis": "States the failure and the run it was found on."
+        }
+      ],
+      "superseded": [],
+      "requiredFacts": [
+        {
+          "id": "the-failure",
+          "any": [
+            "indistinguishable from a regression"
+          ],
+          "basis": "The statement itself."
+        }
+      ]
+    },
+    {
+      "id": "pack-budget-defect",
+      "kind": "history",
+      "askedBy": "beta",
+      "question": "Was there ever a problem with how the context pack accounted for its own budget?",
+      "answerBasis": "Yes — it charged for about a third less than it sent, and cited every observation twice.",
+      "expected": [
+        {
+          "artefact": "budget-undercharge",
+          "relevance": 3,
+          "basis": "The defect, as recorded when it was fixed."
+        }
+      ],
+      "superseded": [],
+      "requiredFacts": [
+        {
+          "id": "the-undercharge",
+          "any": [
+            "a third less"
+          ],
+          "basis": "The statement itself."
+        },
+        {
+          "id": "the-double-citation",
+          "any": [
+            "twice"
+          ],
+          "basis": "The statement itself."
+        }
+      ]
+    },
+    {
+      "id": "why-not-planner",
+      "kind": "prior-decision",
+      "askedBy": "beta",
+      "question": "Would routing context assembly through the query planner fix its recall?",
+      "answerBasis": "No, and it has already been tried and rejected: the deficit is budget rather than retrieval.",
+      "expected": [
+        {
+          "artefact": "planner-routing-rejected",
+          "relevance": 3,
+          "basis": "The rejection and the measurement behind it."
+        }
+      ],
+      "superseded": [],
+      "requiredFacts": [
+        {
+          "id": "rejected",
+          "any": [
+            "rejected"
+          ],
+          "basis": "The statement itself."
+        },
+        {
+          "id": "the-reason",
+          "any": [
+            "deficit is budget",
+            "budget rather than retrieval"
+          ],
+          "basis": "The statement itself."
+        }
+      ]
+    }
+  ],
+  "continuity": [
+    {
+      "id": "resume-s6",
+      "agent": "alpha",
+      "resumes": "s6",
+      "question": "What was I in the middle of, and what is the next thing to do?",
+      "answerBasis": "The provenance-per-slot trade-off is open and the next task is to measure the pack at 8 000 tokens. The checkpoint says so and a session memory says so; both were recorded by the same agent and neither was promoted.",
+      "expectedPhrases": [
+        "8 000",
+        "provenance"
+      ]
+    }
+  ],
+  "isolation": [
+    {
+      "id": "beta-recall-alpha",
+      "actor": "beta",
+      "target": "s6",
+      "expect": "refused",
+      "basis": "A session is read by the agent that ran it. Beta naming alpha's identifier must learn nothing, including whether the identifier exists."
+    },
+    {
+      "id": "beta-show-alpha",
+      "actor": "beta",
+      "target": "s6",
+      "expect": "refused",
+      "basis": "The same rule on the inspection tool."
+    },
+    {
+      "id": "beta-promote-alpha",
+      "actor": "beta",
+      "target": "s6",
+      "expect": "refused",
+      "basis": "Promotion publishes an agent's working state as shared knowledge; done by anyone else it publishes notes their owner never offered."
+    },
+    {
+      "id": "alpha-recall-own",
+      "actor": "alpha",
+      "target": "s6",
+      "expect": "allowed",
+      "basis": "The owner reads its own session. A benchmark that only checked the refusal would pass on a build that refused everyone."
+    },
+    {
+      "id": "beta-reads-durable",
+      "actor": "beta",
+      "target": "durable",
+      "expect": "allowed",
+      "basis": "What must cross does cross: durable context alpha recorded is readable by beta, which never spoke to it."
+    },
+    {
+      "id": "private-not-durable",
+      "actor": "beta",
+      "target": "private",
+      "expect": "refused",
+      "basis": "Alpha's unpromoted session memories must not appear in the durable context beta reads. Non-transfer and leakage are both failures, so both are checked."
+    }
+  ]
+}
