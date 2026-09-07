@@ -11,9 +11,11 @@ import {
   ErrorCode,
   HitSource,
   MAX_BUDGET,
+  MIN_BUDGET,
   PUBLIC_ACCESS,
   TokenBudget,
   TruncationReason,
+  MCP_JSON_INDENT,
   estimateJsonTokens,
   estimateTokens,
   renderPack,
@@ -200,6 +202,64 @@ describe('building a context pack', () => {
     // Ranked order matters because the budget runs out: what gets dropped
     // should be what Ferret judged least relevant, not whatever was last.
     expect(pack.items.map((item) => item.entity.id)).toStrictEqual(['c1', 'c2']);
+  });
+
+  it('reports what it sends, not only what its items cost — EPIC-136 AC-1', async () => {
+    // The defect: the items were charged for what is sent and the envelope
+    // around them was not. Measured on a real pack, 3 971 items against a
+    // budget of 4 000 arrived as 5 438 tokens — 37% over a budget the response
+    // reported keeping. And the transport pretty-prints, which the compact
+    // estimate did not count either.
+    const builder = new ContextPackBuilder(
+      new FakeRetrieval([
+        hit('c1', { message: 'a'.repeat(600) }),
+        hit('c2', { message: 'b'.repeat(600) }),
+        hit('c3', { message: 'c'.repeat(600) }),
+      ]),
+      PUBLIC_ACCESS,
+    );
+    const pack = await builder.build({ question: 'what does this cost', budget: 4000 });
+
+    const delivered = estimateTokens(JSON.stringify(pack, null, MCP_JSON_INDENT));
+    const drift = Math.abs(delivered - pack.estimatedTokens) / delivered;
+    expect(drift).toBeLessThanOrEqual(0.05);
+    // And the figure describes the whole response rather than the item sum.
+    const items = pack.items.reduce((total, item) => total + item.estimatedTokens, 0);
+    expect(pack.estimatedTokens).toBeGreaterThan(items);
+  });
+
+  it('never sends more than the budget it was asked for — EPIC-136 AC-2', async () => {
+    const builder = new ContextPackBuilder(
+      new FakeRetrieval(
+        Array.from({ length: 12 }, (_, at) => hit(`c${String(at)}`, { message: 'x'.repeat(900) })),
+      ),
+      PUBLIC_ACCESS,
+    );
+    for (const budget of [1500, 4000, 9000]) {
+      const pack = await builder.build({ question: 'anything', budget });
+      const delivered = estimateTokens(JSON.stringify(pack, null, MCP_JSON_INDENT));
+      expect(delivered, `budget ${String(budget)}`).toBeLessThanOrEqual(budget);
+      expect(pack.budget, `budget ${String(budget)}`).toBe(budget);
+    }
+  });
+
+  it('raises a budget below the floor, and says it did — EPIC-136 AC-2', async () => {
+    // A pack's fixed fields cost ~470 estimated tokens before an item is in it,
+    // so a request for 100 cannot be met. Until the envelope was charged for,
+    // such a request was simply exceeded in silence — task-assembly asked for
+    // 400 and was sent 599.
+    const builder = new ContextPackBuilder(
+      new FakeRetrieval([hit('c1', { message: 'anything at all' })]),
+      PUBLIC_ACCESS,
+    );
+    const pack = await builder.build({ question: 'anything', budget: 100 });
+
+    // Clamped rather than refused: the caller gets a usable pack and is told
+    // the budget was raised, which is what it needed. `budget` reports what was
+    // applied, so the promise below holds for every request.
+    expect(pack.budget).toBe(MIN_BUDGET);
+    expect(pack.estimatedTokens).toBeLessThanOrEqual(pack.budget);
+    expect(pack.omitted.some((one) => /was raised to/.test(one.detail))).toBe(true);
   });
 
   it('says what it left out, and why', async () => {
@@ -705,7 +765,14 @@ describe('evidence selection on a pack item', () => {
     ]);
     const builder = new ContextPackBuilder(new FakeRetrieval([hit('c1', { message: 'x'.repeat(6000) })]), PUBLIC_ACCESS, store);
 
-    const pack = await builder.build({ question: 'why', budget: 900 });
+    // 1 100 rather than 900 since EPIC-136 AC-1: a pack now charges for the
+    // envelope it sends and for the indentation the transport adds, so every
+    // budget buys less than it appeared to. At 900 this item plus its evidence
+    // metadata genuinely does not fit, and the pack drops it rather than
+    // overrunning — which is AC-2 working. The behaviour under test here is the
+    // *cause* reported for evidence a trim took away, and 1 100 is the smallest
+    // budget that still reaches it.
+    const pack = await builder.build({ question: 'why', budget: 1100 });
 
     expect(pack.items[0]?.trimmed).toBe(true);
     expect(pack.items[0]?.evidence).toStrictEqual([]);

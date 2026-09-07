@@ -51,6 +51,7 @@ import {
   type RetrievalPort,
   type SearchHit,
 } from '../retrieval/index.js';
+import { estimateDeliveredTokens } from '../context/budget.js';
 import { VERSION } from '../version.js';
 
 import { registerConfigTools, type ConfigurationAccess } from './config-tools.js';
@@ -101,6 +102,15 @@ import { createToolGuard } from './guards.js';
 export const MCP_SERVER_NAME = 'ferret';
 
 /** Results a tool will return however many are asked for. */
+/**
+ * The smallest `maxTokens` worth honouring — EPIC-136 §4.2.
+ *
+ * Below this a response is the notice and the safety report with no room for a
+ * result, so a caller asking for less is asking for nothing. Rejected at the
+ * schema rather than silently rounded up.
+ */
+const MIN_SEARCH_TOKENS = 500;
+
 const TOOL_RESULT_LIMIT = 50;
 
 export interface McpServerDependencies {
@@ -241,22 +251,46 @@ export interface McpServerDependencies {
  * Separated from serving it so the tools can be tested without a transport,
  * which is most of what is worth testing.
  */
+/**
+ * A search response cut to the size its caller asked for — EPIC-136 §4.2.
+ *
+ * `limit` bounds how many hits come back; nothing bounded how much each one
+ * carried, and there was no way to ask. Measured through the surface:
+ * `limit: 20` returned 79 571 characters — about 32 000 tokens in one result —
+ * and a real benchmark session had that truncated to a file by its client and
+ * then could not open it. The agent asked one question, paid for it, and
+ * received nothing usable. `budget.ts` names that failure exactly: *"the client
+ * truncates … and the thing that gets cut is not the thing Ferret would have
+ * chosen to cut."*
+ *
+ * So Ferret does the cutting, from the bottom of the ranking, and **says how
+ * much it cut**. Absent, nothing changes: the bound is opt-in because a default
+ * would be a change to a published surface, which §5 puts out of scope.
+ */
+function withinTokens<R extends { readonly results: readonly unknown[] }>(
+  response: R,
+  maxTokens: number | undefined,
+): R | (R & { readonly truncated: { readonly droppedResults: number; readonly maxTokens: number } }) {
+  if (maxTokens === undefined) return response;
+  const results = [...response.results];
+  let dropped = 0;
+  // One result is always returned: a response with none tells a caller nothing
+  // it could not have got from a smaller `limit`, and pretending a bound was
+  // met by emptying the answer is the dishonesty this exists to prevent.
+  while (results.length > 1 && estimateDeliveredTokens({ ...response, results }) > maxTokens) {
+    results.pop();
+    dropped += 1;
+  }
+  if (dropped === 0) return response;
+  return { ...response, results, truncated: { droppedResults: dropped, maxTokens } };
+}
+
 export function createMcpServer(dependencies: McpServerDependencies): McpServer {
   const { retrieval, planner, evidence, logger } = dependencies;
   const access = dependencies.access ?? PUBLIC_ACCESS;
   const principal = dependencies.principal ?? ANONYMOUS_PRINCIPAL;
   const confirmations = dependencies.confirmations ?? new ConfirmationGate();
   const packs = new ContextPackBuilder(retrieval, access, evidence);
-
-  const server = new McpServer(
-    { name: MCP_SERVER_NAME, version: VERSION },
-    {
-      instructions:
-        'Ferret answers questions about indexed repositories: commits, files, ' +
-        'branches, worktrees, developers and the evidence behind each fact. ' +
-        CONTENT_NOTICE,
-    },
-  );
 
   // EPIC-068. The permission is checked here rather than in each handler; see
   // `createToolGuard`. The two destructive tools live in `./config-tools.ts` and
@@ -268,6 +302,15 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
     logger,
     ...(dependencies.audit === undefined ? {} : { audit: dependencies.audit }),
   });
+  const server = new McpServer(
+    { name: MCP_SERVER_NAME, version: VERSION },
+    {
+      instructions:
+        'Ferret answers questions about indexed repositories: commits, files, ' +
+        'branches, worktrees, developers and the evidence behind each fact. ' +
+        CONTENT_NOTICE,
+    },
+  );
 
   // EPIC-066. Registered only when a caller supplied the access, so a knowledge-
   // only server does not advertise tools it cannot serve.
@@ -376,10 +419,22 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
               'because repository content otherwise outranks it.',
           ),
         limit: z.number().int().min(1).max(TOOL_RESULT_LIMIT).optional(),
+        maxTokens: z
+          .number()
+          .int()
+          .min(MIN_SEARCH_TOKENS)
+          .optional()
+          .describe(
+            'Cap this response at roughly this many tokens, dropping the ' +
+              'lowest-ranked results to fit and reporting how many it dropped. ' +
+              'Use it when a wide `limit` would return more than you can afford ' +
+              'to read: a result set your client truncates has lost whichever ' +
+              'part it chose to cut, rather than whichever part matters least.',
+          ),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ query, kinds, limit }) =>
+    async ({ query, kinds, limit, maxTokens }) =>
       guard('search', Permission.READ, async () => {
         const bounded = Math.min(limit ?? 20, TOOL_RESULT_LIMIT);
 
@@ -398,15 +453,18 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           );
           const safety = new ContentSafety();
           const results = hits.map((hit) => describeHit(hit, safety));
-          return {
-            notice: CONTENT_NOTICE,
-            count: hits.length,
-            results,
-            contentSafety: safety.report,
-            // EPIC-058. A count and nothing else. It tells a caller the answer is
-            // short without telling it what is missing.
-            withheld: withheld.total,
-          };
+          return withinTokens(
+            {
+              notice: CONTENT_NOTICE,
+              count: hits.length,
+              results,
+              contentSafety: safety.report,
+              // EPIC-058. A count and nothing else. It tells a caller the answer is
+              // short without telling it what is missing.
+              withheld: withheld.total,
+            },
+            maxTokens,
+          );
         }
 
         const { plan, hits, withheld } = await planner.search(
@@ -420,30 +478,33 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
 
         const safety = new ContentSafety();
         const plannedResults = hits.map((hit) => ({ ...describeHit(hit, safety), foundBy: hit.foundBy }));
-        return {
-          notice: CONTENT_NOTICE,
-          count: hits.length,
-          contentSafety: safety.report,
-          // EPIC-058. Present on both branches of this tool: dogfooding found it
-          // on the unplanned one and absent on the planned one, which is the path
-          // the CLI wires — so in production the count reached nobody.
-          withheld: withheld.total,
-          // Reported, not hidden. A caller cannot tell a complete answer from a
-          // partial one unless the answer says which it is, and `partial` is the
-          // single field that says so.
-          plan: {
-            interpretedAs: plan.shape,
-            why: plan.reason,
-            partial: plan.partial,
-            strategies: plan.strategies.map((outcome) => ({
-              strategy: outcome.strategy,
-              ran: outcome.ran,
-              returned: outcome.returned,
-              ...(outcome.skipped === undefined ? {} : { skipped: outcome.skipped }),
-            })),
+        return withinTokens(
+          {
+            notice: CONTENT_NOTICE,
+            count: hits.length,
+            contentSafety: safety.report,
+            // EPIC-058. Present on both branches of this tool: dogfooding found it
+            // on the unplanned one and absent on the planned one, which is the path
+            // the CLI wires — so in production the count reached nobody.
+            withheld: withheld.total,
+            // Reported, not hidden. A caller cannot tell a complete answer from a
+            // partial one unless the answer says which it is, and `partial` is the
+            // single field that says so.
+            plan: {
+              interpretedAs: plan.shape,
+              why: plan.reason,
+              partial: plan.partial,
+              strategies: plan.strategies.map((outcome) => ({
+                strategy: outcome.strategy,
+                ran: outcome.ran,
+                returned: outcome.returned,
+                ...(outcome.skipped === undefined ? {} : { skipped: outcome.skipped }),
+              })),
+            },
+            results: plannedResults,
           },
-          results: plannedResults,
-        };
+          maxTokens,
+        );
       }),
   );
 

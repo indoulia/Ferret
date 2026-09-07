@@ -9,6 +9,8 @@
 export {
   ESTIMATE_MARGIN,
   TokenBudget,
+  MCP_JSON_INDENT,
+  estimateDeliveredTokens,
   estimateJsonTokens,
   estimateTokens,
 } from './budget.js';
@@ -17,6 +19,7 @@ export {
   ContextPackBuilder,
   DEFAULT_BUDGET,
   MAX_BUDGET,
+  MIN_BUDGET,
   PACK_FORMAT_VERSION,
   TruncationReason,
   renderPack,

@@ -20,7 +20,7 @@ import {
 } from '../retrieval/index.js';
 import { VERSION } from '../version.js';
 
-import { TokenBudget, estimateJsonTokens } from './budget.js';
+import { TokenBudget, estimateDeliveredTokens, estimateJsonTokens } from './budget.js';
 import { DURABLE_CONTEXT_KIND } from './durable.js';
 import {
   MAX_STANDING_CONTEXT,
@@ -331,8 +331,66 @@ export interface PackRequest {
 /** Tokens a pack occupies when the caller does not say. */
 export const DEFAULT_BUDGET = 4000;
 
+/**
+ * What a pack costs before a single item is in it - EPIC-136 4.1.
+ *
+ * Every field besides `standing` and `items`: the content notice, the
+ * provenance quartet, the question, the safety report, and the JSON structure
+ * around them. None of it was charged, and the transport pretty-prints, which
+ * the compact estimate did not count either. Measured on a real pack: 3 971
+ * items against a budget of 4 000 arrived as 5 438 tokens, 37 per cent over a
+ * budget the response reported keeping.
+ *
+ * A **floor, not a ceiling** - it covers only the fields whose size is known
+ * before anything is selected. The omission list is not one of them, because
+ * which reasons appear depends on what did not fit; `build` measures the
+ * assembled pack instead and drops items if it overran. Reserving every reason
+ * at its longest cost ~300 tokens of a 4 000 budget for omissions that rarely
+ * all occur, and left a 1 200-token budget with room for nothing.
+ */
+function envelopeTokens(question: string): number {
+  return estimateDeliveredTokens({
+    contentNotice: CONTENT_NOTICE,
+    formatVersion: PACK_FORMAT_VERSION,
+    producer: 'ferret.context',
+    producerVersion: VERSION,
+    builtAt: new Date().toISOString(),
+    question,
+    standing: [],
+    items: [],
+    omitted: [],
+    contentSafety: new ContentSafety().report,
+    estimatedTokens: Number.MAX_SAFE_INTEGER,
+    budget: Number.MAX_SAFE_INTEGER,
+    withheld: {
+      total: Number.MAX_SAFE_INTEGER,
+      byReason: Object.fromEntries(
+        Object.values(WithholdReason).map((reason) => [reason, Number.MAX_SAFE_INTEGER]),
+      ),
+    },
+  });
+}
+
 /** The most a pack may occupy however large a budget is requested. */
 export const MAX_BUDGET = 100_000;
+
+/**
+ * The smallest budget a pack can honour - EPIC-136 4.1.
+ *
+ * A pack's fixed fields cost about 470 estimated tokens before an item is in
+ * it: the content notice EPIC-133 requires, the provenance quartet, the safety
+ * report. That is irreducible, so a request for 400 cannot be met, and until
+ * the envelope was charged for the response simply exceeded it in silence -
+ * `tests/integration/retrieval/task-assembly.test.ts` asked for 400 and was
+ * sent 599.
+ *
+ * Clamped up rather than refused. A caller asking for too little gets a usable
+ * pack and is *told* the budget was raised, which is what it needed; throwing
+ * would turn a response that used to arrive into an error, and the caller had
+ * no way to know the floor. `budget` reports what was actually applied, so the
+ * promise `estimatedTokens <= budget` holds for every request.
+ */
+export const MIN_BUDGET = 800;
 
 export class ContextPackBuilder {
   readonly #retrieval: RetrievalPort;
@@ -476,7 +534,10 @@ export class ContextPackBuilder {
       });
     }
 
-    const budget = new TokenBudget(Math.min(request.budget ?? DEFAULT_BUDGET, MAX_BUDGET));
+    const asked = Math.min(request.budget ?? DEFAULT_BUDGET, MAX_BUDGET);
+    const requested = Math.max(asked, MIN_BUDGET);
+    const envelope = envelopeTokens(question);
+    const budget = new TokenBudget(Math.max(1, requested - envelope));
     const maxItems = request.maxItems ?? 20;
 
     const { hits, withheld } = await this.#recordsFor(
@@ -524,7 +585,7 @@ export class ContextPackBuilder {
           subsumed: hit.ranking?.subsumed ?? [],
           evidence: await this.#supportFor(hit.entity.id),
         },
-        estimateJsonTokens,
+        estimateDeliveredTokens,
         safety,
       );
       if (budget.admit(entry.estimatedTokens)) standing.push(entry);
@@ -575,87 +636,159 @@ export class ContextPackBuilder {
     // that is not reported is indistinguishable from an entity that simply had no
     // more. The breakdown by cause is the §18 part: an integer says how much was
     // left out, and only a cause says why.
-    const omitted: PackOmission[] = evidenceOmissions(items);
-    if (standingDropped > 0) {
-      omitted.push({
-        reason: TruncationReason.BUDGET,
-        count: standingDropped,
-        detail: `${String(standingDropped)} durable statement(s) did not fit the pack`,
-      });
-    }
-    if (trimmedCount > 0) {
-      omitted.push({
-        reason: TruncationReason.CONTENT,
-        count: trimmedCount,
-        detail: `${String(trimmedCount)} result(s) had their longest values shortened to fit`,
-      });
-    }
-    if (droppedForBudget > 0) {
-      omitted.push({
-        reason: TruncationReason.BUDGET,
-        count: droppedForBudget,
-        detail: `${String(droppedForBudget)} result(s) did not fit in ${String(budget.total)} estimated tokens`,
-      });
-    }
-    // A statement delivered in the standing section is not a statement omitted.
-    //
-    // This was `hits.length > items.length + droppedForBudget`, which infers the
-    // limit's effect from a subtraction — and the subtraction has no term for a
-    // hit that was delivered somewhere other than `items`. Durable context is
-    // exactly that: it reaches `standing` from this same list and is marked seen
-    // so it is not sent twice, so every standing entry was counted as a result
-    // the limit had cut off.
-    //
-    // Measured by `benchmark/continuity/` on **fourteen of fourteen** packs: each
-    // reported `result-limit` with a count exactly equal to the number of durable
-    // statements it had just delivered, and `renderPack` printed *"stopped after
-    // 20 results"* into the prose the model reads. It is the inverse of the
-    // defect the widening fallback fixed — that pack claimed completeness while
-    // empty, this one claimed truncation while complete — and either way a client
-    // that cannot believe `omitted` has lost the field EPIC-048 AC-7 exists for.
-    if (stoppedAtLimit > 0) {
-      omitted.push({
-        reason: TruncationReason.LIMIT,
-        count: stoppedAtLimit,
-        detail: `stopped after ${String(maxItems)} results`,
-      });
-    }
-    // EPIC-058 AC-13. A count and nothing else: no id, no kind, no path, no
-    // source, no rule. It says the answer is short; it does not say what is
-    // missing, which is the question the filter exists to refuse.
-    //
-    // One entry per rule that hid something. The tally has always carried
-    // `byReason`; reading `total` and naming a single reason for the sum
-    // reported whichever reason was named for all three, and the reason named
-    // was the one that reads as an authorization boundary. Order is fixed here
-    // rather than taken from the tally so that two packs over the same result
-    // compare equal.
-    for (const [reason, describe] of WITHHELD_REPORTING) {
-      const count = withheld.byReason[reason] ?? 0;
-      if (count === 0) continue;
-      omitted.push({ reason: describe.reason, count, detail: describe.detail(count) });
-    }
+    /**
+     * The pack for a given item list, with the omission list that describes it.
+     *
+     * A closure because AC-2 needs the whole response measured and, if it
+     * overran, measured *again* with one fewer item - and the omission list has
+     * to change when it does, or the pack would under-report what it cut.
+     */
+    const assemble = (
+      chosen: readonly PackItem[],
+      keptStanding: readonly StandingContext[],
+      droppedTotal: number,
+      standingDroppedTotal: number,
+    ): ContextPack => {
+      const omitted: PackOmission[] = evidenceOmissions(chosen);
+      if (standingDroppedTotal > 0) {
+        omitted.push({
+          reason: TruncationReason.BUDGET,
+          count: standingDroppedTotal,
+          detail: `${String(standingDroppedTotal)} durable statement(s) did not fit the pack`,
+        });
+      }
+      if (trimmedCount > 0) {
+        omitted.push({
+          reason: TruncationReason.CONTENT,
+          count: trimmedCount,
+          detail: `${String(trimmedCount)} result(s) had their longest values shortened to fit`,
+        });
+      }
+      // EPIC-136 AC-2. A budget below the floor is raised, and said so: silence
+      // is the failure this Epic exists to remove, not one to introduce.
+      if (asked < MIN_BUDGET) {
+        omitted.push({
+          reason: TruncationReason.BUDGET,
+          count: 1,
+          detail:
+            `a budget of ${String(asked)} was raised to ${String(requested)}: the fixed ` +
+            `fields of a pack cost about ${String(envelope)} estimated tokens before any ` +
+            'result is in it, so a smaller budget cannot be met.',
+        });
+      }
+      if (droppedTotal > 0) {
+        omitted.push({
+          reason: TruncationReason.BUDGET,
+          count: droppedTotal,
+          detail: `${String(droppedTotal)} result(s) did not fit in ${String(requested)} estimated tokens`,
+        });
+      }
+      // A statement delivered in the standing section is not a statement
+      // omitted. This was `hits.length > items.length + droppedForBudget`,
+      // which infers the limit from a subtraction with no term for a hit
+      // delivered somewhere other than `items`. Durable context is exactly
+      // that. Measured by `benchmark/continuity/` on fourteen of fourteen
+      // packs: each reported `result-limit` with a count equal to the durable
+      // statements it had just delivered.
+      if (stoppedAtLimit > 0) {
+        omitted.push({
+          reason: TruncationReason.LIMIT,
+          count: stoppedAtLimit,
+          detail: `stopped after ${String(maxItems)} results`,
+        });
+      }
+      // EPIC-058 AC-13. A count and nothing else: no id, no kind, no path, no
+      // source, no rule. It says the answer is short; it does not say what is
+      // missing, which is the question the filter exists to refuse. Order is
+      // fixed here rather than taken from the tally so that two packs over the
+      // same result compare equal.
+      for (const [reason, describe] of WITHHELD_REPORTING) {
+        const count = withheld.byReason[reason] ?? 0;
+        if (count === 0) continue;
+        omitted.push({ reason: describe.reason, count, detail: describe.detail(count) });
+      }
 
-    return {
-      // First, and the reason is F-66. A model reads in order, and an
-      // instruction that arrives after the content it governs has already lost
-      // — which is what this field did when it sat last in the literal. Key
-      // order is JSON serialization order, so this line is the fix and not a
-      // preference.
-      contentNotice: CONTENT_NOTICE,
-      formatVersion: PACK_FORMAT_VERSION,
-      producer: 'ferret.context',
-      producerVersion: VERSION,
-      builtAt: new Date().toISOString(),
-      question,
-      standing: orderStanding(standing),
-      items,
-      omitted,
-      contentSafety: safety.report,
-      estimatedTokens: budget.spent,
-      budget: budget.total,
-      withheld,
+      const assembled = {
+        // First, and the reason is F-66. A model reads in order, and an
+        // instruction that arrives after the content it governs has already
+        // lost - which is what this field did when it sat last in the literal.
+        // Key order is JSON serialization order, so this line is the fix and
+        // not a preference.
+        contentNotice: CONTENT_NOTICE,
+        formatVersion: PACK_FORMAT_VERSION,
+        producer: 'ferret.context',
+        producerVersion: VERSION,
+        builtAt: new Date().toISOString(),
+        question,
+        standing: orderStanding(keptStanding),
+        items: [...chosen],
+        omitted,
+        contentSafety: safety.report,
+        estimatedTokens: 0,
+        budget: requested,
+        withheld,
+      };
+      // The estimate is a field of the thing being estimated, so it is measured
+      // against the widest number that field can hold - the trick `#toItem`
+      // already uses, and for the same reason.
+      return {
+        ...assembled,
+        estimatedTokens: estimateDeliveredTokens({
+          ...assembled,
+          estimatedTokens: Number.MAX_SAFE_INTEGER,
+        }),
+      };
     };
+
+    // EPIC-136 AC-2. The reserve is a floor rather than a guarantee - the
+    // omission list is not sized until it exists - so what makes the promise
+    // true is measurement: assemble, and if the whole response overran, take
+    // the overrun out of the lowest-ranked item.
+    //
+    // **Trim before dropping.** Dropping alone reverses the decision this file
+    // already took, in its own words: *"a commit's first paragraph answers most
+    // questions about that commit, and a pack with half a message beats a pack
+    // with an apology."* Caught by `context-pack.test.ts`, which had a 900-token
+    // budget trim an oversized commit and then watched the overrun check throw
+    // the trimmed item away, leaving the apology.
+    //
+    // Each item is trimmed at most once and dropped at most once, so the loop
+    // runs at most twice per item.
+    let chosen: readonly PackItem[] = items;
+    let kept: readonly StandingContext[] = standing;
+    let dropped = droppedForBudget;
+    let shedStanding = standingDropped;
+    let pack = assemble(chosen, kept, dropped, shedStanding);
+    // Bounded: every iteration shrinks the last item strictly, removes it, or
+    // removes a standing entry, so it cannot run longer than there is content.
+    while (pack.estimatedTokens > requested && (chosen.length > 0 || kept.length > 0)) {
+      const last = chosen[chosen.length - 1];
+      if (last !== undefined) {
+        const room = last.estimatedTokens - (pack.estimatedTokens - requested);
+        const tighter = room >= MINIMUM_TRIMMED_TOKENS ? trimItem(last, room) : undefined;
+        // Progress or removal. A `trimItem` that returns the same size - an item
+        // already at its floor, or one whose bulk is not in a trimmable value -
+        // would otherwise spin.
+        if (tighter !== undefined && tighter.estimatedTokens < last.estimatedTokens) {
+          if (last.trimmed !== true) trimmedCount += 1;
+          chosen = [...chosen.slice(0, -1), tighter];
+        } else {
+          chosen = chosen.slice(0, -1);
+          dropped += 1;
+        }
+      } else {
+        // Items exhausted and still over. Standing context is admitted first and
+        // deliberately protected - EPIC-131 exists so a repository indexed
+        // beside it cannot crowd the standing statements out - so it is shed
+        // last and only to keep the promise `budget` makes. Exceeding the budget
+        // in silence would be worse: the client then truncates, and what it cuts
+        // is not what Ferret would have chosen to cut.
+        kept = kept.slice(0, -1);
+        shedStanding += 1;
+      }
+      pack = assemble(chosen, kept, dropped, shedStanding);
+    }
+    return pack;
   }
 
   async #toItem(hit: SearchHit, withNeighbours: boolean, safety: ContentSafety): Promise<PackItem> {
@@ -738,7 +871,7 @@ export class ContextPackBuilder {
     // against the widest number the field can hold. Sixteen digits where the
     // real one is three costs a handful of tokens and keeps the count on the
     // over-counting side of exact, which is the side the module chose.
-    const estimatedTokens = estimateJsonTokens({
+    const estimatedTokens = estimateDeliveredTokens({
       ...item,
       estimatedTokens: Number.MAX_SAFE_INTEGER,
     });

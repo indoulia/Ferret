@@ -69,6 +69,31 @@ export function estimateJsonTokens(value: unknown): number {
 }
 
 /**
+ * The indentation an MCP tool result is serialized at — `src/mcp/guards.ts`.
+ *
+ * Shared rather than written twice because {@link estimateDeliveredTokens}
+ * exists precisely to agree with that serialization, and a budget that
+ * disagreed with the transport by a constant is the defect EPIC-136 §4.1
+ * describes.
+ */
+export const MCP_JSON_INDENT = 2;
+
+/**
+ * What a value costs a client once the transport has serialized it — EPIC-136 §4.1.
+ *
+ * {@link estimateJsonTokens} measures *compact* JSON, and the MCP guard sends
+ * pretty-printed JSON. Every indented line adds a whitespace run, which
+ * {@link estimateTokens} charges as a token, so the compact estimate is about
+ * 17% below what actually goes out — measured across three real context packs.
+ * Anything making a promise about what a client receives has to count what a
+ * client receives.
+ */
+export function estimateDeliveredTokens(value: unknown): number {
+  const json = JSON.stringify(value, null, MCP_JSON_INDENT);
+  return json === undefined ? 1 : estimateTokens(json);
+}
+
+/**
  * A budget being spent down.
  *
  * Tracks what was admitted and, more importantly, **what was not**. A pack that
