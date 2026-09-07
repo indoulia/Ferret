@@ -1,0 +1,251 @@
+{
+  "version": "3",
+  "description": "Three sessions over one store. Session A investigates and records; Session B is a fresh agent asked a question whose answer A established but no document states; Session C is asked the same question after the repository changed under it. The supersession is real: it is the exclusion trailing-slash defect this phase found and fixed, so A's record is true when made and false afterwards.",
+  "design": {
+    "why-this-question": "The task benchmark's questions are answerable by grepping, and the Opus arm showed a strong control reaching them without help. This question is not one of those. Whether a pattern written `secrets/` excludes anything is stated in no document: it is a consequence of `matcherFor` expanding a metacharacter-free pattern into four forms, and of what picomatch then does with a doubled separator. An agent has to read the code and reason about a library to get it right — which is exactly the kind of finding a previous session is worth having recorded.",
+    "why-the-same-question-twice": "Session C asks Session B's question after the defect is fixed, so the correct verdict moves from one option to another within the same fixed option set, and Session B's correct answer becomes Session C's stale one. Nothing about the rubric changes between them; the repository does.",
+    "control": "A notes file in the repository holding exactly what Session A recorded, in the same order, with rationale and status, written immediately before the control session and deleted immediately after. Nothing is withheld from it — the same argument benchmark/continuity/README.md makes for its own baseline.",
+    "why-a-fourth-session": "Session C measured the realistic case: the repository changed and nobody recorded that it had. Both arms noticed anyway, by verifying against source. That leaves one question unanswered — whether Ferret's lifecycle machinery helps when it is actually used. So a maintenance session is asked to bring the record up to date, using whatever it has for that, and Session D asks Session C's question again. Nothing is curated by the harness: if the maintenance session records nothing, that is the result."
+  },
+  "sessions": {
+    "a": {
+      "id": "session-a",
+      "question": "Ferret has a top-level configuration key called `exclude`. Establish precisely what it does today: what a pattern may look like, which patterns actually match which paths, and at what point in Ferret's pipeline the exclusion takes effect. Pay particular attention to what happens to a pattern written as a bare directory name and to one written with a trailing slash, and check your conclusion against how the matching library actually behaves rather than only against what the comments say. Then record what you established, so a later session working on exclusions does not have to repeat this investigation. Finish by telling me what you recorded.",
+      "notes": "Not scored on a verdict. What is measured is whether the session reached the finding at all, and what it chose to record — reported rather than graded, because nothing here decides in advance what the right set of statements is.",
+      "facts": [
+        {
+          "id": "trailing-slash-matches-nothing",
+          "patterns": [
+            "trailing slash",
+            "secrets/",
+            "matches? (?:nothing|no path)",
+            "excludes? nothing",
+            "//\\*\\*"
+          ],
+          "why": "The finding that exists on the tree Session A runs against, that no document states, and that Session C's change supersedes."
+        },
+        {
+          "id": "bare-directory-expands",
+          "patterns": [
+            "bare directory",
+            "directory and everything under",
+            "\\*\\*/",
+            "four patterns",
+            "expand"
+          ],
+          "why": "The behaviour that works, which the trailing-slash case was supposed to share."
+        },
+        {
+          "id": "read-path-enforcement",
+          "patterns": [
+            "read[- ]?(?:path|time)",
+            "retrieval[- ]?time",
+            "withheld",
+            "filtered",
+            "not prevented from being (?:stored|indexed)",
+            "still stored"
+          ],
+          "why": "Where the enforcement is, which is what makes the key's documented intent inaccurate."
+        }
+      ]
+    },
+    "b": {
+      "id": "session-b",
+      "question": "A colleague wants Ferret to stop returning anything under a directory called `secrets`, and adds the single entry `secrets/` to the `exclude` list in Ferret's configuration. Will that keep the contents of that directory out of Ferret's answers? Answer for the repository as it stands.",
+      "verdict": {
+        "description": "What that entry does to paths under the directory.",
+        "options": [
+          "it-excludes-that-directory-and-everything-under-it",
+          "it-matches-nothing",
+          "it-excludes-only-the-directory-entry-itself",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "it-matches-nothing",
+        "stale": "it-excludes-that-directory-and-everything-under-it"
+      },
+      "facts": [
+        {
+          "id": "the-mechanism",
+          "patterns": [
+            "//\\*\\*",
+            "double(?:d)? (?:slash|separator)",
+            "trailing slash",
+            "metacharacter",
+            "matcherFor",
+            "expan(?:d|sion)"
+          ],
+          "why": "Why it fails: the expansion produces a pattern with a doubled separator, which matches no path."
+        },
+        {
+          "id": "the-workaround",
+          "patterns": [
+            "without the (?:trailing )?slash",
+            "drop the (?:trailing )?slash",
+            "`?secrets`?(?: instead| without)",
+            "bare (?:name|directory)",
+            "omit the slash"
+          ],
+          "why": "What the colleague should write instead, which is the useful half of the answer."
+        },
+        {
+          "id": "silent",
+          "patterns": [
+            "silent",
+            "no (?:error|warning|complaint)",
+            "accepted",
+            "reports? (?:it )?as (?:configured|excluded)",
+            "without complaint"
+          ],
+          "why": "That the failure gives no signal, which is what makes it dangerous for this use."
+        }
+      ],
+      "evidence": [
+        {
+          "artefact": "file:src/config/exclusions.ts",
+          "relevance": 3,
+          "basis": "matcherFor: the four-pattern expansion, applied only when the pattern holds no glob metacharacter."
+        },
+        {
+          "artefact": "file:src/config/schema.ts",
+          "relevance": 2,
+          "basis": "Where `exclude` is declared and documented."
+        }
+      ]
+    },
+    "c": {
+      "id": "session-c",
+      "question": "A colleague wants Ferret to stop returning anything under a directory called `secrets`, and adds the single entry `secrets/` to the `exclude` list in Ferret's configuration. Will that keep the contents of that directory out of Ferret's answers? Answer for the repository as it stands, and say whether the answer has always been the same.",
+      "verdict": {
+        "description": "What that entry does to paths under the directory.",
+        "options": [
+          "it-excludes-that-directory-and-everything-under-it",
+          "it-matches-nothing",
+          "it-excludes-only-the-directory-entry-itself",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "it-excludes-that-directory-and-everything-under-it",
+        "stale": "it-matches-nothing"
+      },
+      "facts": [
+        {
+          "id": "current-mechanism",
+          "patterns": [
+            "withoutTrailingSlash",
+            "strip(?:s|ped|ping)?[^.]{0,60}(?:trailing )?slash",
+            "trailing slash(?:es)? (?:is|are) (?:now )?strip",
+            "does (?:now )?exclude",
+            "now (?:it )?(?:works|excludes)"
+          ],
+          "why": "The current answer, and the mechanism that produces it."
+        },
+        {
+          "id": "it-changed",
+          "patterns": [
+            "(?:was|used to|previously|formerly|until|before|earlier)[^.]{0,90}(?:matched? nothing|excluded? nothing|no match|did not)",
+            "has not always",
+            "not always been",
+            "changed",
+            "fixed",
+            "regression test"
+          ],
+          "why": "The second half of the question: this is a reversal, not a standing truth. An answer that does not know it changed has answered half."
+        }
+      ],
+      "evidence": [
+        {
+          "artefact": "file:src/config/exclusions.ts",
+          "relevance": 3,
+          "basis": "withoutTrailingSlash, applied in matcherFor before the directory expansion."
+        },
+        {
+          "artefact": "file:tests/unit/config-layers.test.ts",
+          "relevance": 2,
+          "basis": "The regression test that pins it, and names where the defect was found."
+        }
+      ]
+    },
+    "maintain": {
+      "id": "session-maintain",
+      "question": "A change has just landed in this repository that affects how Ferret's `exclude` patterns are matched. Find out what changed, then bring the recorded engineering knowledge about exclusions up to date so that a later session is not misled by anything now out of date. Finish by telling me what you changed and why.",
+      "notes": "Not scored on a verdict. What is measured is whether the session found the durable records at all, whether it could mark the out-of-date one as superseded, and what that cost.",
+      "facts": [
+        {
+          "id": "found-the-change",
+          "patterns": [
+            "70bcfca",
+            "withoutTrailingSlash",
+            "trailing slash(?:es)? (?:is|are) (?:now )?strip",
+            "strip(?:s|ped|ping)?[^.]{0,60}trailing"
+          ],
+          "why": "That it identified the commit and the mechanism."
+        },
+        {
+          "id": "acted-on-the-record",
+          "patterns": [
+            "supersede",
+            "superseded",
+            "archiv",
+            "record(?:ed)? (?:a )?(?:new|replacement)",
+            "updated the record",
+            "ferret_context_(?:record|trust|lifecycle|promote)",
+            "marked"
+          ],
+          "why": "That it did something to the stored statement rather than only reporting."
+        }
+      ]
+    },
+    "d": {
+      "id": "session-d",
+      "question": "A colleague wants Ferret to stop returning anything under a directory called `secrets`, and adds the single entry `secrets/` to the `exclude` list in Ferret's configuration. Will that keep the contents of that directory out of Ferret's answers? Answer for the repository as it stands, and say whether the answer has always been the same.",
+      "verdict": {
+        "description": "What that entry does to paths under the directory.",
+        "options": [
+          "it-excludes-that-directory-and-everything-under-it",
+          "it-matches-nothing",
+          "it-excludes-only-the-directory-entry-itself",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "it-excludes-that-directory-and-everything-under-it",
+        "stale": "it-matches-nothing"
+      },
+      "facts": [
+        {
+          "id": "current-mechanism",
+          "patterns": [
+            "withoutTrailingSlash",
+            "strip(?:s|ped|ping)?[^.]{0,60}(?:trailing )?slash",
+            "trailing slash(?:es)? (?:is|are) (?:now )?strip",
+            "does (?:now )?exclude",
+            "now (?:it )?(?:works|excludes)"
+          ],
+          "why": "The current answer, and the mechanism that produces it."
+        },
+        {
+          "id": "it-changed",
+          "patterns": [
+            "(?:was|used to|previously|formerly|until|before|earlier)[^.]{0,90}(?:matched? nothing|excluded? nothing|no match|did not)",
+            "has not always",
+            "not always been",
+            "changed",
+            "fixed",
+            "regression test"
+          ],
+          "why": "The second half of the question: this is a reversal, not a standing truth. An answer that does not know it changed has answered half."
+        }
+      ],
+      "evidence": [
+        {
+          "artefact": "file:src/config/exclusions.ts",
+          "relevance": 3,
+          "basis": "withoutTrailingSlash, applied in matcherFor before the directory expansion."
+        },
+        {
+          "artefact": "file:tests/unit/config-layers.test.ts",
+          "relevance": 2,
+          "basis": "The regression test that pins it, and names where the defect was found."
+        }
+      ],
+      "notes": "Session C’s question, asked again after a maintenance session was given the chance to update the record. Same rubric, same option set, same fixed expected and stale verdicts — the only difference is what the store and the notes file now say."
+    }
+  }
+}

@@ -1,0 +1,632 @@
+{
+  "version": "1",
+  "description": "Eight real engineering questions about Ferret, each with a decision to reach, the facts a complete answer states, the artefacts it must rest on, and the superseded belief it must not assert. Written and frozen before either arm was run.",
+  "baseCommit": "144d478",
+  "provenance": "Five of the eight questions, and all of their evidence labels, are the task benchmark's own — benchmark/tasks.json, where they were written from cited repository sentences before any condition was run and have been reviewed and corrected twice since. They are reused rather than rewritten so that this phase cannot be accused of inventing labels that suit it, and so that a weak result here can be compared against the retrieval-only numbers for the same question. The verdict option sets, fact patterns and stale traps are new, because neither earlier benchmark had a model to grade.",
+  "grades": {
+    "3": "The artefact that answers the question. An answer not resting on it is not sourced.",
+    "2": "Supporting. Corroborates or completes the answer; a reader wants it.",
+    "1": "Marginal. Citing it is not wrong; citing it instead of a 3 is."
+  },
+  "scoring": {
+    "verdictCorrect": "answer.verdict === verdict.expected. An equality check, not a reading of prose.",
+    "factsCovered": "Each fact is one claim with several wordings; it counts as covered when any of its patterns matches the conclusion or a key fact, case-insensitively.",
+    "evidenceSourced": "Every relevance-3 artefact appears in answer.citations, after normalising a citation to the artefact vocabulary benchmark/lib/identity.mjs uses.",
+    "staleAsserted": "The answer picked the option named by verdict.stale, or matched one of the stale traps' patterns.",
+    "unsupportedCitations": "Citations naming something that appears in no tool result this agent received."
+  },
+  "tasks": [
+    {
+      "id": "macos-runner",
+      "group": "decision",
+      "question": "CI does not run the packaging suite on macOS. Should a macOS runner be added to the verify matrix? Answer from this repository's own record, and say what that record establishes.",
+      "answerBasis": "No. The owner dropped macOS from the verify matrix on 2026-09-05 and EPIC-115 was closed with coverage DEFERRED; the obligation that replaced it was to stop claiming macOS is verified. The workflow matrix is windows-latest only. It is not a capability gap: macOS was measured and passed.",
+      "verdict": {
+        "description": "The option that answers the question.",
+        "options": [
+          "add-a-macos-runner",
+          "do-not-add-a-macos-runner",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "do-not-add-a-macos-runner"
+      },
+      "facts": [
+        {
+          "id": "owner-decision",
+          "patterns": [
+            "owner decision",
+            "2026-09-05",
+            "owner (?:dropped|removed)",
+            "dropped (?:macos|macOS|from the verify matrix)"
+          ],
+          "why": "The decision is an owner decision with a date, not an inference from the workflow file."
+        },
+        {
+          "id": "coverage-deferred",
+          "patterns": [
+            "defer",
+            "EPIC-115[^.]{0,120}closed"
+          ],
+          "why": "EPIC-115 is CLOSED with coverage DEFERRED — the Epic exists and did not deliver coverage."
+        },
+        {
+          "id": "was-measured",
+          "patterns": [
+            "was (?:already )?measured",
+            "(?:has|had) (?:been )?measured",
+            "#140",
+            "pull request 140",
+            "2[  ,]?463",
+            "112 test files",
+            "did (?:once )?pass",
+            "passed(?: on macos)? (?:once|before|previously)",
+            "EPIC-105"
+          ],
+          "why": "Not a capability gap. Claiming macOS cannot be validated is a different and wrong answer."
+        }
+      ],
+      "stale": [
+        {
+          "id": "claims-a-runner-exists",
+          "patterns": [
+            "(?:we|ci|the matrix) (?:currently )?run[s]? (?:the )?(?:packaging suite|tests?|verify) on macos",
+            "macos (?:runner|job) (?:is|remains) (?:in|on) the (?:verify )?matrix",
+            "macos-latest (?:is|remains) (?:in|on) the (?:verify )?matrix"
+          ],
+          "why": "The reversed position asserted as current: that a macOS runner is in the matrix today. EPIC-105 and its validation record claim macOS coverage; the 2026-09-05 decision ended it.",
+          "correction": "A fourth pattern, `macos is (?:verified|covered|validated)`, was withdrawn after the first Opus run. Both arms tripped it on the same correct sentence: EPIC-115's surviving obligation is worded \"do not pretend macOS is validated unless the packaging path actually ran on macOS\", and an answer that quotes that clause contains the literal string. It fired identically on both arms, so it moved no comparison, and the run it fired on is kept as results/opus.json beside the re-graded results/opus-regraded.json."
+        }
+      ],
+      "evidence": [
+        {
+          "artefact": "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md",
+          "relevance": 3,
+          "basis": "Status line: CLOSED — coverage DEFERRED by owner decision."
+        },
+        {
+          "artefact": "file:.github/workflows/ci.yml",
+          "relevance": 3,
+          "basis": "verify matrix comment: Windows only, by owner decision, 2026-09-05."
+        },
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-115-VALIDATION.md",
+          "relevance": 2,
+          "basis": "Records the corrected claim."
+        },
+        {
+          "artefact": "file:README.md",
+          "relevance": 2,
+          "basis": "Holds the platform table the decision obliged correcting."
+        }
+      ]
+    },
+    {
+      "id": "macos-ever-measured",
+      "group": "history",
+      "question": "Has Ferret's packaging suite ever passed on macOS, and does anything run it now?",
+      "answerBasis": "Yes and no. EPIC-105 ran macos-latest on pull request #140: 112 test files and 2 463 tests passed, the packaging suite among them. The owner then dropped macOS from the verify matrix on 2026-09-05 and nothing has run it since. An answer citing only one of those is wrong in one of two directions.",
+      "verdict": {
+        "description": "The option that answers both halves of the question.",
+        "options": [
+          "passed-before-and-still-runs",
+          "passed-before-but-nothing-runs-it-now",
+          "never-passed-and-nothing-runs-it",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "passed-before-but-nothing-runs-it-now",
+        "stale": "passed-before-and-still-runs"
+      },
+      "facts": [
+        {
+          "id": "the-passing-run",
+          "patterns": [
+            "#140",
+            "pull request 140",
+            "2[  ,]?463",
+            "112 test files",
+            "EPIC-105"
+          ],
+          "why": "The measurement exists and is identified: EPIC-105 on PR #140."
+        },
+        {
+          "id": "nothing-runs-it-now",
+          "patterns": [
+            "windows-latest only",
+            "only windows",
+            "nothing (?:runs|has run) it",
+            "no (?:job|runner|workflow) (?:runs|now runs)",
+            "dropped from the (?:verify )?matrix",
+            "removed from the (?:verify )?matrix"
+          ],
+          "why": "The second half. The matrix is windows-latest only."
+        }
+      ],
+      "stale": [],
+      "evidence": [
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-105-VALIDATION.md",
+          "relevance": 3,
+          "basis": "macOS passes: 112 files, 2 463 tests, packaging suite included, on PR #140."
+        },
+        {
+          "artefact": "file:.github/workflows/ci.yml",
+          "relevance": 3,
+          "basis": "The matrix is windows-latest only."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md",
+          "relevance": 3,
+          "basis": "Nothing about macOS was ever unmeasurable. It was measured — and the coverage is now deferred."
+        },
+        {
+          "artefact": "file:README.md",
+          "relevance": 2,
+          "basis": "The platform table the correction obliged."
+        }
+      ]
+    },
+    {
+      "id": "exclusion-storage",
+      "group": "investigation",
+      "question": "A path is listed in Ferret's exclude configuration. Does Ferret prevent that path's content from being acquired and stored, or does it store the content and withhold it from results? State the current behaviour and whether it matches what the configuration documents.",
+      "answerBasis": "It is stored and withheld at read time. Exclusion is enforced on the retrieval path (src/retrieval/access.ts); excluded files are read from disk, written to the store as entities and their full text retained. src/config/schema.ts documents exclude as \"Paths excluded from indexing\", so the documented intent and the behaviour disagree. EPIC-135 records the defect, with counts measured on the dogfood store on 2026-09-07, and is PROPOSED — nothing has been implemented.",
+      "verdict": {
+        "description": "The option that describes the current behaviour.",
+        "options": [
+          "prevented-from-being-acquired-and-stored",
+          "stored-and-withheld-from-results",
+          "both-depending-on-configuration",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "stored-and-withheld-from-results",
+        "stale": "prevented-from-being-acquired-and-stored"
+      },
+      "facts": [
+        {
+          "id": "read-path-only",
+          "patterns": [
+            "read path",
+            "read[- ]time",
+            "retrieval[- ]time",
+            "withheld (?:at|on) read",
+            "filtered (?:out )?(?:of|from) (?:the )?(?:result|read|answer|quer)",
+            "queries then filter"
+          ],
+          "why": "Where the enforcement actually is."
+        },
+        {
+          "id": "content-retained",
+          "patterns": [
+            "content (?:is )?retained",
+            "text (?:is )?retained",
+            "full text",
+            "content_blob",
+            "stored (?:as|in) (?:the store|entities|the database|the index)",
+            "written to the store",
+            "1[  ,]?463[  ,]?485",
+            "file entities .{0,40}excluded"
+          ],
+          "why": "The consequence: the bytes are in the database."
+        },
+        {
+          "id": "documentation-disagrees",
+          "patterns": [
+            "excluded from indexing",
+            "document(?:ed|ation)[^.]{0,60}(?:disagree|mismatch|does not match|contradict|inaccurate|misleading)",
+            "(?:disagree|mismatch|does not match|contradict)[^.]{0,60}document"
+          ],
+          "why": "The documented intent is stronger than the behaviour, which is what makes it a defect rather than a design."
+        },
+        {
+          "id": "not-implemented",
+          "patterns": [
+            "EPIC-135",
+            "proposed",
+            "not (?:yet )?(?:been )?implemented",
+            "awaiting owner approval",
+            "deferred"
+          ],
+          "why": "The fix is recorded but not shipped; an answer that says it is fixed is wrong."
+        }
+      ],
+      "stale": [
+        {
+          "id": "claims-absent-from-storage",
+          "patterns": [
+            "(?:content|text|bytes|file)s? (?:is|are) not (?:stored|retained|acquired)",
+            "never (?:stored|retained|acquired|reaches the (?:store|database))",
+            "exclusions? (?:is|are) (?:now )?enforced at (?:ingestion|acquisition)"
+          ],
+          "why": "The documented-but-false position, asserted as current."
+        }
+      ],
+      "evidence": [
+        {
+          "artefact": "file:docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+          "relevance": 3,
+          "basis": "§1 objective and §2 problem-observed, with the measured counts and the date."
+        },
+        {
+          "artefact": "file:src/retrieval/access.ts",
+          "relevance": 3,
+          "basis": "WithholdReason.EXCLUSION and evaluateExclusion: exclusion decided on the retrieval path."
+        },
+        {
+          "artefact": "file:src/config/schema.ts",
+          "relevance": 2,
+          "basis": "exclude documented as \"Paths excluded from indexing\" — the intent the behaviour does not meet."
+        },
+        {
+          "artefact": "file:src/config/exclusions.ts",
+          "relevance": 2,
+          "basis": "The rule evaluation the read path calls."
+        }
+      ]
+    },
+    {
+      "id": "exclusion-reason",
+      "group": "change-impact",
+      "question": "ferret_context_pack leaves out a result because a configured exclude rule covers its path. What does the pack tell the caller about why it was left out, and has it always told them that?",
+      "answerBasis": "It now reports it as an exclusion rule — TruncationReason.EXCLUSION, 'exclusion-rule' — distinct from a permission denial and from an out-of-scope result. It did not always: until the fix in pull request #224 an exclusion was reported as PERMISSION, 'permission-withheld', and the continuity benchmark's repository arm measured that on fourteen of fourteen packs. The two are reported apart because they invite opposite responses: a permission denial invites escalation, an exclusion rule is the operator's intent working.",
+      "verdict": {
+        "description": "What the pack currently tells the caller.",
+        "options": [
+          "reports-it-as-a-permission-denial",
+          "reports-it-as-an-exclusion-rule",
+          "reports-that-something-was-omitted-without-a-reason",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "reports-it-as-an-exclusion-rule",
+        "stale": "reports-it-as-a-permission-denial"
+      },
+      "facts": [
+        {
+          "id": "current-reason",
+          "patterns": [
+            "exclusion-rule",
+            "exclusion rule",
+            "TruncationReason\\.EXCLUSION",
+            "WithholdReason\\.EXCLUSION"
+          ],
+          "why": "The reason code the pack emits now."
+        },
+        {
+          "id": "was-a-permission-denial",
+          "patterns": [
+            "permission-withheld",
+            "permission denial",
+            "(?:reported|treated|surfaced)[^.]{0,60}permission",
+            "not permitted",
+            "as a permission"
+          ],
+          "why": "The behaviour before the change — the half of the question about history."
+        },
+        {
+          "id": "when-it-changed",
+          "patterns": [
+            "#224",
+            "6e26e97",
+            "pull request 224",
+            "recently",
+            "(?:was|has been) (?:changed|fixed|corrected)"
+          ],
+          "why": "That it changed, and when."
+        }
+      ],
+      "stale": [],
+      "evidence": [
+        {
+          "artefact": "file:src/context/pack.ts",
+          "relevance": 3,
+          "basis": "TruncationReason.EXCLUSION and WITHHELD_REPORTING, with the comment recording what it replaced."
+        },
+        {
+          "artefact": "file:src/retrieval/access.ts",
+          "relevance": 3,
+          "basis": "WithholdReason.EXCLUSION, the reason the pack maps."
+        },
+        {
+          "artefact": "file:tests/unit/context-pack.test.ts",
+          "relevance": 2,
+          "basis": "The regression coverage the fix landed with."
+        },
+        {
+          "artefact": "commit:6e26e97",
+          "relevance": 2,
+          "basis": "The commit that made the change, on pull request #224."
+        }
+      ]
+    },
+    {
+      "id": "where-decisions-live",
+      "group": "cross-source",
+      "question": "One agent's session decided something. Where does that decision become readable by a different agent, and what has to happen for it to?",
+      "answerBasis": "Durable context, which is keyed on the statement rather than on who recorded it, and which a session's memories reach only by being promoted. A session memory on its own is keyed on the session and is unreachable to any later session that was not that one.",
+      "verdict": {
+        "description": "How a second agent comes to read it.",
+        "options": [
+          "it-is-visible-to-other-agents-as-a-session-memory",
+          "only-after-it-is-promoted-to-durable-context",
+          "it-never-crosses-between-agents",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "only-after-it-is-promoted-to-durable-context",
+        "stale": "it-is-visible-to-other-agents-as-a-session-memory"
+      },
+      "facts": [
+        {
+          "id": "promotion",
+          "patterns": [
+            "promot",
+            "context/promotion",
+            "ferret_context_promote"
+          ],
+          "why": "The mechanism that moves it."
+        },
+        {
+          "id": "session-keyed",
+          "patterns": [
+            "keyed on (?:the )?session",
+            "session[- ]scoped",
+            "identity (?:contains|includes) the session",
+            "unreachable to (?:any )?later session",
+            "only (?:the|that) session"
+          ],
+          "why": "Why a session memory does not cross: its identity contains the session."
+        },
+        {
+          "id": "statement-keyed",
+          "patterns": [
+            "keyed on (?:what is said|the statement|its statement)",
+            "independent of who",
+            "regardless of who",
+            "statement rather than"
+          ],
+          "why": "Why durable context does cross: it is keyed on the statement."
+        }
+      ],
+      "stale": [
+        {
+          "id": "session-memory-called-durable",
+          "patterns": [
+            "session memor(?:y|ies) (?:is|are) (?:already )?durable",
+            "session memor(?:y|ies) (?:is|are) (?:directly )?(?:readable|visible|shared) (?:by|to|across) (?:another|other|any) agent"
+          ],
+          "why": "EPIC-042 calls session memory durable and traceable — true of its own scope, false of this question."
+        }
+      ],
+      "evidence": [
+        {
+          "artefact": "file:docs/EPICs/EPIC-129-Durable-Context-Capture.md",
+          "relevance": 3,
+          "basis": "Problem: memories are keyed on the session, so they are unreachable to any later session that was not that one."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-126-Context-Merger.md",
+          "relevance": 3,
+          "basis": "Durable context is keyed on what is said, independent of who said it."
+        },
+        {
+          "artefact": "file:src/context/promotion.ts",
+          "relevance": 2,
+          "basis": "The mapping from memory to durable context."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-132-Multi-Agent-Shared-Context.md",
+          "relevance": 2,
+          "basis": "Proves the second agent reads it without a protocol between the two."
+        }
+      ]
+    },
+    {
+      "id": "nightly-schedule",
+      "group": "decision",
+      "question": "CI runs a compatibility job on a nightly schedule rather than on every pull request. Should it be moved onto the pull-request gate? Say why the schedule exists.",
+      "answerBasis": "No. EPIC-114 keeps three kinds of coverage apart deliberately: the compatibility job answers 'does the range Ferret claims to support still work', which is broad, slow, and rarely broken by the commit that reveals it. Nightly finds a break within a day for zero pull-request wait; moving it onto the gate makes every author pay for it. The original reason the schedule existed — Windows ran only there — no longer holds after the 2026-09-05 matrix change.",
+      "verdict": {
+        "description": "What should happen to the compatibility job.",
+        "options": [
+          "move-it-onto-the-pull-request-gate",
+          "keep-it-on-the-nightly-schedule",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "keep-it-on-the-nightly-schedule"
+      },
+      "facts": [
+        {
+          "id": "cost-to-authors",
+          "patterns": [
+            "every author",
+            "pull[- ]request wait",
+            "slow(?:s|ing)? (?:every|down)",
+            "broad(?:er)? and slow",
+            "cost",
+            "paid for by"
+          ],
+          "why": "The reason it is kept off the gate."
+        },
+        {
+          "id": "different-question",
+          "patterns": [
+            "different question",
+            "claims? to support",
+            "compatibilit(?:y|ies) coverage",
+            "range (?:it|ferret) (?:claims|supports)",
+            "rarely caused by the commit",
+            "postgres(?:ql)? (?:14|15|16)"
+          ],
+          "why": "Compatibility answers a different question from PR correctness — EPIC-114's distinction."
+        }
+      ],
+      "stale": [
+        {
+          "id": "windows-only-nightly",
+          "patterns": [
+            "windows (?:only )?runs? only (?:on|in) (?:the )?(?:nightly|schedule)",
+            "windows[^.]{0,40}only (?:on|in) the (?:nightly|scheduled)",
+            "(?:nightly|schedule)[^.]{0,50}only place windows"
+          ],
+          "why": "True until 2026-09-05, when Windows moved onto every event. Reversed."
+        }
+      ],
+      "evidence": [
+        {
+          "artefact": "file:.github/workflows/ci.yml",
+          "relevance": 3,
+          "basis": "The schedule trigger's own comment, and the compatibility job gated on it."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-114-PostgreSQL-Version-Coverage.md",
+          "relevance": 2,
+          "basis": "Why compatibility coverage is scheduled rather than on the pull-request gate."
+        }
+      ]
+    },
+    {
+      "id": "score-comparability",
+      "group": "history",
+      "question": "Is a Ferret retrieval score comparable between two different queries? Say what it was before, if it changed.",
+      "answerBasis": "Yes, since EPIC-056 normalised every branch to [0, 1); SearchHit.score documents itself as comparable across queries and reserves 1.0 for an exact identifier match. It was not, when it was PostgreSQL's raw ts_rank — comparable within one result set and nowhere else.",
+      "verdict": {
+        "description": "Whether one query's score can be compared with another's.",
+        "options": [
+          "comparable-across-queries",
+          "comparable-within-one-result-set-only",
+          "never-meaningful-as-a-number",
+          "cannot-determine-from-this-repository"
+        ],
+        "expected": "comparable-across-queries",
+        "stale": "comparable-within-one-result-set-only"
+      },
+      "facts": [
+        {
+          "id": "normalised",
+          "patterns": [
+            "normalis",
+            "canonicaliz",
+            "normaliz",
+            "\\[0, ?1\\)",
+            "\\[0, ?1\\]",
+            "0 (?:to|and) 1",
+            "rank / \\(rank \\+ 1\\)",
+            "flag 32"
+          ],
+          "why": "The mechanism that made it comparable."
+        },
+        {
+          "id": "epic-056",
+          "patterns": [
+            "EPIC-056",
+            "ranking and reranking"
+          ],
+          "why": "Where the change was made."
+        },
+        {
+          "id": "was-not-before",
+          "patterns": [
+            "ts_rank",
+            "raw postgres",
+            "was not (?:comparable|before)",
+            "(?:previously|formerly|used to be)[^.]{0,60}(?:not comparable|within one)",
+            "within one result set"
+          ],
+          "why": "The reversal — an answer that does not know it changed has not answered the second half."
+        }
+      ],
+      "stale": [],
+      "evidence": [
+        {
+          "artefact": "file:src/retrieval/query.ts",
+          "relevance": 3,
+          "basis": "The comment on SearchHit.score: comparable across queries, EPIC-056 §8.1."
+        },
+        {
+          "artefact": "file:src/retrieval/rank.ts",
+          "relevance": 2,
+          "basis": "Where the normalisation is applied."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-098-Retrieval-Quality-Harness.md",
+          "relevance": 2,
+          "basis": "The harness that consumes rank-order metrics."
+        },
+        {
+          "artefact": "file:src/evaluation/metrics.ts",
+          "relevance": 2,
+          "basis": "Records the reversal and why the rank-order constraint outlived the reason first given for it."
+        }
+      ]
+    },
+    {
+      "id": "resume-dogfood",
+      "group": "cross-source",
+      "question": "A new session is taking over Ferret's self-dogfooding work. What does it need to know to continue it, and what would it get wrong without that?",
+      "answerBasis": "That the oracle is scripts/dogfood.mjs and grew rather than being replaced, that every check needs an answer computed independently of Ferret, that a skip is a third outcome distinct from a pass, that it is deliberately not a CI gate because it needs a real repository and database, and what the last run found.",
+      "facts": [
+        {
+          "id": "the-script",
+          "patterns": [
+            "scripts/dogfood\\.mjs",
+            "dogfood\\.mjs",
+            "npm run dogfood"
+          ],
+          "why": "Where the work lives."
+        },
+        {
+          "id": "independent-oracle",
+          "patterns": [
+            "independent(?:ly)? of ferret",
+            "without (?:using )?ferret",
+            "computed[^.]{0,40}(?:independent|separately|from git)",
+            "own answer",
+            "oracle",
+            "against (?:the )?repository (?:itself|directly)"
+          ],
+          "why": "The property that makes a check worth anything: the answer is not Ferret's."
+        },
+        {
+          "id": "not-a-ci-gate",
+          "patterns": [
+            "not (?:a )?(?:ci )?gate",
+            "not (?:run )?in ci",
+            "outside ci",
+            "needs a real (?:repository|database)",
+            "requires (?:a )?(?:real |live )?(?:repository|database|docker|container)"
+          ],
+          "why": "Why it is not on the pull-request path, which an agent otherwise 'fixes'."
+        },
+        {
+          "id": "skip-is-an-outcome",
+          "patterns": [
+            "skip",
+            "third outcome"
+          ],
+          "why": "A skip is not a pass; a harness that conflated them would report a green run over checks that never ran."
+        }
+      ],
+      "stale": [],
+      "evidence": [
+        {
+          "artefact": "file:docs/EPICs/EPIC-134-Continuous-Self-Dogfooding.md",
+          "relevance": 3,
+          "basis": "The Epic that owns the current shape of the work."
+        },
+        {
+          "artefact": "file:scripts/dogfood.mjs",
+          "relevance": 3,
+          "basis": "The oracle itself."
+        },
+        {
+          "artefact": "file:docs/EPICs/validation/EPIC-134-VALIDATION.md",
+          "relevance": 3,
+          "basis": "What the last run found."
+        },
+        {
+          "artefact": "file:docs/EPICs/EPIC-118-Ferret-Self-Dogfood.md",
+          "relevance": 2,
+          "basis": "The earlier Epic the current one grew from."
+        }
+      ]
+    }
+  ]
+}
