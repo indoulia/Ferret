@@ -1,14 +1,20 @@
 # EPIC-136 — MCP Delivery Cost
 
-**Status: PROPOSED | Priority: P1**
+**Status: APPROVED | Priority: P1**
 **Domain:** Context Assembly & Delivery · MCP Surface
 **Classification:** CORRECTIVE
 
-> **Awaiting owner approval.** Scope and acceptance criteria are defined below so
-> the Epic can be reviewed; nothing here is approved and nothing has been
-> implemented. All three defects were found on 2026-09-07 by the real-agent
-> benchmark (`benchmark/agent/`) and were **deliberately not fixed** in that
-> work, on the precedent EPIC-135 set — see [§12](#12-why-this-was-deferred).
+> **Approved by the owner on 2026-09-07**, as the whole of the next phase and
+> with scope explicitly capped at §4: *"Remove the measured delivery-cost
+> barriers, then rerun the same agent A/B … Address only the capabilities
+> explicitly defined by EPIC-136."* The owner also directed that
+> statement-to-tree binding — the other Phase 5 finding — is **not** in this
+> phase, and becomes a candidate only if this experiment shows Ferret is
+> otherwise valuable.
+>
+> All three defects were found on 2026-09-07 by the real-agent benchmark
+> (`benchmark/agent/`) and were **deliberately not fixed** in that work, on the
+> precedent EPIC-135 set — see [§12](#12-why-this-was-deferred).
 
 ## 1. Objective
 
@@ -125,11 +131,74 @@ window.
 2. **A compact form for search.** A way for a caller to ask `ferret_search` for
    hits without full content — a `format` argument, a per-hit content cap, or
    both. The default may stay as it is.
-3. **A smaller default tool surface.** Options to be evaluated, not chosen here:
-   grouping related tools, publishing administration tools only when the caller
-   holds the permission for them (`ferret_config_*` already does this for the
-   configuration dependency and could go further), or supporting deferred tool
-   loading where the client offers it.
+3. ~~**A smaller default tool surface.**~~ **Withdrawn by owner decision on
+   2026-09-07 — see [§4a](#4a-why-the-tool-surface-was-withdrawn).** The
+   measurement stands and the cost is real; the mechanism this Epic named for
+   reducing it conflicts with four accepted contracts, and choosing a different
+   one is a design decision outside this Epic.
+
+## 4a. Why the tool surface was withdrawn
+
+Implemented, measured, and reverted the same day. Recorded because the
+measurement is worth keeping and the reason it cannot ship is worth more.
+
+**It worked, and it was large.** Publishing a tool only to a principal that
+holds its permission cut the surface for the principal the benchmark's answering
+sessions run as — granted `read` and nothing else — from thirty tools to
+fifteen, and from ~14 984 estimated tokens to ~8 398. Measured through
+`tools/list` on a running server by `benchmark/agent/surface.mjs`:
+`results/surface-before.json` and `results/surface-after.json` are both kept.
+That is ~6 600 tokens a turn, on every turn.
+
+**And it breaks four accepted contracts.** Each of these independently requires
+that a tool be *callable* and *informatively refusable* by a principal lacking
+its permission. An unpublished tool answers `MCP error -32602: Tool not found`,
+which names no permission and cannot be told from a missing feature:
+
+| Epic | criterion | the test that failed |
+| --- | --- | --- |
+| EPIC-066 | AC-6 | `refuses a write to a caller granted only CONFIG_READ` — expects `E_NOT_PERMITTED` |
+| EPIC-067 | AC-12 | `refuses the recovery without INDEX` |
+| EPIC-068 | AC-5, AC-6 | `refuses every read tool with NOT_PERMITTED`, `names the missing permission and leaks no configuration` |
+| EPIC-117 | AC-5, D-117.3 | `refuses every writing tool to a principal holding only READ` — expects `record` named |
+
+The first attempt patched this by always publishing `read` tools, on the
+argument that a caller without `read` can call nothing anyway. That fixed one
+family of four; the full suite found the other three. **§9 of this Epic already
+forbade it** — *"Nothing in this Epic may reduce what a caller is told about what
+was withheld"* — and those four Epics are where that rule is actually written
+down.
+
+**So the thirty-tool surface is the price of a diagnostic guarantee**, not an
+oversight. The deferred finding, in one sentence:
+
+> The MCP tool surface has a measurable per-turn context cost, but reducing that
+> surface while preserving informative authorization failures requires a
+> different design decision than EPIC-136 currently scopes.
+
+Three mechanisms remain open, and **none was chosen**: consolidating related
+tools behind fewer entry points, shortening what a description carries, or
+client-side deferred tool loading where a client offers it. The owner explicitly
+declined to weaken the permission model, to accept "Tool not found" as a
+replacement, or to broaden this Epic into any of them.
+
+## 4b. A fourth delivery cost, recorded and not acted on
+
+Found while diagnosing §2.1 and **deliberately not fixed**: every MCP tool
+result is serialized by `src/mcp/guards.ts` as
+`JSON.stringify(result, null, MCP_JSON_INDENT)` — pretty-printed. The
+indentation is roughly **17% of every JSON response Ferret sends**, and it was
+the whole of the gap between what a pack estimated and what it delivered: the
+estimate counted compact JSON, the transport sent indented JSON.
+
+A model does not need the indentation. Removing it would save that 17% across
+every tool, not only the pack. But §5 puts *"changing the default `format` of any
+tool"* out of scope, and the owner capped this phase at §4, so the estimate now
+counts the indentation honestly instead — one shared `MCP_JSON_INDENT` constant
+between the serializer and the estimator, so the two cannot drift again.
+
+Recorded as a future design option, with the same standing as §4a: real,
+measured, and needing a decision this Epic does not carry.
 
 ## 5. Non-scope
 
@@ -147,20 +216,26 @@ window.
 
 - **AC-1** For every `format`, a pack's `estimatedTokens` is within 5% of the
   serialized response it accompanies, measured on at least three real questions.
-- **AC-2** A pack never exceeds its requested `budget` in the form returned. A
-  request whose envelope alone exceeds the budget returns an empty pack that
-  says so, rather than a pack over budget.
+- **AC-2** A pack never exceeds the `budget` it reports, in the form returned.
+  **Restated during implementation**: the original wording — "never exceeds its
+  *requested* budget" — is unachievable, because a pack's fixed fields cost
+  ~470 estimated tokens before an item is in it and a caller may ask for less.
+  A request below `MIN_BUDGET` is therefore raised to it and told so, and
+  `budget` reports what was applied. The promise `estimatedTokens <= budget`
+  then holds for every request, which is what a client can act on.
 - **AC-3** `ferret_search` offers a caller a way to bound its response, and the
   bound is respected.
 - **AC-4** A regression test pins each of AC-1 to AC-3 against a measured
   worked example, on the pattern `tests/unit/context-pack.test.ts` already uses.
 - **AC-5** The tool-definition cost of a default server is measured and
-  recorded, before and after, through `tools/list` on a running server.
+  recorded through `tools/list` on a running server. **Kept despite §4a**: the
+  measurement is the evidence the deferred finding rests on, and
+  `benchmark/agent/surface.mjs` produces it reproducibly for three principals.
 - **AC-6** `benchmark/` and `benchmark/agent/` are re-run and the movement is
   recorded. Both are expected to move: charging the envelope reduces what fits
   in a given budget, so `ferret-pack`'s recall at budget 4 000 will fall and its
   reported cost will become accurate. **A number moving against Ferret here is
-  the fix working.**
+  the fix working**, and the benchmark is not adjusted to compensate for it.
 
 ## 7. Contracts
 

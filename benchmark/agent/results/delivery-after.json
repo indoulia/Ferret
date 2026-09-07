@@ -1,0 +1,79 @@
+{
+  "measured": "2026-09-07T15:44:08.705Z",
+  "tree": {
+    "commit": "68033a779e47544e34ab736632653305b8a26552",
+    "dirty": false
+  },
+  "packs": [
+    {
+      "question": "Should a macOS runner be added?",
+      "format": "json",
+      "budget": 4000,
+      "reportedTokens": 3783,
+      "deliveredTokens": 3779,
+      "driftPercent": 0.1,
+      "withinBudget": true
+    },
+    {
+      "question": "Should a macOS runner be added?",
+      "format": "text",
+      "deliveredTokens": 1911
+    },
+    {
+      "question": "Where does a session decision become readable by another agent?",
+      "format": "json",
+      "budget": 4000,
+      "reportedTokens": 3818,
+      "deliveredTokens": 3812,
+      "driftPercent": 0.2,
+      "withinBudget": true
+    },
+    {
+      "question": "Where does a session decision become readable by another agent?",
+      "format": "text",
+      "deliveredTokens": 1929
+    },
+    {
+      "question": "What does the exclude configuration key actually do?",
+      "format": "json",
+      "budget": 4000,
+      "reportedTokens": 3890,
+      "deliveredTokens": 3886,
+      "driftPercent": 0.1,
+      "withinBudget": true
+    },
+    {
+      "question": "What does the exclude configuration key actually do?",
+      "format": "text",
+      "deliveredTokens": 2033
+    }
+  ],
+  "clamp": {
+    "asked": 100,
+    "appliedBudget": 800,
+    "deliveredTokens": 658,
+    "saysItWasRaised": true
+  },
+  "searches": [
+    {
+      "maxTokens": null,
+      "deliveredTokens": 32152,
+      "results": 20,
+      "droppedResults": 0
+    },
+    {
+      "maxTokens": 4000,
+      "deliveredTokens": 2295,
+      "results": 4,
+      "droppedResults": 16,
+      "withinBound": true
+    },
+    {
+      "maxTokens": 8000,
+      "deliveredTokens": 4274,
+      "results": 5,
+      "droppedResults": 15,
+      "withinBound": true
+    }
+  ]
+}

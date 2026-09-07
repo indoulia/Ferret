@@ -6,6 +6,7 @@ import {
   type Principal,
 } from '../authorization/index.js';
 import { AuditCategory, AuditOutcome, type AuditWriter } from '../audit/index.js';
+import { MCP_JSON_INDENT } from '../context/budget.js';
 import { ErrorCode, FerretError, serializeError } from '../errors/index.js';
 import type { Logger } from '../logging/index.js';
 
@@ -110,7 +111,7 @@ export function createToolGuard({ principal, logger, audit }: GuardDependencies)
       // is for.
       trail(AuditOutcome.PERMITTED, operation, permission);
       const result = await run();
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, MCP_JSON_INDENT) }] };
     } catch (error) {
       // EPIC-091 AC-15, from EPIC-083 §216. A denial is the case an operator
       // most needs to see and the one most easily mistaken for a bug, so it is

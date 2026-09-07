@@ -1,0 +1,120 @@
+{
+  "measured": "2026-09-07T14:01:48.439Z",
+  "tree": {
+    "commit": "0a66a882e4d599c8ea4ebec4d6153d64f5771cdb",
+    "dirty": true
+  },
+  "principals": [
+    {
+      "principal": "surface.reader",
+      "permissions": [
+        "read"
+      ],
+      "toolCount": 15,
+      "tools": [
+        "ferret_providers",
+        "ferret_health",
+        "ferret_session_recall",
+        "ferret_session_list",
+        "ferret_session_show",
+        "ferret_context_find",
+        "ferret_context_trust",
+        "ferret_search",
+        "ferret_explain",
+        "ferret_get_entity",
+        "ferret_neighbours",
+        "ferret_context_pack",
+        "ferret_find",
+        "ferret_answer",
+        "ferret_why"
+      ],
+      "wireChars": 20584,
+      "wireTokens": 8398,
+      "descriptionsWithNotice": 9,
+      "noticeChars": 5616,
+      "instructionsChars": 1018
+    },
+    {
+      "principal": "surface.recorder",
+      "permissions": [
+        "read",
+        "record"
+      ],
+      "toolCount": 21,
+      "tools": [
+        "ferret_providers",
+        "ferret_health",
+        "ferret_session_recall",
+        "ferret_session_list",
+        "ferret_session_show",
+        "ferret_session_start",
+        "ferret_session_remember",
+        "ferret_session_checkpoint",
+        "ferret_session_end",
+        "ferret_context_record",
+        "ferret_context_promote",
+        "ferret_context_find",
+        "ferret_context_trust",
+        "ferret_search",
+        "ferret_explain",
+        "ferret_get_entity",
+        "ferret_neighbours",
+        "ferret_context_pack",
+        "ferret_find",
+        "ferret_answer",
+        "ferret_why"
+      ],
+      "wireChars": 28725,
+      "wireTokens": 11683,
+      "descriptionsWithNotice": 11,
+      "noticeChars": 6864,
+      "instructionsChars": 1010
+    },
+    {
+      "principal": "surface.operator",
+      "permissions": [
+        "read",
+        "record",
+        "mutate",
+        "index",
+        "config.read"
+      ],
+      "toolCount": 28,
+      "tools": [
+        "ferret_config_describe",
+        "ferret_config_schema",
+        "ferret_config_validate",
+        "ferret_config_audit",
+        "ferret_config_exclusions",
+        "ferret_providers",
+        "ferret_provider_recover",
+        "ferret_health",
+        "ferret_session_recall",
+        "ferret_session_list",
+        "ferret_session_show",
+        "ferret_session_start",
+        "ferret_session_remember",
+        "ferret_session_checkpoint",
+        "ferret_session_end",
+        "ferret_context_record",
+        "ferret_context_promote",
+        "ferret_context_find",
+        "ferret_context_trust",
+        "ferret_context_lifecycle",
+        "ferret_search",
+        "ferret_explain",
+        "ferret_get_entity",
+        "ferret_neighbours",
+        "ferret_context_pack",
+        "ferret_find",
+        "ferret_answer",
+        "ferret_why"
+      ],
+      "wireChars": 33906,
+      "wireTokens": 13786,
+      "descriptionsWithNotice": 12,
+      "noticeChars": 7488,
+      "instructionsChars": 982
+    }
+  ]
+}

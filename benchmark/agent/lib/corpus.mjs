@@ -7,6 +7,7 @@ export const EXCLUDED = Object.freeze([
   ...EXCLUDED_PREFIXES,
   'docs/evidence/FERRET-CAN-A-FRESH-AGENT-FIND-IT.md',
   'docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md',
+  'docs/evidence/FERRET-DELIVERY-COST-MEASURED.md',
 ]);
 
 /**

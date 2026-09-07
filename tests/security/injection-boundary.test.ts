@@ -394,10 +394,17 @@ describe('the fences survive every transformation — F-32', () => {
     // trimmed item costs more than 400 tokens, so the pack **dropped** it
     // instead of trimming it and this case stopped exercising a trim at all —
     // which the assertion below said out loud rather than passing quietly.
-    // Raised to the smallest budget that still forces one.
+    //
+    // Raised again, 800 to 1 900, by EPIC-136 §4.1 for the same reason one step
+    // further out: a pack now charges for its envelope and for the indentation
+    // the transport adds, so a budget that once left room for a trimmed item no
+    // longer does. Measured: 1 800 drops the item, 1 850 trims it; 1 900 keeps
+    // headroom rather than pinning the test to the boundary. The assertion is
+    // what protects this — a budget that stopped forcing a trim fails rather
+    // than silently proving nothing.
     const result = (await client.callTool({
       name: 'ferret_context_pack',
-      arguments: { question: 'what changed', budget: 800 },
+      arguments: { question: 'what changed', budget: 1900 },
     })) as { content: { type: string; text: string }[] };
     const raw = result.content[0]?.text ?? '{}';
     const pack = JSON.parse(raw) as {
