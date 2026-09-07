@@ -95,6 +95,7 @@
     "bench:continuity": "node benchmark/continuity/run.mjs",
     "bench:agent": "node benchmark/agent/run.mjs",
     "bench:agent:continuity": "node benchmark/agent/continuity.mjs",
+    "bench:agent:anchors": "node benchmark/agent/anchors.mjs",
     "dogfood": "node scripts/dogfood.mjs",
     "dogfood:db": "node scripts/dogfood-db.mjs",
     "verify": "npm run lint && npm run typecheck && npm run build && npm run test",

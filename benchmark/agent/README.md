@@ -234,6 +234,42 @@ the start might have written different ones.
 - **Statistical significance.** Eight tasks and a handful of repeats. Directions
   and magnitudes; not p-values.
 
+## The anchors experiment — EPIC-137
+
+`anchors.mjs` asks a narrower question than the rest of this harness: does an
+*anchored* durable statement let a fresh agent skip the investigation, and does
+it refuse to when the code moved?
+
+```
+npm run bench:agent:anchors -- --phase setup --no-content
+npm run bench:agent:anchors -- --phase a          # investigate and record
+npm run bench:agent:anchors -- --phase t1         # both arms, tree unchanged
+npm run bench:agent:anchors -- --phase reindex    # after a real commit
+npm run bench:agent:anchors -- --phase t2         # the anchored file changed
+npm run bench:agent:anchors -- --phase maintain   # re-anchor against new bytes
+npm run bench:agent:anchors -- --phase t3
+npm run bench:agent:anchors -- --phase supersede
+npm run bench:agent:anchors -- --phase t4
+npm run bench:agent:anchors -- --phase t5         # an unrelated file changed
+npm run bench:agent:anchors -- --phase report
+```
+
+**The harness synthesises no anchor and no verdict.** Session A passes whatever
+anchors it chooses to `ferret_context_record`; every verdict comes from
+`trust()` against the real index and the real working tree. An earlier design
+that derived an anchor from a statement's prose was rejected: a harness that
+manufactures the mechanism under test measures the harness.
+
+`anchoredFileReads` is the primary measurement — how many times an arm opened a
+file Session A anchored. The control is the same notes file this harness already
+uses, holding every statement verbatim, and **without** the verdict: a notes file
+has no mechanism for saying whether the code still matches, and that absence is
+the capability under test.
+
+The result is in
+[`docs/evidence/FERRET-DOES-AN-ANCHOR-CARRY.md`](../../docs/evidence/FERRET-DOES-AN-ANCHOR-CARRY.md):
+safe, correct, and no reduction in rediscovery.
+
 ## Results
 
 `results/` holds each run, with the commit measured, whether the tree was dirty,
