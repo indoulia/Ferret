@@ -63,6 +63,22 @@ the dogfood store: `src/context/code-state.ts` held two open edges after one
 content change. EPIC-032 owns interval closure; EPIC-137 works around it by
 taking the newest edge and records the gap here rather than changing indexing.
 
+## How the tests were arrived at
+
+Not uniformly red-green, and the record says which:
+
+- `tests/unit/code-state-verification.test.ts` was written **after**
+  `src/context/code-state.ts`, so it was never observed failing against absent
+  code. It was instead mutation-checked: forcing the correspondence gate open
+  (`if (true)`) fails 2 of its cases, so the gate is genuinely covered.
+- AC-18's redaction case was observed failing first, and is the reason
+  `redactSecrets` replaced `redactStatement` there.
+- Defect 7's regression case was mutation-checked the same way: reintroducing a
+  cross-call cache fails 5 cases.
+- The remaining integration cases were written alongside the behaviour they
+  cover and pass on first run; the four dogfood defects each produced a failing
+  observation on the real store before a fix.
+
 ## Limitations
 
 - AC-20 is partial: the per-read cost is bounded by construction but was not

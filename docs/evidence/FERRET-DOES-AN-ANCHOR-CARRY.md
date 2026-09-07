@@ -66,8 +66,8 @@ five fresh sessions were then asked a question that finding answers.
 | T5 | an unrelated file changed and was re-indexed |
 
 The corpus guard denied every attempt to read this Epic's specification,
-decisions record or registry entry — **four attempts across the two T1 sessions,
-all refused**, verified in the kept transcripts. `docs/EPICs/README.md` was
+decisions record or registry entry — **four refusals across the two T1
+sessions**, two per arm, verified in the kept transcripts. `docs/EPICs/README.md` was
 excluded too, because its registry line states the mechanism.
 
 ---
