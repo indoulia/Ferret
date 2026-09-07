@@ -31,7 +31,7 @@
       "notes": "The carried question. `anchoredFileReads` is the measurement: whether the arm opened the implementation again to answer it.",
       "verdict": {
         "options": ["yes", "no"],
-        "correct": "no",
+        "expected": "no",
         "why": "`current: true` means unsuperseded. Verification additionally requires matching content hashes and index/worktree correspondence."
       },
       "facts": [

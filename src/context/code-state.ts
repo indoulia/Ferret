@@ -208,16 +208,16 @@ export function verifyAnchors(input: VerifyInput): Verification {
 
 function report(anchor: ResolvedAnchor, current: ReadonlyMap<string, CurrentContent>): AnchorReport {
   const held = current.get(anchor.path);
-  // Absent from the map is not "unchanged". A path Ferret was not asked about,
-  // or would not answer for, is unresolved rather than matching.
-  const withheld = held?.withheld ?? (held === undefined ? UnknownReason.ANCHOR_UNRESOLVED : undefined);
+  // Absent from the map, withheld, or holding no hash are all "not established"
+  // rather than "unchanged" — a path Ferret cannot speak for never matches.
+  const reason = held?.withheld ?? (held?.contentHash === undefined ? UnknownReason.ANCHOR_UNRESOLVED : undefined);
   return Object.freeze({
     path: anchor.path,
     symbol: anchor.symbol,
     observedHash: anchor.contentHash,
-    currentHash: withheld === undefined ? held?.contentHash : undefined,
-    matches: withheld === undefined && held?.contentHash === anchor.contentHash,
-    reason: withheld ?? (held?.contentHash === undefined ? UnknownReason.ANCHOR_UNRESOLVED : undefined),
+    currentHash: reason === undefined ? held?.contentHash : undefined,
+    matches: reason === undefined && held?.contentHash === anchor.contentHash,
+    reason,
   });
 }
 
