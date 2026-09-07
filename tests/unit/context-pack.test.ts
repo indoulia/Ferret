@@ -25,6 +25,7 @@ import {
   type TraversalResult,
   type SearchHit,
   type WithheldReport,
+  WithholdReason,
   type StatedEvidence,
 } from '../../src/index.js';
 
@@ -897,6 +898,92 @@ describe('what a pack says it left out', () => {
     expect(pack.items).toStrictEqual([]);
     expect(pack.omitted.filter((one) => one.reason === TruncationReason.LIMIT)).toStrictEqual([]);
     expect(renderPack(pack)).not.toContain('stopped after');
+  });
+
+  /** A retrieval that hides things, and says by which rule. */
+  class WithholdingRetrieval extends FakeRetrieval {
+    constructor(
+      private readonly report: WithheldReport,
+      private readonly visible: readonly SearchHit[],
+    ) {
+      super(visible);
+    }
+    override search(): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
+      return Promise.resolve({ hits: this.visible, withheld: this.report });
+    }
+  }
+
+  it('reports an exclusion rule as an exclusion rule, not as a permission denial', async () => {
+    // The two invite opposite responses. "You are not permitted to see this"
+    // invites escalation — ask for the scope, ask a person, treat the answer as
+    // blocked. "A rule excludes this path" invites nothing: it is the operator's
+    // intent, working. An agent that cannot tell them apart cannot act correctly
+    // on either, and an exclusion is the one an operator configures expecting it
+    // to be routine.
+    const retrieval = new WithholdingRetrieval(
+      { total: 2, byReason: { [WithholdReason.EXCLUSION]: 2 } },
+      [hit('c1', { message: 'visible' })],
+    );
+
+    const pack = await new ContextPackBuilder(retrieval, PUBLIC_ACCESS).build({ question: 'anything' });
+
+    expect(pack.omitted).toContainEqual({
+      reason: TruncationReason.EXCLUSION,
+      count: 2,
+      detail: '2 result(s) are covered by an exclusion rule and are not in this answer',
+    });
+    expect(pack.omitted.filter((one) => one.reason === TruncationReason.PERMISSION)).toStrictEqual([]);
+    expect(renderPack(pack)).not.toContain('not permitted');
+  });
+
+  it('still reports a permission scope the caller does not hold as a permission denial', async () => {
+    const retrieval = new WithholdingRetrieval(
+      { total: 3, byReason: { [WithholdReason.PERMISSION]: 3 } },
+      [hit('c1', { message: 'visible' })],
+    );
+
+    const pack = await new ContextPackBuilder(retrieval, PUBLIC_ACCESS).build({ question: 'anything' });
+
+    expect(pack.omitted).toContainEqual({
+      reason: TruncationReason.PERMISSION,
+      count: 3,
+      detail:
+        '3 result(s) were withheld because this caller is not permitted to see them; ' +
+        'an answer built from this pack is partial',
+    });
+  });
+
+  it('reports each rule that hid something, rather than one of them for all of them', async () => {
+    // The tally has always carried `byReason`; the pack read `total` and named
+    // one reason for the sum. Every count in the continuity benchmark's
+    // repository arm was an exclusion reported as a permission denial.
+    const retrieval = new WithholdingRetrieval(
+      {
+        total: 6,
+        byReason: {
+          [WithholdReason.EXCLUSION]: 1,
+          [WithholdReason.PERMISSION]: 2,
+          [WithholdReason.SCOPE]: 3,
+        },
+      },
+      [hit('c1', { message: 'visible' })],
+    );
+
+    const pack = await new ContextPackBuilder(retrieval, PUBLIC_ACCESS).build({ question: 'anything' });
+
+    expect(
+      pack.omitted
+        .filter((one) =>
+          (
+            [TruncationReason.EXCLUSION, TruncationReason.PERMISSION, TruncationReason.SCOPE] as string[]
+          ).includes(one.reason),
+        )
+        .map((one) => ({ reason: one.reason, count: one.count })),
+    ).toStrictEqual([
+      { reason: TruncationReason.EXCLUSION, count: 1 },
+      { reason: TruncationReason.PERMISSION, count: 2 },
+      { reason: TruncationReason.SCOPE, count: 3 },
+    ]);
   });
 
   it('still reports a result limit when one genuinely cut the items off', async () => {
