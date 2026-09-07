@@ -39,6 +39,16 @@ const suite = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../benchmark/agent/tasks.json', import.meta.url)), 'utf8'),
 ) as { readonly tasks: readonly Task[] };
 
+/** Whether this clone holds history at all. A shallow one cannot resolve a past commit. */
+function shallow(): boolean {
+  return (
+    execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    }).trim() === 'true'
+  );
+}
+
 function tracked(): Set<string> {
   return new Set(
     execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
@@ -67,8 +77,15 @@ describe('agent benchmark labels', () => {
           expect(files, `${task.id} → ${artefact}`).toContain(artefact.slice('file:'.length));
           continue;
         }
-        // A commit label must still resolve, or the task cites nothing.
         const sha = artefact.slice(artefact.indexOf(':') + 1);
+        // Always checkable: a label that is not an abbreviated object id cites
+        // nothing whatever the clone holds.
+        expect(sha, `${task.id} → ${artefact}`).toMatch(/^[0-9a-f]{7,40}$/);
+        // Resolving it needs history, and CI has none: `actions/checkout@v5`
+        // fetches a single commit, so `git cat-file` fails for every historical
+        // sha and cannot tell "deleted" from "not fetched". Asserting it there
+        // failed the whole suite on a label that was perfectly good.
+        if (shallow()) continue;
         const resolves = () =>
           execFileSync('git', ['cat-file', '-e', `${sha}^{commit}`], { cwd: ROOT, stdio: 'ignore' });
         expect(resolves, `${task.id} → ${artefact}`).not.toThrow();
