@@ -260,6 +260,18 @@ describe('exclusions', () => {
     );
   });
 
+  it('refuses a negated pattern rather than inverting the whole list', () => {
+    // Found by an agent investigating exclusions through Ferret. A leading `!`
+    // reaches picomatch as a negation, so `!keep` excluded every path except
+    // `keep` — one character turning an exclusion list into an allow-list,
+    // silently. Exclusion is documented as one-way and additive
+    // (ExclusionScope), so there is nothing a negation could correctly mean here.
+    expect(() => parseConfig({ exclude: ['!keep'] })).toThrow(/negat/i);
+    expect(() => parseConfig({ exclude: [{ pattern: '!keep' }] })).toThrow(/negat/i);
+    // A `!` anywhere else is an ordinary character in a filename.
+    expect(parseConfig({ exclude: ['weird!name'] }).exclude).toHaveLength(1);
+  });
+
   it('matches globs, and reports which rule decided', () => {
     const decision = evaluateExclusion('docs/2024/report.pdf', rules);
     expect(decision.excluded).toBe(true);
