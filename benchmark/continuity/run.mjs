@@ -152,12 +152,89 @@ const BASE_CONDITIONS = ['notes-append', 'notes-curated', 'notes-full', 'ferret-
  * slot, is that a ranking problem or a *discoverability* one — is the durable
  * statement unreachable, or merely unreachable by default?
  *
- * The tool does expose `kinds`. Its description lists *"commit, file, branch,
- * developer"* and does not mention that durable context is a searchable kind,
- * so an agent reading the description would not know to ask. Whether that
- * matters is what this condition measures.
+ * The tool does expose `kinds`. When this condition was written its description
+ * listed *"commit, file, branch, developer"* and did not mention that durable
+ * context is a searchable kind, so an agent reading the description would not
+ * have known to ask. This condition is the **oracle**: the argument is written
+ * here, from having read `src/context/durable.ts`, and it stays that way
+ * whatever the surface goes on to say — it measures the ceiling, and
+ * `ferret-surface-kinds` measures how much of that ceiling the surface hands to
+ * an agent that has read nothing.
  */
 const CONTEXT_SEARCH = 'ferret-search-context';
+
+/**
+ * What an agent can work out from the published tool list, and nothing else.
+ *
+ * `ferret-search-context` passes `kinds: ['context']` because whoever wrote this
+ * harness had read `src/context/durable.ts`. No agent has that: `context` is a
+ * *registered* entity kind, so it appears in no enum a client can see, and the
+ * question this phase asks is whether an agent that has never read Ferret's
+ * source can reach the durable statement anyway.
+ *
+ * So these two conditions are given exactly what `tools/list` publishes. The
+ * rules that read it are written once, below, and run unchanged against
+ * whatever the server happens to say — which is what makes a before/after
+ * comparison of the *surface* mean anything. Neither rule is a model. What they
+ * measure is that the routing an agent needs is stated where the agent is
+ * looking, and that acting on it recovers the answer; whether a model reads it
+ * and acts is not measured here, and no condition in this benchmark measures
+ * anything of that shape.
+ */
+const SURFACE_KINDS = 'ferret-surface-kinds';
+const SURFACE_TOOL = 'ferret-surface-tool';
+
+/**
+ * The kind the `kinds` argument says holds durable context.
+ *
+ * The rule: within that argument's own description, the backticked kind names in
+ * whichever sentences mention *durable*. Restricting to every kind the
+ * description lists is the same query as restricting to none, so what an agent
+ * needs is not a list of kinds but which one to ask for — and a sentence that
+ * names five in the same breath as the word teaches that no better than a
+ * sentence that names none. This returns what it finds and does not choose.
+ *
+ * The same rule is asserted in `tests/integration/mcp/tools.test.ts`, so a
+ * rewording that stops satisfying it fails CI rather than quietly moving a
+ * number here.
+ */
+function kindsNamedForDurableContext(description) {
+  return description
+    .split(/(?<=\.)\s+/)
+    .filter((sentence) => /durable/i.test(sentence))
+    .flatMap((sentence) => [...sentence.matchAll(/`([a-z_]+)`/g)].map((found) => found[1]));
+}
+
+/**
+ * The tool the surface offers for a question about what was decided.
+ *
+ * The rule: among the tools whose description names durable context, prefer one
+ * that accepts a whole question; failing that, one that can be called without an
+ * identifier the agent does not have. A tool that writes is never chosen —
+ * this condition is asking, not recording.
+ *
+ * This is the condition that keeps the phase honest. Ferret published
+ * `ferret_context_find` — *"list the durable context Ferret currently holds"* —
+ * long before this phase, so an agent that reads the tool list rather than
+ * reaching for search by habit already had a working path, and any claim that
+ * durable context was unreachable to a fresh agent has to survive that.
+ */
+function toolNamedForDurableContext(tools) {
+  const candidates = tools.filter(
+    (tool) => tool.annotations?.readOnlyHint === true && /durable context/i.test(tool.description ?? ''),
+  );
+  const takesQuestion = candidates.find((tool) => tool.inputSchema?.properties?.question !== undefined);
+  if (takesQuestion !== undefined) return takesQuestion.name;
+  return candidates.find((tool) => (tool.inputSchema?.required ?? []).length === 0)?.name;
+}
+
+/** Both rules, applied to one agent's view of the surface. */
+async function surfaceRouting(client) {
+  const { tools } = await client.listTools();
+  const search = tools.find((tool) => tool.name === 'ferret_search');
+  const kinds = kindsNamedForDurableContext(search?.inputSchema?.properties?.kinds?.description ?? '');
+  return { kinds, tool: toolNamedForDurableContext(tools) };
+}
 
 /**
  * The order everything was recorded in, padding included.
@@ -203,7 +280,9 @@ async function measure(count, { repository = false } = {}) {
   const ordered = interleave(count);
   // The context-restricted search only means something when something else is
   // competing for the slots, so it is measured only then.
-  const measured = repository ? [...BASE_CONDITIONS, CONTEXT_SEARCH] : [...BASE_CONDITIONS];
+  const measured = repository
+    ? [...BASE_CONDITIONS, CONTEXT_SEARCH, SURFACE_KINDS, SURFACE_TOOL]
+    : [...BASE_CONDITIONS];
 
   process.stderr.write(
     `\n=== store: ${String(scenario.statements.length)} graded + ${String(count)} padding` +
@@ -314,13 +393,49 @@ async function measure(count, { repository = false } = {}) {
     };
   }
 
+  /**
+   * Whichever durable-context tool the surface named, called the way its own
+   * schema says to call it.
+   *
+   * Two shapes, because the two tools the rule can land on take different
+   * arguments — a question, or nothing. Neither is given the token `context`,
+   * which is the whole point of the condition. A surface that named no tool at
+   * all is measured as retrieving nothing rather than skipped, because "the
+   * agent had nowhere to go" is a result.
+   */
+  async function surfaceToolCondition(client, task, name) {
+    if (name === undefined) {
+      return { ranked: [], delivered: '', cost: { retrievalTokens: 0, readTokensFull: 0, readTokensFrugal: 0, ms: 0 } };
+    }
+    if (name === 'ferret_context_pack') return packCondition(client, task);
+    if (name === 'ferret_context_find') return findCondition(client);
+    throw new Error(`the surface named ${name} for a durable-context question, and this harness cannot call it`);
+  }
+
   async function findCondition(client) {
     const found = await call(client, 'ferret_context_find', { limit: FIND_LIMIT });
     return {
+      // Asking for everything the store holds is not retrieval, whichever
+      // condition asked.
+      wholeRead: true,
       ranked: (found.body.context ?? []).map((held) => keyOfContext(held.id)),
       delivered: found.text,
       cost: { retrievalTokens: estimateTokens(found.text), readTokensFull: 0, readTokensFrugal: 0, ms: found.ms },
     };
+  }
+
+  // Read once per arm, from each agent's own connection, before anything is
+  // measured — so what the surface said is recorded beside the numbers it
+  // produced rather than inferred from them afterwards.
+  const routing = {};
+  if (repository) {
+    for (const [name, client] of Object.entries(clients)) routing[name] = await surfaceRouting(client);
+    for (const [name, derived] of Object.entries(routing)) {
+      process.stderr.write(
+        `surface (${name}): kinds=${derived.kinds.length === 0 ? 'none named' : derived.kinds.join(',')}` +
+          ` tool=${derived.tool ?? 'none named'}\n`,
+      );
+    }
   }
 
   const rows = [];
@@ -342,12 +457,40 @@ async function measure(count, { repository = false } = {}) {
       'ferret-search': await searchCondition(client, task),
       'ferret-find': await findCondition(client),
       ...(repository ? { [CONTEXT_SEARCH]: await searchCondition(client, task, ['context']) } : {}),
+      // An agent that reaches for search and has only the surface to go on. A
+      // surface naming no kind leaves it nothing to restrict to, so it searches
+      // unrestricted — which is `ferret-search`, deliberately: that *is* what
+      // the agent does when the description does not tell it otherwise, and
+      // reporting the two as one number would hide which of them was measured.
+      ...(repository
+        ? {
+            [SURFACE_KINDS]: await searchCondition(
+              client,
+              task,
+              routing[task.askedBy].kinds.length === 0 ? undefined : routing[task.askedBy].kinds,
+            ),
+          }
+        : {}),
+      // An agent that reads the tool list before reaching for anything.
+      ...(repository ? { [SURFACE_TOOL]: await surfaceToolCondition(client, task, routing[task.askedBy].tool) } : {}),
     };
 
     const conditions = {};
     for (const name of measured) {
       const result = produced[name];
-      const wholeRead = name === 'notes-full' || name === 'ferret-find';
+      // Whether the condition *retrieved* or *read the store*, taken from what
+      // it did rather than from what it is called.
+      //
+      // It used to be a list of two condition names, and `ferret-surface-tool`
+      // is the first condition whose behaviour depends on what the surface says:
+      // it lands on `ferret_context_find` or on `ferret_context_pack`, and only
+      // the first of those is a whole-store read. Named-based, it scored the
+      // identical call `ferret-find` makes at 64% sourced against that
+      // condition's 100%, purely because a newest-first listing was being
+      // graded through a five-result window. That is the artefact
+      // `unranked` already exists to prevent, reached by a route the name list
+      // could not see.
+      const wholeRead = name === 'notes-full' || result.wholeRead === true;
       const ranked = canonicalise(result.ranked);
       const scored = score(task, ranked, result.cost, wholeRead ? { window: ranked.length } : {});
       conditions[name] = {
@@ -474,6 +617,10 @@ async function measure(count, { repository = false } = {}) {
     padding: count,
     repository,
     conditions: measured,
+    // What the surface said, recorded beside what it produced. A reader
+    // checking the before/after does not have to take the two numbers on trust:
+    // the arm that scored nothing says the surface named no kind.
+    ...(repository ? { surfaceRouting: routing } : {}),
     ...(indexMs === undefined ? {} : { indexSeconds: Math.round(indexMs / 1000), indexedContent: !noContent }),
     storeStatements: ordered.length,
     notes: {

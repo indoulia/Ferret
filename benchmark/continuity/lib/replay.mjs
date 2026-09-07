@@ -145,6 +145,7 @@ export const EXCLUDE = Object.freeze([
   'benchmark',
   'docs/evidence/FERRET-DOES-IT-HELP.md',
   'docs/evidence/FERRET-DOES-CONTEXT-CARRY.md',
+  'docs/evidence/FERRET-CAN-A-FRESH-AGENT-FIND-IT.md',
 ]);
 
 /**
