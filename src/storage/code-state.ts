@@ -289,15 +289,24 @@ export class CodeStateStore implements CodeStatePort {
     return out;
   }
 
-  /** The content hash each file holds now, by the open `FILE_HAS_VERSION` edge. */
+  /**
+   * The content hash each file holds now — the newest open `FILE_HAS_VERSION`.
+   *
+   * **Newest, not "the only one".** Observed on the real index: a file whose
+   * content changes gains a second open edge and the first is never retired, so
+   * one path carried two open versions. Requiring exactly one made every
+   * changed file `anchor-does-not-resolve`, which put `stale` out of reach in
+   * the product — and matching *any* open edge would have verified against the
+   * superseded bytes, which is the unsafe direction. The retirement gap belongs
+   * to indexing rather than to EPIC-137; see the evidence report.
+   */
   async #currentVersions(fileIds: readonly string[]): Promise<ReadonlyMap<string, string>> {
     const out = new Map<string, string>();
     for (const fileId of new Set(fileIds)) {
       const edges = await this.#relationships.outgoing(fileId, { type: RelationshipType.FILE_HAS_VERSION });
-      // Exactly one open version, or nothing. Several would mean Ferret cannot
-      // say which content the path holds, which is not a match.
-      if (edges.length !== 1 || edges[0] === undefined) continue;
-      const version = await this.#entities.get(edges[0].toId);
+      const newest = [...edges].sort((left, right) => right.validFrom.localeCompare(left.validFrom))[0];
+      if (newest === undefined) continue;
+      const version = await this.#entities.get(newest.toId);
       const hash = version?.attributes['contentHash'];
       if (typeof hash === 'string' && hash.length > 0) out.set(fileId, hash);
     }

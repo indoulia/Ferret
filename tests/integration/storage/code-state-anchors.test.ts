@@ -297,6 +297,60 @@ describeDb(`code-state anchors (${databaseAvailable() ? 'real PostgreSQL' : SKIP
     live = { ...live, branch: 'main' };
   });
 
+  it('two open versions for one path resolve to the newest, so a changed file is stale', async () => {
+    // Observed on the real index: indexing a changed file leaves the previous
+    // `file_has_version` edge open, so a path carries two. Matching the older
+    // one would verify against superseded bytes.
+    const store = storeWith();
+    const path = 'src/two-open.ts';
+    const file = (
+      await entities.upsert({
+        kind: EntityKind.FILE,
+        source: { system: 'git', id: path, scope: repository },
+        attributes: { path },
+      })
+    ).entity.id;
+
+    const versionFor = async (hash: string): Promise<string> =>
+      (
+        await entities.upsert({
+          kind: EntityKind.FILE_VERSION,
+          source: { system: 'git', id: hash, scope: file },
+          attributes: { contentHash: hash, path },
+        })
+      ).entity.id;
+
+    const older = await versionFor('git-blob:open-1');
+    await relationships.assert(
+      { fromId: file, type: RelationshipType.FILE_HAS_VERSION, toId: older, fromKind: 'file', toKind: 'file_version', sourceSystem: 'git' },
+      new Date(Date.now() - 60_000),
+    );
+
+    const stored = await store.record({
+      statement: 'A statement anchored to a path that will gain a second open version',
+      contextKind: ContextKind.FACT,
+      scope: repository,
+      provenance: by('agent-a', { anchors: [{ path }] }),
+    });
+    expect(stored.anchors[0]?.resolved?.contentHash).toBe('git-blob:open-1');
+    expect((await store.trust(stored.context.entity.id, { permittedScopes: [] }))?.verification?.verdict).toBe(
+      AnchorVerdict.VERIFIED,
+    );
+
+    // A second open edge, the first left open — what the indexer actually does.
+    const newer = await versionFor('git-blob:open-2');
+    await relationships.assert(
+      { fromId: file, type: RelationshipType.FILE_HAS_VERSION, toId: newer, fromKind: 'file', toKind: 'file_version', sourceSystem: 'git' },
+      new Date(),
+    );
+    const open = await relationships.outgoing(file, { type: RelationshipType.FILE_HAS_VERSION });
+    expect(open).toHaveLength(2);
+
+    const belief = await store.trust(stored.context.entity.id, { permittedScopes: [] });
+    expect(belief?.verification?.verdict).toBe(AnchorVerdict.STALE);
+    expect(belief?.verification?.anchors[0]?.currentHash).toBe('git-blob:open-2');
+  });
+
   it('AC-12: an unanchored statement is unanchored, never verified', async () => {
     const store = storeWith();
     const stored = await store.record({
