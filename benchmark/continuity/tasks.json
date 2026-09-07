@@ -311,26 +311,39 @@
     },
     {
       "id": "windows-break",
-      "kind": "gotcha",
+      "kind": "supersession",
       "askedBy": "beta",
       "question": "My pull request is green. Can a Windows-only failure still be waiting for me?",
-      "answerBasis": "Yes. Windows runs on push to main rather than on a pull request, so the break appears just after a merge.",
+      "answerBasis": "No. Windows was reinstated on every event on 2026-09-05, so a Windows-only break blocks the pull request. It was true for a while that it did not, and the working memory recording that was never updated.",
       "expected": [
         {
-          "artefact": "windows-post-merge",
+          "artefact": "windows-gates-prs",
           "relevance": 3,
-          "basis": "States exactly when a Windows-only break surfaces. Recorded in no source file."
+          "basis": "The current decision, and the one that reversed the earlier arrangement."
         }
       ],
-      "superseded": [],
+      "superseded": [
+        {
+          "artefact": "windows-post-merge",
+          "basis": "True from pull request #105 until 2026-09-05. An agent that reads it first and stops merges believing Windows has not run."
+        }
+      ],
       "requiredFacts": [
         {
           "id": "when",
           "any": [
-            "push to the main branch",
-            "after a merge"
+            "every event including a pull request",
+            "blocks the pull request"
           ],
           "basis": "The statement itself."
+        },
+        {
+          "id": "what-it-costs",
+          "any": [
+            "6m41s",
+            "whole of the wait"
+          ],
+          "basis": "Only in the rationale. It is why the arrangement had been the other way, and why it may move again."
         }
       ]
     },

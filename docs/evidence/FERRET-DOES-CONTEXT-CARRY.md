@@ -1,7 +1,7 @@
 # Does durable context carry? — the measurement, and what it says
 
 **Tree:** `7a04411` (`bench/continuity-benchmark`), clean · **Store:** `ferret_continuity`,
-created and dropped by the harness, 26 graded statements + 0/40/123 padding ·
+created and dropped by the harness, 27 graded statements + 0/40/123 padding ·
 **Command:** `npm run bench:continuity` · **Date:** 2026-09-07
 
 The task benchmark measured whether an agent holding Ferret answers a repository
@@ -18,17 +18,17 @@ bad for reasons worth being precise about.
 
 ## 1. The benchmark
 
-`benchmark/continuity/` — twenty-six statements of real Ferret engineering
+`benchmark/continuity/` — twenty-seven statements of real Ferret engineering
 knowledge, replayed as **eight sessions run by two agents** through the MCP
 surface, then fourteen questions asked in sessions holding no transcript of the
 work that learned the answer. Alpha recorded eighteen of the statements and beta
-eight, and **eleven of the fourteen questions are answered by a statement the
+nine, and **eleven of the fourteen questions are answered by a statement the
 agent asking never recorded** — so the headline figures are almost entirely
 cross-agent figures.
 
 Every statement cites where it came from — a source file and its decision
 number, a pull request, an owner decision. The history contains what a real one
-contains: two reversed decisions, a rule later widened, one decision restated in
+contains: three reversed decisions, a rule later widened, one decision restated in
 nearly the same words and another restated in completely different ones, and one
 session's private working state that was never promoted.
 
@@ -54,26 +54,27 @@ and the session identifiers Ferret mints.
 
 ## 2. What it found
 
-At the smallest store, 26 statements — a knowledge base a week old:
+At the smallest store, 27 statements — a knowledge base a week old:
 
 | condition | sourced | answered | facts | stale ranked first | tokens/task | p50 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `notes-append` | 100% | **100%** | 25/25 | **50%** | 877 | 0 ms |
-| `notes-curated` | 100% | **100%** | 25/25 | 0% | **851** | 0 ms |
-| `notes-full` | 100% | **100%** | 25/25 | 0% | 3 347 | 0 ms |
-| `ferret-pack` | 93% | 71% | 20/25 | 0% | 1 081 | 37 ms |
-| `ferret-search` | 93% | 64% | 19/25 | 0% | 2 572 | 16 ms |
-| `ferret-find` | 100% | 71% | 21/25 | 0% | 3 012 | 48 ms |
+| `notes-append` | 100% | **100%** | 26/26 | **60%** | 903 | 0 ms |
+| `notes-curated` | 100% | **100%** | 26/26 | 0% | **883** | 0 ms |
+| `notes-full` | 100% | **100%** | 26/26 | 0% | 3 349 | 0 ms |
+| `ferret-pack` | 93% | 64% | 20/26 | 0% | 1 102 | 37 ms |
+| `ferret-search` | 93% | 57% | 19/26 | 0% | 2 659 | 15 ms |
+| `ferret-find` | 100% | 64% | 21/26 | 0% | 2 999 | 42 ms |
 
 ### The one measurement that separates the mechanisms
 
 **`notes-append` ranks a reversed decision above the decision that reversed it on
-half the tasks that have one, and no Ferret surface ever does.** Two of the four
-supersession tasks: an agent asking whether to add a macOS job is handed the
-decision to keep one, first; an agent asking whether two queries' scores are
-comparable is handed the rule that says never, first. Both answers are confident
-and wrong, and both are what an agent with an append-only notes file actually
-gets.
+three of the five tasks that have one, and no Ferret surface ever does.** An
+agent asking whether to add a macOS job is handed the decision to keep one,
+first; one asking whether two queries' scores are comparable is handed the rule
+that says never; one asking whether a green pull request can still hide a
+Windows failure is handed the arrangement that was later reversed. All three
+answers are confident and wrong, and all three are what an agent with an
+append-only notes file actually gets.
 
 That is the failure durable context exists to prevent, and it prevents it.
 
@@ -89,19 +90,19 @@ downstream follows. Nobody has to remember to go back and delete.
 
 | store | notes-curated | notes-full | ferret-pack | ferret-find |
 | --- | --- | --- | --- | --- |
-| 26 statements | 851 | 3 347 | 1 081 | 3 012 |
-| 66 statements | 843 | 5 450 | 1 111 | 6 792 |
-| 149 statements | 853 | **9 886** | **1 238** | **14 708** |
+| 27 statements | 883 | 3 349 | 1 102 | 2 999 |
+| 67 statements | 874 | 5 452 | 1 131 | 6 779 |
+| 150 statements | 867 | **9 888** | **1 259** | **14 694** |
 
 tokens per task, at three store sizes.
 
 **Reading everything does not scale and asking a question does.** `notes-full`
-triples and `ferret-find` grows nearly fivefold across a 5.7× store; `ferret-pack` grows
-15%. That is the product's central claim about a growing knowledge base, and on
+triples and `ferret-find` grows nearly fivefold across a 5.6× store;
+`ferret-pack` grows 14%. That is the product's central claim about a growing knowledge base, and on
 this evidence it holds.
 
-**And a grep over a notes file scales just as well** — 851 to 853, flat — while
-costing less than the pack at every size: 21% less at the smallest store, 31%
+**And a grep over a notes file scales just as well** — 883 to 867, flat — while
+costing less than the pack at every size: 20% less at the smallest store, 31%
 less at the largest, so the gap widens rather than closing. That is the result that matters
 most here, and it is not the one Ferret would have hoped for. Against a
 *disciplined* agent with a *grep-able* notes file, Ferret's durable tier is not
@@ -124,14 +125,14 @@ refusals:
 | alpha recalls its own session | **allowed** | 15 memories |
 | alpha's unpromoted working state reaches beta | refused | 0 of 2 reachable |
 
-Twenty-three rather than twenty-six because a whole-store read returns only
-current statements: the three superseded ones are already excluded without being
+Twenty-three rather than twenty-seven because a whole-store read returns only
+current statements: the four superseded ones are already excluded without being
 asked for. That is also why `ferret-find` cannot rank a reversed decision first —
 it never returns one — and it is a genuine property rather than an artefact of
 how the condition was written.
 
 Eleven of the fourteen questions are answered by a statement the asking agent
-never recorded. On those, `ferret-pack` sources 10 of 11 and answers 7 of 11 —
+never recorded. On those, `ferret-pack` sources 10 of 11 and answers 6 of 11 —
 which are, within rounding, the whole benchmark's figures, because they are
 almost the whole benchmark. The three questions an asker could answer from its
 own recording score 3 of 3 on both, and that sample is far too small to compare
@@ -151,7 +152,7 @@ memories, and both phrases a resumption needs — the open question and the next
 task — come back. It costs 3 176 tokens and **does not grow with the store**, at
 any of the three sizes.
 
-Re-reading the notes costs 845 tokens by grep and 9 886 by reading the file at
+Re-reading the notes costs 845 tokens by grep and 9 888 by reading the file at
 the largest size. So recall is four times a grep and a third of a full read, and
 alone among the three it is flat. The honest reading: recall is not cheap, and
 what it buys is that the price does not move as the project does.
@@ -259,12 +260,13 @@ caveat that benchmark records its own commit for.
 **Disproven, or at least not supported.**
 
 - **That durable context carries the reasoning.** It does not, and this is the
-  sharpest finding. `answered` is 100% for every notes condition and **71% for
-  `ferret-pack`, 71% for `ferret-find`, 64% for `ferret-search`**. On four of
+  sharpest finding. `answered` is 100% for every notes condition and **64% for
+  `ferret-pack`, 64% for `ferret-find`, 57% for `ferret-search`**. On five of
   fourteen questions Ferret returned the right statement and not the reason for
-  it. Three of those four are pure rationale gaps: *why* the owner dropped macOS,
+  it. Four of those five are pure rationale gaps: *why* the owner dropped macOS,
   *what* the narrow exclusion rule missed, *what measurement* makes a testing
-  practice worth following.
+  practice worth following, and *what* reinstating Windows on every pull request
+  costs.
 
   This is by design, twice over. `ferret_context_record` has no rationale field,
   and its schema says the statement is *"not a transcript, not a plan, not

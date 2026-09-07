@@ -25,11 +25,11 @@ starts. It does **not** need the dogfood index, and never touches it.
 
 ## What is being measured
 
-Twenty-six statements of real Ferret engineering knowledge are replayed as
+Twenty-seven statements of real Ferret engineering knowledge are replayed as
 **eight sessions run by two agents**, in the order they were learned, through
 the MCP surface. Then fourteen questions are asked in sessions that hold no
 transcript of the work that learned the answer. Alpha recorded eighteen of the
-statements and beta eight, and **eleven of the fourteen questions are answered by
+statements and beta nine, and **eleven of the fourteen questions are answered by
 a statement the asking agent never recorded**, so what the benchmark reports is
 almost entirely cross-agent.
 
@@ -39,7 +39,7 @@ not be sourced was left out. `scenario.json` is checkable rather than
 trustworthy, and `tests/unit/continuity-tasks.test.ts` fails if a label stops
 naming something the scenario holds.
 
-The history contains what a real one contains: two reversed decisions, one
+The history contains what a real one contains: three reversed decisions, one
 narrow rule later widened, one decision restated in nearly the same words and
 another restated in completely different ones, and one session's private working
 state that was deliberately never promoted.
@@ -142,7 +142,7 @@ client receives.
 
 ## It is measured at more than one size
 
-A store holding twenty-six statements is a week old, and at that size a notes
+A store holding twenty-seven statements is a week old, and at that size a notes
 file is a page that can simply be read. The claim durable context makes is about
 a knowledge base months old, so the same questions are asked again with the
 store padded by **real** statements drawn from this repository's Epics — one per
@@ -201,6 +201,27 @@ condition scored zero on every task at every store size — which reads as
 is read from the build rather than written down here. A refusal *inside* a
 successful call — `found: false` on a session that is not yours — still passes
 through, because that distinction is the whole of the isolation measurement.
+
+**A statement was recorded as current that this repository had reversed.** The
+scenario claimed Windows continuous integration runs only on push to `main`, so
+a Windows-only break appears after a merge. That was true from pull request #105
+and was reversed by an owner decision on 2026-09-05: Windows now runs on every
+event including a pull request, and Ubuntu and macOS are dropped from the verify
+matrix entirely. The claim reached the scenario from a **working memory that was
+never updated after the reversal** — which is precisely the failure this
+benchmark exists to measure, arriving through the one route it cannot see, the
+person writing the labels. It is the same correction the task benchmark had to
+make, for the same reason, and it was caught here only by reading
+`.github/workflows/ci.yml` while waiting for that workflow to run.
+
+Corrected as the supersession it actually is rather than by editing the
+statement: the reversed claim stays, marked superseded, and the owner decision
+that replaced it is recorded against it. That added a fifth supersession task and
+moved two headline figures — `notes-append` ranks a stale statement first on 60%
+of them rather than 50%, and `ferret-pack` answers 64% rather than 71%, because
+what the reinstatement cost is recorded only in a rationale. Both moved against
+the conclusion the earlier numbers supported, which is the direction a correction
+should be allowed to move them.
 
 **A worked example asserted the wrong winner.** The unit test pinned a notes
 ranking that the ranker does not produce, and the ranker was right. The example

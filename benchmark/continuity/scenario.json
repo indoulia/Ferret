@@ -225,6 +225,15 @@
       "basis": "benchmark/run.mjs, assertBuildIsCurrent."
     },
     {
+      "key": "windows-post-merge",
+      "session": "s5",
+      "kind": "gotcha",
+      "statement": "Windows continuous integration runs on push to the main branch rather than on a pull request, so a Windows-only break appears just after a merge rather than before it.",
+      "rationale": "Pull requests were cut to about three minutes from twelve. Windows was moved rather than deleted because this repository has real Windows-only history: a digest that failed only there, and a line-ending regression test that failed on the one platform it existed for.",
+      "basis": "Pull request #105, recorded in the fast-iteration-loop working memory. True when written and reversed on 2026-09-05; the memory was not updated, which is how it reached this scenario as though it were current.",
+      "supersededLater": true
+    },
+    {
       "key": "headline-cost",
       "session": "s6",
       "kind": "gotcha",
@@ -285,20 +294,21 @@
       "supersedes": "score-scoped"
     },
     {
+      "key": "windows-gates-prs",
+      "session": "s7",
+      "kind": "decision",
+      "statement": "Windows runs on every event including a pull request, so a Windows-only break blocks the pull request rather than appearing after a merge.",
+      "rationale": "Windows had been moved off the pull-request gate because it was the whole of the wait — Ubuntu verify took 1m52s to 2m55s against Windows at 6m41s to 11m54s, on every one of six pull requests — and reinstating it brings that cost back. Ubuntu and macOS are dropped from the verify matrix entirely.",
+      "basis": ".github/workflows/ci.yml, the verify matrix comment recording the owner decision of 2026-09-05.",
+      "supersedes": "windows-post-merge"
+    },
+    {
       "key": "unit-then-verify",
       "session": "s8",
       "kind": "preference",
       "statement": "Run the unit tests while iterating and the full verification once immediately before a commit.",
       "rationale": "Four integration files are eighty per cent of the full run and they spawn real git and real CLI processes. Measured on 2026-09-02: the full suite was run about fifteen times in one session where the unit tests would have caught the same failures in a tenth of the time.",
       "basis": "The fast-iteration-loop working memory. Written down in no source file."
-    },
-    {
-      "key": "windows-post-merge",
-      "session": "s8",
-      "kind": "gotcha",
-      "statement": "Windows continuous integration runs on push to the main branch rather than on a pull request, so a Windows-only break appears just after a merge rather than before it.",
-      "rationale": "Pull requests were cut to about three minutes from twelve. Windows was moved rather than deleted because this repository has real Windows-only history: a digest that failed only there, and a line-ending regression test that failed on the one platform it existed for.",
-      "basis": "Pull request #105, recorded in the fast-iteration-loop working memory. Written down in no source file."
     },
     {
       "key": "reverify-after-rebase",

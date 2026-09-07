@@ -412,6 +412,10 @@ Recorded in session s7 by beta.
 Why: The rank-order rule in the metrics module was still justifying itself with the reversed claim, and citing a line number that by then held a traversal bound.
 Recorded in session s7 by beta.
 
+## decision — Windows runs on every event including a pull request, so a Windows-only break blocks the pull request rather than appearing after a merge.
+Why: Windows had been moved off the pull-request gate because it was the whole of the wait — Ubuntu verify took 1m52s to 2m55s against Windows at 6m41s to 11m54s, on every one of six pull requests — and reinstating it brings that cost back. Ubuntu and macOS are dropped from the verify matrix entirely.
+Recorded in session s7 by beta.
+
 ## fact — EPIC-123 covers confluence connector and its status is implemented.
 Recorded in session s8 by alpha.
 
@@ -447,10 +451,6 @@ Recorded in session s8 by alpha.
 
 ## preference — Run the unit tests while iterating and the full verification once immediately before a commit.
 Why: Four integration files are eighty per cent of the full run and they spawn real git and real CLI processes. Measured on 2026-09-02: the full suite was run about fifteen times in one session where the unit tests would have caught the same failures in a tenth of the time.
-Recorded in session s8 by alpha.
-
-## gotcha — Windows continuous integration runs on push to the main branch rather than on a pull request, so a Windows-only break appears just after a merge rather than before it.
-Why: Pull requests were cut to about three minutes from twelve. Windows was moved rather than deleted because this repository has real Windows-only history: a digest that failed only there, and a line-ending regression test that failed on the one platform it existed for.
 Recorded in session s8 by alpha.
 
 ## constraint — Re-run the linter, the type check and the unit tests after a rebase and before pushing, because a green run from before the rebase proves nothing about the rebased tree.
