@@ -139,6 +139,39 @@ the benchmark directory covers. Both now paraphrase, and say why.
 Results measured before the exclusion are not comparable with results after it.
 The first committed run is one of them.
 
+### What the exclusion guard actually proves
+
+Precisely, because the difference matters and was measured on 2026-09-07 against
+the dogfood store at merge `b8ea20c`.
+
+Excluded paths **are present in storage** after a re-index. `benchmark/` has been
+excluded since 2026-09-06; `benchmark/continuity/` was created on 2026-09-07 and
+indexed by that day's run anyway, with its file content retained. So a Ferret
+`exclude` rule currently filters reads rather than preventing acquisition.
+
+What the guard verifies is the read path, and there it holds completely:
+
+| Surface | Excluded path returned? |
+| --- | --- |
+| `ferret_find`, exact path | no |
+| `ferret_search`, three queries worded to match the harness | no — 0 of 30 results |
+| `ferret_context_pack` | no — 0 of 5 items |
+
+So `assertCorpusExcluded` and the no-leakage checks prove **the answer key is
+not returned through the surfaces this benchmark measures**. They do **not**
+prove it is absent from the database, and this benchmark never claimed the
+stronger thing. Every number here is produced through those surfaces, so the
+guarantee they give is the one the results need.
+
+The storage behaviour is a separate defect, deferred to
+[EPIC-135](../docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md) by owner
+decision on 2026-09-07 rather than fixed inside benchmark work. Nothing about
+this benchmark's scoring, conditions or semantics changed for it.
+
+The continuity benchmark is unaffected in either direction: it runs against a
+database it creates and drops, with no repository indexed, so there is nothing
+for an exclusion to apply to.
+
 **A label stated the answer it was supposed to catch.** `score-comparability`
 asked why a retrieval score must never be compared between queries, and gave as
 its basis that a `SearchHit.score` is PostgreSQL's `ts_rank`, *"comparable within

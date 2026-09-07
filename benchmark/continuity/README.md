@@ -179,6 +179,15 @@ this repository actually reads, and writing an invented history into it would
 move that benchmark's numbers and put fictional sessions in front of a real
 agent.
 
+**This benchmark is unaffected by the exclusion defect recorded in
+[EPIC-135](../../docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md).**
+That defect is that a configured `exclude` rule filters reads rather than
+preventing a path being indexed and stored. Nothing here relies on an exclusion:
+the store holds the scenario and nothing else, no repository is indexed into it,
+and it is dropped at the end of every run. The task benchmark's own guard is
+clarified in `benchmark/README.md` — it proves the answer key is not *returned*,
+not that it is absent from storage.
+
 ## Corrections
 
 Kept here rather than quietly folded in. All three were found by running it.
