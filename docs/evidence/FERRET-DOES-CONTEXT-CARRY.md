@@ -1,6 +1,6 @@
 # Does durable context carry? — the measurement, and what it says
 
-**Tree:** `7a04411` (`bench/continuity-benchmark`), clean · **Store:** `ferret_continuity`,
+**Tree:** `2267e28` (`bench/continuity-benchmark`), clean · **Store:** `ferret_continuity`,
 created and dropped by the harness, 27 graded statements + 0/40/123 padding ·
 **Command:** `npm run bench:continuity` · **Date:** 2026-09-07
 
