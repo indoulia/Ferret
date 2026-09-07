@@ -1,8 +1,16 @@
 # EPIC-137 — Code-State Anchored Durable Context
 
-**Status:** APPROVED · **Priority:** P1 · **Domain:** Durable Context · **Classification:** CONTINUATION
+**Status:** IMPLEMENTED · **Priority:** P1 · **Domain:** Durable Context · **Classification:** CONTINUATION
 
-Approved 2026-09-08. Decisions: [EPIC-137-DECISIONS](../Architecture/EPIC-137-DECISIONS.md). Not implemented.
+Approved 2026-09-08. Decisions: [EPIC-137-DECISIONS](../Architecture/EPIC-137-DECISIONS.md).
+Validation: [record](validation/EPIC-137-VALIDATION.md) · Evidence: [report](../evidence/FERRET-DOES-AN-ANCHOR-CARRY.md).
+
+Every AC in §13 passes except **AC-20 (partial)** — the per-read cost is bounded
+by construction but was not measured across store sizes. §14's mandatory safety
+criterion is met: zero stale assertions and zero false drift in ten sessions.
+§14's success criterion is **not** met: the treatment re-read the anchored files
+on all five tasks. The verdict was delivered and arrived at tool call 19 of 24,
+after the reading was already paid.
 
 ## 1. Objective
 
