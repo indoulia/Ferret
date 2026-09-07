@@ -242,6 +242,27 @@ displacing the documents it describes. It is now on the exclusion list beside
 in §2 are measured with it excluded and are unchanged from what was first
 published.
 
+**What the exclusion guard proves, precisely.** Measured on 2026-09-07 against
+the dogfood store at merge `b8ea20c`: excluded paths **are present in storage**
+after a re-index. `benchmark/` has been excluded since 2026-09-06, and
+`benchmark/continuity/` was created on 2026-09-07 and indexed by that day's run
+anyway, with its content retained — so a Ferret `exclude` rule currently filters
+reads rather than preventing acquisition.
+
+The read path holds completely: `ferret_find` on an exact path, `ferret_search`
+on three queries worded to match the harness (0 of 30 results) and
+`ferret_context_pack` (0 of 5 items) all return nothing from the excluded set.
+
+So this benchmark's guard proves the answer key **is not returned through the
+surfaces it measures**. It does not prove the answer key is absent from the
+database, and nothing here ever claimed the stronger thing. Every number in this
+report is produced through those surfaces, so the guarantee they give is the one
+the results need. No scoring, condition or semantic changed.
+
+The storage behaviour is a separate defect and is deferred to
+[EPIC-135](../EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md) by owner
+decision on 2026-09-07, rather than fixed inside benchmark work.
+
 **A run measured a build that was not the working tree.** The harness ran against
 `dist/` and never checked it had been built from the tree it reported on. A run
 made after a failed rebase measured a build predating a merged fix, and those

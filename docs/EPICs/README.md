@@ -213,6 +213,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-083 — Authorization Enforcement** — P0 — VALIDATED ([spec](EPIC-083-Authorization-Enforcement.md), [evidence](validation/EPIC-083-VALIDATION.md))
 - **EPIC-084 — Prompt-Injection Resistance** — P0 — VALIDATED ([spec](EPIC-084-Prompt-Injection-Resistance.md), [evidence](validation/EPIC-084-VALIDATION.md))
 - **EPIC-085 — Audit Events** — P1 — VALIDATED ([spec](EPIC-085-Audit-Events.md), [evidence](validation/EPIC-085-VALIDATION.md))
+- **EPIC-135 — Exclusion Enforcement at Ingestion** — P0 — PROPOSED ([spec](EPIC-135-Exclusion-Enforcement-At-Ingestion.md)) — corrective; a configured exclusion is enforced on the read path but not at acquisition, so excluded file content is stored. Observed 2026-09-07, deferred by owner decision the same day.
 
 ### Storage & Data Lifecycle
 
