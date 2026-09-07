@@ -306,3 +306,6 @@ rather than take this document's word for it.
 `results/before-omission-fix.json` is kept deliberately: it is the run that
 found the pack reporting a result limit it never hit, on fourteen of fourteen
 packs, and it is the measurement the fix is justified by.
+
+`results/repository-ab.json` is the two-arm run described above — the same store
+and questions with and without this repository indexed beside them.
