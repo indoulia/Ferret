@@ -20,11 +20,9 @@ import { entity } from './schema/entities.js';
 /**
  * Current code state for one repository scope — EPIC-137.
  *
- * Everything read here already existed: a `file` entity's `source_id` is its
- * repo-relative path within its repository, the open `FILE_HAS_VERSION`
- * interval names the version that path holds now, and `withholds` is the same
- * boundary retrieval uses — so an exclusion stays an exclusion instead of
- * becoming a permission denial, which is the mistake EPIC-135 fixed.
+ * A `file`'s `source_id` is its repo-relative path; `withholds` is the same
+ * boundary retrieval uses, so an exclusion stays an exclusion rather than
+ * becoming a permission denial — the mistake EPIC-135 fixed.
  */
 
 /** Reads the live working tree. `git/worktree-state.ts` satisfies this. */
@@ -67,12 +65,10 @@ export class CodeStateStore implements CodeStatePort {
       readonly access: AccessContext;
       readonly worktree?: WorktreeReader | undefined;
       /**
-       * The checkout this caller is asking about — normally the server's own
-       * working directory.
-       *
-       * Required to disambiguate: this repository has four live worktrees on
-       * four different commits, so "the state being evaluated" cannot be
-       * inferred from the index. Without it, several worktrees mean `unknown`.
+       * The checkout being asked about — normally the server's own directory.
+       * Ferret's own repository has four live worktrees on four commits, so
+       * this cannot be inferred from the index; without it, several worktrees
+       * mean `unknown`.
        */
       readonly cwd?: string | undefined;
     },
@@ -217,11 +213,8 @@ export class CodeStateStore implements CodeStatePort {
   /**
    * The checkout to evaluate against.
    *
-   * The caller's own directory when it is one of this repository's worktrees —
-   * found by dogfooding, where the `repository` entity carried no `path` at all
-   * and four worktrees sat on four commits. A single worktree needs no
-   * disambiguation; several without a caller directory are ambiguous, and
-   * ambiguous is `unknown` rather than a guess.
+   * Dogfooding found the `repository` entity carries no `path` at all, and that
+   * four worktrees sat on four commits. Ambiguous is `unknown`, not a guess.
    */
   async #localPath(scope: string, repository: CanonicalEntity): Promise<string | undefined> {
     const rows = await this.#db
@@ -290,15 +283,12 @@ export class CodeStateStore implements CodeStatePort {
   }
 
   /**
-   * The content hash each file holds now — the newest open `FILE_HAS_VERSION`.
+   * The newest open `FILE_HAS_VERSION`, not the only one.
    *
-   * **Newest, not "the only one".** Observed on the real index: a file whose
-   * content changes gains a second open edge and the first is never retired, so
-   * one path carried two open versions. Requiring exactly one made every
-   * changed file `anchor-does-not-resolve`, which put `stale` out of reach in
-   * the product — and matching *any* open edge would have verified against the
-   * superseded bytes, which is the unsafe direction. The retirement gap belongs
-   * to indexing rather than to EPIC-137; see the evidence report.
+   * Observed on the real index: a changed file gains a second open edge and the
+   * first is never retired. Requiring exactly one put `stale` out of reach;
+   * matching *any* open edge would verify against superseded bytes. The
+   * retirement gap belongs to indexing, not to EPIC-137.
    */
   async #currentVersions(fileIds: readonly string[]): Promise<ReadonlyMap<string, string>> {
     const out = new Map<string, string>();

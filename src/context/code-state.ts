@@ -1,35 +1,26 @@
 import { HISTORICAL_LIFECYCLE_STATES, LifecycleState, type CanonicalEvidence } from '../domain/index.js';
 
 /**
- * Whether a durable statement still describes the code it was observed against
- * — EPIC-137.
+ * Whether a statement still describes the code it was observed against — EPIC-137.
  *
- * A second axis, deliberately not a lifecycle state. `LifecycleState` refused a
- * sixth `historical` value because it would duplicate `superseded`, and the
- * same argument applies here: lifecycle answers *has anyone retired this*, and
- * this answers *does the observation still match the source*. Adding these to
- * that enum would conflate two questions and break `HISTORICAL_LIFECYCLE_STATES`.
+ * A second axis, not a lifecycle state: lifecycle answers *has anyone retired
+ * this*, this answers *does the observation still match the source*. Adding
+ * these to `LifecycleState` would break `HISTORICAL_LIFECYCLE_STATES`.
  */
 export const AnchorVerdict = {
-  /** Every anchor matches, and the index corresponds to the state evaluated. */
   VERIFIED: 'verified',
   /** An anchored path's content moved. Not a claim that the statement is false. */
   STALE: 'stale',
-  /** A replacement exists. Outranks every other verdict. */
+  /** Outranks every other verdict. */
   SUPERSEDED: 'superseded',
-  /** Anchored, but correspondence or the anchor itself could not be established. */
   UNKNOWN: 'unknown',
-  /**
-   * No anchor recorded. Distinct from `unknown`: the correct action differs —
-   * `unknown` means verify from source, `unanchored` means this may not be a
-   * claim about code at all.
-   */
+  /** No anchor recorded. Distinct from `unknown`: verify-from-source versus not-a-code-claim. */
   UNANCHORED: 'unanchored',
 } as const;
 
 export type AnchorVerdict = (typeof AnchorVerdict)[keyof typeof AnchorVerdict];
 
-/** How many anchors one statement may carry. A finding resting on twenty files is not one finding. */
+/** A finding resting on twenty files is not one finding. */
 export const MAX_ANCHORS = 20;
 
 /** Why Ferret could not decide. Category only — never a path a caller may not see. */
@@ -53,23 +44,21 @@ export const UnknownReason = {
 
 export type UnknownReason = (typeof UnknownReason)[keyof typeof UnknownReason];
 
-/** An anchor as an agent supplies it: a path, never an entity id. */
+/** As an agent supplies it: a path, never an entity id. */
 export interface ContextAnchorInput {
-  /** Repository-relative POSIX path. */
   readonly path: string;
-  /** Qualified name of the relevant symbol. Identifies the area, never verifies. */
+  /** Identifies the area, never verifies. */
   readonly symbol?: string | undefined;
   readonly lineRange?: { readonly start: number; readonly end: number } | undefined;
 }
 
-/** An anchor Ferret resolved to an indexed file version. */
 export interface ResolvedAnchor extends ContextAnchorInput {
   readonly fileId: string;
-  /** The content hash observed. The verification key. */
+  /** The verification key. */
   readonly contentHash: string;
 }
 
-/** One anchor's resolution outcome. A failure is reported, never dropped. */
+/** A failure is reported, never dropped. */
 export interface AnchorResolution {
   readonly path: string;
   readonly resolved: ResolvedAnchor | undefined;
@@ -84,12 +73,7 @@ export interface CurrentContent {
   readonly withheld: UnknownReason | undefined;
 }
 
-/**
- * Whether the index corresponds to the repository state being evaluated —
- * EPIC-137 §8, the owner's locked contract.
- *
- * `established: false` is never upgraded to a match by any later comparison.
- */
+/** EPIC-137 §8. `established: false` is never upgraded by a later comparison. */
 export interface Correspondence {
   readonly established: boolean;
   readonly reason: UnknownReason | undefined;
@@ -106,30 +90,19 @@ export const CORRESPONDENCE_UNAVAILABLE: Correspondence = Object.freeze({
   dirtySampleTruncated: false,
 });
 
-/**
- * Reading the current code state for one repository scope.
- *
- * A port for the reason `durable-port.ts` is one: comparing two hashes has
- * nothing to do with PostgreSQL or Git, and importing either here would give
- * the core a dependency `boundaries.test.ts` refuses.
- */
+/** A port for the reason `durable-port.ts` is one: `boundaries.test.ts` refuses the import. */
 export interface CodeStatePort {
-  /** Resolves anchors at record time, reporting each failure separately. */
+  /** Reports each failure separately. */
   resolveAnchors(
     scope: string | undefined,
     anchors: readonly ContextAnchorInput[],
   ): Promise<readonly AnchorResolution[]>;
-  /**
-   * What the anchored paths hold now.
-   *
-   * The caller's access policy belongs to the adapter, which is built per
-   * request at the composition root — the same object retrieval filters with.
-   */
+  /** The access policy belongs to the adapter — the same object retrieval filters with. */
   currentContent(scope: string | undefined, paths: readonly string[]): Promise<ReadonlyMap<string, CurrentContent>>;
   correspondence(scope: string | undefined): Promise<Correspondence>;
 }
 
-/** One anchor, as reported to a reader: what was observed against what is there. */
+/** What was observed against what is there. */
 export interface AnchorReport {
   readonly path: string;
   readonly symbol: string | undefined;
@@ -142,12 +115,12 @@ export interface AnchorReport {
 export interface Verification {
   readonly verdict: AnchorVerdict;
   readonly anchors: readonly AnchorReport[];
-  /** Category, never a path. Absent when the verdict needs no qualification. */
+  /** Category, never a path. */
   readonly reason: UnknownReason | undefined;
   readonly detail: string;
 }
 
-/** One observation's anchors, newest first as `verifyAnchors` expects. */
+/** Oldest first, as `verifyAnchors` expects. */
 export interface AnchoredObservation {
   readonly evidenceId: string;
   readonly observedAt: string | undefined;
@@ -157,7 +130,7 @@ export interface AnchoredObservation {
 export interface VerifyInput {
   readonly lifecycle: LifecycleState;
   readonly supersededBy: string | undefined;
-  /** Anchored supporting observations visible to the caller. */
+  /** Visible to the caller. */
   readonly observations: readonly AnchoredObservation[];
   readonly current: ReadonlyMap<string, CurrentContent>;
   readonly correspondence: Correspondence;
@@ -167,15 +140,11 @@ const UNANCHORED_DETAIL =
   'no code-state anchor was recorded, so nothing about the repository is being claimed';
 
 /**
- * The verdict, from recorded anchors and current content — EPIC-137 §8.
+ * The verdict — EPIC-137 §8. Six conditions for `verified`; any one
+ * unestablished is `unknown`, never a match. Over-reporting costs a
+ * re-verification, under-reporting costs a confident wrong answer.
  *
- * Pure, and the whole decision. Six conditions must hold for `verified`; any
- * one unestablished is `unknown`, never a match. The failure direction is
- * chosen: over-reporting costs a re-verification, under-reporting costs a
- * confident wrong answer.
- *
- * Called by both the trust surface and the context pack, so the two cannot
- * disagree about whether the code still matches.
+ * Shared by the trust surface and the pack, so the two cannot disagree.
  */
 export function verifyAnchors(input: VerifyInput): Verification {
   // Lifecycle first. A matching anchor must never make a retired statement
