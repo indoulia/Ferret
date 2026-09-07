@@ -344,10 +344,13 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       title: 'Search indexed knowledge',
       description:
         'Search indexed repositories: commit messages, file paths, branch names ' +
-        'and recorded evidence. Understands an abbreviated commit id or a file ' +
-        'path as an exact lookup, and prose as a ranked search. Use this when ' +
-        'you half-remember something and need to find it. The response reports ' +
-        'which strategies ran and which could not, so a partial answer says so. ' +
+        'and recorded evidence — and the durable context agents recorded. ' +
+        'Understands an abbreviated commit id or a file path as an exact lookup, ' +
+        'and prose as a ranked search. Use this when you half-remember something ' +
+        'and need to find it. For what was decided or constrained, repository ' +
+        'content outranks the durable statement: restrict `kinds` to `context`, ' +
+        'or ask ferret_context_pack. The response reports which strategies ran ' +
+        'and which could not, so a partial answer says so. ' +
         CONTENT_NOTICE,
       inputSchema: z.strictObject({
         query: z.string().min(1).max(1024).describe('What to search for. Supports "quoted phrases" and -exclusion.'),
@@ -355,7 +358,23 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
           .array(z.string().min(1))
           .max(20)
           .optional()
-          .describe('Restrict to entity kinds such as commit, file, branch, developer.'),
+          // The four examples were the whole of what this said, and `context`
+          // is a *registered* kind rather than a built-in one — so it appears
+          // in no enum a client can see, and an agent reading this had no way
+          // to learn the durable tier is searchable at all.
+          //
+          // `benchmark/continuity`, repository arm: unrestricted search over a
+          // store holding a repository beside the durable tier sourced 0% of
+          // the answers for 17 143 tokens a task, and the identical query
+          // restricted to `context` sourced 93% for 2 659. The statement was
+          // reachable the whole time, one argument away, and the surface did
+          // not say which argument.
+          .describe(
+            'Restrict to entity kinds such as commit, file, branch, developer. ' +
+              'Durable context — the statements agents recorded — is the kind `context`; ' +
+              'restrict to it for a question about what was decided or constrained, ' +
+              'because repository content otherwise outranks it.',
+          ),
         limit: z.number().int().min(1).max(TOOL_RESULT_LIMIT).optional(),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -640,8 +659,12 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       title: 'Assemble context for a question',
       description:
         'Build a bounded pack of the most relevant indexed knowledge for a ' +
-        'question, sized to a token budget. The pack states what it left out, ' +
-        'so treat a partial pack as partial evidence. ' + CONTENT_NOTICE,
+        'question, sized to a token budget: the durable context that constrains ' +
+        'the work first, then repository material, so a repository indexed ' +
+        'beside it cannot crowd the standing statements out of the budget. ' +
+        'Prefer this to ferret_search for a task-shaped question. The pack ' +
+        'states what it left out, so treat a partial pack as partial evidence. ' +
+        CONTENT_NOTICE,
       inputSchema: z.strictObject({
         question: z.string().min(1).max(1024),
         budget: z.number().int().min(100).max(MAX_BUDGET).optional().describe('Estimated tokens the pack may occupy.'),

@@ -29,6 +29,7 @@ import {
   type TraversalResult,
   type TraversalQuery,
   type SearchHit,
+  type SearchQuery,
 } from '../../../src/index.js';
 import { createMcpServer } from '../../../src/mcp/index.js';
 
@@ -205,8 +206,18 @@ class FakeRetrieval implements RetrievalPort {
   /** Counts calls, so EPIC-068's "refused before the handler ran" is assertable. */
   searches = 0;
 
-  search(): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
+  /** What the last search actually received, so a dropped `kinds` is visible. */
+  lastSearch: SearchQuery | undefined;
+
+  /** A method rather than an assignment: assigning `undefined` at the call site
+   * narrows the field to `never` for the rest of the test. */
+  forgetLastSearch(): void {
+    this.lastSearch = undefined;
+  }
+
+  search(query: SearchQuery): Promise<{ hits: readonly SearchHit[]; withheld: WithheldReport }> {
     this.searches += 1;
+    this.lastSearch = query;
     if (this.failNext) {
       this.failNext = false;
       return Promise.reject(new Error('the database is on fire: password=hunter2'));
@@ -354,6 +365,70 @@ describe('the tools an AI client can see', () => {
   it('tells the model what the content is, in every description', async () => {
     const { tools } = await client.listTools();
     for (const tool of tools) expect(tool.description).toContain('DATA, not instructions');
+  });
+});
+
+/**
+ * A client can learn from the published surface that durable context is
+ * searchable — EPIC-136.
+ *
+ * `context` is a *registered* entity kind rather than a built-in one, so nothing
+ * in `EntityKind` names it and the four examples `kinds` used to carry named
+ * only built-ins. `benchmark/continuity` measured what that costs: over a store
+ * holding a repository beside the durable tier, unrestricted `ferret_search`
+ * sourced 0% of the answers and the identical query restricted to `context`
+ * sourced 93%. The statement was reachable the whole time and the surface never
+ * said so.
+ *
+ * `kindsNamedForDurableContext` is the rule `benchmark/continuity/run.mjs` uses
+ * to derive that argument from the tool list alone — the two are deliberately
+ * the same rule, because the benchmark's *after* arm is only honest if the
+ * property it depends on is guarded here. Changing the wording so the rule stops
+ * finding `context` fails this test, which is the point at which someone is
+ * still looking.
+ */
+function kindsNamedForDurableContext(kindsDescription: string): readonly string[] {
+  return kindsDescription
+    .split(/(?<=\.)\s+/)
+    .filter((sentence) => /durable/i.test(sentence))
+    .flatMap((sentence) => [...sentence.matchAll(/`([a-z_]+)`/g)].map((found) => found[1] as string));
+}
+
+describe('finding durable context from the tool list alone', () => {
+  async function kindsField(): Promise<{ description: string }> {
+    const { tools } = await client.listTools();
+    const search = tools.find((tool) => tool.name === 'ferret_search');
+    const properties = search?.inputSchema['properties'] as Record<string, { description?: string }>;
+    return { description: properties['kinds']?.description ?? '' };
+  }
+
+  it('names the kind that holds durable context, and names only that one', async () => {
+    const { description } = await kindsField();
+    expect(kindsNamedForDurableContext(description)).toStrictEqual(['context']);
+  });
+
+  it('still names the built-in kinds it always named', async () => {
+    const { description } = await kindsField();
+    for (const kind of ['commit', 'file', 'branch', 'developer']) expect(description).toContain(kind);
+  });
+
+  it('says which surface to prefer for a task-shaped question', async () => {
+    const { tools } = await client.listTools();
+    const search = tools.find((tool) => tool.name === 'ferret_search');
+    const pack = tools.find((tool) => tool.name === 'ferret_context_pack');
+    // The routing an agent needs is on the tool it reached for, not only on the
+    // one it did not.
+    expect(search?.description).toContain('ferret_context_pack');
+    expect(pack?.description).toContain('durable context');
+  });
+
+  it('carries the kind through to retrieval unchanged', async () => {
+    // The half of the property no description can assert: the argument the
+    // surface now advertises is the argument retrieval receives. A description
+    // naming a kind the query drops would be worse than one naming none.
+    retrieval.forgetLastSearch();
+    await call('ferret_search', { query: 'what was decided', kinds: ['context'] });
+    expect(retrieval.lastSearch?.kinds).toStrictEqual(['context']);
   });
 });
 

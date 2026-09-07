@@ -190,7 +190,23 @@ not that it is absent from storage.
 
 ## Corrections
 
-Kept here rather than quietly folded in. All three were found by running it.
+Kept here rather than quietly folded in. All of them were found by running it.
+
+**A whole-store read was classified by condition name.** `unranked` exists
+because an nDCG over a newest-first listing is a fabrication rather than a low
+number, and which conditions it applies to was a list of two names —
+`notes-full` and `ferret-find`. `ferret-surface-tool` is the first condition
+whose behaviour depends on what the surface says: it lands on
+`ferret_context_find` or on `ferret_context_pack`, and only the first is a
+whole-store read. Name-based, it graded the *identical* call `ferret-find` makes
+through a five-result window and scored it 64% sourced against that condition's
+100% — the artefact `unranked` exists to prevent, reached by a route a list of
+names could not see. The classification now follows what the condition did.
+Noted because it moved a number **towards** the state of things before the
+change this phase made, which is the direction that makes a correction worth
+distrusting: it is kept because the two conditions issue the same call with the
+same arguments and returned identical token counts, so any figure that separated
+them was measuring the harness.
 
 **Three statements were duplicated by the harness, not by the product.** A
 `fact` is a durable context kind and is *not* a session memory kind —
@@ -280,12 +296,50 @@ twice; with one it separates a ranking problem from a discoverability problem.
 identical in both arms. If it ever differs, the arms differ by more than the
 repository and the run means nothing.
 
+### Two conditions that have read nothing but the tool list
+
+`ferret-search-context` passes `kinds: ['context']` because whoever wrote this
+harness had read `src/context/durable.ts`. No agent has that: `context` is a
+*registered* entity kind, so it appears in no enum a client can see. So it is the
+**oracle** — the ceiling — and two further conditions measure how much of that
+ceiling the published surface hands to an agent that has read nothing.
+
+Both are given exactly what `tools/list` returns, and both apply a rule fixed in
+`run.mjs` rather than per-arm, so the same rule runs against whatever the server
+happens to say:
+
+- **`ferret-surface-kinds`** searches restricted to the kinds the `kinds`
+  argument's own description names *in a sentence that mentions "durable"*.
+  Restricting to every kind a description lists is the same query as restricting
+  to none, so what an agent needs is not a list but which one to ask for. When
+  the rule finds nothing the agent has nothing to restrict to and searches
+  unrestricted — which is `ferret-search`, deliberately: that is what the agent
+  does when the description does not tell it otherwise.
+- **`ferret-surface-tool`** picks a *tool* rather than an argument: among the
+  read-only tools whose description names durable context, the one that accepts a
+  whole question, or failing that the one callable without an identifier the
+  agent does not have. This is the condition that keeps the phase honest.
+  `ferret_context_find` — *"list the durable context Ferret currently holds"* —
+  has been published since EPIC-129, so an agent that reads the tool list rather
+  than reaching for search by habit already had a working path, and any claim
+  that durable context was unreachable has to survive that.
+
+Neither rule is a model. What they measure is that the routing an agent needs is
+stated where the agent is looking, and that acting on it recovers the answer.
+Whether a model reads it and acts is **not** measured, here or anywhere in this
+benchmark. The `kinds` rule is additionally asserted in
+`tests/integration/mcp/tools.test.ts`, so a rewording that stops satisfying it
+fails CI rather than quietly moving a number here.
+
 ## What this does not measure
 
 Stated here rather than discovered later.
 
 - **Reasoning.** No model is in this loop. `answered` checks that the facts an
-  answer needs were in front of the agent, not that the agent used them.
+  answer needs were in front of the agent, not that the agent used them. This is
+  the sharpest limit on the two surface-derived conditions: they show that the
+  surface states the routing and that acting on the statement works, not that a
+  model reads a tool description and follows it.
 - **Extraction.** Every statement was recorded deliberately. Whether an agent
   *would* have recorded the right twenty-six sentences is the question this
   assumes an answer to, and it is the largest assumption in the design.
