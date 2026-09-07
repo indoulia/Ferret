@@ -247,6 +247,19 @@ describe('exclusions', () => {
     expect(isExcluded('src/index.js', rules)).toBe(false);
   });
 
+  it('treats a trailing slash as the same directory rule, not as a rule matching nothing', () => {
+    // Found by the real-agent benchmark: `benchmark/` was reported as configured and excluded nothing.
+    const slashed = [{ pattern: 'node_modules/', scope: ExclusionScope.GLOBAL }];
+    expect(isExcluded('node_modules', slashed)).toBe(true);
+    expect(isExcluded('node_modules/pkg/index.js', slashed)).toBe(true);
+    expect(isExcluded('src/node_modules/x.js', slashed)).toBe(true);
+    expect(isExcluded('src/index.js', slashed)).toBe(false);
+    // A trailing slash on a glob is stripped too; the glob still decides the rest.
+    expect(isExcluded('docs/2024/x.pdf', [{ pattern: 'docs/**/', scope: ExclusionScope.GLOBAL }])).toBe(
+      true,
+    );
+  });
+
   it('matches globs, and reports which rule decided', () => {
     const decision = evaluateExclusion('docs/2024/report.pdf', rules);
     expect(decision.excluded).toBe(true);

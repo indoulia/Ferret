@@ -85,6 +85,12 @@ export function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
+/** `secrets/` must exclude, not silently match nothing: the expansion below turned it into `secrets//**`. */
+function withoutTrailingSlash(pattern: string): string {
+  const trimmed = pattern.replace(/\/+$/, '');
+  return trimmed.length > 0 ? trimmed : pattern;
+}
+
 /**
  * Compiled matcher for one rule.
  *
@@ -94,7 +100,7 @@ export function normalizePath(path: string): string {
  * eliminate.
  */
 function matcherFor(rule: ExclusionRule): (path: string) => boolean {
-  const pattern = normalizePath(rule.pattern);
+  const pattern = withoutTrailingSlash(normalizePath(rule.pattern));
   const patterns = /[*?[\]{}!]/.test(pattern)
     ? [pattern]
     : [pattern, `${pattern}/**`, `**/${pattern}`, `**/${pattern}/**`];
