@@ -7,7 +7,7 @@ import {
   truncateContained,
   type ContentSafetyReport,
 } from '../security/index.js';
-import { EvidenceState, type CanonicalEntity, type CanonicalEvidence } from '../domain/index.js';
+import { EvidenceState, type CanonicalEntity, type CanonicalEvidence, type LifecycleState } from '../domain/index.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
 import {
   Direction,
@@ -21,6 +21,7 @@ import {
 import { VERSION } from '../version.js';
 
 import { TokenBudget, estimateDeliveredTokens, estimateJsonTokens } from './budget.js';
+import { anchoredObservations, verifyAnchors, type CodeStatePort, type Verification } from './code-state.js';
 import { DURABLE_CONTEXT_KIND } from './durable.js';
 import {
   MAX_STANDING_CONTEXT,
@@ -396,6 +397,7 @@ export class ContextPackBuilder {
   readonly #retrieval: RetrievalPort;
   readonly #access: AccessContext;
   readonly #evidence: EvidenceReader | undefined;
+  readonly #codeState: CodeStatePort | undefined;
 
   /**
    * `access` is EPIC-058's addition and is **required**, and it is a constructor
@@ -409,10 +411,42 @@ export class ContextPackBuilder {
    * that matched the query — and that evidence comes from the store, so its
    * lineage is real rather than the empty array a search hit carries.
    */
-  constructor(retrieval: RetrievalPort, access: AccessContext, evidence?: EvidenceReader) {
+  constructor(
+    retrieval: RetrievalPort,
+    access: AccessContext,
+    evidence?: EvidenceReader,
+    // EPIC-137. Optional for the same reason `evidence` is: a build that wires
+    // no code-state reader reports no verdict, rather than a wrong one.
+    codeState?: CodeStatePort,
+  ) {
     this.#retrieval = retrieval;
     this.#access = access;
     this.#evidence = evidence;
+    this.#codeState = codeState;
+  }
+
+  /**
+   * The code-state verdict for one standing statement — EPIC-137.
+   *
+   * From the evidence the pack already fetched, so no observation is read
+   * twice, and through the same `verifyAnchors` the trust surface uses — a pack
+   * and a trust report must not disagree about whether the code still matches.
+   */
+  async #verificationFor(
+    scope: string | undefined,
+    lifecycle: LifecycleState,
+    evidence: readonly CanonicalEvidence[],
+  ): Promise<Verification | undefined> {
+    const reader = this.#codeState;
+    if (reader === undefined) return undefined;
+    const observations = anchoredObservations(evidence);
+    if (observations.length === 0) return undefined;
+    const paths = [...new Set(observations.flatMap((one) => one.anchors.map((anchor) => anchor.path)))];
+    const [current, correspondence] = await Promise.all([
+      reader.currentContent(scope, paths),
+      reader.correspondence(scope),
+    ]);
+    return verifyAnchors({ lifecycle, supersededBy: undefined, observations, current, correspondence });
   }
 
   /**
@@ -579,11 +613,15 @@ export class ContextPackBuilder {
         standingDropped += 1;
         continue;
       }
+      const support = await this.#supportFor(hit.entity.id);
+      const scope = hit.entity.source.scope;
+      const verification = await this.#verificationFor(scope, hit.entity.lifecycle, support);
       const entry = standingContextOf(
         {
           entity: hit.entity,
           subsumed: hit.ranking?.subsumed ?? [],
-          evidence: await this.#supportFor(hit.entity.id),
+          evidence: support,
+          ...(verification === undefined ? {} : { verification }),
         },
         estimateDeliveredTokens,
         safety,

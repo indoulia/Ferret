@@ -10,8 +10,10 @@ import { createMcpServer, serveStdio } from '../../mcp/index.js';
 import { probeHealth } from '../health.js';
 import { Capability, assertSupported } from '../../providers/index.js';
 import { QueryPlanner, assertUsableAccess, type AccessContext } from '../../retrieval/index.js';
+import { readWorktreeState } from '../../git/index.js';
 import { createRuntime } from '../../runtime/index.js';
 import {
+  CodeStateStore,
   EvidenceStore,
   MigrationPolicy,
   RetrievalStore,
@@ -76,6 +78,22 @@ export function mcpCommand(): Command {
         // than concluding the index is empty.
         assertUsableAccess(access);
 
+        // EPIC-137. `access` is the same policy retrieval filters with, so an
+        // excluded path stays excluded here rather than becoming a denial.
+        const codeState = new CodeStateStore(storage.db, {
+          access,
+          worktree: {
+            read: async (cwd) => {
+              const live = await readWorktreeState({ cwd, signal: context.signal, logger: context.logger });
+              return {
+                headCommit: live.headCommit,
+                dirtyPaths: live.state.sample,
+                dirtySampleTruncated: live.state.sampleTruncated,
+              };
+            },
+          },
+        });
+
         // EPIC-055. `semantic` is deliberately absent: Ferret ships no embedding
         // provider, so the planner reports semantic retrieval as unavailable
         // with the reason, rather than returning an empty result that reads as
@@ -132,7 +150,12 @@ export function mcpCommand(): Command {
           // structurally, so the surface an agent calls never learns that
           // PostgreSQL exists — and the port, not this store, is what a second
           // client would be written against.
-          context: new DurableContextStore(storage.db),
+          // EPIC-137. One reader, shared by the durable store and the pack, so
+          // a trust report and a pack cannot disagree about whether the code
+          // still matches. The composition root is the only place allowed to
+          // know that this means PostgreSQL and Git.
+          context: new DurableContextStore(storage.db, { codeState }),
+          codeState,
           // EPIC-048. Without this the traceability tool is not registered at
           // all, and the 556 evidence rows a single index run records stay
           // unreachable from the only surface an AI client has.

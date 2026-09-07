@@ -1,4 +1,4 @@
-import { HISTORICAL_LIFECYCLE_STATES, LifecycleState } from '../domain/index.js';
+import { HISTORICAL_LIFECYCLE_STATES, LifecycleState, type CanonicalEvidence } from '../domain/index.js';
 
 /**
  * Whether a durable statement still describes the code it was observed against
@@ -279,4 +279,39 @@ function frozen(
   detail: string,
 ): Verification {
   return Object.freeze({ verdict, anchors: Object.freeze([...anchors]), reason, detail });
+}
+
+/**
+ * Regroups evidence rows into the observations they were written as.
+ *
+ * Rows sharing `sourceId` came from one `record` call and are one observation;
+ * oldest first, because `verifyAnchors` reports over the last when none matches.
+ */
+export function anchoredObservations(support: readonly CanonicalEvidence[]): readonly AnchoredObservation[] {
+  const groups = new Map<string, { observedAt: string | undefined; anchors: ResolvedAnchor[]; id: string }>();
+  for (const row of support) {
+    const locator = row.locator;
+    if (locator === undefined || locator.kind !== 'path' || typeof locator.start !== 'string') continue;
+    if (row.sourceContentHash === undefined || row.sourceId === undefined) continue;
+    const group = groups.get(row.sourceId) ?? {
+      observedAt: row.observedAt,
+      anchors: [] as ResolvedAnchor[],
+      id: row.id,
+    };
+    group.anchors.push({
+      path: locator.start,
+      symbol: locator.detail,
+      lineRange: undefined,
+      fileId: '',
+      contentHash: row.sourceContentHash,
+    });
+    groups.set(row.sourceId, group);
+  }
+  return [...groups.values()]
+    // Oldest first. `observedAt` when the producer gave one, else the
+    // evidence id — stable, and the only other total order available here.
+    .sort((left, right) => (left.observedAt ?? left.id).localeCompare(right.observedAt ?? right.id))
+    .map((group) =>
+      Object.freeze({ evidenceId: group.id, observedAt: group.observedAt, anchors: Object.freeze([...group.anchors]) }),
+    );
 }

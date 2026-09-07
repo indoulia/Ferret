@@ -22,9 +22,9 @@ import {
 import {
   CORRESPONDENCE_UNAVAILABLE,
   UnknownReason,
+  anchoredObservations,
   verifyAnchors,
   type AnchorResolution,
-  type AnchoredObservation,
   type CodeStatePort,
   type ContextAnchorInput,
   type ResolvedAnchor,
@@ -733,41 +733,6 @@ function locatorFor(anchor: ResolvedAnchor): { kind: string; start: string; deta
 function anchorSetId(anchors: readonly ResolvedAnchor[]): string {
   const parts = anchors.map((one) => `${one.path}=${one.contentHash}`).sort();
   return `anchors:${createHash('sha256').update(encodeKeyParts(parts)).digest('hex').slice(0, 32)}`;
-}
-
-/**
- * Regroups evidence rows into the observations they were written as.
- *
- * Rows sharing `sourceId` came from one `record` call and are one observation;
- * oldest first, because `verifyAnchors` reports over the last when none matches.
- */
-function anchoredObservations(support: readonly CanonicalEvidence[]): readonly AnchoredObservation[] {
-  const groups = new Map<string, { observedAt: string | undefined; anchors: ResolvedAnchor[]; id: string }>();
-  for (const row of support) {
-    const locator = row.locator;
-    if (locator === undefined || locator.kind !== 'path' || typeof locator.start !== 'string') continue;
-    if (row.sourceContentHash === undefined || row.sourceId === undefined) continue;
-    const group = groups.get(row.sourceId) ?? {
-      observedAt: row.observedAt,
-      anchors: [] as ResolvedAnchor[],
-      id: row.id,
-    };
-    group.anchors.push({
-      path: locator.start,
-      symbol: locator.detail,
-      lineRange: undefined,
-      fileId: '',
-      contentHash: row.sourceContentHash,
-    });
-    groups.set(row.sourceId, group);
-  }
-  return [...groups.values()]
-    // Oldest first. `observedAt` when the producer gave one, else the
-    // evidence id — stable, and the only other total order available here.
-    .sort((left, right) => (left.observedAt ?? left.id).localeCompare(right.observedAt ?? right.id))
-    .map((group) =>
-      Object.freeze({ evidenceId: group.id, observedAt: group.observedAt, anchors: Object.freeze([...group.anchors]) }),
-    );
 }
 
 function unresolvable(path: string): AnchorResolution {

@@ -160,3 +160,22 @@ export {
   type StandingCandidate,
   type StandingContext,
 } from './standing.js';
+
+export {
+  AnchorVerdict,
+  CORRESPONDENCE_UNAVAILABLE,
+  MAX_ANCHORS,
+  UnknownReason,
+  anchoredObservations,
+  verifyAnchors,
+  type AnchorReport,
+  type AnchorResolution,
+  type AnchoredObservation,
+  type CodeStatePort,
+  type ContextAnchorInput,
+  type Correspondence,
+  type CurrentContent,
+  type ResolvedAnchor,
+  type Verification,
+  type VerifyInput,
+} from './code-state.js';
