@@ -205,6 +205,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-132 — Multi-Agent Shared Context** — P1 — VALIDATED ([spec](EPIC-132-Multi-Agent-Shared-Context.md), [evidence](validation/EPIC-132-VALIDATION.md))
 - **EPIC-133 — Context Governance & Security** — P0 — VALIDATED ([spec](EPIC-133-Context-Governance-And-Security.md), [evidence](validation/EPIC-133-VALIDATION.md))
 - **EPIC-134 — Continuous Self-Dogfooding** — P1 — VALIDATED ([spec](EPIC-134-Continuous-Self-Dogfooding.md), [evidence](validation/EPIC-134-VALIDATION.md))
+- **EPIC-136 — MCP Delivery Cost** — P1 — PROPOSED ([spec](EPIC-136-MCP-Delivery-Cost.md)) — corrective; a context pack reports keeping a budget it exceeds by 37% in the format a client gets by default, `ferret_search` has no compact form, and thirty tool definitions are re-sent every turn. Measured 2026-09-07 by the real-agent benchmark, deferred the same day on EPIC-135's precedent.
 
 ### Security & Authorization
 

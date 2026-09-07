@@ -1,0 +1,3653 @@
+{
+  "measured": "2026-09-07T12:19:15.516Z",
+  "database": "ferret_agent_ab",
+  "builtInTools": "Read,Grep,Glob,Bash",
+  "suite": {
+    "version": "3",
+    "description": "Three sessions over one store. Session A investigates and records; Session B is a fresh agent asked a question whose answer A established but no document states; Session C is asked the same question after the repository changed under it. The supersession is real: it is the exclusion trailing-slash defect this phase found and fixed, so A's record is true when made and false afterwards."
+  },
+  "gitLog": [
+    "70bcfca fix(config): an exclusion written `secrets/` excluded nothing",
+    "144d478 docs(mcp): search never said durable context was searchable (#226)",
+    "947c3d5 docs(evidence): the exclusion-reporting fix, measured (#225)"
+  ],
+  "phases": {
+    "a": {
+      "tree": {
+        "commit": "144d478ac19dfcf457f13604d6e655807a1277d1",
+        "dirty": true
+      },
+      "model": "opus",
+      "effort": "high",
+      "scored": {
+        "task": "session-a",
+        "answered": true,
+        "stopped": "completed",
+        "verdict": null,
+        "factsCovered": 3,
+        "factsTotal": 3,
+        "factsComplete": true,
+        "facts": [
+          {
+            "id": "trailing-slash-matches-nothing",
+            "covered": true
+          },
+          {
+            "id": "bare-directory-expands",
+            "covered": true
+          },
+          {
+            "id": "read-path-enforcement",
+            "covered": true
+          }
+        ],
+        "evidenceSourced": false,
+        "primaryCited": 0,
+        "primaryTotal": 0,
+        "citations": [
+          "file:src/config/exclusions.ts",
+          "file:src/config/schema.ts",
+          "file:src/config/resolve.ts",
+          "file:src/git/discovery.ts",
+          "file:src/git/provider.ts",
+          "file:src/authorization/authorization.ts",
+          "file:src/retrieval/access.ts",
+          "file:tests/unit/config-layers.test.ts",
+          "file:tests/unit/config.test.ts",
+          "file:docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+          "file:node_modules/picomatch/lib/parse.js",
+          "file:node_modules/picomatch/lib/picomatch.js",
+          "file:package.json",
+          "commit:9c6a5dc",
+          "commit:d1bd70f",
+          "commit:6e26e97",
+          "commit:9bce5ce",
+          "context:ferret context 7bffb926-c557-84e2-8379-c26ab04483ee",
+          "context:ferret context 33cc8e6d-9ea9-805e-bbea-96f527020cde",
+          "context:ferret context 09d73c70-e819-8341-985d-64695471b6b6",
+          "context:ferret context ba65be37-2d7d-81be-9760-9c42797e205b"
+        ],
+        "citationsOffLabel": 21,
+        "toolCalls": 35,
+        "turns": 37,
+        "filesRead": 8,
+        "linesRead": 1076,
+        "searches": 16,
+        "historyCalls": 2,
+        "ferretCalls": 6,
+        "refusals": 2,
+        "toolErrors": 4,
+        "contextTokens": 1004904,
+        "inputTokens": 42,
+        "cacheReadTokens": 989069,
+        "cacheWriteTokens": 50766,
+        "outputTokens": 15793,
+        "nudges": 0,
+        "unsupportedCitations": 0,
+        "unsupported": [],
+        "stale": [],
+        "elapsedMs": 245989,
+        "toolMs": 30055,
+        "ferretSurfaces": {
+          "mcp__ferret__ferret_config_exclusions": 1,
+          "mcp__ferret__ferret_config_schema": 1,
+          "mcp__ferret__ferret_context_record": 4
+        },
+        "trace": [
+          {
+            "tool": "mcp__ferret__ferret_config_exclusions",
+            "input": {},
+            "ms": 601,
+            "isError": true,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_config_exclusions",
+              "ok": false,
+              "chars": 388
+            },
+            "chars": 388
+          },
+          {
+            "tool": "mcp__ferret__ferret_config_schema",
+            "input": {},
+            "ms": 602,
+            "isError": true,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_config_schema",
+              "ok": false,
+              "chars": 380
+            },
+            "chars": 380
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "exclude",
+              "path": "C:\\AIAgent\\Ferret\\src",
+              "output_mode": "files_with_matches",
+              "-i": true
+            },
+            "ms": 1182,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "exclude",
+              "matches": 55
+            },
+            "chars": 1385
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\src\\config\\exclusions.ts"
+            },
+            "ms": 426,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "src/config/exclusions.ts",
+              "lines": 206
+            },
+            "chars": 8422
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "exclude",
+              "path": "C:\\AIAgent\\Ferret\\src\\config\\schema.ts",
+              "output_mode": "content",
+              "-i": true,
+              "-C": 12
+            },
+            "ms": 951,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "exclude",
+              "matches": 50
+            },
+            "chars": 2175
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "isExcluded|evaluateExclusion|effectiveExclusions",
+              "path": "C:\\AIAgent\\Ferret\\src",
+              "output_mode": "content",
+              "-n": true
+            },
+            "ms": 993,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "isExcluded|evaluateExclusion|effectiveExclusions",
+              "matches": 32
+            },
+            "chars": 2603
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "node -e \"\nconst pm=require('picomatch');\nconst cases=['node_modules','node_modules/','docs/*.md','.git','build'];\nconst paths=['node_modules','node_modules/a.js','a/node_modules/b.js','src/node_modules','docs/x.md','docs/sub/x.md','build/out.js','buildtool/x.js'];\nfor(const raw of cases){\n  const p=raw.replace(/\\\\\\\\/g,'/').replace(/^\\.\\//,'');\n  const pats=/[*?[\\]{}!]/.test(p)?[p]:[p,p+'/**','**/'+p,'**/'+p+'/**'];\n  const m=pm(pats,{dot:true});\n  console.log('PATTERN '+JSON.stringify(raw)+' -> '+JSON.stringify(pats));\n  for(const path of paths) console.log('   '+(m(path)?'MATCH  ':'no     ')+path);\n}\n\"",
+              "description": "Test picomatch expansion behavior empirically"
+            },
+            "ms": 576,
+            "isError": true,
+            "refused": true,
+            "chars": 159
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "exclusion|exclude",
+              "path": "C:\\AIAgent\\Ferret\\tests",
+              "output_mode": "files_with_matches",
+              "-i": true
+            },
+            "ms": 918,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "exclusion|exclude",
+              "matches": 49
+            },
+            "chars": 2010
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "git log --oneline -25 -- src/config/exclusions.ts",
+              "description": "Git history of exclusions.ts"
+            },
+            "ms": 2923,
+            "isError": false,
+            "refused": false,
+            "log": {
+              "command": "git log --oneline -25 -- src/config/exclusions.ts"
+            },
+            "chars": 129
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "exclu",
+              "path": "C:\\AIAgent\\Ferret\\tests\\unit\\config.test.ts",
+              "output_mode": "content",
+              "-n": true,
+              "-i": true,
+              "-C": 4,
+              "head_limit": 120
+            },
+            "ms": 2011,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "exclu",
+              "matches": 55
+            },
+            "chars": 2102
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "ls node_modules/picomatch/lib/ 2>/dev/null && grep -n \"endsWith('/')\\|slash\\|trailing\" node_modules/picomatch/lib/picomatch.js | head -40",
+              "description": "Inspect picomatch library source"
+            },
+            "ms": 742,
+            "isError": true,
+            "refused": true,
+            "search": {
+              "pattern": "ls node_modules/picomatch/lib/ 2>/dev/null && grep -n \"endsWith('/')\\|slash\\|trailing\" node_modules/picomatch/lib/picomatch.js | head -40",
+              "matches": 1
+            },
+            "chars": 159
+          },
+          {
+            "tool": "Glob",
+            "input": {
+              "pattern": "node_modules/picomatch/lib/*.js"
+            },
+            "ms": 2538,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "node_modules/picomatch/lib/*.js",
+              "matches": 5
+            },
+            "chars": 186
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "format|trailing|/$|endsWith",
+              "path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\picomatch.js",
+              "output_mode": "content",
+              "-n": true
+            },
+            "ms": 1131,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "format|trailing|/$|endsWith",
+              "matches": 18
+            },
+            "chars": 451
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\picomatch.js",
+              "offset": 100,
+              "limit": 70
+            },
+            "ms": 440,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "node_modules/picomatch/lib/picomatch.js",
+              "lines": 70
+            },
+            "chars": 2141
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "fastpaths|\\bSLASH\\b|'/'|\"/\"",
+              "path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\parse.js",
+              "output_mode": "content",
+              "-n": true,
+              "head_limit": 60
+            },
+            "ms": 869,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "fastpaths|\\bSLASH\\b|'/'|\"/\"",
+              "matches": 14
+            },
+            "chars": 987
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "strictSlashes",
+              "path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib",
+              "output_mode": "content",
+              "-n": true,
+              "-C": 6
+            },
+            "ms": 1390,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "strictSlashes",
+              "matches": 41
+            },
+            "chars": 2787
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\parse.js",
+              "offset": 1160,
+              "limit": 90
+            },
+            "ms": 440,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "node_modules/picomatch/lib/parse.js",
+              "lines": 90
+            },
+            "chars": 3581
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "node_modules/|exclude|trailing slash|bare directory",
+              "path": "C:\\AIAgent\\Ferret\\docs",
+              "output_mode": "files_with_matches",
+              "-i": true,
+              "head_limit": 30
+            },
+            "ms": 1229,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "node_modules/|exclude|trailing slash|bare directory",
+              "matches": 31
+            },
+            "chars": 1379
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\parse.js",
+              "offset": 1339,
+              "limit": 85
+            },
+            "ms": 470,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "node_modules/picomatch/lib/parse.js",
+              "lines": 85
+            },
+            "chars": 2706
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\docs\\EPICs\\EPIC-135-Exclusion-Enforcement-At-Ingestion.md"
+            },
+            "ms": 497,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+              "lines": 348
+            },
+            "chars": 19877
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\src\\git\\discovery.ts",
+              "offset": 170,
+              "limit": 40
+            },
+            "ms": 494,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "src/git/discovery.ts",
+              "lines": 40
+            },
+            "chars": 1548
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\src\\retrieval\\access.ts",
+              "offset": 215,
+              "limit": 90
+            },
+            "ms": 474,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "src/retrieval/access.ts",
+              "lines": 90
+            },
+            "chars": 4116
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "git grep -n -i \"exclus\\|exclude\" -- src/indexing/indexer.ts src/indexing/content.ts src/git/provider.ts | head -40",
+              "description": "Check ingestion paths for exclusion enforcement"
+            },
+            "ms": 653,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "git grep -n -i \"exclus\\|exclude\" -- src/indexing/indexer.ts src/indexing/content.ts src/git/provider.ts | head -40",
+              "matches": 29
+            },
+            "chars": 2587
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "git log --oneline -12 -- docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md docs/EPICs/ROADMAP.md && git show --stat 6e26e97 | head -30",
+              "description": "History of EPIC-135 and the recent exclusion fix"
+            },
+            "ms": 970,
+            "isError": false,
+            "refused": false,
+            "log": {
+              "command": "git log --oneline -12 -- docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md docs/EPICs/ROADMAP.md && git show --stat 6e26e97 | head -30"
+            },
+            "chars": 2780
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "git grep -n \"isExcluded\\|evaluateExclusion\" -- tests | head -40",
+              "description": "Find tests asserting exclusion matching"
+            },
+            "ms": 713,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "git grep -n \"isExcluded\\|evaluateExclusion\" -- tests | head -40",
+              "matches": 14
+            },
+            "chars": 1409
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "git grep -n -i \"FERRET_EXCLUDE\" -- src | head -20",
+              "description": "Find env var parsing for exclude"
+            },
+            "ms": 777,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "git grep -n -i \"FERRET_EXCLUDE\" -- src | head -20",
+              "matches": 1
+            },
+            "chars": 59
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\tests\\unit\\config-layers.test.ts",
+              "offset": 236,
+              "limit": 62
+            },
+            "ms": 535,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "tests/unit/config-layers.test.ts",
+              "lines": 62
+            },
+            "chars": 3029
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\src\\config\\resolve.ts",
+              "offset": 45,
+              "limit": 55
+            },
+            "ms": 507,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "src/config/resolve.ts",
+              "lines": 55
+            },
+            "chars": 2106
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\parse.js",
+              "offset": 965,
+              "limit": 30
+            },
+            "ms": 393,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "node_modules/picomatch/lib/parse.js",
+              "lines": 30
+            },
+            "chars": 884
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "git grep -n \"picomatch\" -- package.json; grep -n '\"version\"' node_modules/picomatch/package.json",
+              "description": "Check picomatch version pinned"
+            },
+            "ms": 775,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "git grep -n \"picomatch\" -- package.json; grep -n '\"version\"' node_modules/picomatch/package.json",
+              "matches": 3
+            },
+            "chars": 118
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "negated",
+              "path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\picomatch.js",
+              "output_mode": "content",
+              "-n": true,
+              "-C": 3
+            },
+            "ms": 839,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "negated",
+              "matches": 23
+            },
+            "chars": 688
+          },
+          {
+            "tool": "mcp__ferret__ferret_context_record",
+            "input": {
+              "statement": "Ferret's top-level `exclude` key is enforced in exactly two places today — the repository discovery walk (src/git/discovery.ts:194, via src/git/provider.ts:191) and the read/retrieval path (effectiveExclusions injected into the access context at src/authorization/authorization.ts:287, evaluated per row in src/retrieval/access.ts:249). There is no per-file gate at ingestion: an excluded file inside an indexed repository is still read, stored as entity/version/content_blob, and merely filtered out of answers. EPIC-135 (docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md) specifies the ingestion gate but is status PROPOSED and unimplemented as of 2026-09-07.",
+              "contextKind": "fact",
+              "observedAt": "2026-09-07T00:00:00Z",
+              "sourceUrl": "src/config/exclusions.ts"
+            },
+            "ms": 563,
+            "isError": false,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_context_record",
+              "ok": true,
+              "chars": 1747
+            },
+            "chars": 1747
+          },
+          {
+            "tool": "mcp__ferret__ferret_context_record",
+            "input": {
+              "statement": "GOTCHA — an `exclude` pattern written with a trailing slash (e.g. \"node_modules/\") excludes nothing. matcherFor (src/config/exclusions.ts:96) only expands a pattern to [p, p/**, **/p, **/p/**] when it contains none of [*?[]{}!]; \"node_modules/\" has no metacharacter so it expands to the four useless forms \"node_modules/\", \"node_modules//**\", \"**/node_modules/\", \"**/node_modules//**\". picomatch 4.0.7 pushes a trailing \"/\" as a plain SLASH_LITERAL token (lib/parse.js:989) and only appends an optional \"/?\" when the last token is a star or bracket (lib/parse.js:1313), so the regex demands a literal trailing slash — and every path Ferret evaluates (relative(root, child) at discovery, entity.attributes.path at retrieval) has none. Write the bare name \"node_modules\", which is tested and works.",
+              "contextKind": "gotcha",
+              "observedAt": "2026-09-07T00:00:00Z",
+              "sourceUrl": "src/config/exclusions.ts"
+            },
+            "ms": 451,
+            "isError": false,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_context_record",
+              "ok": true,
+              "chars": 1894
+            },
+            "chars": 1894
+          },
+          {
+            "tool": "mcp__ferret__ferret_context_record",
+            "input": {
+              "statement": "GOTCHA — an `exclude` pattern containing any of [*?[]{}!] is passed to picomatch verbatim with no depth expansion (src/config/exclusions.ts:98), so \"*.log\" matches only a top-level a.log and never src/a.log; write \"**/*.log\" for that. Same rule means a leading \"!\" is handed to picomatch as a negation, which compiles to ^(?!...).*$ (node_modules/picomatch/lib/picomatch.js:274) — so a rule like \"!keep\" excludes every path except keep. Only the metacharacter-free bare form gets the [p, p/**, **/p, **/p/**] expansion.",
+              "contextKind": "gotcha",
+              "observedAt": "2026-09-07T00:00:00Z",
+              "sourceUrl": "src/config/exclusions.ts"
+            },
+            "ms": 523,
+            "isError": false,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_context_record",
+              "ok": true,
+              "chars": 1607
+            },
+            "chars": 1607
+          },
+          {
+            "tool": "mcp__ferret__ferret_context_record",
+            "input": {
+              "statement": "`exclude` accepts a bare glob string or a full rule object {pattern, scope: global|repository|session, reason?, effectiveFrom?} (src/config/exclusions.ts:45-75, src/config/schema.ts:137). Patterns are matched against repository-relative POSIX paths after normalizePath folds backslashes and strips a leading \"./\". Rules are additive and one-way — effectiveExclusions = DEFAULT_EXCLUSIONS (.git, node_modules, .venv, __pycache__, dist, build, coverage, .next, target, vendor) then the user's, and mergeExclusions dedupes on scope+pattern, so a narrower scope can never un-exclude. effectiveFrom gates the rule by evaluation instant. Config layers replace the `exclude` array rather than concatenate it, and FERRET_EXCLUDE is split on commas and semicolons (src/config/resolve.ts:88-94).",
+              "contextKind": "fact",
+              "observedAt": "2026-09-07T00:00:00Z",
+              "sourceUrl": "src/config/exclusions.ts"
+            },
+            "ms": 459,
+            "isError": false,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_context_record",
+              "ok": true,
+              "chars": 1865
+            },
+            "chars": 1865
+          },
+          {
+            "tool": "StructuredOutput",
+            "input": {
+              "conclusion": "`exclude` takes a bare glob string or a full rule object `{pattern, scope, reason?, effectiveFrom?}`, matched against repository-relative POSIX paths. A metacharacter-free pattern is expanded to four forms (`p`, `p/**`, `**/p`, `**/p/**`), so a bare directory name means \"that directory and everything under it\" — but a trailing slash (`node_modules/`) is also metacharacter-free, expands to four degenerate forms, and matches nothing Ferret ever evaluates, because picomatch 4.0.7 treats the trailing `/` as a literal it must find in the input. Enforcement happens in exactly two places today — the repository discovery walk and the read/retrieval filter — not at ingestion: an excluded file inside an indexed repository is still read and stored, and only filtered out of answers. EPIC-135 specifies the ingestion gate but is PROPOSED and unimplemented.",
+              "key_facts": [
+                "`exclude` is `z.array(exclusionInputSchema).default([])`; each entry is either a bare glob string or `{pattern, scope: global|repository|session, reason?, effectiveFrom?}` (src/config/schema.ts:137, src/config/exclusions.ts:45-75).",
+                "matcherFor expands a pattern to `[p, p/**, **/p, **/p/**]` only when `/[*?[\\]{}!]/` does not match it; otherwise the pattern is passed to picomatch verbatim (src/config/exclusions.ts:96-102).",
+                "A bare name therefore excludes the directory itself, its descendants, and nested copies — asserted by tests/unit/config-layers.test.ts:243-248 for `node_modules`, `node_modules/pkg/index.js`, `src/node_modules/x.js`.",
+                "A trailing-slash pattern has no metacharacter, so it expands to `node_modules/`, `node_modules//**`, `**/node_modules/`, `**/node_modules//**` — all of which require a literal `/` at that position in the input.",
+                "picomatch 4.0.7 pushes a trailing `/` as a plain `SLASH_LITERAL` token with no directory semantics (node_modules/picomatch/lib/parse.js:989), and appends an optional `SLASH_LITERAL?` only when the final token is a `star` or `bracket` (parse.js:1313), so no trailing slash is made optional.",
+                "Every path Ferret evaluates lacks a trailing slash: `relative(root, child)` at discovery (src/git/discovery.ts:194) and `entity.attributes['path']` at retrieval (src/retrieval/access.ts:246-252). A trailing-slash rule therefore excludes nothing. No test covers this case.",
+                "Patterns containing a metacharacter get no `**/` prefix, so `*.log` matches only a top-level `a.log`, not `src/a.log`; and a leading `!` reaches picomatch as a negation compiling to `^(?!...).*$` (node_modules/picomatch/lib/picomatch.js:274).",
+                "Enforcement point 1 — discovery: `effectiveExclusions(config)` is loaded at src/git/provider.ts:191 and applied when walking directories for repositories at src/git/discovery.ts:194 (`SkipReason.EXCLUDED`).",
+                "Enforcement point 2 — read path: the same rules are placed into the access context at src/authorization/authorization.ts:287 and evaluated per row by `withholds` at src/retrieval/access.ts:249, returning `WithholdReason.EXCLUSION`.",
+                "No per-file exclusion gate exists in ingestion: `git grep -i exclus` over src/indexing/indexer.ts and src/indexing/content.ts returns only commit-reachability `exclude` (rev-list) usages, unrelated to path exclusion.",
+                "EPIC-135 records the measured consequence — 27 file entities and 1,463,485 bytes of content_blob stored for excluded paths on the dogfood store — and is marked **Status: PROPOSED**, explicitly unimplemented and deferred by owner decision on 2026-09-07 (docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:3-11, §2, §16).",
+                "Rules are additive and one-way: `effectiveExclusions` = DEFAULT_EXCLUSIONS then the user's, deduped on scope+pattern (src/config/schema.ts:180-182, src/config/exclusions.ts:163-205); `effectiveFrom` gates by evaluation instant; config layers replace the array rather than concatenate (tests/unit/config-layers.test.ts:108-114); FERRET_EXCLUDE splits on `,` and `;` (src/config/resolve.ts:88-94).",
+                "src/config/exclusions.ts is unchanged since EPIC-003 apart from a NUL-byte escaping fix (`git log` on that path returns only 9c6a5dc and d1bd70f), so this is current behaviour, not a superseded design.",
+                "Verification limit: the sandbox is read-only, so picomatch behaviour was established by reading picomatch 4.0.7's source rather than by executing it; the bare-name half is independently confirmed by an existing repo test, the trailing-slash half is not."
+              ],
+              "citations": [
+                "src/config/exclusions.ts",
+                "src/config/schema.ts",
+                "src/config/resolve.ts",
+                "src/git/discovery.ts",
+                "src/git/provider.ts",
+                "src/authorization/authorization.ts",
+                "src/retrieval/access.ts",
+                "tests/unit/config-layers.test.ts",
+                "tests/unit/config.test.ts",
+                "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                "node_modules/picomatch/lib/parse.js",
+                "node_modules/picomatch/lib/picomatch.js",
+                "package.json",
+                "9c6a5dc",
+                "d1bd70f",
+                "6e26e97",
+                "9bce5ce",
+                "ferret context 7bffb926-c557-84e2-8379-c26ab04483ee (fact: exclude pattern shape and precedence)",
+                "ferret context 33cc8e6d-9ea9-805e-bbea-96f527020cde (fact: two enforcement points, no ingestion gate)",
+                "ferret context 09d73c70-e819-8341-985d-64695471b6b6 (gotcha: trailing-slash pattern matches nothing)",
+                "ferret context ba65be37-2d7d-81be-9760-9c42797e205b (gotcha: metacharacter patterns are verbatim, ! negates)"
+              ],
+              "confidence": "high"
+            },
+            "ms": 550,
+            "isError": false,
+            "refused": false,
+            "chars": 39
+          }
+        ]
+      },
+      "answer": {
+        "conclusion": "`exclude` takes a bare glob string or a full rule object `{pattern, scope, reason?, effectiveFrom?}`, matched against repository-relative POSIX paths. A metacharacter-free pattern is expanded to four forms (`p`, `p/**`, `**/p`, `**/p/**`), so a bare directory name means \"that directory and everything under it\" — but a trailing slash (`node_modules/`) is also metacharacter-free, expands to four degenerate forms, and matches nothing Ferret ever evaluates, because picomatch 4.0.7 treats the trailing `/` as a literal it must find in the input. Enforcement happens in exactly two places today — the repository discovery walk and the read/retrieval filter — not at ingestion: an excluded file inside an indexed repository is still read and stored, and only filtered out of answers. EPIC-135 specifies the ingestion gate but is PROPOSED and unimplemented.",
+        "key_facts": [
+          "`exclude` is `z.array(exclusionInputSchema).default([])`; each entry is either a bare glob string or `{pattern, scope: global|repository|session, reason?, effectiveFrom?}` (src/config/schema.ts:137, src/config/exclusions.ts:45-75).",
+          "matcherFor expands a pattern to `[p, p/**, **/p, **/p/**]` only when `/[*?[\\]{}!]/` does not match it; otherwise the pattern is passed to picomatch verbatim (src/config/exclusions.ts:96-102).",
+          "A bare name therefore excludes the directory itself, its descendants, and nested copies — asserted by tests/unit/config-layers.test.ts:243-248 for `node_modules`, `node_modules/pkg/index.js`, `src/node_modules/x.js`.",
+          "A trailing-slash pattern has no metacharacter, so it expands to `node_modules/`, `node_modules//**`, `**/node_modules/`, `**/node_modules//**` — all of which require a literal `/` at that position in the input.",
+          "picomatch 4.0.7 pushes a trailing `/` as a plain `SLASH_LITERAL` token with no directory semantics (node_modules/picomatch/lib/parse.js:989), and appends an optional `SLASH_LITERAL?` only when the final token is a `star` or `bracket` (parse.js:1313), so no trailing slash is made optional.",
+          "Every path Ferret evaluates lacks a trailing slash: `relative(root, child)` at discovery (src/git/discovery.ts:194) and `entity.attributes['path']` at retrieval (src/retrieval/access.ts:246-252). A trailing-slash rule therefore excludes nothing. No test covers this case.",
+          "Patterns containing a metacharacter get no `**/` prefix, so `*.log` matches only a top-level `a.log`, not `src/a.log`; and a leading `!` reaches picomatch as a negation compiling to `^(?!...).*$` (node_modules/picomatch/lib/picomatch.js:274).",
+          "Enforcement point 1 — discovery: `effectiveExclusions(config)` is loaded at src/git/provider.ts:191 and applied when walking directories for repositories at src/git/discovery.ts:194 (`SkipReason.EXCLUDED`).",
+          "Enforcement point 2 — read path: the same rules are placed into the access context at src/authorization/authorization.ts:287 and evaluated per row by `withholds` at src/retrieval/access.ts:249, returning `WithholdReason.EXCLUSION`.",
+          "No per-file exclusion gate exists in ingestion: `git grep -i exclus` over src/indexing/indexer.ts and src/indexing/content.ts returns only commit-reachability `exclude` (rev-list) usages, unrelated to path exclusion.",
+          "EPIC-135 records the measured consequence — 27 file entities and 1,463,485 bytes of content_blob stored for excluded paths on the dogfood store — and is marked **Status: PROPOSED**, explicitly unimplemented and deferred by owner decision on 2026-09-07 (docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:3-11, §2, §16).",
+          "Rules are additive and one-way: `effectiveExclusions` = DEFAULT_EXCLUSIONS then the user's, deduped on scope+pattern (src/config/schema.ts:180-182, src/config/exclusions.ts:163-205); `effectiveFrom` gates by evaluation instant; config layers replace the array rather than concatenate (tests/unit/config-layers.test.ts:108-114); FERRET_EXCLUDE splits on `,` and `;` (src/config/resolve.ts:88-94).",
+          "src/config/exclusions.ts is unchanged since EPIC-003 apart from a NUL-byte escaping fix (`git log` on that path returns only 9c6a5dc and d1bd70f), so this is current behaviour, not a superseded design.",
+          "Verification limit: the sandbox is read-only, so picomatch behaviour was established by reading picomatch 4.0.7's source rather than by executing it; the bare-name half is independently confirmed by an existing repo test, the trailing-slash half is not."
+        ],
+        "citations": [
+          "src/config/exclusions.ts",
+          "src/config/schema.ts",
+          "src/config/resolve.ts",
+          "src/git/discovery.ts",
+          "src/git/provider.ts",
+          "src/authorization/authorization.ts",
+          "src/retrieval/access.ts",
+          "tests/unit/config-layers.test.ts",
+          "tests/unit/config.test.ts",
+          "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+          "node_modules/picomatch/lib/parse.js",
+          "node_modules/picomatch/lib/picomatch.js",
+          "package.json",
+          "9c6a5dc",
+          "d1bd70f",
+          "6e26e97",
+          "9bce5ce",
+          "ferret context 7bffb926-c557-84e2-8379-c26ab04483ee (fact: exclude pattern shape and precedence)",
+          "ferret context 33cc8e6d-9ea9-805e-bbea-96f527020cde (fact: two enforcement points, no ingestion gate)",
+          "ferret context 09d73c70-e819-8341-985d-64695471b6b6 (gotcha: trailing-slash pattern matches nothing)",
+          "ferret context ba65be37-2d7d-81be-9760-9c42797e205b (gotcha: metacharacter patterns are verbatim, ! negates)"
+        ],
+        "confidence": "high"
+      },
+      "costUsd": 1.3983195,
+      "records": [
+        {
+          "id": "7bffb926-c557-84e2-8379-c26ab04483ee",
+          "statement": "␂ferret:content␂`exclude` accepts a bare glob string or a full rule object {pattern, scope: global|repository|session, reason?, effectiveFrom?} (src/config/exclusions.ts:45-75, src/config/schema.ts:137). Patterns are matched against repository-relative POSIX paths after normalizePath folds backslashes and strips a leading \"./\". Rules are additive and one-way — effectiveExclusions = DEFAULT_EXCLUSIONS (.git, node_modules, .venv, __pycache__, dist, build, coverage, .next, target, vendor) then the user's, and mergeExclusions dedupes on scope+pattern, so a narrower scope can never un-exclude. effectiveFrom gates the rule by evaluation instant. Config layers replace the `exclude` array rather than concatenate it, and FERRET_EXCLUDE is split on commas and semicolons (src/config/resolve.ts:88-94).␃ferret:content␃",
+          "contextKind": "fact",
+          "state": "active",
+          "current": true
+        },
+        {
+          "id": "ba65be37-2d7d-81be-9760-9c42797e205b",
+          "statement": "␂ferret:content␂GOTCHA — an `exclude` pattern containing any of [*?[]{}!] is passed to picomatch verbatim with no depth expansion (src/config/exclusions.ts:98), so \"*.log\" matches only a top-level a.log and never src/a.log; write \"**/*.log\" for that. Same rule means a leading \"!\" is handed to picomatch as a negation, which compiles to ^(?!...).*$ (node_modules/picomatch/lib/picomatch.js:274) — so a rule like \"!keep\" excludes every path except keep. Only the metacharacter-free bare form gets the [p, p/**, **/p, **/p/**] expansion.␃ferret:content␃",
+          "contextKind": "gotcha",
+          "state": "active",
+          "current": true
+        },
+        {
+          "id": "09d73c70-e819-8341-985d-64695471b6b6",
+          "statement": "␂ferret:content␂GOTCHA — an `exclude` pattern written with a trailing slash (e.g. \"node_modules/\") excludes nothing. matcherFor (src/config/exclusions.ts:96) only expands a pattern to [p, p/**, **/p, **/p/**] when it contains none of [*?[]{}!]; \"node_modules/\" has no metacharacter so it expands to the four useless forms \"node_modules/\", \"node_modules//**\", \"**/node_modules/\", \"**/node_modules//**\". picomatch 4.0.7 pushes a trailing \"/\" as a plain SLASH_LITERAL token (lib/parse.js:989) and only appends an optional \"/?\" when the last token is a star or bracket (lib/parse.js:1313), so the regex demands a literal trailing slash — and every path Ferret evaluates (relative(root, child) at discovery, entity.attributes.path at retrieval) has none. Write the bare name \"node_modules\", which is tested and works.␃ferret:content␃",
+          "contextKind": "gotcha",
+          "state": "active",
+          "current": true
+        },
+        {
+          "id": "33cc8e6d-9ea9-805e-bbea-96f527020cde",
+          "statement": "␂ferret:content␂Ferret's top-level `exclude` key is enforced in exactly two places today — the repository discovery walk (src/git/discovery.ts:194, via src/git/provider.ts:191) and the read/retrieval path (effectiveExclusions injected into the access context at src/authorization/authorization.ts:287, evaluated per row in src/retrieval/access.ts:249). There is no per-file gate at ingestion: an excluded file inside an indexed repository is still read, stored as entity/version/content_blob, and merely filtered out of answers. EPIC-135 (docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md) specifies the ingestion gate but is status PROPOSED and unimplemented as of 2026-09-07.␃ferret:content␃",
+          "contextKind": "fact",
+          "state": "active",
+          "current": true
+        }
+      ],
+      "surfaces": {
+        "mcp__ferret__ferret_config_exclusions": 1,
+        "mcp__ferret__ferret_config_schema": 1,
+        "mcp__ferret__ferret_context_record": 4
+      }
+    },
+    "b": {
+      "tree": {
+        "commit": "144d478ac19dfcf457f13604d6e655807a1277d1",
+        "dirty": true
+      },
+      "model": "opus",
+      "effort": "high",
+      "notesBytes": 3113,
+      "carried": 4,
+      "arms": {
+        "control": {
+          "task": "session-b",
+          "answered": true,
+          "stopped": "completed",
+          "verdict": "it-matches-nothing",
+          "verdictCorrect": true,
+          "factsCovered": 1,
+          "factsTotal": 3,
+          "factsComplete": false,
+          "facts": [
+            {
+              "id": "the-mechanism",
+              "covered": true
+            },
+            {
+              "id": "the-workaround",
+              "covered": false
+            },
+            {
+              "id": "silent",
+              "covered": false
+            }
+          ],
+          "evidenceSourced": true,
+          "primaryCited": 1,
+          "primaryTotal": 1,
+          "citations": [
+            "file:src/config/exclusions.ts",
+            "file:src/git/discovery.ts",
+            "file:src/retrieval/access.ts",
+            "file:src/config/schema.ts",
+            "file:node_modules/picomatch/lib/parse.js",
+            "file:docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+            "file:README.md",
+            "file:git log -- src/config/exclusions.ts",
+            "file:benchmark/agent/results/opus.json"
+          ],
+          "citationsOffLabel": 7,
+          "toolCalls": 23,
+          "turns": 25,
+          "filesRead": 4,
+          "linesRead": 405,
+          "searches": 12,
+          "historyCalls": 2,
+          "ferretCalls": 0,
+          "refusals": 3,
+          "toolErrors": 3,
+          "contextTokens": 331555,
+          "inputTokens": 32,
+          "cacheReadTokens": 322073,
+          "cacheWriteTokens": 33074,
+          "outputTokens": 9450,
+          "nudges": 0,
+          "unsupportedCitations": 0,
+          "unsupported": [],
+          "staleAsserted": false,
+          "staleVerdict": false,
+          "stale": [],
+          "elapsedMs": 150368,
+          "toolMs": 21846,
+          "ferretSurfaces": {},
+          "answer": {
+            "verdict": "it-matches-nothing",
+            "conclusion": "No. As the repository stands, `secrets/` matches nothing at all. Because the pattern contains no glob metacharacter, `matcherFor` expands it to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` (src/config/exclusions.ts:96-102), and nothing strips the trailing slash — so every variant needs either a literal double slash or a path ending in `/`, which the repo-relative paths passed to `evaluateExclusion` never have. The colleague must write `secrets` or `secrets/**`; and even then the exclusion only filters reads, since ingestion still stores the files (EPIC-135, PROPOSED/unimplemented).",
+            "key_facts": [
+              "src/config/exclusions.ts:98 tests the pattern for `[*?[\\]{}!]`; `secrets/` has none, so it takes the bare-directory branch at line 100, yielding `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**`.",
+              "`normalizePath` (src/config/exclusions.ts:84-86) only converts backslashes to `/` and strips a leading `./` — it does not remove a trailing slash, and no other code does: `withoutTrailingSlash` has zero hits in src/ or tests/.",
+              "picomatch pushes each `/` as its own slash token emitting a literal `\\/` (node_modules/picomatch/lib/parse.js:989); the only slash-collapsing code (parse.js:689-699) collapses backslashes, not forward slashes — so `secrets//**` requires a literal `//` in the path.",
+              "picomatch only appends an optional trailing slash when the last token is a star or bracket (parse.js:1313-1315), so pattern `secrets/` compiles to a regex matching only the literal string `secrets/`.",
+              "Call sites pass paths with no trailing slash: src/git/discovery.ts:194 passes `relative(root, child) || name`, and src/retrieval/access.ts:249 passes stored entity paths.",
+              "src/config/exclusions.ts is unmodified in the working tree (`git status --porcelain` reports nothing for it) and its last commits are d1bd70f and 9c6a5dc — the `withoutTrailingSlash` fix described in benchmark/agent/results/*.json as \"uncommitted\" is not present anywhere in the repository, so that description is superseded.",
+              "DEFAULT_EXCLUSIONS (src/config/exclusions.ts:188-205) and the README example `scratch/**` (README.md:628) all avoid a bare trailing slash, so only operator-written gitignore-style patterns hit this; nothing in the docs warns about it.",
+              "Even a correctly written exclusion is enforced on the read path only: docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md is Status PROPOSED and records excluded files being read, stored as entities and retaining 1,463,485 bytes of content while the exclusion was in force."
+            ],
+            "citations": [
+              "src/config/exclusions.ts:84-102",
+              "src/config/exclusions.ts:188-205",
+              "src/git/discovery.ts:194",
+              "src/retrieval/access.ts:249",
+              "src/config/schema.ts:130-137",
+              "src/config/schema.ts:174-181",
+              "node_modules/picomatch/lib/parse.js:689-699",
+              "node_modules/picomatch/lib/parse.js:989",
+              "node_modules/picomatch/lib/parse.js:1313-1315",
+              "node_modules/picomatch/lib/parse.js:1377-1422",
+              "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:1-52",
+              "README.md:614-630",
+              "git log -- src/config/exclusions.ts (d1bd70f, 9c6a5dc)",
+              "benchmark/agent/results/opus.json:6553"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.7292165000000002,
+          "trace": [
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclude",
+                "glob": "src/**/*.ts",
+                "output_mode": "files_with_matches"
+              },
+              "ms": 844,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclude",
+                "matches": 44
+              },
+              "chars": 1113
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "ls && ls src 2>/dev/null",
+                "description": "List repo root and src"
+              },
+              "ms": 379,
+              "isError": true,
+              "refused": true,
+              "chars": 159
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\config\\exclusions.ts"
+              },
+              "ms": 430,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/config/exclusions.ts",
+                "lines": 206
+              },
+              "chars": 8422
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "trailing|replace\\(/\\\\/\\+\\$/|/\\$/",
+                "glob": "src/**/*.ts",
+                "output_mode": "content",
+                "-n": true
+              },
+              "ms": 1628,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "trailing|replace\\(/\\\\/\\+\\$/|/\\$/",
+                "matches": 16
+              },
+              "chars": 1528
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "secrets/|trailing slash",
+                "output_mode": "content",
+                "-n": true,
+                "head_limit": 60
+              },
+              "ms": 1363,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "secrets/|trailing slash",
+                "matches": 55
+              },
+              "chars": 8665
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\docs\\evidence\\FERRET-DOES-A-REAL-AGENT-DO-BETTER.md",
+                "offset": 80,
+                "limit": 50
+              },
+              "ms": 431,
+              "isError": true,
+              "refused": true,
+              "read": {
+                "path": "docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md",
+                "lines": 1
+              },
+              "chars": 298
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline -15 -- src/config/exclusions.ts && echo \"---GREP---\" && git grep -n \"withoutTrailingSlash\" -- src tests | head -20 && echo \"---STATUS---\" && git status --porcelain src/config/exclusions.ts tests/unit/config-layers.test.ts",
+                "description": "Check exclusions.ts history and trailing-slash fix presence"
+              },
+              "ms": 3508,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline -15 -- src/config/exclusions.ts && echo \"---GREP---\" && git grep -n \"withoutTrailingSlash\" -- src tests | head -20 && echo \"---STATUS---\" && git status --porcelain src/config/exclusions.ts tests/unit/config-layers.test.ts"
+              },
+              "chars": 153
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n \"exclude\\|exclusion\" -- src/config/schema.ts src/config/resolve.ts | head -40",
+                "description": "Inspect config schema and resolve exclusion handling"
+              },
+              "ms": 751,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "git grep -n \"exclude\\|exclusion\" -- src/config/schema.ts src/config/resolve.ts | head -40",
+                "matches": 10
+              },
+              "chars": 764
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n \"picomatch\" -- src tests | head -30",
+                "description": "Find all picomatch usages"
+              },
+              "ms": 807,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "git grep -n \"picomatch\" -- src tests | head -30",
+                "matches": 6
+              },
+              "chars": 593
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n \"pattern: '[^']*/'\\|exclude: \\['[^']*/'\\]\" -- tests src | head -20; echo \"---\"; git grep -rn \"matchBase\\|posix\\|slash\" -- node_modules/picomatch/lib/picomatch.js 2>/dev/null | head; ls node_modules/picomatch/lib 2>/dev/null",
+                "description": "Search tests for bare trailing-slash patterns; inspect picomatch lib"
+              },
+              "ms": 343,
+              "isError": true,
+              "refused": true,
+              "search": {
+                "pattern": "git grep -n \"pattern: '[^']*/'\\|exclude: \\['[^']*/'\\]\" -- tests src | head -20; echo \"---\"; git grep -rn \"matchBase\\|posix\\|slash\" -- node_modules/picomatch/lib/picomatch.js 2>/dev/null | head; ls node_modules/picomatch/lib 2>/dev/null",
+                "matches": 1
+              },
+              "chars": 159
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "pattern: '[^']*/'|exclude: \\['[^']*/'\\]",
+                "path": "C:\\AIAgent\\Ferret\\tests",
+                "output_mode": "content",
+                "-n": true,
+                "head_limit": 20
+              },
+              "ms": 1709,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "pattern: '[^']*/'|exclude: \\['[^']*/'\\]",
+                "matches": 1
+              },
+              "chars": 16
+            },
+            {
+              "tool": "Glob",
+              "input": {
+                "pattern": "node_modules/picomatch/lib/*.js"
+              },
+              "ms": 1877,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "node_modules/picomatch/lib/*.js",
+                "matches": 5
+              },
+              "chars": 186
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "\\/\\$|endsWith\\('/'\\)|replace\\(/\\\\\\\\\\?\\//|strictSlashes|trailing",
+                "path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib",
+                "output_mode": "content",
+                "-n": true,
+                "head_limit": 40
+              },
+              "ms": 944,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "\\/\\$|endsWith\\('/'\\)|replace\\(/\\\\\\\\\\?\\//|strictSlashes|trailing",
+                "matches": 6
+              },
+              "chars": 608
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\parse.js",
+                "offset": 1405,
+                "limit": 25
+              },
+              "ms": 431,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "node_modules/picomatch/lib/parse.js",
+                "lines": 22
+              },
+              "chars": 493
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n \"fastpaths\" -- node_modules/picomatch/lib/picomatch.js | head; echo ---; grep -n \"prev.type === 'slash'\\|slash\" node_modules/picomatch/lib/parse.js | head -40",
+                "description": "Inspect picomatch fastpaths and slash handling"
+              },
+              "ms": 821,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "git grep -n \"fastpaths\" -- node_modules/picomatch/lib/picomatch.js | head; echo ---; grep -n \"prev.type === 'slash'\\|slash\" node_modules/picomatch/lib/parse.js | head -40",
+                "matches": 25
+              },
+              "chars": 1625
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\parse.js",
+                "offset": 684,
+                "limit": 16
+              },
+              "ms": 405,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "node_modules/picomatch/lib/parse.js",
+                "lines": 16
+              },
+              "chars": 466
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\parse.js",
+                "offset": 975,
+                "limit": 20
+              },
+              "ms": 394,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "node_modules/picomatch/lib/parse.js",
+                "lines": 20
+              },
+              "chars": 734
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n \"isExcluded\\|evaluateExclusion\" -- src | head -30",
+                "description": "Find exclusion evaluation call sites"
+              },
+              "ms": 712,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "git grep -n \"isExcluded\\|evaluateExclusion\" -- src | head -30",
+                "matches": 19
+              },
+              "chars": 1494
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline -8; echo ---; git status --porcelain | head -20",
+                "description": "Recent commits and working tree status"
+              },
+              "ms": 928,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline -8; echo ---; git status --porcelain | head -20"
+              },
+              "chars": 1015
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\docs\\EPICs\\EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                "limit": 60
+              },
+              "ms": 456,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                "lines": 60
+              },
+              "chars": 3054
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\parse.js",
+                "offset": 1300,
+                "limit": 30
+              },
+              "ms": 548,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "node_modules/picomatch/lib/parse.js",
+                "lines": 30
+              },
+              "chars": 1045
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\node_modules\\picomatch\\lib\\parse.js",
+                "offset": 1355,
+                "limit": 50
+              },
+              "ms": 874,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "node_modules/picomatch/lib/parse.js",
+                "lines": 50
+              },
+              "chars": 1678
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclude",
+                "path": "C:\\AIAgent\\Ferret\\README.md",
+                "output_mode": "content",
+                "-n": true,
+                "head_limit": 30
+              },
+              "ms": 1263,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclude",
+                "matches": 6
+              },
+              "chars": 470
+            },
+            {
+              "tool": "StructuredOutput",
+              "input": {
+                "verdict": "it-matches-nothing",
+                "conclusion": "No. As the repository stands, `secrets/` matches nothing at all. Because the pattern contains no glob metacharacter, `matcherFor` expands it to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` (src/config/exclusions.ts:96-102), and nothing strips the trailing slash — so every variant needs either a literal double slash or a path ending in `/`, which the repo-relative paths passed to `evaluateExclusion` never have. The colleague must write `secrets` or `secrets/**`; and even then the exclusion only filters reads, since ingestion still stores the files (EPIC-135, PROPOSED/unimplemented).",
+                "key_facts": [
+                  "src/config/exclusions.ts:98 tests the pattern for `[*?[\\]{}!]`; `secrets/` has none, so it takes the bare-directory branch at line 100, yielding `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**`.",
+                  "`normalizePath` (src/config/exclusions.ts:84-86) only converts backslashes to `/` and strips a leading `./` — it does not remove a trailing slash, and no other code does: `withoutTrailingSlash` has zero hits in src/ or tests/.",
+                  "picomatch pushes each `/` as its own slash token emitting a literal `\\/` (node_modules/picomatch/lib/parse.js:989); the only slash-collapsing code (parse.js:689-699) collapses backslashes, not forward slashes — so `secrets//**` requires a literal `//` in the path.",
+                  "picomatch only appends an optional trailing slash when the last token is a star or bracket (parse.js:1313-1315), so pattern `secrets/` compiles to a regex matching only the literal string `secrets/`.",
+                  "Call sites pass paths with no trailing slash: src/git/discovery.ts:194 passes `relative(root, child) || name`, and src/retrieval/access.ts:249 passes stored entity paths.",
+                  "src/config/exclusions.ts is unmodified in the working tree (`git status --porcelain` reports nothing for it) and its last commits are d1bd70f and 9c6a5dc — the `withoutTrailingSlash` fix described in benchmark/agent/results/*.json as \"uncommitted\" is not present anywhere in the repository, so that description is superseded.",
+                  "DEFAULT_EXCLUSIONS (src/config/exclusions.ts:188-205) and the README example `scratch/**` (README.md:628) all avoid a bare trailing slash, so only operator-written gitignore-style patterns hit this; nothing in the docs warns about it.",
+                  "Even a correctly written exclusion is enforced on the read path only: docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md is Status PROPOSED and records excluded files being read, stored as entities and retaining 1,463,485 bytes of content while the exclusion was in force."
+                ],
+                "citations": [
+                  "src/config/exclusions.ts:84-102",
+                  "src/config/exclusions.ts:188-205",
+                  "src/git/discovery.ts:194",
+                  "src/retrieval/access.ts:249",
+                  "src/config/schema.ts:130-137",
+                  "src/config/schema.ts:174-181",
+                  "node_modules/picomatch/lib/parse.js:689-699",
+                  "node_modules/picomatch/lib/parse.js:989",
+                  "node_modules/picomatch/lib/parse.js:1313-1315",
+                  "node_modules/picomatch/lib/parse.js:1377-1422",
+                  "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:1-52",
+                  "README.md:614-630",
+                  "git log -- src/config/exclusions.ts (d1bd70f, 9c6a5dc)",
+                  "benchmark/agent/results/opus.json:6553"
+                ],
+                "confidence": "high"
+              },
+              "ms": 497,
+              "isError": false,
+              "refused": false,
+              "chars": 39
+            }
+          ]
+        },
+        "treatment": {
+          "task": "session-b",
+          "answered": true,
+          "stopped": "completed",
+          "verdict": "it-matches-nothing",
+          "verdictCorrect": true,
+          "factsCovered": 2,
+          "factsTotal": 3,
+          "factsComplete": false,
+          "facts": [
+            {
+              "id": "the-mechanism",
+              "covered": true
+            },
+            {
+              "id": "the-workaround",
+              "covered": true
+            },
+            {
+              "id": "silent",
+              "covered": false
+            }
+          ],
+          "evidenceSourced": true,
+          "primaryCited": 1,
+          "primaryTotal": 1,
+          "citations": [
+            "file:src/config/exclusions.ts",
+            "file:src/config/schema.ts",
+            "file:node_modules/picomatch/package.json",
+            "file:node_modules/picomatch/lib/parse.js",
+            "file:tests/unit/config-layers.test.ts",
+            "file:tests/integration/retrieval/permission.test.ts",
+            "file:git log --oneline -- src/config/exclusions.ts",
+            "file:git status --porcelain -- src/config/exclusions.ts",
+            "file:benchmark/agent/results/opus.json",
+            "context:ferret durable context 09d73c70-e819-8341-985d-64695471b6b6",
+            "file:src/cli/commands/config.ts"
+          ],
+          "citationsOffLabel": 9,
+          "toolCalls": 15,
+          "turns": 18,
+          "filesRead": 4,
+          "linesRead": 298,
+          "searches": 7,
+          "historyCalls": 1,
+          "ferretCalls": 2,
+          "refusals": 2,
+          "toolErrors": 3,
+          "contextTokens": 413790,
+          "inputTokens": 22,
+          "cacheReadTokens": 402376,
+          "cacheWriteTokens": 55771,
+          "outputTokens": 11392,
+          "nudges": 0,
+          "unsupportedCitations": 0,
+          "unsupported": [],
+          "staleAsserted": false,
+          "staleVerdict": false,
+          "stale": [],
+          "elapsedMs": 186736,
+          "toolMs": 45022,
+          "ferretSurfaces": {
+            "mcp__ferret__ferret_config_exclusions": 1,
+            "mcp__ferret__ferret_search": 1
+          },
+          "answer": {
+            "verdict": "it-matches-nothing",
+            "conclusion": "No. As the repository stands, the entry `secrets/` excludes nothing at all — neither the directory's contents nor the directory entry itself. A trailing slash is not a glob metacharacter, so matcherFor takes the bare-name expansion branch and produces four patterns that each demand a literal trailing slash or a doubled slash, none of which any path Ferret evaluates can match. The rule still shows up as configured, so it looks effective while withholding nothing; the pattern that works is the bare name `secrets` (or `secrets/**`).",
+            "key_facts": [
+              "matcherFor (src/config/exclusions.ts:96-102) expands a pattern to [p, p/**, **/p, **/p/**] only when it contains none of *?[]{}! — a trailing slash is not in that set, so `secrets/` expands to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**`.",
+              "normalizePath (src/config/exclusions.ts:84-86) converts backslashes to forward slashes and strips a leading ./ but never strips a trailing slash; exclusionInputSchema (src/config/exclusions.ts:72-75, consumed at src/config/schema.ts:137) stores the string verbatim, so nothing normalizes the pattern earlier.",
+              "Installed picomatch is 4.0.7: lib/parse.js:990 pushes a trailing / as a plain slash token with mandatory SLASH_LITERAL output, and lib/parse.js:1313 appends the optional /? (maybe_slash) only when the last token is a star or bracket — so `secrets/` and `**/secrets/` compile to regexes requiring a literal trailing slash.",
+              "For `secrets//**`, picomatch's branch at lib/parse.js:1197-1207 rebuilds the tail as (?:SLASH globstar|$) after the first literal slash, so it matches only a path ending immediately at `secrets/` or one containing a doubled slash; `secrets/key.pem` does not match.",
+              "Paths Ferret evaluates carry no trailing slash, so none of the four expansions can match — including the directory entity itself, whose path is `secrets`.",
+              "The defect is present in the current tree, not fixed: `withoutTrailingSlash` appears nowhere in src/, `git status --porcelain` reports src/config/exclusions.ts unmodified, and the last commit touching it is d1bd70f (before that, 9c6a5dc EPIC-003).",
+              "benchmark/agent/results/opus.json:6553,7257 describe a fix (withoutTrailingSlash) as 'fixed but uncommitted' plus a regression test at tests/unit/config-layers.test.ts:250 — that state no longer exists: line 250 is the unrelated 'matches globs, and reports which rule decided' test, and the exclusion tests at tests/unit/config-layers.test.ts:243-260 only cover the bare name `node_modules` and the glob `docs/**/*.pdf`.",
+              "Ferret's own durable context (context entity 09d73c70-e819-8341-985d-64695471b6b6, kind gotcha) records the same finding and is currently active: a trailing-slash exclude pattern excludes nothing, and the bare name is what is tested and works.",
+              "DEFAULT_EXCLUSIONS (src/config/exclusions.ts:188-205) all use bare names with no trailing slash, so only operator-written gitignore-style patterns are affected.",
+              "Retrieval-side enforcement itself works when the pattern matches: tests/integration/retrieval/permission.test.ts:612-636 shows `secrets/**` withholding secrets/keys.txt — so the failure here is the pattern, not the filter."
+            ],
+            "citations": [
+              "src/config/exclusions.ts:96-102",
+              "src/config/exclusions.ts:84-86",
+              "src/config/exclusions.ts:72-75",
+              "src/config/exclusions.ts:188-205",
+              "src/config/schema.ts:137",
+              "node_modules/picomatch/package.json (version 4.0.7)",
+              "node_modules/picomatch/lib/parse.js:990",
+              "node_modules/picomatch/lib/parse.js:1313",
+              "node_modules/picomatch/lib/parse.js:1197-1207",
+              "tests/unit/config-layers.test.ts:237-260",
+              "tests/integration/retrieval/permission.test.ts:612-636",
+              "git log --oneline -- src/config/exclusions.ts (d1bd70f, 9c6a5dc)",
+              "git status --porcelain -- src/config/exclusions.ts (no output: unmodified)",
+              "benchmark/agent/results/opus.json:6553",
+              "benchmark/agent/results/opus.json:7257",
+              "ferret durable context 09d73c70-e819-8341-985d-64695471b6b6 (gotcha, active)",
+              "src/cli/commands/config.ts:246-260"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 1.044838,
+          "trace": [
+            {
+              "tool": "mcp__ferret__ferret_config_exclusions",
+              "input": {},
+              "ms": 2830,
+              "isError": true,
+              "refused": false,
+              "ferret": {
+                "name": "ferret_config_exclusions",
+                "ok": false,
+                "chars": 392
+              },
+              "chars": 392
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclude|exclusion",
+                "glob": "src/**/*.ts",
+                "output_mode": "files_with_matches",
+                "head_limit": 40
+              },
+              "ms": 3137,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclude|exclusion",
+                "matches": 41
+              },
+              "chars": 1000
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\config\\exclusions.ts"
+              },
+              "ms": 1549,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/config/exclusions.ts",
+                "lines": 206
+              },
+              "chars": 8422
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "node -e \"\nconst pm = require('picomatch');\nconst norm = p => p.replace(/\\\\\\\\/g,'/').replace(/^\\.\\//,'');\nfunction matcherFor(pattern){\n  const p = norm(pattern);\n  const patterns = /[*?[\\]{}!]/.test(p) ? [p] : [p, p+'/**', '**/'+p, '**/'+p+'/**'];\n  console.log('pattern', JSON.stringify(pattern), '=> expansions', JSON.stringify(patterns));\n  return pm(patterns, {dot:true});\n}\nfor (const pat of ['secrets/','secrets']) {\n  const m = matcherFor(pat);\n  for (const path of ['secrets','secrets/key.pem','secrets/deep/a/b.txt','src/secrets/key.pem','docs/secrets']) {\n    console.log('   ', JSON.stringify(path), '->', m(path));\n  }\n}\n\"",
+                "description": "Test picomatch expansion for trailing-slash pattern"
+              },
+              "ms": 1077,
+              "isError": true,
+              "refused": true,
+              "chars": 159
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclude",
+                "path": "C:\\AIAgent\\Ferret\\src\\config\\schema.ts",
+                "output_mode": "content",
+                "-C": 6
+              },
+              "ms": 2608,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclude",
+                "matches": 32
+              },
+              "chars": 1328
+            },
+            {
+              "tool": "mcp__ferret__ferret_search",
+              "input": {
+                "query": "exclusion pattern trailing slash directory not matched",
+                "limit": 15
+              },
+              "ms": 2922,
+              "isError": false,
+              "refused": false,
+              "ferret": {
+                "name": "ferret_search",
+                "ok": true,
+                "chars": 22491
+              },
+              "chars": 22491
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "trailing slash|trailing-slash|secrets/|'secrets'",
+                "output_mode": "content",
+                "-n": true,
+                "head_limit": 60
+              },
+              "ms": 3237,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "trailing slash|trailing-slash|secrets/|'secrets'",
+                "matches": 62
+              },
+              "chars": 9589
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "withoutTrailingSlash|replace\\(/\\\\/\\+\\$/|/\\\\/\\$/",
+                "output_mode": "content",
+                "-n": true
+              },
+              "ms": 3905,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "withoutTrailingSlash|replace\\(/\\\\/\\+\\$/|/\\\\/\\$/",
+                "matches": 18
+              },
+              "chars": 3779
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline -12 -- src/config/exclusions.ts && echo \"=== STATUS ===\" && git status --porcelain -- src/config/exclusions.ts tests/unit/config-layers.test.ts && echo \"=== HEAD matcherFor ===\" && git show HEAD:src/config/exclusions.ts | grep -n \"metacharacter\\|test(pattern)\\|TrailingSlash\" ",
+                "description": "Check git history and working-tree status of exclusions.ts"
+              },
+              "ms": 9898,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline -12 -- src/config/exclusions.ts && echo \"=== STATUS ===\" && git status --porcelain -- src/config/exclusions.ts tests/unit/config-layers.test.ts && echo \"=== HEAD matcherFor ===\" && git show HEAD:src/config/exclusions.ts | grep -n \"metacharacter\\|test(pattern)\\|TrailingSlash\" "
+              },
+              "chars": 217
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "grep '\"version\"' node_modules/picomatch/package.json; echo \"=== parse.js 984-994 ===\"; sed -n '984,994p' node_modules/picomatch/lib/parse.js; echo \"=== parse.js 1305,1320 ===\"; sed -n '1305,1320p' node_modules/picomatch/lib/parse.js",
+                "description": "Inspect installed picomatch version and trailing-slash handling"
+              },
+              "ms": 3019,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "grep '\"version\"' node_modules/picomatch/package.json; echo \"=== parse.js 984-994 ===\"; sed -n '984,994p' node_modules/picomatch/lib/parse.js; echo \"=== parse.js 1305,1320 ===\"; sed -n '1305,1320p' node_modules/picomatch/lib/parse.js",
+                "matches": 29
+              },
+              "chars": 778
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\benchmark\\agent\\README.md",
+                "offset": 180,
+                "limit": 30
+              },
+              "ms": 1808,
+              "isError": true,
+              "refused": true,
+              "read": {
+                "path": "benchmark/agent/README.md",
+                "lines": 1
+              },
+              "chars": 272
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\tests\\unit\\config-layers.test.ts",
+                "offset": 232,
+                "limit": 30
+              },
+              "ms": 1746,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "tests/unit/config-layers.test.ts",
+                "lines": 30
+              },
+              "chars": 1357
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "grep -n \"globstar\" node_modules/picomatch/lib/parse.js | head -40",
+                "description": "Locate globstar handling in picomatch parse.js"
+              },
+              "ms": 2448,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "grep -n \"globstar\" node_modules/picomatch/lib/parse.js | head -40",
+                "matches": 33
+              },
+              "chars": 1789
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "sed -n '1190,1250p' node_modules/picomatch/lib/parse.js",
+                "description": "Read picomatch trailing-globstar branches"
+              },
+              "ms": 2259,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "sed -n '1190,1250p' node_modules/picomatch/lib/parse.js",
+                "lines": 61
+              },
+              "chars": 1985
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclusionInputSchema|normalizePath|\\.pattern",
+                "path": "C:\\AIAgent\\Ferret\\src",
+                "output_mode": "content",
+                "-n": true,
+                "head_limit": 30
+              },
+              "ms": 2579,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclusionInputSchema|normalizePath|\\.pattern",
+                "matches": 18
+              },
+              "chars": 1595
+            },
+            {
+              "tool": "StructuredOutput",
+              "input": {
+                "__unparsedToolInput": {
+                  "raw": "{\"verdict\": \"it-matches-nothing\", \"conclusion\": \"No. As the repository stands, the entry `secrets/` excludes nothing at all — not the directory's contents, and not even the directory entry itself. The trailing slash is not a glob metacharacter, so `matcherFor` takes the bare-name expansion branch and produces four patterns that each demand a literal trailing slash or a doubled slash (`secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**`), none of which any path Ferret evaluates can match. The rule still appears in the configured exclusion list, so it looks effective while withholding nothing; the working pattern is the bare name `secrets` (or `secrets/**`).\", \"key_facts\": `matcherFor` (src/config/exclusions.ts:96-102) only expands a pattern to `[p, p/**, **/p, **/p/**]` when it contains none of `*?[]{}!`; a trailing slash is not in that set, so `secrets/` takes the expansion branch and yields `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**`., \"key_facts\": `normalizePath` (src/config/exclusions.ts:84-86) only converts backslashes to forward slashes and strips a leading `./`; it never strips a trailing slash, and `exclusionInputSchema` (src/config/exclusions.ts:72-75, used at src/config/schema.ts:137) stores the string verbatim, so nothing normalizes the pattern before matching., \"key_facts\": The installed picomatch is 4.0.7; lib/parse.js:990 pushes a trailing `/` as a plain `slash` token with mandatory `SLASH_LITERAL` output, and lib/parse.js:1313 appends the optional `/?` (`maybe_slash`) only when the last token is a `star` or `bracket` — so `secrets/` and `**/secrets/` compile to regexes requiring a literal trailing slash., \"key_facts\": For `secrets//**`, picomatch's branch at lib/parse.js:1197-1207 rebuilds the tail as `(?:/<globstar>|$)` after the first literal slash, so the pattern matches only a path ending immediately at `secrets/` or one containing a doubled slash — `secrets/key.pem` does not match., \"key_facts\": Paths Ferret evaluates carry no trailing slash (repository-relative paths at di",
+                  "len": 4662
+                }
+              },
+              "ms": 2,
+              "isError": true,
+              "refused": false,
+              "chars": 504
+            },
+            {
+              "tool": "StructuredOutput",
+              "input": {
+                "verdict": "it-matches-nothing",
+                "conclusion": "No. As the repository stands, the entry `secrets/` excludes nothing at all — neither the directory's contents nor the directory entry itself. A trailing slash is not a glob metacharacter, so matcherFor takes the bare-name expansion branch and produces four patterns that each demand a literal trailing slash or a doubled slash, none of which any path Ferret evaluates can match. The rule still shows up as configured, so it looks effective while withholding nothing; the pattern that works is the bare name `secrets` (or `secrets/**`).",
+                "key_facts": [
+                  "matcherFor (src/config/exclusions.ts:96-102) expands a pattern to [p, p/**, **/p, **/p/**] only when it contains none of *?[]{}! — a trailing slash is not in that set, so `secrets/` expands to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**`.",
+                  "normalizePath (src/config/exclusions.ts:84-86) converts backslashes to forward slashes and strips a leading ./ but never strips a trailing slash; exclusionInputSchema (src/config/exclusions.ts:72-75, consumed at src/config/schema.ts:137) stores the string verbatim, so nothing normalizes the pattern earlier.",
+                  "Installed picomatch is 4.0.7: lib/parse.js:990 pushes a trailing / as a plain slash token with mandatory SLASH_LITERAL output, and lib/parse.js:1313 appends the optional /? (maybe_slash) only when the last token is a star or bracket — so `secrets/` and `**/secrets/` compile to regexes requiring a literal trailing slash.",
+                  "For `secrets//**`, picomatch's branch at lib/parse.js:1197-1207 rebuilds the tail as (?:SLASH globstar|$) after the first literal slash, so it matches only a path ending immediately at `secrets/` or one containing a doubled slash; `secrets/key.pem` does not match.",
+                  "Paths Ferret evaluates carry no trailing slash, so none of the four expansions can match — including the directory entity itself, whose path is `secrets`.",
+                  "The defect is present in the current tree, not fixed: `withoutTrailingSlash` appears nowhere in src/, `git status --porcelain` reports src/config/exclusions.ts unmodified, and the last commit touching it is d1bd70f (before that, 9c6a5dc EPIC-003).",
+                  "benchmark/agent/results/opus.json:6553,7257 describe a fix (withoutTrailingSlash) as 'fixed but uncommitted' plus a regression test at tests/unit/config-layers.test.ts:250 — that state no longer exists: line 250 is the unrelated 'matches globs, and reports which rule decided' test, and the exclusion tests at tests/unit/config-layers.test.ts:243-260 only cover the bare name `node_modules` and the glob `docs/**/*.pdf`.",
+                  "Ferret's own durable context (context entity 09d73c70-e819-8341-985d-64695471b6b6, kind gotcha) records the same finding and is currently active: a trailing-slash exclude pattern excludes nothing, and the bare name is what is tested and works.",
+                  "DEFAULT_EXCLUSIONS (src/config/exclusions.ts:188-205) all use bare names with no trailing slash, so only operator-written gitignore-style patterns are affected.",
+                  "Retrieval-side enforcement itself works when the pattern matches: tests/integration/retrieval/permission.test.ts:612-636 shows `secrets/**` withholding secrets/keys.txt — so the failure here is the pattern, not the filter."
+                ],
+                "citations": [
+                  "src/config/exclusions.ts:96-102",
+                  "src/config/exclusions.ts:84-86",
+                  "src/config/exclusions.ts:72-75",
+                  "src/config/exclusions.ts:188-205",
+                  "src/config/schema.ts:137",
+                  "node_modules/picomatch/package.json (version 4.0.7)",
+                  "node_modules/picomatch/lib/parse.js:990",
+                  "node_modules/picomatch/lib/parse.js:1313",
+                  "node_modules/picomatch/lib/parse.js:1197-1207",
+                  "tests/unit/config-layers.test.ts:237-260",
+                  "tests/integration/retrieval/permission.test.ts:612-636",
+                  "git log --oneline -- src/config/exclusions.ts (d1bd70f, 9c6a5dc)",
+                  "git status --porcelain -- src/config/exclusions.ts (no output: unmodified)",
+                  "benchmark/agent/results/opus.json:6553",
+                  "benchmark/agent/results/opus.json:7257",
+                  "ferret durable context 09d73c70-e819-8341-985d-64695471b6b6 (gotcha, active)",
+                  "src/cli/commands/config.ts:246-260"
+                ],
+                "confidence": "high"
+              },
+              "ms": 1063,
+              "isError": false,
+              "refused": false,
+              "chars": 39
+            }
+          ]
+        }
+      }
+    },
+    "c": {
+      "tree": {
+        "commit": "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+        "dirty": true
+      },
+      "model": "opus",
+      "effort": "high",
+      "notesBytes": 3113,
+      "carried": 4,
+      "arms": {
+        "control": {
+          "task": "session-c",
+          "answered": true,
+          "stopped": "completed",
+          "verdict": "it-excludes-that-directory-and-everything-under-it",
+          "verdictCorrect": true,
+          "factsCovered": 2,
+          "factsTotal": 2,
+          "factsComplete": true,
+          "facts": [
+            {
+              "id": "current-mechanism",
+              "covered": true
+            },
+            {
+              "id": "it-changed",
+              "covered": true
+            }
+          ],
+          "evidenceSourced": true,
+          "primaryCited": 1,
+          "primaryTotal": 1,
+          "citations": [
+            "file:src/config/exclusions.ts",
+            "file:tests/unit/config-layers.test.ts",
+            "file:src/retrieval/access.ts",
+            "file:src/storage/retrieval.ts",
+            "file:docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+            "commit:70bcfca",
+            "commit:144d478"
+          ],
+          "citationsOffLabel": 5,
+          "toolCalls": 13,
+          "turns": 15,
+          "filesRead": 3,
+          "linesRead": 680,
+          "searches": 5,
+          "historyCalls": 4,
+          "ferretCalls": 0,
+          "refusals": 1,
+          "toolErrors": 1,
+          "contextTokens": 139452,
+          "inputTokens": 16,
+          "cacheReadTokens": 133571,
+          "cacheWriteTokens": 25047,
+          "outputTokens": 5865,
+          "nudges": 0,
+          "unsupportedCitations": 0,
+          "unsupported": [],
+          "staleAsserted": false,
+          "staleVerdict": false,
+          "stale": [],
+          "elapsedMs": 95187,
+          "toolMs": 13806,
+          "ferretSurfaces": {},
+          "answer": {
+            "verdict": "it-excludes-that-directory-and-everything-under-it",
+            "conclusion": "As the repository stands (HEAD = 70bcfca on the checked-out branch `phase5-real-agent-ab`), `secrets/` excludes the directory and everything under it, at any depth: `matcherFor` strips trailing slashes before expanding a metacharacter-free pattern into `secrets`, `secrets/**`, `**/secrets`, `**/secrets/**`, and the read path (find, search, graph, context pack) withholds any entity whose path matches. This has not always been true — until that commit, dated today, a trailing slash was not a metacharacter, so `secrets/` expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and matched no path at all while still being reported as configured. Note also that the fix is not yet on `main` (tip 144d478), and per the still-PROPOSED EPIC-135 an exclusion only keeps content out of answers, not out of the database — matching files are still read and stored with their full text.",
+            "key_facts": [
+              "src/config/exclusions.ts:88-92 defines withoutTrailingSlash, applied at line 103 before the pattern expansion, so `secrets/` is normalized to `secrets`.",
+              "src/config/exclusions.ts:104-107: a pattern with no metacharacters expands to [pattern, pattern/**, **/pattern, **/pattern/**] via picomatch with dot:true, so a bare directory name covers the entry and everything beneath it at any depth.",
+              "Commit 70bcfca (2026-09-07, HEAD of branch phase5-real-agent-ab) is titled \"fix(config): an exclusion written `secrets/` excluded nothing\" and records that the four expanded forms previously became `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and matched no path at all; the failure mode was silent — the rule was accepted and reported as configured.",
+              "The regression test added in that commit (tests/unit/config-layers.test.ts, \"treats a trailing slash as the same directory rule, not as a rule matching nothing\") asserts `node_modules/` excludes `node_modules`, `node_modules/pkg/index.js` and `src/node_modules/x.js` but not `src/index.js`.",
+              "70bcfca is not reachable from `main` (main tip is 144d478); on main the trailing-slash spelling still matches nothing.",
+              "Read-path enforcement: src/retrieval/access.ts:246-256 returns WithholdReason.EXCLUSION for any entity whose `path` attribute matches, and src/storage/retrieval.ts applies visibleEntities/withholds on find, search, graph traversal and ranked queries.",
+              "A shorthand string exclusion becomes a rule with no effectiveFrom (src/config/exclusions.ts:53-75), and an absent effectiveFrom means \"has always applied\", so already-indexed matching paths are filtered from answers too.",
+              "EPIC-135 (docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md) is status PROPOSED and unimplemented: `exclude` is enforced on the read path only, so excluded files are still read from disk and their full text retained in the store; its §2 table records find, search and context_pack all returning zero excluded results."
+            ],
+            "citations": [
+              "src/config/exclusions.ts",
+              "tests/unit/config-layers.test.ts",
+              "src/retrieval/access.ts",
+              "src/storage/retrieval.ts",
+              "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+              "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+              "144d478"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.46499650000000003,
+          "trace": [
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclude",
+                "output_mode": "files_with_matches",
+                "glob": "src/**/*.ts"
+              },
+              "ms": 1276,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclude",
+                "matches": 44
+              },
+              "chars": 1113
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline -1 && git show --stat 70bcfca",
+                "description": "Show the exclusion fix commit"
+              },
+              "ms": 3297,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline -1 && git show --stat 70bcfca"
+              },
+              "chars": 1365
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\config\\exclusions.ts"
+              },
+              "ms": 357,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/config/exclusions.ts",
+                "lines": 212
+              },
+              "chars": 8734
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline -15 -- src/config/exclusions.ts",
+                "description": "History of exclusions.ts"
+              },
+              "ms": 923,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline -15 -- src/config/exclusions.ts"
+              },
+              "chars": 199
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git branch -a --contains 70bcfca && git log --oneline -3 origin/main 2>/dev/null; git status --short -- src/ tests/unit/config-layers.test.ts",
+                "description": "Check if fix is on main"
+              },
+              "ms": 469,
+              "isError": true,
+              "refused": true,
+              "chars": 159
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "ls docs/EPICs/ | head -50 && echo ---- && grep -rn \"read-versus-storage\\|read versus storage\" docs/EPICs/*135* | head -20",
+                "description": "List EPICs, find 135 semantics"
+              },
+              "ms": 862,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "ls docs/EPICs/ | head -50 && echo ---- && grep -rn \"read-versus-storage\\|read versus storage\" docs/EPICs/*135* | head -20",
+                "matches": 51
+              },
+              "chars": 1848
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline -5 main; echo ----; git log --oneline main | grep -c 70bcfca; echo ----; ls docs/EPICs/ | grep -E \"13[0-9]\"",
+                "description": "Check main tip and EPIC 13x files"
+              },
+              "ms": 925,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline -5 main; echo ----; git log --oneline main | grep -c 70bcfca; echo ----; ls docs/EPICs/ | grep -E \"13[0-9]\""
+              },
+              "chars": 714
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "isExcluded|evaluateExclusion",
+                "output_mode": "content",
+                "glob": "src/**/*.ts",
+                "-n": true,
+                "head_limit": 60
+              },
+              "ms": 1167,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "isExcluded|evaluateExclusion",
+                "matches": 19
+              },
+              "chars": 1476
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\docs\\EPICs\\EPIC-135-Exclusion-Enforcement-At-Ingestion.md"
+              },
+              "ms": 492,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                "lines": 348
+              },
+              "chars": 19877
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\retrieval\\access.ts",
+                "offset": 190,
+                "limit": 120
+              },
+              "ms": 587,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/retrieval/access.ts",
+                "lines": 120
+              },
+              "chars": 5605
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git show 70bcfca -- tests/unit/config-layers.test.ts | cat",
+                "description": "Show the regression test added"
+              },
+              "ms": 913,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git show 70bcfca -- tests/unit/config-layers.test.ts | cat"
+              },
+              "chars": 2408
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclusion|withholds|visibleEntities",
+                "output_mode": "content",
+                "glob": "src/storage/durable-context.ts",
+                "-n": true,
+                "head_limit": 30
+              },
+              "ms": 1213,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclusion|withholds|visibleEntities",
+                "matches": 1
+              },
+              "chars": 16
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclusion|withhold|visibleEntities",
+                "output_mode": "content",
+                "glob": "src/{storage/retrieval.ts,context/pack.ts,context/answer.ts,mcp/context-tools.ts}",
+                "-n": true,
+                "head_limit": 40
+              },
+              "ms": 1325,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclusion|withhold|visibleEntities",
+                "matches": 25
+              },
+              "chars": 2437
+            },
+            {
+              "tool": "StructuredOutput",
+              "input": {
+                "verdict": "it-excludes-that-directory-and-everything-under-it",
+                "conclusion": "As the repository stands (HEAD = 70bcfca on the checked-out branch `phase5-real-agent-ab`), `secrets/` excludes the directory and everything under it, at any depth: `matcherFor` strips trailing slashes before expanding a metacharacter-free pattern into `secrets`, `secrets/**`, `**/secrets`, `**/secrets/**`, and the read path (find, search, graph, context pack) withholds any entity whose path matches. This has not always been true — until that commit, dated today, a trailing slash was not a metacharacter, so `secrets/` expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and matched no path at all while still being reported as configured. Note also that the fix is not yet on `main` (tip 144d478), and per the still-PROPOSED EPIC-135 an exclusion only keeps content out of answers, not out of the database — matching files are still read and stored with their full text.",
+                "key_facts": [
+                  "src/config/exclusions.ts:88-92 defines withoutTrailingSlash, applied at line 103 before the pattern expansion, so `secrets/` is normalized to `secrets`.",
+                  "src/config/exclusions.ts:104-107: a pattern with no metacharacters expands to [pattern, pattern/**, **/pattern, **/pattern/**] via picomatch with dot:true, so a bare directory name covers the entry and everything beneath it at any depth.",
+                  "Commit 70bcfca (2026-09-07, HEAD of branch phase5-real-agent-ab) is titled \"fix(config): an exclusion written `secrets/` excluded nothing\" and records that the four expanded forms previously became `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and matched no path at all; the failure mode was silent — the rule was accepted and reported as configured.",
+                  "The regression test added in that commit (tests/unit/config-layers.test.ts, \"treats a trailing slash as the same directory rule, not as a rule matching nothing\") asserts `node_modules/` excludes `node_modules`, `node_modules/pkg/index.js` and `src/node_modules/x.js` but not `src/index.js`.",
+                  "70bcfca is not reachable from `main` (main tip is 144d478); on main the trailing-slash spelling still matches nothing.",
+                  "Read-path enforcement: src/retrieval/access.ts:246-256 returns WithholdReason.EXCLUSION for any entity whose `path` attribute matches, and src/storage/retrieval.ts applies visibleEntities/withholds on find, search, graph traversal and ranked queries.",
+                  "A shorthand string exclusion becomes a rule with no effectiveFrom (src/config/exclusions.ts:53-75), and an absent effectiveFrom means \"has always applied\", so already-indexed matching paths are filtered from answers too.",
+                  "EPIC-135 (docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md) is status PROPOSED and unimplemented: `exclude` is enforced on the read path only, so excluded files are still read from disk and their full text retained in the store; its §2 table records find, search and context_pack all returning zero excluded results."
+                ],
+                "citations": [
+                  "src/config/exclusions.ts",
+                  "tests/unit/config-layers.test.ts",
+                  "src/retrieval/access.ts",
+                  "src/storage/retrieval.ts",
+                  "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                  "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+                  "144d478"
+                ],
+                "confidence": "high"
+              },
+              "ms": 377,
+              "isError": false,
+              "refused": false,
+              "chars": 39
+            }
+          ]
+        },
+        "treatment": {
+          "task": "session-c",
+          "answered": true,
+          "stopped": "completed",
+          "verdict": "it-excludes-that-directory-and-everything-under-it",
+          "verdictCorrect": true,
+          "factsCovered": 2,
+          "factsTotal": 2,
+          "factsComplete": true,
+          "facts": [
+            {
+              "id": "current-mechanism",
+              "covered": true
+            },
+            {
+              "id": "it-changed",
+              "covered": true
+            }
+          ],
+          "evidenceSourced": true,
+          "primaryCited": 1,
+          "primaryTotal": 1,
+          "citations": [
+            "commit:70bcfca",
+            "commit:144d478",
+            "commit:9c6a5dc",
+            "commit:d1bd70f",
+            "file:src/config/exclusions.ts",
+            "file:tests/unit/config-layers.test.ts",
+            "file:src/retrieval/access.ts",
+            "file:src/authorization/authorization.ts",
+            "file:src/git/provider.ts",
+            "file:src/config/schema.ts",
+            "file:src/cli/commands/config.ts",
+            "file:src/mcp/config-tools.ts",
+            "file:docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md"
+          ],
+          "citationsOffLabel": 11,
+          "toolCalls": 16,
+          "turns": 19,
+          "filesRead": 5,
+          "linesRead": 713,
+          "searches": 4,
+          "historyCalls": 4,
+          "ferretCalls": 1,
+          "refusals": 2,
+          "toolErrors": 3,
+          "contextTokens": 390223,
+          "inputTokens": 22,
+          "cacheReadTokens": 382630,
+          "cacheWriteTokens": 25292,
+          "outputTokens": 7571,
+          "nudges": 0,
+          "unsupportedCitations": 0,
+          "unsupported": [],
+          "staleAsserted": false,
+          "staleVerdict": false,
+          "stale": [],
+          "elapsedMs": 124159,
+          "toolMs": 17418,
+          "ferretSurfaces": {
+            "mcp__ferret__ferret_config_exclusions": 1
+          },
+          "answer": {
+            "verdict": "it-excludes-that-directory-and-everything-under-it",
+            "conclusion": "As the repository stands, yes. matcherFor now strips trailing slashes before expanding a metacharacter-free pattern, so `secrets/` means what `secrets` means — the directory entry, everything under it, and any nested `secrets` directory at any depth — and it is applied both at discovery and on the read path. This has not always been true: until commit 70bcfca (2026-09-07, currently HEAD of phase5-real-agent-ab and not yet on main) that spelling expanded to `secrets//**` and friends and matched nothing, while still being reported as configured. Caveat that is still current: an exclusion governs indexing and retrieval, not storage — EPIC-135, which would stop excluded content being written at all, is still PROPOSED, so content already stored for such a path stays in the database even though queries no longer return it.",
+            "key_facts": [
+              "src/config/exclusions.ts:88-92 defines withoutTrailingSlash, called at line 103 before the four-form expansion at lines 104-106, so a metacharacter-free pattern becomes `p`, `p/**`, `**/p`, `**/p/**`.",
+              "Commit 70bcfca 'fix(config): an exclusion written `secrets/` excluded nothing' introduced that strip; before it the line was `const pattern = normalizePath(rule.pattern)` and `secrets/` expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**`, matching no path while the rule was still accepted and reported as configured.",
+              "70bcfca is HEAD of branch phase5-real-agent-ab; `git branch -a --contains 70bcfca` lists only that branch and main is at 144d478, so the fix is not on main yet.",
+              "The regression test added in tests/unit/config-layers.test.ts asserts that `node_modules/` excludes `node_modules`, `node_modules/pkg/index.js` and `src/node_modules/x.js` but not `src/index.js`, and that a trailing slash on a glob (`docs/**/`) is stripped too.",
+              "Only two earlier commits touched src/config/exclusions.ts (9c6a5dc EPIC-003 Configuration Engine, d1bd70f), so the trailing-slash defect existed from the original configuration engine until 70bcfca — the answer was 'excludes nothing' for that whole period.",
+              "One evaluator serves every surface: effectiveExclusions feeds git discovery (src/git/provider.ts:191), the read-path access context (src/authorization/authorization.ts:287), the CLI (src/cli/commands/config.ts:244,276) and the MCP exclusions tool (src/mcp/config-tools.ts:398), so the fix applies uniformly.",
+              "src/retrieval/access.ts:246-256 applies evaluateExclusion to an entity's `path` attribute and withholds with reason EXCLUSION, and EPIC-135 §2 records observing (2026-09-07) that ferret_find, ferret_search and ferret_context_pack all returned nothing for excluded paths.",
+              "EPIC-135-Exclusion-Enforcement-At-Ingestion.md is marked 'Status: PROPOSED', 'Awaiting owner approval… nothing has been implemented', and documents that excluded files are still read, stored as entities and retained as content blobs — so exclusion hides rather than prevents storage.",
+              "src/config/schema.ts:130-138 documents `exclude` as the user's intent, merged with DEFAULT_EXCLUSIONS by effectiveExclusions; exclusion is additive and one-way per src/config/exclusions.ts:29-41."
+            ],
+            "citations": [
+              "70bcfca",
+              "144d478",
+              "9c6a5dc",
+              "d1bd70f",
+              "src/config/exclusions.ts",
+              "tests/unit/config-layers.test.ts",
+              "src/retrieval/access.ts",
+              "src/authorization/authorization.ts",
+              "src/git/provider.ts",
+              "src/config/schema.ts",
+              "src/cli/commands/config.ts",
+              "src/mcp/config-tools.ts",
+              "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.6346510000000001,
+          "trace": [
+            {
+              "tool": "mcp__ferret__ferret_config_exclusions",
+              "input": {},
+              "ms": 621,
+              "isError": true,
+              "refused": false,
+              "ferret": {
+                "name": "ferret_config_exclusions",
+                "ok": false,
+                "chars": 392
+              },
+              "chars": 392
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git show --stat 70bcfca",
+                "description": "Show the exclusion fix commit"
+              },
+              "ms": 3453,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git show --stat 70bcfca"
+              },
+              "chars": 1295
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\config\\exclusions.ts"
+              },
+              "ms": 496,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/config/exclusions.ts",
+                "lines": 212
+              },
+              "chars": 8734
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git show 70bcfca -- src/config/exclusions.ts",
+                "description": "Show diff of exclusions.ts"
+              },
+              "ms": 959,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git show 70bcfca -- src/config/exclusions.ts"
+              },
+              "chars": 2170
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline -- src/config/exclusions.ts | head -40",
+                "description": "History of exclusions.ts"
+              },
+              "ms": 773,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline -- src/config/exclusions.ts | head -40"
+              },
+              "chars": 199
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "isExcluded|evaluateExclusion|exclusionsFor|DEFAULT_EXCLUSIONS",
+                "output_mode": "files_with_matches",
+                "path": "C:\\AIAgent\\Ferret\\src"
+              },
+              "ms": 1745,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "isExcluded|evaluateExclusion|exclusionsFor|DEFAULT_EXCLUSIONS",
+                "matches": 10
+              },
+              "chars": 212
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\retrieval\\access.ts"
+              },
+              "ms": 529,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/retrieval/access.ts",
+                "lines": 333
+              },
+              "chars": 14936
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "ls docs/EPICs/ | grep -E \"135|058|003\" ",
+                "description": "Find relevant EPIC docs"
+              },
+              "ms": 1052,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "ls docs/EPICs/ | grep -E \"135|058|003\" ",
+                "matches": 3
+              },
+              "chars": 118
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "head -120 docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                "description": "Read EPIC-135 head"
+              },
+              "ms": 662,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "head -120 docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                "lines": 120
+              },
+              "chars": 6421
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git show 70bcfca -- tests/unit/config-layers.test.ts",
+                "description": "Show test added by fix"
+              },
+              "ms": 725,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git show 70bcfca -- tests/unit/config-layers.test.ts"
+              },
+              "chars": 2408
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "node -e \"\nconst pm=require('picomatch');\nconst old=pm(['secrets/','secrets//**','**/secrets/','**/secrets//**'],{dot:true});\nconst neu=pm(['secrets','secrets/**','**/secrets','**/secrets/**'],{dot:true});\nfor (const p of ['secrets','secrets/prod-db-password.txt','secrets/a/b.txt','app/secrets/k.pem']) console.log(p, 'old=', old(p), 'new=', neu(p));\n\"",
+                "description": "Compare old vs new pattern expansion with picomatch"
+              },
+              "ms": 428,
+              "isError": true,
+              "refused": true,
+              "chars": 159
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "sed -n '120,140p' src/config/schema.ts && sed -n '275,300p' src/authorization/authorization.ts",
+                "description": "Show exclude schema and authorization wiring"
+              },
+              "ms": 865,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "sed -n '120,140p' src/config/schema.ts && sed -n '275,300p' src/authorization/authorization.ts",
+                "lines": 47
+              },
+              "chars": 2049
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git branch -a --contains 70bcfca && git log --oneline -1 main && git log --oneline main..HEAD",
+                "description": "Check which branches contain the fix"
+              },
+              "ms": 1754,
+              "isError": false,
+              "refused": false,
+              "chars": 167
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "trailing slash|secrets/",
+                "output_mode": "content",
+                "path": "C:\\AIAgent\\Ferret\\docs",
+                "-n": true,
+                "head_limit": 30
+              },
+              "ms": 1873,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "trailing slash|secrets/",
+                "matches": 11
+              },
+              "chars": 1421
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "sed -n '85,125p' docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md",
+                "description": "Read evidence section on the exclusion defect"
+              },
+              "ms": 449,
+              "isError": true,
+              "refused": true,
+              "read": {
+                "path": "sed -n '85,125p' docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md",
+                "lines": 1
+              },
+              "chars": 298
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "effectiveExclusions",
+                "output_mode": "content",
+                "path": "C:\\AIAgent\\Ferret\\src",
+                "-n": true
+              },
+              "ms": 1034,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "effectiveExclusions",
+                "matches": 14
+              },
+              "chars": 1266
+            },
+            {
+              "tool": "StructuredOutput",
+              "input": {
+                "__unparsedToolInput": {
+                  "raw": "{\"verdict\": \"it-excludes-that-directory-and-everything-under-it\", \"conclusion\": \"As the repository stands, yes: `matcherFor` now strips trailing slashes before expanding a metacharacter-free pattern, so `secrets/` means the same as `secrets` — the directory entry, everything under it, and any nested `secrets/` at any depth — and it is filtered out of answers via `evaluateExclusion` on the read path as well as at discovery. This has *not* always been true: until commit 70bcfca (2026-09-07, HEAD, not yet on main) that spelling expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and matched nothing while still being reported as configured. One live caveat: exclusion governs indexing and retrieval, not storage — EPIC-135, which would prevent excluded content being written at all, is still PROPOSED, so already-stored content for such a path remains in the database even though queries no longer return it.\", \"key_facts\": Commit 70bcfca `fix(config): an exclusion written `secrets/` excluded nothing` is HEAD of branch phase5-real-agent-ab; `git branch --contains` lists only that branch, and main is at 144d478, so the fix is not yet on main., \"key_facts\": src/config/exclusions.ts:88-92 adds `withoutTrailingSlash`, called at line 103 before the expansion at lines 104-106, so a bare-name pattern expands to `p`, `p/**`, `**/p`, `**/p/**`., \"key_facts\": Before 70bcfca the line was `const pattern = normalizePath(rule.pattern)`, so `secrets/` expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` — matching no path, with the rule still accepted and reported as configured (commit message of 70bcfca)., \"key_facts\": The regression test in tests/unit/config-layers.test.ts asserts `node_modules/` excludes `node_modules`, `node_modules/pkg/index.js` and `src/node_modules/x.js`, and that a trailing slash on a glob (`docs/**/`) is stripped too., \"key_facts\": Only two prior commits touched src/config/exclusions.ts (9c6a5dc EPIC-003, d1bd70f), so the broken trailing-slash behaviour existed from the confi",
+                  "len": 3765
+                }
+              },
+              "ms": 2,
+              "isError": true,
+              "refused": false,
+              "chars": 504
+            },
+            {
+              "tool": "StructuredOutput",
+              "input": {
+                "verdict": "it-excludes-that-directory-and-everything-under-it",
+                "conclusion": "As the repository stands, yes. matcherFor now strips trailing slashes before expanding a metacharacter-free pattern, so `secrets/` means what `secrets` means — the directory entry, everything under it, and any nested `secrets` directory at any depth — and it is applied both at discovery and on the read path. This has not always been true: until commit 70bcfca (2026-09-07, currently HEAD of phase5-real-agent-ab and not yet on main) that spelling expanded to `secrets//**` and friends and matched nothing, while still being reported as configured. Caveat that is still current: an exclusion governs indexing and retrieval, not storage — EPIC-135, which would stop excluded content being written at all, is still PROPOSED, so content already stored for such a path stays in the database even though queries no longer return it.",
+                "key_facts": [
+                  "src/config/exclusions.ts:88-92 defines withoutTrailingSlash, called at line 103 before the four-form expansion at lines 104-106, so a metacharacter-free pattern becomes `p`, `p/**`, `**/p`, `**/p/**`.",
+                  "Commit 70bcfca 'fix(config): an exclusion written `secrets/` excluded nothing' introduced that strip; before it the line was `const pattern = normalizePath(rule.pattern)` and `secrets/` expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**`, matching no path while the rule was still accepted and reported as configured.",
+                  "70bcfca is HEAD of branch phase5-real-agent-ab; `git branch -a --contains 70bcfca` lists only that branch and main is at 144d478, so the fix is not on main yet.",
+                  "The regression test added in tests/unit/config-layers.test.ts asserts that `node_modules/` excludes `node_modules`, `node_modules/pkg/index.js` and `src/node_modules/x.js` but not `src/index.js`, and that a trailing slash on a glob (`docs/**/`) is stripped too.",
+                  "Only two earlier commits touched src/config/exclusions.ts (9c6a5dc EPIC-003 Configuration Engine, d1bd70f), so the trailing-slash defect existed from the original configuration engine until 70bcfca — the answer was 'excludes nothing' for that whole period.",
+                  "One evaluator serves every surface: effectiveExclusions feeds git discovery (src/git/provider.ts:191), the read-path access context (src/authorization/authorization.ts:287), the CLI (src/cli/commands/config.ts:244,276) and the MCP exclusions tool (src/mcp/config-tools.ts:398), so the fix applies uniformly.",
+                  "src/retrieval/access.ts:246-256 applies evaluateExclusion to an entity's `path` attribute and withholds with reason EXCLUSION, and EPIC-135 §2 records observing (2026-09-07) that ferret_find, ferret_search and ferret_context_pack all returned nothing for excluded paths.",
+                  "EPIC-135-Exclusion-Enforcement-At-Ingestion.md is marked 'Status: PROPOSED', 'Awaiting owner approval… nothing has been implemented', and documents that excluded files are still read, stored as entities and retained as content blobs — so exclusion hides rather than prevents storage.",
+                  "src/config/schema.ts:130-138 documents `exclude` as the user's intent, merged with DEFAULT_EXCLUSIONS by effectiveExclusions; exclusion is additive and one-way per src/config/exclusions.ts:29-41."
+                ],
+                "citations": [
+                  "70bcfca",
+                  "144d478",
+                  "9c6a5dc",
+                  "d1bd70f",
+                  "src/config/exclusions.ts",
+                  "tests/unit/config-layers.test.ts",
+                  "src/retrieval/access.ts",
+                  "src/authorization/authorization.ts",
+                  "src/git/provider.ts",
+                  "src/config/schema.ts",
+                  "src/cli/commands/config.ts",
+                  "src/mcp/config-tools.ts",
+                  "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md"
+                ],
+                "confidence": "high"
+              },
+              "ms": 319,
+              "isError": false,
+              "refused": false,
+              "chars": 39
+            }
+          ]
+        }
+      }
+    },
+    "maintain": {
+      "tree": {
+        "commit": "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+        "dirty": true
+      },
+      "model": "opus",
+      "effort": "high",
+      "scored": {
+        "task": "session-maintain",
+        "answered": true,
+        "stopped": "completed",
+        "verdict": null,
+        "factsCovered": 2,
+        "factsTotal": 2,
+        "factsComplete": true,
+        "facts": [
+          {
+            "id": "found-the-change",
+            "covered": true
+          },
+          {
+            "id": "acted-on-the-record",
+            "covered": true
+          }
+        ],
+        "evidenceSourced": false,
+        "primaryCited": 0,
+        "primaryTotal": 0,
+        "citations": [
+          "commit:70bcfca",
+          "file:src/config/exclusions.ts",
+          "file:tests/unit/config-layers.test.ts",
+          "file:docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+          "context:ferret durable context 09d73c70-e819-8341-985d-64695471b6b6",
+          "context:ferret durable context ba65be37-2d7d-81be-9760-9c42797e205b",
+          "context:ferret durable context 1cf7b78b-75e7-803f-acca-3d55ce539a0a",
+          "context:ferret durable context d8137f8c-6632-8cb0-8e40-e1c51938ddc4",
+          "context:ferret durable context 7bffb926-c557-84e2-8379-c26ab04483ee",
+          "context:ferret durable context 33cc8e6d-9ea9-805e-bbea-96f527020cde"
+        ],
+        "citationsOffLabel": 10,
+        "toolCalls": 16,
+        "turns": 18,
+        "filesRead": 3,
+        "linesRead": 27,
+        "searches": 5,
+        "historyCalls": 2,
+        "ferretCalls": 5,
+        "refusals": 2,
+        "toolErrors": 3,
+        "contextTokens": 358318,
+        "inputTokens": 22,
+        "cacheReadTokens": 351587,
+        "cacheWriteTokens": 21099,
+        "outputTokens": 6709,
+        "nudges": 0,
+        "unsupportedCitations": 0,
+        "unsupported": [],
+        "stale": [],
+        "elapsedMs": 132524,
+        "toolMs": 29151,
+        "ferretSurfaces": {
+          "mcp__ferret__ferret_context_find": 2,
+          "mcp__ferret__ferret_context_trust": 1,
+          "mcp__ferret__ferret_context_record": 2
+        },
+        "trace": [
+          {
+            "tool": "mcp__ferret__ferret_context_find",
+            "input": {
+              "limit": 100
+            },
+            "ms": 1301,
+            "isError": false,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_context_find",
+              "ok": true,
+              "chars": 4406
+            },
+            "chars": 4406
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "git show --stat 70bcfca",
+              "description": "Show the exclusion fix commit"
+            },
+            "ms": 6896,
+            "isError": false,
+            "refused": false,
+            "log": {
+              "command": "git show --stat 70bcfca"
+            },
+            "chars": 1295
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "git show 70bcfca -- src/config/exclusions.ts && sed -n 85,120p src/config/exclusions.ts",
+              "description": "Show exclusions.ts diff and current code"
+            },
+            "ms": 2566,
+            "isError": false,
+            "refused": false,
+            "log": {
+              "command": "git show 70bcfca -- src/config/exclusions.ts && sed -n 85,120p src/config/exclusions.ts"
+            },
+            "chars": 3411
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "trailing slash|trailing-slash|node_modules/\\\"|secrets/",
+              "output_mode": "content",
+              "-n": true,
+              "glob": "**/*.{md,ts}",
+              "head_limit": 40
+            },
+            "ms": 2525,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "trailing slash|trailing-slash|node_modules/\\\"|secrets/",
+              "matches": 37
+            },
+            "chars": 4618
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "sed -n 240,275p tests/unit/config-layers.test.ts; ls \"C:/Users/prsingh/.claude/projects/C--AIAgent-Ferret/memory/\"",
+              "description": "Read regression test and list memory files"
+            },
+            "ms": 1261,
+            "isError": true,
+            "refused": false,
+            "read": {
+              "path": "sed -n 240,275p tests/unit/config-layers.test.ts; ls \"C:/Users/prsingh/.claude/projects/C--AIAgent-Ferret/memory/\"",
+              "lines": 1
+            },
+            "chars": 250
+          },
+          {
+            "tool": "mcp__ferret__ferret_context_trust",
+            "input": {
+              "contextId": "09d73c70-e819-8341-985d-64695471b6b6"
+            },
+            "ms": 1066,
+            "isError": false,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_context_trust",
+              "ok": true,
+              "chars": 2151
+            },
+            "chars": 2151
+          },
+          {
+            "tool": "Read",
+            "input": {
+              "file_path": "C:\\AIAgent\\Ferret\\tests\\unit\\config-layers.test.ts",
+              "offset": 245,
+              "limit": 25
+            },
+            "ms": 1146,
+            "isError": false,
+            "refused": false,
+            "read": {
+              "path": "tests/unit/config-layers.test.ts",
+              "lines": 25
+            },
+            "chars": 1388
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "exclude|exclusion",
+              "output_mode": "files_with_matches",
+              "glob": "**/*.md",
+              "-i": true,
+              "head_limit": 40
+            },
+            "ms": 2848,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "exclude|exclusion",
+              "matches": 41
+            },
+            "chars": 1647
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "npx vitest run tests/unit/config-layers.test.ts -t \"trailing slash\" 2>&1 | tail -20",
+              "description": "Run the trailing-slash regression test",
+              "timeout": 240000
+            },
+            "ms": 3192,
+            "isError": true,
+            "refused": true,
+            "chars": 159
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "sed -n 88,120p docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md",
+              "description": "Read evidence doc section on the fix"
+            },
+            "ms": 639,
+            "isError": true,
+            "refused": true,
+            "read": {
+              "path": "sed -n 88,120p docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md",
+              "lines": 1
+            },
+            "chars": 298
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "exclude",
+              "output_mode": "content",
+              "-n": true,
+              "-C": 3,
+              "path": "C:\\AIAgent\\Ferret\\README.md",
+              "head_limit": 50
+            },
+            "ms": 1579,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "exclude",
+              "matches": 33
+            },
+            "chars": 1899
+          },
+          {
+            "tool": "mcp__ferret__ferret_context_record",
+            "input": {
+              "statement": "GOTCHA (corrected 2026-09-07, supersedes the \"trailing slash excludes nothing\" note): an `exclude` pattern with a trailing slash now means exactly what the bare name means. matcherFor strips trailing slashes via withoutTrailingSlash (src/config/exclusions.ts:88-92) before the metacharacter test, so \"node_modules/\" becomes \"node_modules\" and gets the [p, p/**, **/p, **/p/**] expansion instead of the four useless forms \"node_modules/\", \"node_modules//**\", \"**/node_modules/\", \"**/node_modules//**\". Fixed in commit 70bcfca, regression test tests/unit/config-layers.test.ts:250. Two nuances: the slash is stripped from globs too (\"docs/**/\" behaves as \"docs/**\"), and the trailing slash does NOT impose gitignore-style directory-only semantics — \"secrets/\" also excludes a *file* named secrets at any depth, because it is simply the bare-name expansion. A pattern that is only slashes is left as written.",
+              "contextKind": "gotcha",
+              "supersedes": "09d73c70-e819-8341-985d-64695471b6b6",
+              "observedAt": "2026-09-07T00:00:00.000Z",
+              "sourceUrl": "https://github.com/ferret/commit/70bcfcac4fa56e662fee88e7d2dbfa811b3f4313"
+            },
+            "ms": 386,
+            "isError": false,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_context_record",
+              "ok": true,
+              "chars": 2061
+            },
+            "chars": 2061
+          },
+          {
+            "tool": "Grep",
+            "input": {
+              "pattern": "\\[\\*\\?\\[|function matcherFor|withoutTrailingSlash",
+              "output_mode": "content",
+              "-n": true,
+              "path": "C:\\AIAgent\\Ferret\\src\\config\\exclusions.ts"
+            },
+            "ms": 1243,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "\\[\\*\\?\\[|function matcherFor|withoutTrailingSlash",
+              "matches": 4
+            },
+            "chars": 256
+          },
+          {
+            "tool": "mcp__ferret__ferret_context_record",
+            "input": {
+              "statement": "GOTCHA — an `exclude` pattern containing any of [*?[]{}!] is passed to picomatch verbatim with no depth expansion (src/config/exclusions.ts:104), so \"*.log\" matches only a top-level a.log and never src/a.log; write \"**/*.log\" for that. Same rule means a leading \"!\" is handed to picomatch as a negation, which compiles to ^(?!...).*$ — so a rule like \"!keep\" excludes every path except keep. The [p, p/**, **/p, **/p/**] expansion applies to any metacharacter-free pattern; since commit 70bcfca that test runs after trailing slashes are stripped (src/config/exclusions.ts:103), so the trailing-slash spelling \"node_modules/\" is expanded exactly like the bare name. Line numbers updated 2026-09-07 (the metacharacter test moved from :98 to :104).",
+              "contextKind": "gotcha",
+              "supersedes": "ba65be37-2d7d-81be-9760-9c42797e205b",
+              "observedAt": "2026-09-07T00:00:00.000Z",
+              "sourceUrl": "https://github.com/ferret/commit/70bcfcac4fa56e662fee88e7d2dbfa811b3f4313"
+            },
+            "ms": 703,
+            "isError": false,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_context_record",
+              "ok": true,
+              "chars": 1891
+            },
+            "chars": 1891
+          },
+          {
+            "tool": "mcp__ferret__ferret_context_find",
+            "input": {
+              "limit": 20
+            },
+            "ms": 685,
+            "isError": false,
+            "refused": false,
+            "ferret": {
+              "name": "ferret_context_find",
+              "ok": true,
+              "chars": 4745
+            },
+            "chars": 4745
+          },
+          {
+            "tool": "Bash",
+            "input": {
+              "command": "grep -n -i -m3 \"status\" docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+              "description": "Check EPIC-135 status line"
+            },
+            "ms": 1115,
+            "isError": false,
+            "refused": false,
+            "search": {
+              "pattern": "grep -n -i -m3 \"status\" docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+              "matches": 3
+            },
+            "chars": 147
+          },
+          {
+            "tool": "StructuredOutput",
+            "input": {
+              "conclusion": "Commit 70bcfca (\"fix(config): an exclusion written `secrets/` excluded nothing\") added `withoutTrailingSlash` so `matcherFor` strips trailing slashes before the metacharacter test — a trailing-slash pattern now expands like the bare name instead of matching nothing. That reversed the previously recorded gotcha, so I superseded both exclusion gotchas in Ferret's durable context: 09d73c70 (\"a trailing slash excludes nothing\") → 1cf7b78b, and ba65be37 (stale line number :98, and its claim that only the bare form gets expansion) → d8137f8c. The two `exclude` facts (7bffb926, 33cc8e6d) I re-checked and left alone — the patch inserted at line 88, below the 45-75 range they cite, and EPIC-135 is still PROPOSED.",
+              "key_facts": [
+                "Commit 70bcfca adds `withoutTrailingSlash` (src/config/exclusions.ts:88-92) and applies it in matcherFor at src/config/exclusions.ts:103, before the /[*?[\\]{}!]/ metacharacter test now at line 104",
+                "Before the fix, `secrets/` expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and matched no path; the rule was still accepted and reported as configured, so the failure was silent",
+                "Regression test tests/unit/config-layers.test.ts:250 asserts `node_modules/` excludes `node_modules`, `node_modules/pkg/index.js` and `src/node_modules/x.js`, and that `docs/**/` still matches `docs/2024/x.pdf` — the slash is stripped from globs too",
+                "The trailing slash carries no gitignore-style directory-only meaning: it becomes the plain bare-name expansion [p, p/**, **/p, **/p/**], which also matches a file named `secrets` at any depth",
+                "Durable context 09d73c70 ('an exclude pattern with a trailing slash excludes nothing ... write the bare name') was active and is now factually wrong; superseded by 1cf7b78b",
+                "Durable context ba65be37 cited the metacharacter test at :98 and said only the metacharacter-free bare form gets the expansion; superseded by d8137f8c with the corrected line and the trailing-slash case",
+                "Fact 7bffb926 cites src/config/exclusions.ts:45-75, untouched by the patch (insertion was at line 88), so it remains accurate",
+                "Fact 33cc8e6d's claim that EPIC-135 is PROPOSED holds: docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:3 reads 'Status: PROPOSED | Priority: P0'",
+                "This session was read-only (test execution and writes outside the repo were refused), so the update was made in Ferret's durable context rather than in files"
+              ],
+              "citations": [
+                "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+                "src/config/exclusions.ts:88-104",
+                "tests/unit/config-layers.test.ts:250-261",
+                "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:3",
+                "ferret durable context 09d73c70-e819-8341-985d-64695471b6b6 (superseded)",
+                "ferret durable context ba65be37-2d7d-81be-9760-9c42797e205b (superseded)",
+                "ferret durable context 1cf7b78b-75e7-803f-acca-3d55ce539a0a (new)",
+                "ferret durable context d8137f8c-6632-8cb0-8e40-e1c51938ddc4 (new)",
+                "ferret durable context 7bffb926-c557-84e2-8379-c26ab04483ee (rechecked, unchanged)",
+                "ferret durable context 33cc8e6d-9ea9-805e-bbea-96f527020cde (rechecked, unchanged)"
+              ],
+              "confidence": "high"
+            },
+            "ms": 531,
+            "isError": false,
+            "refused": false,
+            "chars": 39
+          }
+        ]
+      },
+      "answer": {
+        "conclusion": "Commit 70bcfca (\"fix(config): an exclusion written `secrets/` excluded nothing\") added `withoutTrailingSlash` so `matcherFor` strips trailing slashes before the metacharacter test — a trailing-slash pattern now expands like the bare name instead of matching nothing. That reversed the previously recorded gotcha, so I superseded both exclusion gotchas in Ferret's durable context: 09d73c70 (\"a trailing slash excludes nothing\") → 1cf7b78b, and ba65be37 (stale line number :98, and its claim that only the bare form gets expansion) → d8137f8c. The two `exclude` facts (7bffb926, 33cc8e6d) I re-checked and left alone — the patch inserted at line 88, below the 45-75 range they cite, and EPIC-135 is still PROPOSED.",
+        "key_facts": [
+          "Commit 70bcfca adds `withoutTrailingSlash` (src/config/exclusions.ts:88-92) and applies it in matcherFor at src/config/exclusions.ts:103, before the /[*?[\\]{}!]/ metacharacter test now at line 104",
+          "Before the fix, `secrets/` expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and matched no path; the rule was still accepted and reported as configured, so the failure was silent",
+          "Regression test tests/unit/config-layers.test.ts:250 asserts `node_modules/` excludes `node_modules`, `node_modules/pkg/index.js` and `src/node_modules/x.js`, and that `docs/**/` still matches `docs/2024/x.pdf` — the slash is stripped from globs too",
+          "The trailing slash carries no gitignore-style directory-only meaning: it becomes the plain bare-name expansion [p, p/**, **/p, **/p/**], which also matches a file named `secrets` at any depth",
+          "Durable context 09d73c70 ('an exclude pattern with a trailing slash excludes nothing ... write the bare name') was active and is now factually wrong; superseded by 1cf7b78b",
+          "Durable context ba65be37 cited the metacharacter test at :98 and said only the metacharacter-free bare form gets the expansion; superseded by d8137f8c with the corrected line and the trailing-slash case",
+          "Fact 7bffb926 cites src/config/exclusions.ts:45-75, untouched by the patch (insertion was at line 88), so it remains accurate",
+          "Fact 33cc8e6d's claim that EPIC-135 is PROPOSED holds: docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:3 reads 'Status: PROPOSED | Priority: P0'",
+          "This session was read-only (test execution and writes outside the repo were refused), so the update was made in Ferret's durable context rather than in files"
+        ],
+        "citations": [
+          "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+          "src/config/exclusions.ts:88-104",
+          "tests/unit/config-layers.test.ts:250-261",
+          "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:3",
+          "ferret durable context 09d73c70-e819-8341-985d-64695471b6b6 (superseded)",
+          "ferret durable context ba65be37-2d7d-81be-9760-9c42797e205b (superseded)",
+          "ferret durable context 1cf7b78b-75e7-803f-acca-3d55ce539a0a (new)",
+          "ferret durable context d8137f8c-6632-8cb0-8e40-e1c51938ddc4 (new)",
+          "ferret durable context 7bffb926-c557-84e2-8379-c26ab04483ee (rechecked, unchanged)",
+          "ferret durable context 33cc8e6d-9ea9-805e-bbea-96f527020cde (rechecked, unchanged)"
+        ],
+        "confidence": "high"
+      },
+      "costUsd": 0.5556464999999999,
+      "records": [
+        {
+          "id": "d8137f8c-6632-8cb0-8e40-e1c51938ddc4",
+          "statement": "␂ferret:content␂GOTCHA — an `exclude` pattern containing any of [*?[]{}!] is passed to picomatch verbatim with no depth expansion (src/config/exclusions.ts:104), so \"*.log\" matches only a top-level a.log and never src/a.log; write \"**/*.log\" for that. Same rule means a leading \"!\" is handed to picomatch as a negation, which compiles to ^(?!...).*$ — so a rule like \"!keep\" excludes every path except keep. The [p, p/**, **/p, **/p/**] expansion applies to any metacharacter-free pattern; since commit 70bcfca that test runs after trailing slashes are stripped (src/config/exclusions.ts:103), so the trailing-slash spelling \"node_modules/\" is expanded exactly like the bare name. Line numbers updated 2026-09-07 (the metacharacter test moved from :98 to :104).␃ferret:content␃",
+          "contextKind": "gotcha",
+          "state": "active",
+          "current": true
+        },
+        {
+          "id": "1cf7b78b-75e7-803f-acca-3d55ce539a0a",
+          "statement": "␂ferret:content␂GOTCHA (corrected 2026-09-07, supersedes the \"trailing slash excludes nothing\" note): an `exclude` pattern with a trailing slash now means exactly what the bare name means. matcherFor strips trailing slashes via withoutTrailingSlash (src/config/exclusions.ts:88-92) before the metacharacter test, so \"node_modules/\" becomes \"node_modules\" and gets the [p, p/**, **/p, **/p/**] expansion instead of the four useless forms \"node_modules/\", \"node_modules//**\", \"**/node_modules/\", \"**/node_modules//**\". Fixed in commit 70bcfca, regression test tests/unit/config-layers.test.ts:250. Two nuances: the slash is stripped from globs too (\"docs/**/\" behaves as \"docs/**\"), and the trailing slash does NOT impose gitignore-style directory-only semantics — \"secrets/\" also excludes a *file* named secrets at any depth, because it is simply the bare-name expansion. A pattern that is only slashes is left as written.␃ferret:content␃",
+          "contextKind": "gotcha",
+          "state": "active",
+          "current": true
+        },
+        {
+          "id": "7bffb926-c557-84e2-8379-c26ab04483ee",
+          "statement": "␂ferret:content␂`exclude` accepts a bare glob string or a full rule object {pattern, scope: global|repository|session, reason?, effectiveFrom?} (src/config/exclusions.ts:45-75, src/config/schema.ts:137). Patterns are matched against repository-relative POSIX paths after normalizePath folds backslashes and strips a leading \"./\". Rules are additive and one-way — effectiveExclusions = DEFAULT_EXCLUSIONS (.git, node_modules, .venv, __pycache__, dist, build, coverage, .next, target, vendor) then the user's, and mergeExclusions dedupes on scope+pattern, so a narrower scope can never un-exclude. effectiveFrom gates the rule by evaluation instant. Config layers replace the `exclude` array rather than concatenate it, and FERRET_EXCLUDE is split on commas and semicolons (src/config/resolve.ts:88-94).␃ferret:content␃",
+          "contextKind": "fact",
+          "state": "active",
+          "current": true
+        },
+        {
+          "id": "33cc8e6d-9ea9-805e-bbea-96f527020cde",
+          "statement": "␂ferret:content␂Ferret's top-level `exclude` key is enforced in exactly two places today — the repository discovery walk (src/git/discovery.ts:194, via src/git/provider.ts:191) and the read/retrieval path (effectiveExclusions injected into the access context at src/authorization/authorization.ts:287, evaluated per row in src/retrieval/access.ts:249). There is no per-file gate at ingestion: an excluded file inside an indexed repository is still read, stored as entity/version/content_blob, and merely filtered out of answers. EPIC-135 (docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md) specifies the ingestion gate but is status PROPOSED and unimplemented as of 2026-09-07.␃ferret:content␃",
+          "contextKind": "fact",
+          "state": "active",
+          "current": true
+        }
+      ],
+      "surfaces": {
+        "mcp__ferret__ferret_context_find": 2,
+        "mcp__ferret__ferret_context_trust": 1,
+        "mcp__ferret__ferret_context_record": 2
+      }
+    },
+    "d": {
+      "tree": {
+        "commit": "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+        "dirty": true
+      },
+      "model": "opus",
+      "effort": "high",
+      "notesBytes": 3446,
+      "carried": 4,
+      "arms": {
+        "control": {
+          "task": "session-d",
+          "answered": true,
+          "stopped": "completed",
+          "verdict": "it-excludes-that-directory-and-everything-under-it",
+          "verdictCorrect": true,
+          "factsCovered": 2,
+          "factsTotal": 2,
+          "factsComplete": true,
+          "facts": [
+            {
+              "id": "current-mechanism",
+              "covered": true
+            },
+            {
+              "id": "it-changed",
+              "covered": true
+            }
+          ],
+          "evidenceSourced": true,
+          "primaryCited": 1,
+          "primaryTotal": 1,
+          "citations": [
+            "file:src/config/exclusions.ts",
+            "file:tests/unit/config-layers.test.ts",
+            "file:src/authorization/authorization.ts",
+            "file:src/retrieval/access.ts",
+            "file:src/storage/retrieval.ts",
+            "file:docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+            "commit:70bcfca",
+            "commit:6e26e97"
+          ],
+          "citationsOffLabel": 6,
+          "toolCalls": 18,
+          "turns": 20,
+          "filesRead": 3,
+          "linesRead": 650,
+          "searches": 7,
+          "historyCalls": 5,
+          "ferretCalls": 0,
+          "refusals": 1,
+          "toolErrors": 1,
+          "contextTokens": 230676,
+          "inputTokens": 22,
+          "cacheReadTokens": 224952,
+          "cacheWriteTokens": 23386,
+          "outputTokens": 5702,
+          "nudges": 0,
+          "unsupportedCitations": 0,
+          "unsupported": [],
+          "staleAsserted": false,
+          "staleVerdict": false,
+          "stale": [],
+          "elapsedMs": 102238,
+          "toolMs": 19817,
+          "ferretSurfaces": {},
+          "answer": {
+            "verdict": "it-excludes-that-directory-and-everything-under-it",
+            "conclusion": "As the repo stands (HEAD 70bcfca on `phase5-real-agent-ab`), `secrets/` works: `matcherFor` strips the trailing slash and expands the bare name into `secrets`, `secrets/**`, `**/secrets`, `**/secrets/**`, so the directory and everything under it — at any depth — is withheld from every retrieval surface via `withholds`/`visibleEntities`. The answer has not always been the same: until that commit (dated today, and not yet merged to main) the trailing slash produced `secrets//**`-style patterns that matched no path, so the rule was accepted and reported as configured while excluding nothing. One caveat that is still true: exclusion is enforced on the read path only — the files are still read and their content stored (EPIC-135 is PROPOSED, unimplemented), so this keeps `secrets/` out of answers, not out of the database.",
+            "key_facts": [
+              "src/config/exclusions.ts:88-92 adds `withoutTrailingSlash`, applied at line 103 before the metacharacter test, so `secrets/` is normalized to `secrets`.",
+              "src/config/exclusions.ts:104-107: a metacharacter-free pattern expands to [pattern, pattern/**, **/pattern, **/pattern/**], i.e. the directory entry plus everything under it, at any depth.",
+              "Commit 70bcfca (`fix(config): an exclusion written `secrets/` excluded nothing`) states the pre-fix expansion was `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and \"matched no path at all\", with the failure mode being silence: the rule was reported as configured.",
+              "The regression test added in 70bcfca (tests/unit/config-layers.test.ts) asserts a trailing-slash rule excludes the bare dir, files under it, and a nested occurrence, and that a trailing slash on a glob is stripped too.",
+              "70bcfca is contained only by branch `phase5-real-agent-ab` (`git branch --contains`), not by main; the working tree has no modifications under src/.",
+              "Read-path enforcement is live: effectiveExclusions is injected into the access context at src/authorization/authorization.ts:287, evaluated per row by `withholds` (src/retrieval/access.ts:246-256, WithholdReason.EXCLUSION) and applied through `visibleEntities` at src/storage/retrieval.ts:394, 453, 703, 1049.",
+              "EPIC-135 (docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md) is Status: PROPOSED, awaiting owner approval, nothing implemented: exclusions are enforced on the read path only, and excluded files are still read from disk and their full text retained in the store (1,463,485 bytes observed on the dogfood store).",
+              "EPIC-135 §2 records read-path verification that excluded paths are returned by none of ferret_find, ferret_search, ferret_context_pack.",
+              "Commit 6e26e97 (#224) changed only how an exclusion is *reported* in a context pack (exclusion-rule rather than permission-withheld); it did not change what is withheld."
+            ],
+            "citations": [
+              "src/config/exclusions.ts",
+              "tests/unit/config-layers.test.ts",
+              "src/authorization/authorization.ts:287",
+              "src/retrieval/access.ts:227-316",
+              "src/storage/retrieval.ts:394",
+              "src/storage/retrieval.ts:453",
+              "src/storage/retrieval.ts:1049",
+              "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+              "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+              "6e26e972a6eed7a3d469f29ddac4af7903643122"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.49003700000000006,
+          "trace": [
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclude\", \"exclusion|exclude",
+                "glob": "src/**/*.ts",
+                "output_mode": "files_with_matches"
+              },
+              "ms": 1454,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclude\", \"exclusion|exclude",
+                "matches": 44
+              },
+              "chars": 1113
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log -1 --stat 70bcfca",
+                "description": "Show latest commit stat"
+              },
+              "ms": 3760,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log -1 --stat 70bcfca"
+              },
+              "chars": 1295
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\config\\exclusions.ts"
+              },
+              "ms": 408,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/config/exclusions.ts",
+                "lines": 212
+              },
+              "chars": 8734
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git branch -a --contains 70bcfca && echo \"---\" && git log --oneline -3 main origin/main 2>/dev/null | head -20",
+                "description": "Check which branches contain the fix"
+              },
+              "ms": 494,
+              "isError": true,
+              "refused": true,
+              "chars": 159
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "EPIC-135",
+                "output_mode": "files_with_matches"
+              },
+              "ms": 1112,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "EPIC-135",
+                "matches": 15
+              },
+              "chars": 489
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git branch -a --contains 70bcfca",
+                "description": "List branches containing commit"
+              },
+              "ms": 815,
+              "isError": false,
+              "refused": false,
+              "chars": 22
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\docs\\EPICs\\EPIC-135-Exclusion-Enforcement-At-Ingestion.md"
+              },
+              "ms": 479,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                "lines": 348
+              },
+              "chars": 19877
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline --follow -- src/config/exclusions.ts | head -30",
+                "description": "History of exclusions.ts"
+              },
+              "ms": 1089,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline --follow -- src/config/exclusions.ts | head -30"
+              },
+              "chars": 199
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git show 70bcfca -- tests/unit/config-layers.test.ts",
+                "description": "Show regression test added"
+              },
+              "ms": 1100,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git show 70bcfca -- tests/unit/config-layers.test.ts"
+              },
+              "chars": 2408
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "effectiveExclusions",
+                "output_mode": "content",
+                "-n": true
+              },
+              "ms": 1441,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "effectiveExclusions",
+                "matches": 35
+              },
+              "chars": 5544
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline -8 -- src/config/schema.ts | head; echo ---; git status --short src/ tests/unit/config-layers.test.ts",
+                "description": "Schema history and working tree state"
+              },
+              "ms": 1584,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline -8 -- src/config/schema.ts | head; echo ---; git status --short src/ tests/unit/config-layers.test.ts"
+              },
+              "chars": 328
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\retrieval\\access.ts",
+                "offset": 225,
+                "limit": 50
+              },
+              "ms": 520,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/retrieval/access.ts",
+                "lines": 50
+              },
+              "chars": 2293
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git show 6e26e97 --stat",
+                "description": "Show #224 commit stat"
+              },
+              "ms": 990,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git show 6e26e97 --stat"
+              },
+              "chars": 1974
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n \"name: 'ferret_\" -- src/mcp | head -40",
+                "description": "List MCP tool names"
+              },
+              "ms": 1132,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "git grep -n \"name: 'ferret_\" -- src/mcp | head -40",
+                "matches": 1
+              },
+              "chars": 31
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "withholds\\(",
+                "output_mode": "content",
+                "-n": true,
+                "glob": "src/**/*.ts"
+              },
+              "ms": 1256,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "withholds\\(",
+                "matches": 3
+              },
+              "chars": 318
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\retrieval\\access.ts",
+                "offset": 290,
+                "limit": 40
+              },
+              "ms": 402,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/retrieval/access.ts",
+                "lines": 40
+              },
+              "chars": 1391
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n \"applyAccess\\|filterWithheld\\|partitionByAccess\" -- src | head -30",
+                "description": "Find access filter usages"
+              },
+              "ms": 834,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "git grep -n \"applyAccess\\|filterWithheld\\|partitionByAccess\" -- src | head -30",
+                "matches": 1
+              },
+              "chars": 31
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n \"visibleEntities\" -- src | head -20",
+                "description": "Find visibleEntities usages"
+              },
+              "ms": 947,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "git grep -n \"visibleEntities\" -- src | head -20",
+                "matches": 11
+              },
+              "chars": 954
+            },
+            {
+              "tool": "StructuredOutput",
+              "input": {
+                "verdict": "it-excludes-that-directory-and-everything-under-it",
+                "conclusion": "As the repo stands (HEAD 70bcfca on `phase5-real-agent-ab`), `secrets/` works: `matcherFor` strips the trailing slash and expands the bare name into `secrets`, `secrets/**`, `**/secrets`, `**/secrets/**`, so the directory and everything under it — at any depth — is withheld from every retrieval surface via `withholds`/`visibleEntities`. The answer has not always been the same: until that commit (dated today, and not yet merged to main) the trailing slash produced `secrets//**`-style patterns that matched no path, so the rule was accepted and reported as configured while excluding nothing. One caveat that is still true: exclusion is enforced on the read path only — the files are still read and their content stored (EPIC-135 is PROPOSED, unimplemented), so this keeps `secrets/` out of answers, not out of the database.",
+                "key_facts": [
+                  "src/config/exclusions.ts:88-92 adds `withoutTrailingSlash`, applied at line 103 before the metacharacter test, so `secrets/` is normalized to `secrets`.",
+                  "src/config/exclusions.ts:104-107: a metacharacter-free pattern expands to [pattern, pattern/**, **/pattern, **/pattern/**], i.e. the directory entry plus everything under it, at any depth.",
+                  "Commit 70bcfca (`fix(config): an exclusion written `secrets/` excluded nothing`) states the pre-fix expansion was `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and \"matched no path at all\", with the failure mode being silence: the rule was reported as configured.",
+                  "The regression test added in 70bcfca (tests/unit/config-layers.test.ts) asserts a trailing-slash rule excludes the bare dir, files under it, and a nested occurrence, and that a trailing slash on a glob is stripped too.",
+                  "70bcfca is contained only by branch `phase5-real-agent-ab` (`git branch --contains`), not by main; the working tree has no modifications under src/.",
+                  "Read-path enforcement is live: effectiveExclusions is injected into the access context at src/authorization/authorization.ts:287, evaluated per row by `withholds` (src/retrieval/access.ts:246-256, WithholdReason.EXCLUSION) and applied through `visibleEntities` at src/storage/retrieval.ts:394, 453, 703, 1049.",
+                  "EPIC-135 (docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md) is Status: PROPOSED, awaiting owner approval, nothing implemented: exclusions are enforced on the read path only, and excluded files are still read from disk and their full text retained in the store (1,463,485 bytes observed on the dogfood store).",
+                  "EPIC-135 §2 records read-path verification that excluded paths are returned by none of ferret_find, ferret_search, ferret_context_pack.",
+                  "Commit 6e26e97 (#224) changed only how an exclusion is *reported* in a context pack (exclusion-rule rather than permission-withheld); it did not change what is withheld."
+                ],
+                "citations": [
+                  "src/config/exclusions.ts",
+                  "tests/unit/config-layers.test.ts",
+                  "src/authorization/authorization.ts:287",
+                  "src/retrieval/access.ts:227-316",
+                  "src/storage/retrieval.ts:394",
+                  "src/storage/retrieval.ts:453",
+                  "src/storage/retrieval.ts:1049",
+                  "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                  "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+                  "6e26e972a6eed7a3d469f29ddac4af7903643122"
+                ],
+                "confidence": "high"
+              },
+              "ms": 646,
+              "isError": false,
+              "refused": false,
+              "chars": 39
+            }
+          ]
+        },
+        "treatment": {
+          "task": "session-d",
+          "answered": true,
+          "stopped": "completed",
+          "verdict": "it-excludes-that-directory-and-everything-under-it",
+          "verdictCorrect": true,
+          "factsCovered": 2,
+          "factsTotal": 2,
+          "factsComplete": true,
+          "facts": [
+            {
+              "id": "current-mechanism",
+              "covered": true
+            },
+            {
+              "id": "it-changed",
+              "covered": true
+            }
+          ],
+          "evidenceSourced": true,
+          "primaryCited": 1,
+          "primaryTotal": 1,
+          "citations": [
+            "file:src/config/exclusions.ts",
+            "file:src/config/schema.ts",
+            "file:src/retrieval/access.ts",
+            "file:src/storage/retrieval.ts",
+            "file:src/context/pack.ts",
+            "file:src/git/discovery.ts",
+            "file:tests/unit/config-layers.test.ts",
+            "commit:70bcfca",
+            "commit:d1bd70f",
+            "commit:9c6a5dc",
+            "file:docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md"
+          ],
+          "citationsOffLabel": 9,
+          "toolCalls": 19,
+          "turns": 21,
+          "filesRead": 4,
+          "linesRead": 403,
+          "searches": 8,
+          "historyCalls": 5,
+          "ferretCalls": 1,
+          "refusals": 3,
+          "toolErrors": 4,
+          "contextTokens": 412885,
+          "inputTokens": 24,
+          "cacheReadTokens": 405759,
+          "cacheWriteTokens": 20863,
+          "outputTokens": 7102,
+          "nudges": 0,
+          "unsupportedCitations": 0,
+          "unsupported": [],
+          "staleAsserted": false,
+          "staleVerdict": false,
+          "stale": [],
+          "elapsedMs": 120813,
+          "toolMs": 21059,
+          "ferretSurfaces": {
+            "mcp__ferret__ferret_config_exclusions": 1
+          },
+          "answer": {
+            "verdict": "it-excludes-that-directory-and-everything-under-it",
+            "conclusion": "As the repository stands now, yes: `matcherFor` strips trailing slashes before expanding a metacharacter-free pattern, so `secrets/` compiles to `secrets`, `secrets/**`, `**/secrets`, `**/secrets/**` and withholds the directory and everything under it from answers (`WithholdReason.EXCLUSION` on the read path). This has not always been true — until commit 70bcfca (2026-09-07, on the current branch and not yet on `main`), `secrets/` expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and matched no path at all, while still being reported as a configured rule. Two caveats remain: exclusion filters only entities that carry a `path` attribute, and per EPIC-135 (still PROPOSED) the files are still read and stored — only the read path hides them.",
+            "key_facts": [
+              "src/config/exclusions.ts:88-92 defines `withoutTrailingSlash`, and line 103 applies it inside `matcherFor` before the four-form expansion at lines 104-106, so `secrets/` now means what the bare name `secrets` means.",
+              "A metacharacter-free pattern expands to `pattern`, `pattern/**`, `**/pattern`, `**/pattern/**` (src/config/exclusions.ts:104-106), which is what makes a bare directory name cover everything under it.",
+              "Before the fix, `matcherFor` used `normalizePath(rule.pattern)` with no slash stripping (git show d1bd70f:src/config/exclusions.ts), so `secrets/` produced `secrets//**` and `**/secrets//**` and matched nothing; commit 70bcfca's message states the failure mode was silent — the rule was accepted and reported as configured while excluding nothing.",
+              "The fix is commit 70bcfca `fix(config): an exclusion written `secrets/` excluded nothing`, HEAD of branch phase5-real-agent-ab; `git log main..HEAD` shows only that commit, so `main` does not yet contain it.",
+              "A regression test was added in the same commit at tests/unit/config-layers.test.ts (`treats a trailing slash as the same directory rule, not as a rule matching nothing`), asserting `node_modules/` excludes `node_modules`, `node_modules/pkg/index.js` and `src/node_modules/x.js`. It could not be executed here: this session is read-only.",
+              "The user's `exclude` list is merged with DEFAULT_EXCLUSIONS by `effectiveExclusions` (src/config/schema.ts:180-181), and exclusion is additive across scopes (src/config/exclusions.ts:169-181), so adding the entry can only widen what is hidden.",
+              "Enforcement on answers runs through `withholds` (src/retrieval/access.ts:246-256) returning `WithholdReason.EXCLUSION`, applied by `visibleEntities` across search, find, neighbours and pack (src/storage/retrieval.ts:394, 453, 703, 1049; src/context/pack.ts:145), and at discovery time in src/git/discovery.ts:194.",
+              "`withholds` only evaluates the exclusion when the entity has a non-empty `path` attribute (src/retrieval/access.ts:246-247), so entities without a path — a commit message, for instance — are not filtered by this rule.",
+              "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md is PROPOSED and unimplemented: it records that `exclude` is enforced on the read path only, that excluded files are still read from disk and their full text retained in the store, and that the read surfaces (`ferret_find`, `ferret_search`, `ferret_context_pack`) did return none of them.",
+              "A plain string entry becomes a rule with no `effectiveFrom` (src/config/exclusions.ts:72-75), and an omitted `effectiveFrom` means \"has always applied\" (lines 53-60), so the rule also hides content indexed before it was added."
+            ],
+            "citations": [
+              "src/config/exclusions.ts:88-108",
+              "src/config/exclusions.ts:53-75",
+              "src/config/exclusions.ts:169-181",
+              "src/config/schema.ts:126-137",
+              "src/config/schema.ts:173-182",
+              "src/retrieval/access.ts:227-259",
+              "src/storage/retrieval.ts:394",
+              "src/context/pack.ts:145",
+              "src/git/discovery.ts:194",
+              "tests/unit/config-layers.test.ts:250",
+              "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+              "d1bd70f (previous src/config/exclusions.ts matcherFor)",
+              "9c6a5dc (EPIC-003: Configuration Engine, #5)",
+              "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:1-80"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.5902205,
+          "trace": [
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclude|exclusion",
+                "glob": "src/**/*.ts",
+                "output_mode": "files_with_matches"
+              },
+              "ms": 1466,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclude|exclusion",
+                "matches": 52
+              },
+              "chars": 1306
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log -1 --stat 70bcfca",
+                "description": "Show the exclusion fix commit"
+              },
+              "ms": 3995,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log -1 --stat 70bcfca"
+              },
+              "chars": 1295
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\config\\exclusions.ts"
+              },
+              "ms": 538,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/config/exclusions.ts",
+                "lines": 212
+              },
+              "chars": 8734
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline -3 main; git status -sb | head -3; git log --oneline main..HEAD",
+                "description": "Check whether fix is on main or only branch"
+              },
+              "ms": 1502,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline -3 main; git status -sb | head -3; git log --oneline main..HEAD"
+              },
+              "chars": 395
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git show 70bcfca -- tests/unit/config-layers.test.ts | head -40",
+                "description": "Show regression test"
+              },
+              "ms": 881,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git show 70bcfca -- tests/unit/config-layers.test.ts | head -40"
+              },
+              "chars": 2213
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "isExcluded|evaluateExclusion",
+                "glob": "src/**/*.ts",
+                "output_mode": "content",
+                "-n": true
+              },
+              "ms": 1256,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "isExcluded|evaluateExclusion",
+                "matches": 19
+              },
+              "chars": 1476
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\src\\retrieval\\access.ts",
+                "offset": 200,
+                "limit": 110
+              },
+              "ms": 448,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "src/retrieval/access.ts",
+                "lines": 110
+              },
+              "chars": 5055
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "exclude",
+                "glob": "src/config/schema.ts",
+                "output_mode": "content",
+                "-n": true,
+                "-C": 6
+              },
+              "ms": 1045,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "exclude",
+                "matches": 32
+              },
+              "chars": 1979
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git log --oneline --follow -- src/config/exclusions.ts | head -30",
+                "description": "History of exclusions.ts"
+              },
+              "ms": 899,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git log --oneline --follow -- src/config/exclusions.ts | head -30"
+              },
+              "chars": 199
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "npx vitest run tests/unit/config-layers.test.ts -t \"trailing slash\" 2>&1 | tail -20",
+                "description": "Run trailing-slash regression test",
+                "timeout": 300000
+              },
+              "ms": 866,
+              "isError": true,
+              "refused": true,
+              "chars": 159
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git show d1bd70f:src/config/exclusions.ts | sed -n '70,110p'",
+                "description": "Show previous matcherFor implementation"
+              },
+              "ms": 1609,
+              "isError": false,
+              "refused": false,
+              "log": {
+                "command": "git show d1bd70f:src/config/exclusions.ts | sed -n '70,110p'"
+              },
+              "chars": 1480
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "visibleEntities|WithholdReason.EXCLUSION",
+                "glob": "src/**/*.ts",
+                "output_mode": "content",
+                "-n": true
+              },
+              "ms": 1359,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "visibleEntities|WithholdReason.EXCLUSION",
+                "matches": 14
+              },
+              "chars": 1155
+            },
+            {
+              "tool": "mcp__ferret__ferret_config_exclusions",
+              "input": {
+                "path": "secrets/api-key.txt"
+              },
+              "ms": 421,
+              "isError": true,
+              "refused": false,
+              "ferret": {
+                "name": "ferret_config_exclusions",
+                "ok": false,
+                "chars": 392
+              },
+              "chars": 392
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n \"read-versus-storage\\|read versus storage\" -- docs | head -20; ls docs/EPICs | grep -i 135",
+                "description": "Find EPIC-135 read vs storage docs"
+              },
+              "ms": 970,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "git grep -n \"read-versus-storage\\|read versus storage\" -- docs | head -20; ls docs/EPICs | grep -i 135",
+                "matches": 1
+              },
+              "chars": 46
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "sed -n '1,80p' docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                "description": "Read EPIC-135"
+              },
+              "ms": 734,
+              "isError": false,
+              "refused": false,
+              "read": {
+                "path": "sed -n '1,80p' docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md",
+                "lines": 80
+              },
+              "chars": 4171
+            },
+            {
+              "tool": "Bash",
+              "input": {
+                "command": "git grep -n -i \"trailing slash\" -- docs benchmark | head -20; echo ---; git branch -r --contains 70bcfca 2>/dev/null | head",
+                "description": "Find trailing-slash mentions in docs and branch containment"
+              },
+              "ms": 538,
+              "isError": true,
+              "refused": true,
+              "search": {
+                "pattern": "git grep -n -i \"trailing slash\" -- docs benchmark | head -20; echo ---; git branch -r --contains 70bcfca 2>/dev/null | head",
+                "matches": 1
+              },
+              "chars": 159
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "trailing slash|secrets/",
+                "path": "C:\\AIAgent\\Ferret\\docs",
+                "output_mode": "content",
+                "-i": true,
+                "-n": true,
+                "head_limit": 20
+              },
+              "ms": 1049,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "trailing slash|secrets/",
+                "matches": 11
+              },
+              "chars": 1421
+            },
+            {
+              "tool": "Grep",
+              "input": {
+                "pattern": "trailing slash|excluded nothing",
+                "path": "C:\\AIAgent\\Ferret\\benchmark",
+                "output_mode": "content",
+                "-i": true,
+                "-n": true,
+                "head_limit": 20
+              },
+              "ms": 1060,
+              "isError": false,
+              "refused": false,
+              "search": {
+                "pattern": "trailing slash|excluded nothing",
+                "matches": 19
+              },
+              "chars": 3837
+            },
+            {
+              "tool": "Read",
+              "input": {
+                "file_path": "C:\\AIAgent\\Ferret\\docs\\evidence\\FERRET-DOES-A-REAL-AGENT-DO-BETTER.md",
+                "offset": 90,
+                "limit": 30
+              },
+              "ms": 423,
+              "isError": true,
+              "refused": true,
+              "read": {
+                "path": "docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md",
+                "lines": 1
+              },
+              "chars": 298
+            },
+            {
+              "tool": "StructuredOutput",
+              "input": {
+                "verdict": "it-excludes-that-directory-and-everything-under-it",
+                "conclusion": "As the repository stands now, yes: `matcherFor` strips trailing slashes before expanding a metacharacter-free pattern, so `secrets/` compiles to `secrets`, `secrets/**`, `**/secrets`, `**/secrets/**` and withholds the directory and everything under it from answers (`WithholdReason.EXCLUSION` on the read path). This has not always been true — until commit 70bcfca (2026-09-07, on the current branch and not yet on `main`), `secrets/` expanded to `secrets/`, `secrets//**`, `**/secrets/`, `**/secrets//**` and matched no path at all, while still being reported as a configured rule. Two caveats remain: exclusion filters only entities that carry a `path` attribute, and per EPIC-135 (still PROPOSED) the files are still read and stored — only the read path hides them.",
+                "key_facts": [
+                  "src/config/exclusions.ts:88-92 defines `withoutTrailingSlash`, and line 103 applies it inside `matcherFor` before the four-form expansion at lines 104-106, so `secrets/` now means what the bare name `secrets` means.",
+                  "A metacharacter-free pattern expands to `pattern`, `pattern/**`, `**/pattern`, `**/pattern/**` (src/config/exclusions.ts:104-106), which is what makes a bare directory name cover everything under it.",
+                  "Before the fix, `matcherFor` used `normalizePath(rule.pattern)` with no slash stripping (git show d1bd70f:src/config/exclusions.ts), so `secrets/` produced `secrets//**` and `**/secrets//**` and matched nothing; commit 70bcfca's message states the failure mode was silent — the rule was accepted and reported as configured while excluding nothing.",
+                  "The fix is commit 70bcfca `fix(config): an exclusion written `secrets/` excluded nothing`, HEAD of branch phase5-real-agent-ab; `git log main..HEAD` shows only that commit, so `main` does not yet contain it.",
+                  "A regression test was added in the same commit at tests/unit/config-layers.test.ts (`treats a trailing slash as the same directory rule, not as a rule matching nothing`), asserting `node_modules/` excludes `node_modules`, `node_modules/pkg/index.js` and `src/node_modules/x.js`. It could not be executed here: this session is read-only.",
+                  "The user's `exclude` list is merged with DEFAULT_EXCLUSIONS by `effectiveExclusions` (src/config/schema.ts:180-181), and exclusion is additive across scopes (src/config/exclusions.ts:169-181), so adding the entry can only widen what is hidden.",
+                  "Enforcement on answers runs through `withholds` (src/retrieval/access.ts:246-256) returning `WithholdReason.EXCLUSION`, applied by `visibleEntities` across search, find, neighbours and pack (src/storage/retrieval.ts:394, 453, 703, 1049; src/context/pack.ts:145), and at discovery time in src/git/discovery.ts:194.",
+                  "`withholds` only evaluates the exclusion when the entity has a non-empty `path` attribute (src/retrieval/access.ts:246-247), so entities without a path — a commit message, for instance — are not filtered by this rule.",
+                  "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md is PROPOSED and unimplemented: it records that `exclude` is enforced on the read path only, that excluded files are still read from disk and their full text retained in the store, and that the read surfaces (`ferret_find`, `ferret_search`, `ferret_context_pack`) did return none of them.",
+                  "A plain string entry becomes a rule with no `effectiveFrom` (src/config/exclusions.ts:72-75), and an omitted `effectiveFrom` means \"has always applied\" (lines 53-60), so the rule also hides content indexed before it was added."
+                ],
+                "citations": [
+                  "src/config/exclusions.ts:88-108",
+                  "src/config/exclusions.ts:53-75",
+                  "src/config/exclusions.ts:169-181",
+                  "src/config/schema.ts:126-137",
+                  "src/config/schema.ts:173-182",
+                  "src/retrieval/access.ts:227-259",
+                  "src/storage/retrieval.ts:394",
+                  "src/context/pack.ts:145",
+                  "src/git/discovery.ts:194",
+                  "tests/unit/config-layers.test.ts:250",
+                  "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+                  "d1bd70f (previous src/config/exclusions.ts matcherFor)",
+                  "9c6a5dc (EPIC-003: Configuration Engine, #5)",
+                  "docs/EPICs/EPIC-135-Exclusion-Enforcement-At-Ingestion.md:1-80"
+                ],
+                "confidence": "high"
+              },
+              "ms": 402,
+              "isError": false,
+              "refused": false,
+              "chars": 39
+            }
+          ]
+        }
+      }
+    }
+  },
+  "setup": {
+    "database": "ferret_agent_ab",
+    "tree": {
+      "commit": "144d478ac19dfcf457f13604d6e655807a1277d1",
+      "dirty": true
+    },
+    "indexSeconds": 724,
+    "content": true
+  },
+  "reindex": {
+    "tree": {
+      "commit": "70bcfcac4fa56e662fee88e7d2dbfa811b3f4313",
+      "dirty": true
+    },
+    "indexSeconds": 42
+  }
+}

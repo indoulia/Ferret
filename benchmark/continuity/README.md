@@ -336,7 +336,10 @@ fails CI rather than quietly moving a number here.
 Stated here rather than discovered later.
 
 - **Reasoning.** No model is in this loop. `answered` checks that the facts an
-  answer needs were in front of the agent, not that the agent used them. This is
+  answer needs were in front of the agent, not that the agent used them.
+  `benchmark/agent/continuity.mjs` is where a real agent is put in it: one
+  session records, a fresh one is asked a related question, and a third is asked
+  again after the repository changed under the answer. This is
   the sharpest limit on the two surface-derived conditions: they show that the
   surface states the routing and that acting on the statement works, not that a
   model reads a tool description and follows it.

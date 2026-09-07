@@ -247,6 +247,31 @@ describe('exclusions', () => {
     expect(isExcluded('src/index.js', rules)).toBe(false);
   });
 
+  it('treats a trailing slash as the same directory rule, not as a rule matching nothing', () => {
+    // Found by the real-agent benchmark: `benchmark/` was reported as configured and excluded nothing.
+    const slashed = [{ pattern: 'node_modules/', scope: ExclusionScope.GLOBAL }];
+    expect(isExcluded('node_modules', slashed)).toBe(true);
+    expect(isExcluded('node_modules/pkg/index.js', slashed)).toBe(true);
+    expect(isExcluded('src/node_modules/x.js', slashed)).toBe(true);
+    expect(isExcluded('src/index.js', slashed)).toBe(false);
+    // A trailing slash on a glob is stripped too; the glob still decides the rest.
+    expect(isExcluded('docs/2024/x.pdf', [{ pattern: 'docs/**/', scope: ExclusionScope.GLOBAL }])).toBe(
+      true,
+    );
+  });
+
+  it('refuses a negated pattern rather than inverting the whole list', () => {
+    // Found by an agent investigating exclusions through Ferret. A leading `!`
+    // reaches picomatch as a negation, so `!keep` excluded every path except
+    // `keep` — one character turning an exclusion list into an allow-list,
+    // silently. Exclusion is documented as one-way and additive
+    // (ExclusionScope), so there is nothing a negation could correctly mean here.
+    expect(() => parseConfig({ exclude: ['!keep'] })).toThrow(/negat/i);
+    expect(() => parseConfig({ exclude: [{ pattern: '!keep' }] })).toThrow(/negat/i);
+    // A `!` anywhere else is an ordinary character in a filename.
+    expect(parseConfig({ exclude: ['weird!name'] }).exclude).toHaveLength(1);
+  });
+
   it('matches globs, and reports which rule decided', () => {
     const decision = evaluateExclusion('docs/2024/report.pdf', rules);
     expect(decision.excluded).toBe(true);

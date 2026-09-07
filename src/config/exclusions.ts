@@ -42,9 +42,20 @@ export const ExclusionScope = {
 
 export type ExclusionScope = (typeof ExclusionScope)[keyof typeof ExclusionScope];
 
+/**
+ * A leading `!` is picomatch's negation, and there is nothing it could correctly
+ * mean in a one-way additive list: `!keep` excluded every path except `keep`.
+ */
+const notNegated = (pattern: string): boolean => !normalizePath(pattern).startsWith('!');
+
+const NEGATION_REFUSAL =
+  'An exclusion pattern may not start with "!". Exclusion is one-way — a rule can ' +
+  'only ever exclude more — so a negated pattern would exclude everything except ' +
+  'what it names. Write the paths to exclude instead.';
+
 export const exclusionRuleSchema = z.object({
   /** Glob pattern, matched against repository-relative POSIX paths. */
-  pattern: z.string().min(1),
+  pattern: z.string().min(1).refine(notNegated, NEGATION_REFUSAL),
   scope: z.enum([ExclusionScope.GLOBAL, ExclusionScope.REPOSITORY, ExclusionScope.SESSION]).default(
     ExclusionScope.GLOBAL,
   ),
@@ -69,10 +80,11 @@ export type ExclusionRule = z.infer<typeof exclusionRuleSchema>;
  * details plus optional exclusions — asking a user to write a JSON object to
  * skip a directory would breach that.
  */
-export const exclusionInputSchema = z.union([z.string().min(1), exclusionRuleSchema]).transform(
-  (value): ExclusionRule =>
+export const exclusionInputSchema = z
+  .union([z.string().min(1).refine(notNegated, NEGATION_REFUSAL), exclusionRuleSchema])
+  .transform((value): ExclusionRule =>
     typeof value === 'string' ? { pattern: value, scope: ExclusionScope.GLOBAL } : value,
-);
+  );
 
 export interface ExclusionDecision {
   readonly excluded: boolean;
@@ -85,6 +97,12 @@ export function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
+/** `secrets/` must exclude, not silently match nothing: the expansion below turned it into `secrets//**`. */
+function withoutTrailingSlash(pattern: string): string {
+  const trimmed = pattern.replace(/\/+$/, '');
+  return trimmed.length > 0 ? trimmed : pattern;
+}
+
 /**
  * Compiled matcher for one rule.
  *
@@ -94,7 +112,7 @@ export function normalizePath(path: string): string {
  * eliminate.
  */
 function matcherFor(rule: ExclusionRule): (path: string) => boolean {
-  const pattern = normalizePath(rule.pattern);
+  const pattern = withoutTrailingSlash(normalizePath(rule.pattern));
   const patterns = /[*?[\]{}!]/.test(pattern)
     ? [pattern]
     : [pattern, `${pattern}/**`, `**/${pattern}`, `**/${pattern}/**`];

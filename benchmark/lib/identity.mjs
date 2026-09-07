@@ -62,6 +62,11 @@ export const EXCLUDED_PREFIXES = [
   // macOS reversal, score comparability, what the pack does with standing
   // context — in enough detail to displace the documents it is describing.
   'docs/evidence/FERRET-DOES-CONTEXT-CARRY.md',
+  // The real-agent benchmark's report, on the same rule and by the same route.
+  // It reuses five of *this* benchmark's questions and states their answers in
+  // prose, so leaving it out would repeat the contamination the paragraph above
+  // describes. Added before it was indexed rather than after.
+  'docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md',
 ];
 
 /** Whether an artefact is part of the corpus rather than the harness. */

@@ -227,7 +227,9 @@ Stated here rather than discovered later.
 
 - **Reasoning.** No model is in this loop. Whether an agent handed the right
   evidence writes the right answer is not observed. `sourced` is a necessary
-  condition for a correct answer, not a sufficient one.
+  condition for a correct answer, not a sufficient one. `benchmark/agent/` is
+  where that is measured; it reuses five of these questions and all of their
+  labels, so the two can be read against each other.
 - **Multi-turn work.** One question, one retrieval. An agent that searches,
   reads, and searches again with what it learned is not modelled, and that is
   the habit both conditions would improve under.
