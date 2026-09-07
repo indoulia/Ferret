@@ -94,6 +94,7 @@ function portOf(seed: readonly DurableContext[] = []): DurableContextPort & { re
         evidenceId: `evidence-${stored.entity.id}`,
         related: [],
         superseded: request.supersedes,
+        anchors: [],
       });
     },
     current: (request) =>

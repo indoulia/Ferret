@@ -1,5 +1,6 @@
 import type { LifecycleState } from '../domain/index.js';
 
+import type { AnchorResolution, ContextAnchorInput, Verification } from './code-state.js';
 import type { ContextKind, DurableContext } from './durable.js';
 
 /**
@@ -61,6 +62,13 @@ export interface AgentProvenance {
    * explicit statement and a matched marker are genuinely 0.35 apart.
    */
   readonly confidence?: number | undefined;
+  /**
+   * The code state this was observed against — EPIC-137.
+   *
+   * Paths, never entity ids: an agent holds a path. Resolved to a file version
+   * by the store, and each failure is reported rather than dropped.
+   */
+  readonly anchors?: readonly ContextAnchorInput[] | undefined;
 }
 
 export interface StoreContextRequest {
@@ -81,6 +89,8 @@ export interface StoredContext {
   readonly evidenceId: string;
   readonly related: readonly { readonly id: string; readonly similarity: number; readonly contradiction: boolean }[];
   readonly superseded: string | undefined;
+  /** One entry per requested anchor, resolved or explicitly failed — EPIC-137. */
+  readonly anchors: readonly AnchorResolution[];
 }
 
 export interface FindContextRequest {
@@ -108,6 +118,14 @@ export interface ContextBelief {
   readonly supersededBy: string | undefined;
   readonly supersedes: readonly string[];
   readonly reason: string;
+  /**
+   * Whether the anchored code state still matches — EPIC-137.
+   *
+   * Absent when the build wires no code-state reader, which is not the same as
+   * `unanchored`: one says Ferret cannot answer, the other that nothing was
+   * claimed.
+   */
+  readonly verification?: Verification | undefined;
 }
 
 /**

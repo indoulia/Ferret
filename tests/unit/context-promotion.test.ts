@@ -87,6 +87,7 @@ function portOf(): DurableContextPort & { readonly requests: StoreContextRequest
         evidenceId: 'evidence-1',
         related: [],
         superseded: undefined,
+        anchors: [],
       });
     },
     current: () => Promise.resolve([]),

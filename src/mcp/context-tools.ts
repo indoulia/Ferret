@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { Permission } from '../authorization/index.js';
+import { AnchorVerdict, MAX_ANCHORS, type Verification } from '../context/code-state.js';
 import {
   CONTENT_NOTICE,
   CONTEXT_KINDS,
@@ -120,6 +121,31 @@ function describeBelief(belief: ContextBelief): Record<string, unknown> {
     ...(belief.contradictedBy.length === 0 ? {} : { contradictedBy: [...belief.contradictedBy] }),
     ...(belief.supersededBy === undefined ? {} : { supersededBy: belief.supersededBy }),
     ...(belief.supersedes.length === 0 ? {} : { supersedes: [...belief.supersedes] }),
+    ...(belief.verification === undefined ? {} : { verification: describeVerification(belief.verification) }),
+  };
+}
+
+/**
+ * Whether the anchored code still matches — EPIC-137.
+ *
+ * `current` above means unsuperseded; this is the separate question, and the
+ * two are labelled so a reader cannot mistake one for the other. Paths and
+ * hashes are Ferret's own reading of its index, so none is contained.
+ */
+function describeVerification(verification: Verification): Record<string, unknown> {
+  return {
+    verdict: verification.verdict,
+    trustworthy: verification.verdict === AnchorVerdict.VERIFIED,
+    detail: verification.detail,
+    ...(verification.reason === undefined ? {} : { reason: verification.reason }),
+    anchors: verification.anchors.map((anchor) => ({
+      path: anchor.path,
+      observedHash: anchor.observedHash,
+      matches: anchor.matches,
+      ...(anchor.symbol === undefined ? {} : { symbol: anchor.symbol }),
+      ...(anchor.currentHash === undefined ? {} : { currentHash: anchor.currentHash }),
+      ...(anchor.reason === undefined ? {} : { reason: anchor.reason }),
+    })),
   };
 }
 
@@ -225,6 +251,23 @@ export function registerContextTools({
           .datetime({ offset: true })
           .optional()
           .describe('When the statement was true at its source.'),
+        anchors: z
+          .array(
+            z.strictObject({
+              path: z.string().min(1).describe('Repository-relative path of a file this statement rests on.'),
+              symbol: z.string().min(1).optional().describe('Qualified name of the relevant symbol, to narrow a later re-read.'),
+              lineRange: z
+                .strictObject({ start: z.number().int().positive(), end: z.number().int().positive() })
+                .optional(),
+            }),
+          )
+          .max(MAX_ANCHORS)
+          .optional()
+          .describe(
+            'The files this statement was observed against. Ferret records the content hash of each, ' +
+              'so a later reader is told whether the code still matches instead of only that nobody ' +
+              'superseded the statement. Paths only — never guess an entity id.',
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -244,6 +287,7 @@ export function registerContextTools({
             sourceSystem: 'ferret',
             ...(input.sourceUrl === undefined ? {} : { sourceUrl: input.sourceUrl }),
             ...(input.observedAt === undefined ? {} : { observedAt: input.observedAt }),
+            ...(input.anchors === undefined ? {} : { anchors: input.anchors }),
           },
         });
 
@@ -257,6 +301,20 @@ export function registerContextTools({
           // it did not know about rather than recording a third wording of it.
           related: stored.related.map((one) => ({ ...one })),
           ...(stored.superseded === undefined ? {} : { superseded: stored.superseded }),
+          // EPIC-137. Every requested anchor, resolved or not. An anchor that
+          // matched nothing is reported here rather than dropped — the silence
+          // EPIC-135 was fixed for.
+          ...(stored.anchors.length === 0
+            ? {}
+            : {
+                anchors: stored.anchors.map((one) => ({
+                  path: one.path,
+                  resolved: one.resolved !== undefined,
+                  ...(one.resolved === undefined ? {} : { contentHash: one.resolved.contentHash }),
+                  ...(one.failure === undefined ? {} : { failure: one.failure }),
+                  ...(one.detail === undefined ? {} : { detail: one.detail }),
+                })),
+              }),
           contentSafety: safety.report,
         };
       }),
@@ -348,11 +406,24 @@ export function registerContextTools({
           ...(input.limit === undefined ? {} : { limit: input.limit }),
         });
 
+        // EPIC-137. One verdict per listed statement. Correspondence is read
+        // once per repository by the code-state reader, so this is bounded by
+        // the page rather than by the size of the store.
+        const beliefs = await Promise.all(
+          found.map(async (held) => context.trust(held.entity.id, { permittedScopes })),
+        );
+
         const safety = new ContentSafety();
         return {
           notice: CONTENT_NOTICE,
           count: found.length,
-          context: found.map((held) => describeContext(held, safety)),
+          context: found.map((held, index) => {
+            const verification = beliefs[index]?.verification;
+            return {
+              ...describeContext(held, safety),
+              ...(verification === undefined ? {} : { verification: describeVerification(verification) }),
+            };
+          }),
           contentSafety: safety.report,
         };
       }),
