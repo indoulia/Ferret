@@ -256,3 +256,5 @@ export {
   type RecordedContext,
   type RelatedContext,
 } from './durable-context.js';
+
+export { CodeStateStore, type WorktreeReader } from './code-state.js';

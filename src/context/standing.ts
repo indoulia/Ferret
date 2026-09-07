@@ -7,6 +7,7 @@ import {
 } from '../domain/index.js';
 import { containUntrusted, type ContentSafety } from '../security/index.js';
 
+import type { Verification } from './code-state.js';
 import { durableContextOf, DURABLE_CONTEXT_KIND, type ContextKind } from './durable.js';
 
 /**
@@ -59,6 +60,8 @@ export interface StandingContext {
   readonly authority: number | undefined;
   /** Support exists and nothing in it decides between the observations. */
   readonly undecided: boolean;
+  /** Whether the anchored code still matches — EPIC-137. Absent when unreadable. */
+  readonly verification?: Verification | undefined;
   /**
    * Restatements retrieval folded into this one — EPIC-130.
    *
@@ -75,6 +78,8 @@ export interface StandingCandidate {
   readonly subsumed: readonly string[];
   /** Observations behind it, already narrowed to what the caller may see. */
   readonly evidence: readonly CanonicalEvidence[];
+  /** The code-state verdict, when the pack could read code state — EPIC-137. */
+  readonly verification?: Verification | undefined;
 }
 
 /** True when a hit is durable context rather than a source record. */
@@ -112,6 +117,8 @@ export function standingContextOf(
     // a reader that cannot tell them apart reads silence as agreement.
     undecided: candidate.evidence.length > 1 && preferred === undefined,
     restates: Object.freeze([...candidate.subsumed]),
+    // Charged to the estimate by being part of `entry` — EPIC-137 AC-19.
+    ...(candidate.verification === undefined ? {} : { verification: candidate.verification }),
   };
 
   return Object.freeze({

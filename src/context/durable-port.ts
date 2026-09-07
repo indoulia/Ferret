@@ -1,5 +1,6 @@
 import type { LifecycleState } from '../domain/index.js';
 
+import type { AnchorResolution, ContextAnchorInput, Correspondence, Verification } from './code-state.js';
 import type { ContextKind, DurableContext } from './durable.js';
 
 /**
@@ -39,6 +40,15 @@ export const DEFAULT_CONTEXT_PRODUCER = 'ferret.agent';
 /** A read that states which permission scopes the caller holds — EPIC-083. */
 export interface ContextRead {
   readonly permittedScopes: readonly string[];
+  /**
+   * A per-call memo for code-state correspondence — EPIC-137.
+   *
+   * One `git status` costs ~120 ms and a listing verifies a whole page, so a
+   * caller reading many statements passes one map and pays for one read. It
+   * must not outlive the call: a remembered answer to "is the index still
+   * current" is exactly the staleness this capability exists to report.
+   */
+  readonly correspondence?: Map<string, Promise<Correspondence>>;
 }
 
 /** Where a statement came from, as an agent reports it. */
@@ -61,6 +71,13 @@ export interface AgentProvenance {
    * explicit statement and a matched marker are genuinely 0.35 apart.
    */
   readonly confidence?: number | undefined;
+  /**
+   * The code state this was observed against — EPIC-137.
+   *
+   * Paths, never entity ids: an agent holds a path. Resolved to a file version
+   * by the store, and each failure is reported rather than dropped.
+   */
+  readonly anchors?: readonly ContextAnchorInput[] | undefined;
 }
 
 export interface StoreContextRequest {
@@ -81,6 +98,8 @@ export interface StoredContext {
   readonly evidenceId: string;
   readonly related: readonly { readonly id: string; readonly similarity: number; readonly contradiction: boolean }[];
   readonly superseded: string | undefined;
+  /** One entry per requested anchor, resolved or explicitly failed — EPIC-137. */
+  readonly anchors: readonly AnchorResolution[];
 }
 
 export interface FindContextRequest {
@@ -108,6 +127,14 @@ export interface ContextBelief {
   readonly supersededBy: string | undefined;
   readonly supersedes: readonly string[];
   readonly reason: string;
+  /**
+   * Whether the anchored code state still matches — EPIC-137.
+   *
+   * Absent when the build wires no code-state reader, which is not the same as
+   * `unanchored`: one says Ferret cannot answer, the other that nothing was
+   * claimed.
+   */
+  readonly verification?: Verification | undefined;
 }
 
 /**

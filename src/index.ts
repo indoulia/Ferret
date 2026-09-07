@@ -995,3 +995,20 @@ export {
   type ProviderManifest,
   type ProviderManifestReader,
 } from './providers/index.js';
+
+export {
+  AnchorVerdict,
+  MAX_ANCHORS,
+  UnknownReason,
+  anchoredObservations,
+  verifyAnchors,
+  type AnchorReport,
+  type AnchorResolution,
+  type AnchoredObservation,
+  type CodeStatePort,
+  type ContextAnchorInput,
+  type Correspondence,
+  type CurrentContent,
+  type ResolvedAnchor,
+  type Verification,
+} from './context/code-state.js';

@@ -206,6 +206,7 @@ An Epic is intentionally small enough to have a coherent outcome, independently 
 - **EPIC-133 — Context Governance & Security** — P0 — VALIDATED ([spec](EPIC-133-Context-Governance-And-Security.md), [evidence](validation/EPIC-133-VALIDATION.md))
 - **EPIC-134 — Continuous Self-Dogfooding** — P1 — VALIDATED ([spec](EPIC-134-Continuous-Self-Dogfooding.md), [evidence](validation/EPIC-134-VALIDATION.md))
 - **EPIC-136 — MCP Delivery Cost** — P1 — IN_PROGRESS ([spec](EPIC-136-MCP-Delivery-Cost.md)) — corrective; a context pack reports keeping a budget it exceeds by 37% in the format a client gets by default, `ferret_search` has no compact form, and thirty tool definitions are re-sent every turn. Measured 2026-09-07 by the real-agent benchmark, deferred the same day on EPIC-135's precedent.
+- **EPIC-137 — Code-State Anchored Durable Context** — P1 — IMPLEMENTED ([spec](EPIC-137-Code-State-Anchored-Durable-Context.md), [decisions](../Architecture/EPIC-137-DECISIONS.md), [validation](validation/EPIC-137-VALIDATION.md), [evidence](../evidence/FERRET-DOES-AN-ANCHOR-CARRY.md)) — a durable statement records the paths and content hashes it was observed against, so a reader is told `verified`/`stale`/`superseded`/`unknown`/`unanchored` rather than only `current`. ACs met except AC-20 (partial). The real-agent experiment found the mechanism correct and safe and **no reduction in rediscovery** — reported as a negative result.
 
 ### Security & Authorization
 

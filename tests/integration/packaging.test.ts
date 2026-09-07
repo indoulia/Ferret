@@ -484,7 +484,19 @@ describe('package contents', () => {
     // No dependency was added, and most of the bulk is again prose `tsc` keeps
     // in the emitted `.js` — these two files carry the permission split and the
     // reason a transcript cannot be promoted, which is the part worth keeping.
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_560_000);
+    //
+    // **2026-09-08, EPIC-137 — raised again.** 3 563 782 against 3 560 000:
+    // 0.1% over, and code-state anchoring accounts for it.
+    //
+    //    +11 003  dist/storage/code-state.js       (resolution, correspondence)
+    //     +8 392  dist/context/code-state.js       (verdicts and verifyAnchors)
+    //     +6 039  dist/context/code-state.d.ts
+    //     +1 850  dist/storage/code-state.d.ts
+    //
+    // No dependency was added. Comments in both new files were cut by ~3 000
+    // bytes before raising this; what is left records why a verdict is
+    // `unknown` rather than `verified`, which is the safety property.
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_580_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {

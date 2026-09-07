@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import {
@@ -17,6 +19,18 @@ import {
   type DurableContext,
   type DurableContextInput,
 } from '../context/durable.js';
+import {
+  CORRESPONDENCE_UNAVAILABLE,
+  UnknownReason,
+  anchoredObservations,
+  verifyAnchors,
+  type AnchorResolution,
+  type CodeStatePort,
+  type ContextAnchorInput,
+  type Correspondence,
+  type ResolvedAnchor,
+  type Verification,
+} from '../context/code-state.js';
 import { MAX_CONTEXT_PAGE } from '../context/durable-port.js';
 import {
   EvidenceMethod,
@@ -27,7 +41,9 @@ import {
   preferredEvidence,
   type CanonicalEvidence,
 } from '../domain/index.js';
+import { encodeKeyParts } from '../domain/identity.js';
 import { ErrorCode, FerretError } from '../errors/index.js';
+import { redactSecrets } from '../security/index.js';
 
 import { classifyDatabaseError } from './connection.js';
 import { EntityStore, UpsertOutcome, recomputeEntityHash, type FerretDatabase } from './entities.js';
@@ -64,6 +80,8 @@ export interface ContextProvenance {
   readonly permissionScope?: string | undefined;
   /** Evidence this rests on, for a derived statement. */
   readonly derivedFrom?: readonly string[] | undefined;
+  /** The code state this was observed against — EPIC-137. Paths, not ids. */
+  readonly anchors?: readonly ContextAnchorInput[] | undefined;
 }
 
 export interface RecordContextInput extends DurableContextInput {
@@ -97,6 +115,8 @@ export interface RecordedContext {
   readonly related: readonly RelatedContext[];
   /** The record this write superseded, when one was named. */
   readonly superseded: string | undefined;
+  /** One entry per requested anchor — EPIC-137. A failure is reported, never dropped. */
+  readonly anchors: readonly AnchorResolution[];
 }
 
 export interface ContextQuery {
@@ -120,14 +140,17 @@ export class DurableContextStore {
   readonly #entities: EntityStore;
   readonly #evidence: EvidenceStore;
   readonly #relationships: RelationshipStore;
+  /** Absent in a build that wires no code-state reader — EPIC-137. */
+  readonly #codeState: CodeStatePort | undefined;
 
-  constructor(db: FerretDatabase) {
+  constructor(db: FerretDatabase, options: { readonly codeState?: CodeStatePort | undefined } = {}) {
     // Composing the store registers the kind, as `SymbolStore` does for symbols.
     registerDurableContextKind();
     this.#db = db;
     this.#entities = new EntityStore(db);
     this.#evidence = new EvidenceStore(db);
     this.#relationships = new RelationshipStore(db);
+    this.#codeState = options.codeState;
   }
 
   /**
@@ -153,30 +176,61 @@ export class DurableContextStore {
 
     const context = durableContextOf(upserted.entity);
 
-    const support = await this.#evidence.record(
-      {
-        subjectId: context.entity.id,
-        // The writer's wording. The record holds what Ferret settled on.
-        statement: built.statement,
-        method,
-        producer: input.provenance.producer,
-        producerVersion: input.provenance.producerVersion,
-        sourceSystem: input.provenance.sourceSystem,
-        authority: authorityFor(method),
-        // Support, not replacement. `single` would mark a second agent's
-        // agreement as having replaced the first's, erasing corroboration.
-        cardinality: 'collection',
-        ...(input.provenance.sourceId === undefined ? {} : { sourceId: input.provenance.sourceId }),
-        ...(input.provenance.sourceUrl === undefined ? {} : { sourceUrl: input.provenance.sourceUrl }),
-        ...(input.provenance.confidence === undefined ? {} : { confidence: input.provenance.confidence }),
-        ...(input.provenance.observedAt === undefined ? {} : { observedAt: input.provenance.observedAt }),
-        ...(input.provenance.permissionScope === undefined
-          ? {}
-          : { permissionScope: input.provenance.permissionScope }),
-        ...(input.provenance.derivedFrom === undefined ? {} : { derivedFrom: [...input.provenance.derivedFrom] }),
-      },
-      now,
-    );
+    // EPIC-137. Anchors resolve before any evidence is written, so a failure is
+    // reported against the request rather than discovered by a later reader.
+    const resolutions =
+      input.provenance.anchors === undefined || input.provenance.anchors.length === 0
+        ? ([] as readonly AnchorResolution[])
+        : ((await this.#codeState?.resolveAnchors(context.scope, input.provenance.anchors)) ??
+          input.provenance.anchors.map((one) => unresolvable(one.path)));
+    const resolved = resolutions.flatMap((one) => (one.resolved === undefined ? [] : [one.resolved]));
+
+    const base = {
+      subjectId: context.entity.id,
+      // The writer's wording. The record holds what Ferret settled on.
+      statement: built.statement,
+      method,
+      producer: input.provenance.producer,
+      producerVersion: input.provenance.producerVersion,
+      sourceSystem: input.provenance.sourceSystem,
+      authority: authorityFor(method),
+      // Support, not replacement. `single` would mark a second agent's
+      // agreement as having replaced the first's, erasing corroboration.
+      cardinality: 'collection' as const,
+      ...(input.provenance.sourceId === undefined ? {} : { sourceId: input.provenance.sourceId }),
+      ...(input.provenance.sourceUrl === undefined ? {} : { sourceUrl: input.provenance.sourceUrl }),
+      ...(input.provenance.confidence === undefined ? {} : { confidence: input.provenance.confidence }),
+      ...(input.provenance.observedAt === undefined ? {} : { observedAt: input.provenance.observedAt }),
+      ...(input.provenance.permissionScope === undefined
+        ? {}
+        : { permissionScope: input.provenance.permissionScope }),
+      ...(input.provenance.derivedFrom === undefined ? {} : { derivedFrom: [...input.provenance.derivedFrom] }),
+    };
+
+    // One observation per anchor. `evidenceKey` covers `locator` and `sourceId`
+    // but **not** `sourceContentHash`, so the hash must reach `sourceId` too —
+    // otherwise re-observing the same claim against changed bytes dedupes onto
+    // the old row and silently keeps the old hash. EPIC-137 decision 4.
+    // All rows from one call share `sourceId`, so a reader can regroup them
+    // into the one observation they are. Without that, a statement resting on
+    // two files would verify when only one of them was unchanged.
+    const setId = anchorSetId(resolved);
+    const written = resolved.length === 0
+      ? [await this.#evidence.record(base, now)]
+      : await Promise.all(
+          resolved.map(async (anchor) =>
+            this.#evidence.record(
+              { ...base, sourceId: setId, sourceContentHash: anchor.contentHash, locator: locatorFor(anchor) },
+              now,
+            ),
+          ),
+        );
+    const support = written[0];
+    if (support === undefined) {
+      throw new FerretError(ErrorCode.EVIDENCE_INVALID, 'Recording durable context produced no observation', {
+        details: { statement: built.statement },
+      });
+    }
 
     if (context.subjectId !== undefined) {
       await this.#relationships.assert(
@@ -205,6 +259,7 @@ export class DurableContextStore {
       evidenceId: support.evidence.id,
       related,
       superseded,
+      anchors: resolutions,
     };
   }
 
@@ -407,7 +462,14 @@ export class DurableContextStore {
    * `permittedScopes` is required rather than defaulted, for the reason
    * EPIC-083 gives: a read that can forget to say who is asking will.
    */
-  async trust(contextId: string, read: ScopedRead & { readonly permittedScopes: readonly string[] }): Promise<ContextTrust | undefined> {
+  async trust(
+    contextId: string,
+    read: ScopedRead & {
+      readonly permittedScopes: readonly string[];
+      /** A per-call memo, so a batch of verdicts costs one working-tree read. */
+      readonly correspondence?: Map<string, Promise<Correspondence>>;
+    },
+  ): Promise<ContextTrust | undefined> {
     const held = await this.get(contextId);
     if (held === undefined) return undefined;
 
@@ -443,7 +505,51 @@ export class DurableContextStore {
       supersededBy: superseding[0]?.fromId,
       supersedes: superseded.map((edge) => edge.toId),
       reason: trustReason(held.entity.lifecycle, support.length, preferred, related),
+      // EPIC-137. Absent, not `unanchored`, when nothing can read code state:
+      // "Ferret cannot answer" and "nothing was claimed" are different answers.
+      ...(this.#codeState === undefined
+        ? {}
+        : {
+            verification: await this.#verify(held, support, superseding[0]?.fromId, read.correspondence ?? new Map<string, Promise<Correspondence>>()),
+          }),
     };
+  }
+
+  /**
+   * The verdict for one statement — EPIC-137 §8.
+   *
+   * Nothing is filtered on the way in: drift is derived here and never written
+   * to `EvidenceState`, so a drifted observation is a `current` row that this
+   * labels rather than one a state filter has already hidden.
+   */
+  async #verify(
+    held: DurableContext,
+    support: readonly CanonicalEvidence[],
+    supersededBy: string | undefined,
+    memo: Map<string, Promise<Correspondence>>,
+  ): Promise<Verification> {
+    const observations = anchoredObservations(support);
+    const paths = [...new Set(observations.flatMap((one) => one.anchors.map((anchor) => anchor.path)))];
+    const reader = this.#codeState;
+    if (reader === undefined || observations.length === 0) {
+      return verifyAnchors({
+        lifecycle: held.entity.lifecycle,
+        supersededBy,
+        observations,
+        current: new Map(),
+        correspondence: CORRESPONDENCE_UNAVAILABLE,
+      });
+    }
+    // One working-tree read per *call*, not per statement: `git status` costs
+    // ~120 ms and a default `ferret_context_find` page is 200 statements. The
+    // memo lives for this call only — caching it across calls is the one thing
+    // this capability cannot do.
+    const key = held.scope ?? '';
+    const pending = memo.get(key) ?? reader.correspondence(held.scope);
+    memo.set(key, pending);
+    const correspondence = await pending;
+    const current = await reader.currentContent(held.scope, paths, correspondence);
+    return verifyAnchors({ lifecycle: held.entity.lifecycle, supersededBy, observations, current, correspondence });
   }
 
   /** Context records the merger related this one to. */
@@ -561,6 +667,8 @@ export interface ContextTrust {
   readonly supersedes: readonly string[];
   /** One sentence a person can read. Never built from indexed text. */
   readonly reason: string;
+  /** Whether the anchored code still matches — EPIC-137. Absent when unreadable. */
+  readonly verification?: Verification | undefined;
 }
 
 /**
@@ -623,4 +731,39 @@ function statesIn(states: readonly LifecycleState[] | undefined) {
 /** Scope is part of identity, so a candidate search never leaves it. */
 function scopeMatches(scope: string | undefined) {
   return scope === undefined ? sql`e.source_scope IS NULL` : sql`e.source_scope = ${scope}`;
+}
+
+/**
+ * `kind: 'path'` with the symbol or line range as the area, never the key.
+ *
+ * `detail` is producer-supplied free text, so it goes through the same masking
+ * a statement does — EPIC-137 AC-18. The path is not masked: it is compared
+ * against the index, and a masked one would resolve to nothing.
+ */
+function locatorFor(anchor: ResolvedAnchor): { kind: string; start: string; detail?: string } {
+  const range = anchor.lineRange === undefined ? undefined : `L${String(anchor.lineRange.start)}-${String(anchor.lineRange.end)}`;
+  const detail = [anchor.symbol, range].filter((one): one is string => one !== undefined).join(' ');
+  if (detail === '') return { kind: 'path', start: anchor.path };
+  return { kind: 'path', start: anchor.path, detail: redactSecrets(detail).text };
+}
+
+/**
+ * The identity of one anchor *set* — EPIC-137 decision 4.
+ *
+ * In `sourceId`, which `evidenceKey` covers, so re-observing the same claim
+ * against changed bytes is a new row rather than a dedupe onto the old one that
+ * would silently keep the old hash. Sorted, so anchor order cannot fork it.
+ */
+function anchorSetId(anchors: readonly ResolvedAnchor[]): string {
+  const parts = anchors.map((one) => `${one.path}=${one.contentHash}`).sort();
+  return `anchors:${createHash('sha256').update(encodeKeyParts(parts)).digest('hex').slice(0, 32)}`;
+}
+
+function unresolvable(path: string): AnchorResolution {
+  return Object.freeze({
+    path,
+    resolved: undefined,
+    failure: UnknownReason.NOT_INDEXED,
+    detail: 'this build wires no code-state reader, so anchors cannot be resolved',
+  });
 }

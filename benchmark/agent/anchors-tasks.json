@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "description": "EPIC-137 — does an anchored durable statement let a fresh agent skip rediscovery, and does it refuse to when the code moved?",
+  "design": "Session A investigates a real question about a real file and records what it found. Five fresh sessions are then asked a question the finding answers, under five states of the repository. The treatment holds Ferret; the control holds the same statements as a handover note. Nothing tells either arm the answer, and nothing tells the treatment to trust the verdict.",
+  "sessions": {
+    "a": {
+      "id": "session-a",
+      "question": "Ferret decides whether a recorded durable statement still describes the code it was observed against. Establish precisely how that decision is made today: what is compared, what must hold before Ferret will call a statement `verified`, and what it reports instead when it cannot establish that. Read the implementation rather than the specifications, and record what you establish as durable context so a later session does not have to repeat this investigation.",
+      "notes": "Not graded on a verdict. What is measured is whether the session reached the mechanism, what it chose to record, and whether it anchored what it recorded — reported rather than graded, because nothing here decides in advance what the right set of statements is.",
+      "facts": [
+        {
+          "id": "content-hash-is-the-key",
+          "patterns": ["content hash", "contentHash", "git-blob", "byte-identical", "file_version"],
+          "why": "The verification key. A commit sha is provenance only."
+        },
+        {
+          "id": "correspondence-required",
+          "patterns": ["correspondence", "head ?commit", "checked[- ]out branch", "worktree", "indexed .*head"],
+          "why": "The condition that separates `verified` from `unknown`, and the owner's locked contract."
+        },
+        {
+          "id": "unknown-never-verified",
+          "patterns": ["unknown", "never verified", "not verified", "cannot establish"],
+          "why": "The safety direction: anything unestablished is unknown rather than a match."
+        }
+      ]
+    },
+    "b": {
+      "id": "session-b",
+      "question": "A colleague says Ferret will tell you whether a durable statement still matches the code, and that `current: true` is enough to trust one. Are they right? State what Ferret actually requires before it reports a statement as verified, and what it reports when a condition does not hold.",
+      "notes": "The carried question. `anchoredFileReads` is the measurement: whether the arm opened the implementation again to answer it.",
+      "verdict": {
+        "options": ["yes", "no"],
+        "expected": "no",
+        "why": "`current: true` means unsuperseded. Verification additionally requires matching content hashes and index/worktree correspondence."
+      },
+      "facts": [
+        {
+          "id": "current-is-not-verified",
+          "patterns": ["unsuperseded", "not .*still (?:true|holds)", "current.*only means", "different question"],
+          "why": "The distinction the capability exists to make."
+        },
+        {
+          "id": "content-hash-is-the-key",
+          "patterns": ["content hash", "contentHash", "git-blob", "byte-identical"],
+          "why": "What is actually compared."
+        },
+        {
+          "id": "correspondence-required",
+          "patterns": ["correspondence", "head ?commit", "checked[- ]out branch", "worktree"],
+          "why": "The second condition, and the one a hash comparison alone does not cover."
+        }
+      ]
+    }
+  }
+}

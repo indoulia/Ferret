@@ -846,6 +846,7 @@ Filled in as Epics land.
 | EPIC-131 | `a5a8049` | [#205](https://github.com/indoulia/Ferret/pull/205) | `a5a8049` | [record](validation/EPIC-131-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-132 | `7899ef7` | [#207](https://github.com/indoulia/Ferret/pull/207) | `7899ef7` | [record](validation/EPIC-132-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-133 | `cacad40` | [#208](https://github.com/indoulia/Ferret/pull/208) | `cacad40` | [record](validation/EPIC-133-VALIDATION.md) | COMPLETE — directed outside this queue |
+| EPIC-137 | `a4ba97a` | pending | pending | [record](validation/EPIC-137-VALIDATION.md), [decisions](../Architecture/EPIC-137-DECISIONS.md), [report](../evidence/FERRET-DOES-AN-ANCHOR-CARRY.md) | IMPLEMENTED — directed outside this queue; ACs met except AC-20 (partial). The real-agent experiment found the mechanism correct and safe and no reduction in rediscovery |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:

@@ -8,6 +8,13 @@ export const EXCLUDED = Object.freeze([
   'docs/evidence/FERRET-CAN-A-FRESH-AGENT-FIND-IT.md',
   'docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md',
   'docs/evidence/FERRET-DELIVERY-COST-MEASURED.md',
+  // EPIC-137's own specification, decisions record and registry line. The
+  // anchors experiment asks how verification is decided, and all three state
+  // the mechanism in prose — the spec gives the six conditions verbatim. A
+  // session must reach it from the implementation or not at all.
+  'docs/EPICs/EPIC-137-Code-State-Anchored-Durable-Context.md',
+  'docs/Architecture/EPIC-137-DECISIONS.md',
+  'docs/EPICs/README.md',
 ]);
 
 /**

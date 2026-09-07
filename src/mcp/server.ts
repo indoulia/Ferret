@@ -12,6 +12,7 @@ import {
   MAX_LINEAGE_DEPTH,
   renderAnswer,
   renderPack,
+  type CodeStatePort,
   type DurableContextPort,
   type EvidenceReader,
 } from '../context/index.js';
@@ -235,6 +236,12 @@ export interface McpServerDependencies {
    */
   readonly context?: DurableContextPort;
   /**
+   * Reads current code state, so an anchored statement can be verified —
+   * EPIC-137. Absent means no verdict is reported at all, which is not the same
+   * as `unanchored`.
+   */
+  readonly codeState?: CodeStatePort;
+  /**
    * What is recorded as the producer of everything an agent stores.
    *
    * From the composition root, never from tool input: a client that could
@@ -290,7 +297,10 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
   const access = dependencies.access ?? PUBLIC_ACCESS;
   const principal = dependencies.principal ?? ANONYMOUS_PRINCIPAL;
   const confirmations = dependencies.confirmations ?? new ConfirmationGate();
-  const packs = new ContextPackBuilder(retrieval, access, evidence);
+  // EPIC-137. Passed through so a pack's standing statements carry the same
+  // verdict `ferret_context_trust` reports; absent leaves them unverified
+  // rather than wrongly verified.
+  const packs = new ContextPackBuilder(retrieval, access, evidence, dependencies.codeState);
 
   // EPIC-068. The permission is checked here rather than in each handler; see
   // `createToolGuard`. The two destructive tools live in `./config-tools.ts` and
