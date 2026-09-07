@@ -239,15 +239,53 @@ note's heading outweighs one in its body — plus a guard that the baseline stil
 retrieves the labelled answer for every real question, so a baseline that
 quietly stopped working could not make every Ferret condition look good.
 
+## A repository alongside the durable tier
+
+The gap both benchmarks declared. The task benchmark ran against a repository
+whose durable tier held two records; this one runs against a durable tier with no
+repository; a real installation is both.
+
+```
+node benchmark/continuity/run.mjs --repository            # ~7 minutes
+node benchmark/continuity/run.mjs --repository --no-content   # plumbing only
+```
+
+`--repository` changes the axis from store size to the repository itself: the
+same store and the same questions are measured **twice**, once with this
+repository indexed beside the scenario and once without, and nothing else differs
+between the arms. It is an A/B rather than a sweep because a content index takes
+about seven minutes, and running one per store size would measure the same thing
+three times.
+
+Content indexing is **on**, for the reason `scripts/dogfood-db.mjs` gives: without
+file bodies the repository competes on paths and commit messages only, and a weak
+competitor answers a different question. `--no-content` exists to prove the
+harness end to end and is explicitly not a measurement.
+
+**The answer key is guarded, not assumed.** Indexing this repository would index
+`benchmark/continuity/tasks.json`, so the exclusion list is in force at index time
+and at read time, and `assertAnswerKeyExcluded` probes all three answer-key paths
+before anything is measured — a precondition, on the pattern
+`benchmark/lib/ferret.mjs` sets, because filtering a contaminated result
+afterwards does not undo the results it displaced. Per EPIC-135 that exclusion
+filters reads rather than storage; reads are what every number here is produced
+through, and the probe checks exactly that.
+
+**`ferret-search-context` is measured only in this mode.** It is `ferret_search`
+restricted to `kinds: ['context']`. Without a repository it would be the same
+query over the same corpus as `ferret-search` and would report the same numbers
+twice; with one it separates a ranking problem from a discoverability problem.
+
+`ferret-find` is an internal control: it reads only durable context, so it must be
+identical in both arms. If it ever differs, the arms differ by more than the
+repository and the run means nothing.
+
 ## What this does not measure
 
 Stated here rather than discovered later.
 
 - **Reasoning.** No model is in this loop. `answered` checks that the facts an
   answer needs were in front of the agent, not that the agent used them.
-- **A repository alongside the durable tier.** The store holds statements and
-  nothing else, so how standing context and file results compete for one budget
-  is not measured here. The task benchmark measures the opposite extreme.
 - **Extraction.** Every statement was recorded deliberately. Whether an agent
   *would* have recorded the right twenty-six sentences is the question this
   assumes an answer to, and it is the largest assumption in the design.

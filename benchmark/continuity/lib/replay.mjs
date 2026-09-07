@@ -29,6 +29,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -73,10 +74,78 @@ export function resetStore({ root, cli, configHome }) {
   });
 }
 
+/**
+ * Indexes this repository into the store, beside the scenario.
+ *
+ * The measurement neither benchmark covered: the task benchmark ran against a
+ * repository with an empty durable tier, this one against a durable tier with no
+ * repository, and a real installation is both. What it costs is one index per
+ * run, which is why it is opt-in.
+ *
+ * Content indexing is on for the same reason `scripts/dogfood-db.mjs` turns it
+ * on: without it the full-text index holds paths and commit messages only, so
+ * repository results would be weak for reasons that have nothing to do with the
+ * question being asked. A weak competitor is not a measurement.
+ */
+export function indexRepository({ root, cli, configHome, content = true }) {
+  const started = performance.now();
+  execFileSync(process.execPath, [cli, 'index', root, ...(content ? ['--content'] : [])], {
+    cwd: root,
+    stdio: ['ignore', 'ignore', 'pipe'],
+    env: { ...process.env, ...CONNECTION, FERRET_CONFIG_HOME: configHome },
+  });
+  return { ms: performance.now() - started };
+}
+
+/**
+ * Refuse to measure a store that holds the answer key.
+ *
+ * `benchmark/lib/ferret.mjs` makes this a precondition rather than a warning for
+ * the task benchmark, and the reasoning transfers exactly: filtering a
+ * contaminated result afterwards does not undo the results it displaced. Asked
+ * as a `find` — is this reachable — rather than by reading configuration,
+ * because what matters is whether the answer key can be returned, not which rule
+ * was written.
+ */
+export async function assertAnswerKeyExcluded(client, probePath) {
+  const { body } = await call(client, 'ferret_find', {
+    kind: 'file',
+    attributes: { path: probePath },
+    limit: 1,
+  });
+  if ((body.results ?? []).length === 0) return;
+  throw new Error(
+    `The store returns ${probePath}, which is this benchmark's answer key.
+` +
+      'Every question would be matching the file that states its own answer.',
+  );
+}
+
 /** Removes the store. A benchmark that leaves a database behind is a mess. */
 export function dropStore() {
   psql(`DROP DATABASE IF EXISTS ${DATABASE}`);
 }
+
+/**
+ * What a repository index must not contain when one is present.
+ *
+ * The same list `benchmark/lib/identity.mjs` keeps, and for the same reason: the
+ * scenario and its labels live under `benchmark/`, so indexing this repository
+ * into the store would index the answer key. It matters only in
+ * {@link indexRepository} — without a repository the store holds the scenario
+ * and nothing that could match a question.
+ *
+ * **This filters reads, not storage.** EPIC-135 records that a configured
+ * exclusion does not stop a path being indexed and its content retained. What
+ * this benchmark needs is that the answer key is never *returned*, because every
+ * number here is produced through the read surfaces — and
+ * {@link assertAnswerKeyExcluded} verifies exactly that rather than assuming it.
+ */
+export const EXCLUDE = Object.freeze([
+  'benchmark',
+  'docs/evidence/FERRET-DOES-IT-HELP.md',
+  'docs/evidence/FERRET-DOES-CONTEXT-CARRY.md',
+]);
 
 /**
  * A configuration directory naming one agent.
@@ -99,11 +168,47 @@ function configFor(configHome, agent) {
             principalClass: 'agent',
             permissions: agent.permissions,
           },
+          // Read-side, so an agent cannot be handed the answer key when a
+          // repository is indexed alongside the scenario.
+          exclude: [...EXCLUDE],
         },
       },
       null,
       2,
     )}\n`,
+  );
+  return directory;
+}
+
+/**
+ * A configuration directory for the indexing step.
+ *
+ * Separate from an agent's because indexing is not something an agent in this
+ * scenario does, and because the exclusion list has to be in force at index time
+ * as well as at read time — the answer key must be neither stored nor returned,
+ * and only one of those is currently achievable (EPIC-135).
+ */
+export function indexConfig(configHome) {
+  const directory = join(configHome, 'indexer');
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    join(directory, 'config.json'),
+    `${JSON.stringify(
+      {
+        version: 1,
+        config: {
+          authorization: {
+            principalId: 'benchmark.indexer',
+            principalClass: 'automation',
+            permissions: ['read', 'index'],
+          },
+          exclude: [...EXCLUDE],
+        },
+      },
+      null,
+      2,
+    )}
+`,
   );
   return directory;
 }

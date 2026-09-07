@@ -57,7 +57,17 @@ import { K, READS, score, summarize } from '../lib/score.mjs';
 import { factsIn } from './lib/facts.mjs';
 import * as notes from './lib/notes.mjs';
 import * as padding from './lib/padding.mjs';
-import { DATABASE, call, connectAgent, dropStore, replay, resetStore } from './lib/replay.mjs';
+import {
+  DATABASE,
+  assertAnswerKeyExcluded,
+  call,
+  connectAgent,
+  dropStore,
+  indexConfig,
+  indexRepository,
+  replay,
+  resetStore,
+} from './lib/replay.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const CLI = join(ROOT, 'dist', 'cli', 'main.js');
@@ -91,6 +101,28 @@ const flag = (name, fallback) => {
 };
 const only = flag('task', undefined);
 const keep = argv.includes('--keep');
+/**
+ * Index this repository beside the scenario, and measure the same questions
+ * with and without it.
+ *
+ * The gap both benchmarks declare: the task benchmark ran against a repository
+ * whose durable tier was empty, this one against a durable tier with no
+ * repository, and a real installation is both. Whether a repository crowds the
+ * durable statement out of the pack's budget is the question, and it is answered
+ * by an A/B on one store size rather than by a sweep — a content index takes
+ * minutes, so running one per store size would measure the same thing three
+ * times at three times the cost.
+ */
+const withRepository = argv.includes('--repository');
+/**
+ * Index paths and history without file bodies.
+ *
+ * For proving the harness end to end without waiting minutes for a content
+ * index. **Not a measurement**: without content the repository competes on paths
+ * and commit messages only, and a weak competitor answers a different question
+ * than the one this mode exists to ask.
+ */
+const noContent = argv.includes('--no-content');
 const outPath = flag('out', join(HERE, 'results', 'latest.json'));
 
 assertBuildIsCurrent({ root: ROOT, cli: CLI });
@@ -108,7 +140,24 @@ const levels = (flag('padding', `0,${String(available.length)}`))
   .filter((one) => Number.isFinite(one));
 
 const configHome = join(ROOT, '.local', 'continuity-config');
-const CONDITIONS = ['notes-append', 'notes-curated', 'notes-full', 'ferret-pack', 'ferret-search', 'ferret-find'];
+const BASE_CONDITIONS = ['notes-append', 'notes-curated', 'notes-full', 'ferret-pack', 'ferret-search', 'ferret-find'];
+
+/**
+ * `ferret_search` restricted to durable context, measured only when a
+ * repository shares the store.
+ *
+ * Without a repository it would be the same query over the same corpus as
+ * `ferret-search` and would report the same numbers twice. With one it answers
+ * the question the unrestricted search raises: when file results take every
+ * slot, is that a ranking problem or a *discoverability* one — is the durable
+ * statement unreachable, or merely unreachable by default?
+ *
+ * The tool does expose `kinds`. Its description lists *"commit, file, branch,
+ * developer"* and does not mention that durable context is a searchable kind,
+ * so an agent reading the description would not know to ask. Whether that
+ * matters is what this condition measures.
+ */
+const CONTEXT_SEARCH = 'ferret-search-context';
 
 /**
  * The order everything was recorded in, padding included.
@@ -150,22 +199,58 @@ function unranked(scored) {
 }
 
 /** One complete measurement at one store size. */
-async function measure(count) {
+async function measure(count, { repository = false } = {}) {
   const ordered = interleave(count);
+  // The context-restricted search only means something when something else is
+  // competing for the slots, so it is measured only then.
+  const measured = repository ? [...BASE_CONDITIONS, CONTEXT_SEARCH] : [...BASE_CONDITIONS];
 
-  process.stderr.write(`\n=== store: ${String(scenario.statements.length)} graded + ${String(count)} padding ===\n`);
+  process.stderr.write(
+    `\n=== store: ${String(scenario.statements.length)} graded + ${String(count)} padding` +
+      `${repository ? ' + this repository, indexed' : ''} ===\n`,
+  );
   resetStore({ root: ROOT, cli: CLI, configHome: join(configHome, 'setup') });
+
+  let indexMs;
+  if (repository) {
+    process.stderr.write('indexing this repository into the store\n');
+    ({ ms: indexMs } = indexRepository({
+      root: ROOT,
+      cli: CLI,
+      configHome: indexConfig(configHome),
+      content: !noContent,
+    }));
+    process.stderr.write(`indexed in ${(indexMs / 1000).toFixed(0)}s\n`);
+  }
 
   const clients = {};
   for (const [name, agent] of Object.entries(scenario.agents)) {
     clients[name] = await connectAgent({ root: ROOT, cli: CLI, configHome, agent });
   }
 
+  // Before anything is measured. A store that returns the answer key produces
+  // numbers, and they mean nothing.
+  if (repository) {
+    for (const probe of [
+      'benchmark/continuity/tasks.json',
+      'benchmark/continuity/scenario.json',
+      'benchmark/tasks.json',
+    ]) {
+      await assertAnswerKeyExcluded(clients.alpha, probe);
+    }
+  }
+
   const history = await replay({ scenario: { ...scenario, statements: ordered }, clients });
 
   const appendNotes = notes.compose(ordered, history.sessionsById, { curated: false });
   const curatedNotes = notes.compose(ordered, history.sessionsById, { curated: true });
-  if (count === levels.at(-1)) {
+  // Written from the full store only, and never from a repository arm. The
+  // notes are identical in both arms, and a partial run — `--padding 0`, or one
+  // arm of the A/B — overwriting the committed files with a shorter version of
+  // them is a silent loss of the artefact a reader checks the baseline against.
+  // Keyed on the whole padding corpus rather than on this run's largest level,
+  // because a run whose largest level is zero is still a partial run.
+  if (!repository && count === available.length) {
     mkdirSync(join(HERE, 'results'), { recursive: true });
     writeFileSync(join(HERE, 'results', 'notes-append.md'), `${appendNotes.text}\n`);
     writeFileSync(join(HERE, 'results', 'notes-curated.md'), `${curatedNotes.text}\n`);
@@ -216,8 +301,12 @@ async function measure(count) {
     };
   }
 
-  async function searchCondition(client, task) {
-    const found = await call(client, 'ferret_search', { query: task.question, limit: K });
+  async function searchCondition(client, task, kinds) {
+    const found = await call(client, 'ferret_search', {
+      query: task.question,
+      limit: K,
+      ...(kinds === undefined ? {} : { kinds }),
+    });
     return {
       ranked: (found.body.results ?? []).map((hit) => keyOfContext(hit.id)),
       delivered: found.text,
@@ -252,10 +341,11 @@ async function measure(count) {
       'ferret-pack': await packCondition(client, task),
       'ferret-search': await searchCondition(client, task),
       'ferret-find': await findCondition(client),
+      ...(repository ? { [CONTEXT_SEARCH]: await searchCondition(client, task, ['context']) } : {}),
     };
 
     const conditions = {};
-    for (const name of CONDITIONS) {
+    for (const name of measured) {
       const result = produced[name];
       const wholeRead = name === 'notes-full' || name === 'ferret-find';
       const ranked = canonicalise(result.ranked);
@@ -351,7 +441,7 @@ async function measure(count) {
   }
 
   const summary = Object.fromEntries(
-    CONDITIONS.map((name) => {
+    measured.map((name) => {
       const scores = rows.map((row) => row.conditions[name].score);
       const rate = (key) => {
         const present = scores.map((one) => one[key]).filter((one) => one !== undefined);
@@ -382,6 +472,9 @@ async function measure(count) {
 
   return {
     padding: count,
+    repository,
+    conditions: measured,
+    ...(indexMs === undefined ? {} : { indexSeconds: Math.round(indexMs / 1000), indexedContent: !noContent }),
     storeStatements: ordered.length,
     notes: {
       appendBlocks: appendNotes.blocks.length,
@@ -398,12 +491,22 @@ async function measure(count) {
   };
 }
 
+// With `--repository` the axis is the repository rather than the store size, so
+// the same store is measured twice — once with this repository indexed beside it
+// and once without — and nothing else differs between the two arms.
+const arms = withRepository
+  ? [
+      { level: levels[0] ?? 0, repository: false },
+      { level: levels[0] ?? 0, repository: true },
+    ]
+  : levels.map((level) => ({ level, repository: false }));
+
 const runs = [];
-for (const level of levels) {
-  const result = await measure(level);
+for (const arm of arms) {
+  const result = await measure(arm.level, { repository: arm.repository });
   runs.push(result);
 
-  for (const name of CONDITIONS) {
+  for (const name of result.conditions) {
     const s = result.summary[name];
     process.stderr.write(
       `${name.padEnd(14)} sourced ${(s.sourced.rate * 100).toFixed(0)}%  answered ${(s.answered.rate * 100).toFixed(0)}%  ` +
@@ -440,6 +543,7 @@ const report = {
     paddingAvailable: available.length,
   },
   levels,
+  arms: arms.map((one) => ({ padding: one.level, repository: one.repository })),
   runs,
 };
 
