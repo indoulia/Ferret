@@ -57,18 +57,32 @@ export class CodeStateStore implements CodeStatePort {
   readonly #relationships: RelationshipStore;
   readonly #access: AccessContext;
   readonly #worktree: WorktreeReader | undefined;
+  readonly #cwd: string | undefined;
   /** One worktree read per scope per instance; the instance is per request. */
   readonly #corresponds = new Map<string, Promise<Correspondence>>();
 
   constructor(
     db: FerretDatabase,
-    options: { readonly access: AccessContext; readonly worktree?: WorktreeReader | undefined },
+    options: {
+      readonly access: AccessContext;
+      readonly worktree?: WorktreeReader | undefined;
+      /**
+       * The checkout this caller is asking about — normally the server's own
+       * working directory.
+       *
+       * Required to disambiguate: this repository has four live worktrees on
+       * four different commits, so "the state being evaluated" cannot be
+       * inferred from the index. Without it, several worktrees mean `unknown`.
+       */
+      readonly cwd?: string | undefined;
+    },
   ) {
     this.#db = db;
     this.#entities = new EntityStore(db);
     this.#relationships = new RelationshipStore(db);
     this.#access = options.access;
     this.#worktree = options.worktree;
+    this.#cwd = options.cwd;
   }
 
   async resolveAnchors(
@@ -163,8 +177,8 @@ export class CodeStateStore implements CodeStatePort {
     if (repository === undefined || repository.kind !== EntityKind.REPOSITORY) {
       return unestablished(UnknownReason.NOT_INDEXED);
     }
-    const path = repository.attributes['path'];
-    if (this.#worktree === undefined || typeof path !== 'string' || path.length === 0) {
+    const path = await this.#localPath(scope, repository);
+    if (this.#worktree === undefined || path === undefined) {
       return CORRESPONDENCE_UNAVAILABLE;
     }
 
@@ -198,6 +212,38 @@ export class CodeStateStore implements CodeStatePort {
       dirtyPaths: new Set(live.dirtyPaths),
       dirtySampleTruncated: live.dirtySampleTruncated,
     });
+  }
+
+  /**
+   * The checkout to evaluate against.
+   *
+   * The caller's own directory when it is one of this repository's worktrees —
+   * found by dogfooding, where the `repository` entity carried no `path` at all
+   * and four worktrees sat on four commits. A single worktree needs no
+   * disambiguation; several without a caller directory are ambiguous, and
+   * ambiguous is `unknown` rather than a guess.
+   */
+  async #localPath(scope: string, repository: CanonicalEntity): Promise<string | undefined> {
+    const rows = await this.#db
+      .select({ attributes: entity.attributes })
+      .from(entity)
+      .where(and(eq(entity.kind, EntityKind.WORKTREE), eq(entity.sourceScope, scope)));
+    const worktrees = rows
+      .map((row) => ((row.attributes as Record<string, unknown> | null) ?? {})['path'])
+      .filter((one): one is string => typeof one === 'string' && one.length > 0);
+
+    const normalize = (value: string): string =>
+      value.replace(/\\/gu, '/').replace(/\/+$/u, '').toLowerCase();
+    if (this.#cwd !== undefined) {
+      const asked = normalize(this.#cwd);
+      const match = worktrees.find((one) => normalize(one) === asked);
+      if (match !== undefined) return match;
+    }
+    if (worktrees.length === 1) return worktrees[0];
+
+    const declared = repository.attributes['path'];
+    if (worktrees.length === 0 && typeof declared === 'string' && declared.length > 0) return declared;
+    return undefined;
   }
 
   /**

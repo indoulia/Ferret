@@ -82,6 +82,10 @@ export function mcpCommand(): Command {
         // excluded path stays excluded here rather than becoming a denial.
         const codeState = new CodeStateStore(storage.db, {
           access,
+          // The checkout this server answers about. Four live worktrees on four
+          // commits make "the state being evaluated" a caller fact, not an
+          // index fact — found by dogfooding EPIC-137.
+          cwd: process.cwd(),
           worktree: {
             read: async (cwd) => {
               const live = await readWorktreeState({ cwd, signal: context.signal, logger: context.logger });
