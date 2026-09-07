@@ -4,6 +4,12 @@
 created and dropped by the harness, 27 graded statements + 0/40/123 padding ·
 **Command:** `npm run bench:continuity` · **Date:** 2026-09-07
 
+The repository A/B that closes §2 was measured separately and is labelled with
+its own tree, because it needs a merge commit the harness change is already in:
+**Tree:** `9feac2e` (`main`), clean · **Command:**
+`node benchmark/continuity/run.mjs --repository --padding 0`, content indexing on
+· `benchmark/continuity/results/repository-ab.json`
+
 The task benchmark measured whether an agent holding Ferret answers a repository
 question better than one holding `git`. It closed by naming what it could not
 reach, and two of those were the same gap seen twice: the durable tier held two
@@ -177,11 +183,88 @@ the store**. And `ferret_context_find`, which bypasses retrieval, returns both
 wordings even in the case the ranked surfaces fold. A reader who lists the store
 sees two records; a reader who asks a question sees one.
 
+### A repository beside the durable tier
+
+The gap both benchmarks declared, and the last one this phase can close. The
+task benchmark measured a repository whose durable tier held two records; every
+figure above was measured against a durable tier with no repository. A real
+installation is both, and whether file results crowd the durable statement out
+of one budget had never been observed.
+
+`node benchmark/continuity/run.mjs --repository` measures the same store and the
+same fourteen questions **twice** — once with this repository indexed beside the
+scenario and once without — with content indexing on, 369 s to index, and
+nothing else differing between the arms. `results/repository-ab.json`, 454 s to
+index. Three consecutive runs of it are identical apart from wall-clock timings.
+
+| condition | sourced | answered | facts | tokens/task | p50 |
+| --- | --- | --- | --- | --- | --- |
+| `ferret-pack` | 93% → **93%** | 64% → **64%** | 20/26 → **20/26** | 1 102 → **2 632** | 57 → 78 ms |
+| `ferret-search` | 93% → **0%** | 57% → **0%** | 19/26 → **2/26** | 2 659 → **17 221** | 24 → 172 ms |
+| `ferret-find` *(control)* | 100% → 100% | 64% → 64% | 21/26 → 21/26 | 2 999 → 2 999 | 69 → 48 ms |
+| `ferret-search-context` | — → **93%** | — → **57%** | — → **19/26** | — → **2 659** | — → 16 ms |
+
+The notes conditions are unchanged and are omitted: they never touch the store,
+so a repository indexed into it cannot reach them.
+
+**The pack is unaffected, and pays for it.** On all fourteen tasks
+`ferret_context_pack` returned the *identical* durable statements in the
+identical order, with identical `sourced`, `answered` and irrelevant-slot counts:
+78 standing entries in each arm, task by task. What arrived beside them is
+repository material — 0 items across the fourteen packs without a repository, 50
+with one — and that is the whole of the cost difference: 1 102 → 2 632 tokens per
+task, 2.4×, inside the same 4 000-token budget.
+
+That budget is the thing to watch rather than the ranking. Without a repository
+it never bound: the largest pack was 1 353 tokens and no pack reported a
+budget omission. With one the largest is 3 719, **nine of the fourteen packs
+report a budget omission** and seven of them report whole results that did not
+fit — the largest, 37 of them. What was dropped to fit was never a standing
+statement: the count stayed at 78, task by task, while results were being cut,
+so durable context is ahead of repository material in the budget rather than
+competing with it. At what repository size that stops
+holding is not measured, and this A/B cannot be extrapolated to it.
+
+**Unrestricted search collapses completely.** `ferret_search` goes from 93%
+sourced to **0%**, from 19 of 26 facts to 2, and from 2 659 tokens per task to
+17 221 — 6.5× the cost for none of the answer. All five top slots are irrelevant
+on all fourteen tasks, where without a repository half of them were. Every slot
+goes to file content. An agent that reaches for search by habit — which is the
+habit this condition exists to represent — gets a store full of durable
+engineering knowledge and sees none of it.
+
+**And the durable statement was reachable the whole time.** `ferret_search` with
+`kinds: ['context']` is **byte-identical to the no-repository `ferret_search`
+arm** on all fourteen tasks: the same ranked lists, the same scores, the same
+2 659 tokens per task, differing only in wall-clock timing. The repository is
+excluded exactly and the ranking over durable context is exactly as good as it
+was.
+
+So the collapse is not a retrieval failure and not a ranking failure. It is
+**default routing**: the durable statement is unreachable *by default* and one
+argument away from being reachable. The tool exposes `kinds`, described in
+`src/mcp/server.ts` as *"restrict to entity kinds such as commit, file, branch,
+developer"* — four kinds, none of them the one that would have worked. An agent
+reading that would not know to ask for `context`, and the benchmark's
+unrestricted condition is what such an agent actually does.
+
+Nothing was changed for this. Which response is right — documenting `context` as
+a searchable kind, routing task-shaped questions to `ferret_context_pack` more
+firmly, changing the default, or recording the finding and leaving the surface
+alone — is an owner decision, and it is now a decision made against a
+measurement rather than an intuition.
+
+**The control holds.** `ferret_context_find` reads only durable context, and it
+is byte-identical across the two arms apart from latency, on every task. The six
+isolation probes and the resume probe are likewise identical in both arms. The
+arms therefore differ by the repository and by nothing else, which is what makes
+the rows above readable at all.
+
 ---
 
-## 3. The defect this found
+## 3. The defects this found
 
-One, and it needed this benchmark to be visible.
+Two, and both needed this benchmark to be visible.
 
 **The context pack reported a result limit it never hit, on fourteen of fourteen
 packs**, and the count was exactly the number of durable statements it had just
@@ -229,6 +312,48 @@ condition's ranked set; its baseline nDCG moves 0.339 → 0.331 because that
 condition greps the working tree and this work edited a file it ranks — the
 caveat that benchmark records its own commit for.
 
+### And a configured exclusion is reported to the model as a permission denial
+
+Found by the repository arm, which is the only place it can appear: without a
+repository there is nothing to exclude, and in that arm no pack withholds
+anything at all. With one, **all fourteen packs report withheld results** — 94
+across the set, three to eighteen per pack — each in this wording, quoted from
+the largest of them:
+
+> 18 result(s) were withheld because this caller is not permitted to see them;
+> an answer built from this pack is partial
+
+No caller here lacks a permission. The two agents hold the same permissions in
+both arms, their scope selectors are empty, and repository file entities carry no
+permission scope — `src/retrieval/access.ts` states that everything Ferret
+indexes today is unscoped. The only restriction in force is this benchmark's
+`exclude` list, which keeps the answer key out of the answers. So every one of
+those 94 is a path exclusion, described to the model as an authorization
+boundary.
+
+The retrieval layer keeps the three apart deliberately. `WithholdReason` is
+`permission` — *"it carries a permission scope the caller does not hold"* —
+`scope`, and `exclusion` — *"an exclusion rule covers its path"* — and
+`WithheldReport` already carries `byReason` beside `total`. `src/context/pack.ts`
+reads `withheld.total` and renders all three as `TruncationReason.PERMISSION`,
+whose own comment says it is *"distinct from every other reason here… a client
+that treated them alike would report a budget problem where there is an
+authorization boundary."* The pack makes the mirror image of that mistake: it
+reports an authorization boundary where there is a configured path exclusion, and
+it does so while holding the breakdown that would have said which.
+
+What it costs is the reading a careful agent takes from it. "You are not
+permitted to see this" invites escalation — ask for the scope, ask a human, treat
+the answer as blocked. "A rule excludes this path" invites nothing; it is the
+operator's intent, working. An agent that cannot tell them apart cannot act
+correctly on either, and per EPIC-135 an exclusion is the *only* one of the three
+that an operator configures expecting it to be routine.
+
+**Not fixed here, and deliberately.** The breakdown exists, so the fix is small,
+but it changes the text of every pack and therefore every token count in §2 and
+in the A/B above. Landing the measurement first and correcting the report against
+it is the order this benchmark has used for both of its defects.
+
 ---
 
 ## 4. What the evidence says
@@ -245,6 +370,10 @@ caveat that benchmark records its own commit for.
   200% and 400% across a 5.7× store.
 - **No Ferret surface ranks a reversed decision above the one that reversed
   it**, where an append-only notes file does so on half the tasks that have one.
+- **A repository indexed beside the durable tier does not displace the pack.**
+  `ferret_context_pack` returns the identical statements in the identical order
+  in both arms, for 2.4× the tokens. The other extreme both benchmarks left
+  open is now measured at one size.
 
 **Not proven.**
 
@@ -286,9 +415,21 @@ caveat that benchmark records its own commit for.
   shares vocabulary, at retrieval, and neither collapses a genuine reword nor
   affects what the store lists.
 
+- **That an agent's habitual search finds durable context when a repository
+  shares the store.** It does not: `ferret_search` goes from 93% sourced to
+  **0%** and from 2 659 tokens per task to 17 221. The same query restricted to
+  `kinds: ['context']` is byte-identical to the no-repository arm, so nothing is
+  wrong with the ranking or the store — the durable statement is unreachable by
+  default and one argument away from being reachable. The tool's description
+  never says durable context is a searchable kind. Whether the fix is
+  documentation, routing, or a different default is an owner decision, taken
+  against a measurement rather than an intuition.
+
 ### Remaining gaps
 
-**Product.** Durable context carries no reasoning and promotion drops it.
+**Product.** A configured path exclusion is reported to the model as a
+permission denial, and the pack holds the breakdown that would have distinguished
+them. Durable context carries no reasoning and promotion drops it.
 Promotion's granularity is the whole session, so an agent holding four memories
 of which it wants to publish two cannot say so — here that was worked around by
 declining to promote a session at all. A `fact` is a durable kind and not a
@@ -298,9 +439,14 @@ reword. The one lexical retrieval miss — a question about which permission
 archiving needs, answered by a statement that names the permission but never the
 word *archive* — is the same limit the task benchmark found, unchanged.
 
-**Engineering.** Nothing measured here competes standing context against file
-results for one budget; the two benchmarks sit at opposite extremes and neither
-covers the middle.
+**Engineering.** Standing context now competes against file results in one
+budget, on one repository at one store size. What that leaves open is scale: the
+largest pack went from 1 353 tokens to 3 719 against a 4 000-token budget, so
+this repository nearly binds it and a repository ten times the size is not
+something these two arms can be extrapolated to. Nor is the interaction between
+a repository and a padded store measured — the A/B runs at zero padding, because
+an index costs minutes and a sweep would have measured the same thing three
+times.
 
 **Measurement.** Fourteen tasks and twenty-six statements are enough to find
 defects and not enough to report a rate to two significant figures. No model
