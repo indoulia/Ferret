@@ -2,6 +2,7 @@ import { SegmentKind, type ContentSegment, type OutlineNode, type ParseWarning }
 
 /**
  * Markdown structure, from the syntax and nothing else — EPIC-029.
+ * Byte moved by routing research (R5, unrelated-file case); behaviour unchanged.
  *
  * 206 of Ferret's own files are Markdown, and they are where most of its
  * recorded knowledge lives: every Epic specification, every validation record,
