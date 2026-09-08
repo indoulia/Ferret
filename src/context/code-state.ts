@@ -20,7 +20,12 @@ export const AnchorVerdict = {
 
 export type AnchorVerdict = (typeof AnchorVerdict)[keyof typeof AnchorVerdict];
 
-/** A finding resting on twenty files is not one finding. */
+/**
+ * A finding resting on twenty files is not one finding.
+ *
+ * Touched by the routing research on a throwaway branch, to move this file's
+ * bytes without moving its behaviour. Nothing else in this file changed.
+ */
 export const MAX_ANCHORS = 20;
 
 /** Why Ferret could not decide. Category only — never a path a caller may not see. */
