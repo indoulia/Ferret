@@ -214,7 +214,12 @@ function groupAnchors(
   const groups = new Map<string, { scope: string | undefined; path: string; found: Map<string, string> }>();
   for (const member of members) {
     for (const anchor of member.anchors) {
-      const key = `${member.scope ?? ''} ${anchor.path}`;
+      // Unambiguous, not concatenated: a scope of `a b` with path `c` and a
+      // scope of `a` with path `b c` would share a space-joined key and merge
+      // two different files into one group — the false association this design
+      // refuses. Written as a pair rather than with a separator byte, so the
+      // file stays text and the key assumes nothing about either value.
+      const key = JSON.stringify([member.scope ?? null, anchor.path]);
       const group = groups.get(key) ?? { scope: member.scope, path: anchor.path, found: new Map() };
       // One entry per statement even when a statement anchors the same path
       // twice across two observations: the group counts statements, not rows.
