@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import {
   CONTEXT_CONCERNS_ENTITY,
@@ -31,6 +31,7 @@ import {
   type ResolvedAnchor,
   type Verification,
 } from '../context/code-state.js';
+import { ContextRelation, type RecordedContextRelation } from '../context/aggregate.js';
 import { MAX_CONTEXT_PAGE } from '../context/durable-port.js';
 import {
   EvidenceMethod,
@@ -51,6 +52,7 @@ import { EvidenceStore, type ScopedRead } from './evidence.js';
 import { RelationshipStore } from './relationships.js';
 import { relaxedTsQuery } from './retrieval.js';
 import { entity } from './schema/entities.js';
+import { relationship } from './schema/relationships.js';
 
 /**
  * Durable context, merged on the way in — EPIC-126.
@@ -550,6 +552,59 @@ export class DurableContextStore {
     const correspondence = await pending;
     const current = await reader.currentContent(held.scope, paths, correspondence);
     return verifyAnchors({ lifecycle: held.entity.lifecycle, supersededBy, observations, current, correspondence });
+  }
+
+  /**
+   * The recorded relations between a page of statements — EPIC-139A.
+   *
+   * Satisfies `ContextRelationReader`. **One query, both endpoints bounded to
+   * the given ids**, mirroring `RetrievalStore.#equivalenceOf`: the cost does
+   * not grow with what Ferret holds, and a relation graph outside the page
+   * cannot reach into it.
+   *
+   * `context_relates_to_context` is deliberately not read. Retrieval already
+   * folds it (EPIC-130) and reports the folded ids as `restates`, so both
+   * endpoints of a relate edge are never both on the page — reading it here
+   * would be the same query and the same union-find a second time.
+   */
+  async relationsAmong(ids: readonly string[]): Promise<readonly RecordedContextRelation[]> {
+    const unique = [...new Set(ids)];
+    if (unique.length < 2) return [];
+    try {
+      const rows = await this.#db
+        .select({
+          id: relationship.id,
+          type: relationship.type,
+          fromId: relationship.fromId,
+          toId: relationship.toId,
+        })
+        .from(relationship)
+        .where(
+          and(
+            inArray(relationship.type, [
+              RelationshipType.ENTITY_SUPERSEDES_ENTITY,
+              CONTEXT_CONTRADICTS_CONTEXT,
+            ]),
+            isNull(relationship.validTo),
+            inArray(relationship.fromId, unique),
+            inArray(relationship.toId, unique),
+          ),
+        );
+
+      return rows.map((row) =>
+        Object.freeze({
+          relationshipId: row.id,
+          relation:
+            row.type === CONTEXT_CONTRADICTS_CONTEXT
+              ? ContextRelation.CONTRADICTS
+              : ContextRelation.SUPERSEDES,
+          from: row.fromId,
+          to: row.toId,
+        }),
+      );
+    } catch (error) {
+      throw classifyDatabaseError(error, 'storage.context.relationsAmong');
+    }
   }
 
   /** Context records the merger related this one to. */

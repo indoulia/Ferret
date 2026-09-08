@@ -31,6 +31,22 @@ export {
   type PackRequest,
 } from './pack.js';
 
+// EPIC-139A. What Ferret already recorded between the statements in one pack,
+// reported as recorded: links naming one relationship row each, and groups
+// keyed on the record their members share. Pure, and composes nothing.
+export {
+  ContextRelation,
+  IndexSignal,
+  relationIndex,
+  type AnchorGroup,
+  type ContextLink,
+  type IndexMember,
+  type MemberAnchor,
+  type RecordedContextRelation,
+  type RelationIndex,
+  type SubjectGroup,
+} from './aggregate.js';
+
 // EPIC-048. The narrow evidence-read port answer traceability needs, and its
 // bounds. Exported from the context barrel rather than from `storage/` so a
 // caller can name what it needs without importing a database.
@@ -129,6 +145,7 @@ export {
   type AgentProvenance,
   type ContextBelief,
   type ContextRead,
+  type ContextRelationReader,
   type DurableContextPort,
   type FindContextRequest,
   type StoreContextRequest,

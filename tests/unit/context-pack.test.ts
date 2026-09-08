@@ -381,9 +381,10 @@ describe('building a context pack', () => {
     expect(pack.producerVersion.length).toBeGreaterThan(0);
     expect(pack.question).toBe('who changed this');
     // A literal, deliberately: the point of this assertion is that the format
-    // version does not move by accident. Two, since a citation names its
-    // observation rather than repeating the record `evidence` already carries.
-    expect(pack.formatVersion).toBe(2);
+    // version does not move by accident. Three, since the pack carries the
+    // relation index — EPIC-139A. It moved here because this line failed, which
+    // is what the literal is for.
+    expect(pack.formatVersion).toBe(3);
   });
 
   it('refuses a pack with no question', async () => {

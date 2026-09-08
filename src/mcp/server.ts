@@ -13,6 +13,7 @@ import {
   renderAnswer,
   renderPack,
   type CodeStatePort,
+  type ContextRelationReader,
   type DurableContextPort,
   type EvidenceReader,
 } from '../context/index.js';
@@ -242,6 +243,15 @@ export interface McpServerDependencies {
    */
   readonly codeState?: CodeStatePort;
   /**
+   * Reads the relations recorded between a pack's statements — EPIC-139A.
+   *
+   * A port for the same reason `codeState` is one, and absent means a pack
+   * carries no relation index — which is what it carried before this Epic, not
+   * a wrong one. `DurableContextStore` satisfies it, so a composition root that
+   * already passes `context` passes the same instance here.
+   */
+  readonly contextRelations?: ContextRelationReader;
+  /**
    * What is recorded as the producer of everything an agent stores.
    *
    * From the composition root, never from tool input: a client that could
@@ -300,7 +310,15 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
   // EPIC-137. Passed through so a pack's standing statements carry the same
   // verdict `ferret_context_trust` reports; absent leaves them unverified
   // rather than wrongly verified.
-  const packs = new ContextPackBuilder(retrieval, access, evidence, dependencies.codeState);
+  const packs = new ContextPackBuilder(
+    retrieval,
+    access,
+    evidence,
+    dependencies.codeState,
+    // EPIC-139A. Passed through so a pack reports the supersession its own two
+    // entries already record; absent leaves the pack exactly as it was.
+    dependencies.contextRelations,
+  );
 
   // EPIC-068. The permission is checked here rather than in each handler; see
   // `createToolGuard`. The two destructive tools live in `./config-tools.ts` and

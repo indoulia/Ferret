@@ -789,6 +789,65 @@ turns an unanswerable question about English into a lookup.
 
 ## Not in this queue
 
+- **[EPIC-139A](EPIC-139A-Context-Aggregation.md) — Context Aggregation.**
+  Specified 2026-09-08, **re-designed on measurement**, and implemented the same
+  day as a **relation index**
+  ([decisions](../Architecture/EPIC-139A-DECISIONS.md) 14–18,
+  [validation](validation/EPIC-139A-VALIDATION.md)).
+
+  The defect was real and narrow: a pack held both endpoints of an
+  `ENTITY_SUPERSEDES_ENTITY` row and never read it. Measured on the dogfood
+  store, two of four standing entries were one belief in two versions, the pack
+  named neither link, and recovering it cost 4 `ferret_context_trust` calls and
+  ~2 295 tokens — 63% of the pack's own 3 622.
+
+  **What was specified is not what shipped, and the reason is the interesting
+  part.** Two studies — [corpus
+  readiness](../evidence/FERRET-IS-THE-CORPUS-READY-FOR-AGGREGATION.md) and a
+  genuine [corpus
+  population](../evidence/FERRET-WHAT-DOES-A-POPULATED-CORPUS-SUPPORT.md) —
+  established that the blockers were design questions rather than data. The
+  proposed primitive, connected components over five relations, required those
+  relations to be interchangeable: three of them (`supersedes`, `contradicts`,
+  `restates`) assert *sameness of subject matter*, and two (`same-subject`,
+  `shared-anchor`) assert only *association*. A component over the union answers
+  *"are these one belief?"* with edges that only meant *"these are related"*,
+  and anchor overlap is set intersection over up to twenty anchors, so its
+  closure joins statements sharing no record at all. On both corpora the
+  component also had no case: each held exactly **one** sameness edge, so a
+  sameness component is a pair, and every multi-member structure came from
+  association — where the component's claim is the false one.
+
+  So the primitive is **links and shared-key groups, composing nothing**: a link
+  names one `relationship` row, a group is keyed on the one record its members
+  share, and composition is permitted only along `ENTITY_SUPERSEDES_ENTITY`, one
+  named hop at a time. Visible on the populated corpus: the
+  `src/config/exclusions.ts` hub arrives as one group of four statements resting
+  on one file rather than a four-member cluster, and two statements bridged only
+  through a third are **not** joined.
+
+  **Result.** `statement 3 supersedes statement 4`, naming the row, at 229
+  tokens and no extra round trip; `standing` byte-identical; one bounded query
+  per pack; nothing durable, no MCP tool, no model call. **G2 passes** with all
+  three claimed signals contributing under leave-one-out. **G4's contradiction
+  half and G5 do not pass** — `contradicts` has never formed, and a
+  verified/stale mixture needs a genuine change under an anchored path, which no
+  file on the branch touched. Neither was manufactured. `same-subject` is a
+  group and never an edge (adoption **0 of 10** agent record calls); `restates`
+  is not read at all, because EPIC-130's fold already removes one endpoint
+  before assembly sees it.
+
+  **§25 is not run, and the honest consequence is that nothing here claims a
+  productivity gain.** C5 is withdrawn (it tests EPIC-130), C2 is
+  operator-dependent, so two of five tasks are runnable — the same count §26.3
+  calls insufficient. Whether the index changes what an agent does is unmeasured.
+  Three decisions remain open and none blocks the shipped behaviour: whether
+  `ferret_context_find` carries an index, whether assembly may spend budget
+  group-first, and G1/G4/G6's restatement in index terms. One EPIC-137 §9 defect
+  found by the population study is still deliberately unfixed: an anchor is
+  refused when `scope` is omitted even where exactly one repository is indexed
+  (`src/storage/code-state.ts:85-89`).
+
 - **[#138](https://github.com/indoulia/Ferret/issues/138) — three limitation rows
   with no owning Epic.** Two of the three are product decisions in their own
   right (what a merge commit's *changes* are; whether untracked working-directory
@@ -848,6 +907,7 @@ Filled in as Epics land.
 | EPIC-133 | `cacad40` | [#208](https://github.com/indoulia/Ferret/pull/208) | `cacad40` | [record](validation/EPIC-133-VALIDATION.md) | COMPLETE — directed outside this queue |
 | EPIC-137 | `3b92c04` | [#229](https://github.com/indoulia/Ferret/pull/229) | `3b92c04` | [record](validation/EPIC-137-VALIDATION.md), [decisions](../Architecture/EPIC-137-DECISIONS.md), [report](../evidence/FERRET-DOES-AN-ANCHOR-CARRY.md) | IMPLEMENTED — directed outside this queue; ACs met except AC-20 (partial). The real-agent experiment found the mechanism correct and safe and no reduction in rediscovery |
 | EPIC-138 | `60773de` (reverted) | [#231](https://github.com/indoulia/Ferret/pull/231) | — | [spec](EPIC-138-Durable-Context-Routing-Guidance.md), [record](validation/EPIC-138-VALIDATION.md), [decisions](../Architecture/EPIC-138-DECISIONS.md), [report](../evidence/FERRET-DOES-A-SERVER-STRING-ROUTE.md) | MEASURED AND REJECTED — directed outside this queue; implemented, measured over 36 real-agent sessions, not shipped. Consultation moved later, not earlier (0/9 against baseline 7/9); safety and correctness held. No product change |
+| EPIC-139A | `pending` | [#232](https://github.com/indoulia/Ferret/pull/232) | `pending` | [record](validation/EPIC-139A-VALIDATION.md), [decisions](../Architecture/EPIC-139A-DECISIONS.md), [readiness](../evidence/FERRET-IS-THE-CORPUS-READY-FOR-AGGREGATION.md), [population](../evidence/FERRET-WHAT-DOES-A-POPULATED-CORPUS-SUPPORT.md) | IMPLEMENTED — directed outside this queue. The specified primitive (connected components over five relations) was **rejected on measurement before any code** and replaced by a relation index: links naming one relationship row each, groups keyed on the record their members share, no composition except along `ENTITY_SUPERSEDES_ENTITY`. The §2 defect is closed — 229 tokens and no extra round trip against 2 295 tokens and 4 calls. **G2 passes; G4's contradiction half and G5 do not, and neither was manufactured. §25 is not run** (two of five tasks runnable), so no productivity gain is claimed |
 
 Two follow-ups came out of dogfooding the Epics above rather than out of the
 queue, and are recorded here because they changed shipped behaviour:
