@@ -24,13 +24,14 @@ import { createMcpServer } from '../../../src/mcp/index.js';
 /**
  * What `initialize` tells a client, through the real protocol — EPIC-138.
  *
- * AC-1/AC-2 against a running server rather than the source literal; AC-12
+ * §14 measured the routing sentence and rejected it, so what is asserted is its
+ * absence, through a running server rather than off the source literal. AC-12
  * across principals, permissions and store contents; AC-3/AC-4 that the tool
- * surface did not move.
+ * surface never moved.
  */
 
-/** The guidance EPIC-138 ships, asserted as bytes so a reworded sentence fails here. */
-const GUIDANCE =
+/** The sentence §14 measured and rejected. Asserted absent, as bytes. */
+const REJECTED_GUIDANCE =
   'For a task-shaped engineering question, check the durable context an ' +
   'earlier session recorded before exploring source, and use its verdict: ' +
   '`verified` says what was observed still matches the indexed code, ' +
@@ -95,15 +96,14 @@ afterAll(async () => {
 });
 
 describe('the instructions a real MCP client receives', () => {
-  it('carries the routing guidance — AC-1', async () => {
+  it('does not carry the rejected routing guidance — AC-1', async () => {
     const client = await connect({});
-    expect(client.getInstructions()).toContain(GUIDANCE.trim());
+    expect(client.getInstructions()).not.toContain(REJECTED_GUIDANCE.trim());
   });
 
-  it('keeps the content notice present, unmodified and after the guidance — AC-2', async () => {
+  it('keeps the content notice present, unmodified and last — AC-2', async () => {
     const instructions = (await connect({})).getInstructions() ?? '';
     expect(instructions).toContain(CONTENT_NOTICE);
-    expect(instructions.indexOf(CONTENT_NOTICE)).toBeGreaterThan(instructions.indexOf(GUIDANCE.trim()));
     expect(instructions.endsWith(CONTENT_NOTICE)).toBe(true);
   });
 

@@ -318,14 +318,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       instructions:
         'Ferret answers questions about indexed repositories: commits, files, ' +
         'branches, worktrees, developers and the evidence behind each fact. ' +
-        // EPIC-138. R138 measured the agent asking last, after rediscovery was
-        // already paid. Ordering only: no call count, and the verdict clause is
-        // what keeps the earlier ask safe.
-        'For a task-shaped engineering question, check the durable context an ' +
-        'earlier session recorded before exploring source, and use its verdict: ' +
-        '`verified` says what was observed still matches the indexed code, ' +
-        'while `stale`, `unknown` and `unanchored` each mean verify against ' +
-        'source before relying on it. ' +
+        // EPIC-138 added a routing sentence here and §14 rejected it on
+        // measurement: 0/9 sessions consulted before their first source read
+        // against the baseline's 7/9. See validation/EPIC-138-VALIDATION.md.
         CONTENT_NOTICE,
     },
   );

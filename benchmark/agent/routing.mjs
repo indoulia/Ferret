@@ -29,8 +29,11 @@ const BASELINE_CLI = join(ROOT, '.local', 'routing-baseline', 'dist', 'cli', 'ma
 
 /**
  * control: no MCP. treatment/baseline: Ferret, contract unchanged. routed: plus the client-side ordering
- * instruction. guided: EPIC-138's server string, which is why it alone runs the current build — the product
- * has no toggle (D4), so the arms are two builds rather than one flag.
+ * instruction. guided: a build whose `initialize` carries a routing sentence — the product has no toggle,
+ * so the arms are two builds rather than one flag.
+ *
+ * EPIC-138 shipped no such sentence: §14 measured it and rejected it. `guided` therefore reproduces
+ * `baseline` against today's `dist/`, and means nothing unless BASELINE_CLI points at a build that differs.
  */
 const CONDITIONS = {
   control: { mcp: false, suffix: '', cli: BASELINE_CLI },

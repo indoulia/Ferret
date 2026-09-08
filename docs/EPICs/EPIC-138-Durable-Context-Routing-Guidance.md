@@ -1,10 +1,21 @@
 # EPIC-138 — Durable-Context Routing Guidance
 
-**Status:** APPROVED · **Priority:** P1 · **Domain:** MCP Surface · **Classification:** CONTINUATION
+**Status:** MEASURED AND REJECTED · **Priority:** P1 · **Domain:** MCP Surface · **Classification:** CONTINUATION
 
-Approved 2026-09-08 on the R138 research result. Research evidence:
-[report](../evidence/FERRET-WHEN-DOES-THE-AGENT-ASK.md). No implementation has been
-performed.
+Approved 2026-09-08 on the R138 research result. Implemented, measured against
+real agents under §14, and **not shipped** — the guided arm consulted before its
+first source read in 0 of 9 sessions against the baseline's 7 of 9, and read 28%
+more source lines. §15 conditions 1 and 2 failed; 3 and 4 held.
+
+`src/mcp/server.ts` is byte-identical to `main`. The specification below is kept
+as written, unamended, because it is what was tested.
+
+Outcome: [validation](validation/EPIC-138-VALIDATION.md) ·
+[evidence](../evidence/FERRET-DOES-A-SERVER-STRING-ROUTE.md) ·
+[decisions](../Architecture/EPIC-138-DECISIONS.md). Research this rested on:
+[report](../evidence/FERRET-WHEN-DOES-THE-AGENT-ASK.md), which stands and is not
+amended — R138 proved the hypothesis under explicit client-side routing; EPIC-138
+disproved that one `initialize` sentence reliably creates that routing.
 
 One sentence is added to the MCP `initialize` instructions. Nothing else ships.
 

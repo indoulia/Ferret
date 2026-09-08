@@ -6,19 +6,28 @@ import { describe, expect, it } from 'vitest';
 import { CONTENT_NOTICE } from '../../src/index.js';
 
 /**
- * The `initialize` guidance as text — EPIC-138 AC-2, AC-6, AC-7, AC-8.
+ * The `initialize` instructions as text — EPIC-138.
  *
- * The lists below were committed red, before the wording existed: a
- * forbidden-phrase list written afterwards is one the sentence passes by
- * construction. AC-1 asserts the same string through a real client.
+ * The lists below were committed red in `46dba26`, before any wording existed.
+ * §14 then rejected the sentence on measurement, not on wording: it passes every
+ * list here. Both halves are kept — what the string is today, and what any
+ * future routing guidance would still have to satisfy.
  */
 
 const SERVER = fileURLToPath(new URL('../../src/mcp/server.ts', import.meta.url));
 
-/** The purpose sentence, unchanged by EPIC-138 and asserted to be so. */
+/** The purpose sentence. Unchanged by EPIC-138, which shipped no product change. */
 const PURPOSE =
   'Ferret answers questions about indexed repositories: commits, files, ' +
   'branches, worktrees, developers and the evidence behind each fact. ';
+
+/** The sentence §14 measured and rejected. Kept so the lists below are exercised against real wording. */
+const REJECTED_GUIDANCE =
+  'For a task-shaped engineering question, check the durable context an ' +
+  'earlier session recorded before exploring source, and use its verdict: ' +
+  '`verified` says what was observed still matches the indexed code, ' +
+  'while `stale`, `unknown` and `unanchored` each mean verify against ' +
+  'source before relying on it. ';
 
 /** Block comments wholesale, line comments only when they start a line — as `mcp-destructive-tools.test.ts` does. */
 function stripComments(source: string): string {
@@ -41,15 +50,11 @@ function instructionsLiteral(): string {
   return parts.join('') + CONTENT_NOTICE;
 }
 
-/** Everything between the purpose sentence and the notice: the sentence EPIC-138 ships. */
+/** Whatever sits between the purpose sentence and the notice. Empty today, by EPIC-138's rejection. */
 function guidance(): string {
   const instructions = instructionsLiteral();
-  if (!instructions.startsWith(PURPOSE)) {
-    throw new Error('The purpose sentence changed; EPIC-138 §4 says it does not.');
-  }
-  if (!instructions.endsWith(CONTENT_NOTICE)) {
-    throw new Error('CONTENT_NOTICE is no longer last; EPIC-138 AC-2 says it is.');
-  }
+  if (!instructions.startsWith(PURPOSE)) throw new Error('The purpose sentence changed.');
+  if (!instructions.endsWith(CONTENT_NOTICE)) throw new Error('CONTENT_NOTICE is no longer last.');
   return instructions.slice(PURPOSE.length, instructions.length - CONTENT_NOTICE.length);
 }
 
@@ -100,61 +105,58 @@ const FORBIDDEN_SKIPPING_VERIFICATION: readonly RegExp[] = Object.freeze([
 /** The three verdicts that mean *verify against source* — EPIC-137 §8. */
 const VERDICTS_REQUIRING_VERIFICATION: readonly string[] = Object.freeze(['stale', 'unknown', 'unanchored']);
 
-describe('the routing guidance in the initialize instructions', () => {
-  it('is one sentence, between the purpose sentence and the notice', () => {
-    const text = guidance();
-    expect(text.trim().length).toBeGreaterThan(0);
-    // One terminator: a paragraph in a handshake is EPIC-136 §2.3's cost.
-    expect(text.match(/[.!?](?=\s|$)/g)).toHaveLength(1);
+describe('what the initialize instructions say today', () => {
+  it('is the purpose sentence and the notice, and nothing between them — EPIC-138 rejected', () => {
+    expect(instructionsLiteral()).toBe(PURPOSE + CONTENT_NOTICE);
+    expect(guidance()).toBe('');
   });
 
-  it('costs a handshake roughly the sentence it is — EPIC-138 §20', () => {
-    // Characters: no tokenizer ships here and `estimateTokens` misreads prose.
-    // 320 chars is §20's ~60-76 tokens at 4-4.7 chars each; per-turn cost is nil.
-    expect(guidance().length).toBeLessThanOrEqual(320);
+  it('does not carry the sentence §14 measured and rejected', () => {
+    expect(instructionsLiteral()).not.toContain(REJECTED_GUIDANCE.trim());
+  });
+
+  it('leaves the notice present, unmodified and last', () => {
+    const instructions = instructionsLiteral();
+    expect(instructions).toContain(CONTENT_NOTICE);
+    expect(instructions.endsWith(CONTENT_NOTICE)).toBe(true);
+  });
+});
+
+describe('what any routing guidance would still have to satisfy', () => {
+  // Exercised against the rejected wording, which passes all of it. The sentence
+  // was rejected on §14's measurement, and these lists are why nobody need
+  // re-derive whether the wording was the problem.
+  const text = REJECTED_GUIDANCE;
+
+  it('is one sentence within a handshake budget — §20', () => {
+    expect(text.match(/[.!?](?=\s|$)/g)).toHaveLength(1);
+    expect(text.length).toBeLessThanOrEqual(320);
   });
 
   it('prescribes no call count and no call on every question — AC-6', () => {
-    const text = guidance();
     for (const forbidden of FORBIDDEN_UNCONDITIONAL) expect(text).not.toMatch(forbidden);
   });
 
   it('claims no authority for what Ferret returns — AC-7', () => {
-    const text = guidance();
     for (const forbidden of FORBIDDEN_AUTHORITY) expect(text).not.toMatch(forbidden);
   });
 
   it('names every verdict that means verify against source — AC-8', () => {
-    const text = guidance();
     for (const verdict of VERDICTS_REQUIRING_VERIFICATION) {
       expect(text).toContain(verdict);
-      // After naming it, so the two cannot be read apart.
       expect(text.slice(text.indexOf(verdict))).toMatch(/\bverif/i);
     }
     expect(text).toMatch(/\bsource\b/i);
   });
 
   it('never presents a verdict as permission to stop — AC-8', () => {
-    const text = guidance();
     for (const forbidden of FORBIDDEN_SKIPPING_VERIFICATION) expect(text).not.toMatch(forbidden);
   });
 
   it('carries no answer, no file path and no repository fact — §7', () => {
-    const text = guidance();
     expect(text).not.toMatch(/\.(?:ts|js|mjs|cjs|md|json|sql)\b/i);
     expect(text).not.toMatch(/\b(?:src|docs|tests|benchmark)\//i);
     expect(text).not.toMatch(/\bEPIC-\d+/i);
     expect(text).not.toMatch(/\bferret_[a-z_]+\b/i);
-  });
-
-  it('leaves the notice present, unmodified and last — AC-2', () => {
-    const instructions = instructionsLiteral();
-    expect(instructions).toContain(CONTENT_NOTICE);
-    expect(instructions.endsWith(CONTENT_NOTICE)).toBe(true);
-    expect(instructions.indexOf(CONTENT_NOTICE)).toBeGreaterThan(instructions.indexOf(guidance()));
-  });
-
-  it('leaves the purpose sentence unchanged — §4', () => {
-    expect(instructionsLiteral().startsWith(PURPOSE)).toBe(true);
   });
 });
