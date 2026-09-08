@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "description": "Routing research — does consulting durable context before opening source change what an engineering answer costs, and does it stay safe when the code moved?",
+  "design": "Session A investigates and records, exactly as EPIC-137's anchors suite runs it. The carried question is then asked under three conditions that differ only in *when* the agent is told to look: control has no Ferret and a notes file, treatment has Ferret and the unchanged contract, routed has Ferret and one added sentence about ordering. R8 asks a question nothing was recorded about, to see what the ordering instruction costs when Ferret has nothing on point.",
+  "routing": "The routed arm's added sentence names no file, no answer, no verdict vocabulary and no trust guidance. It asks whether *any* durable context exists, so the arm is fair on R8.",
+  "tasks": {
+    "r1": {
+      "what": "tree unchanged since A recorded — the productivity case",
+      "from": "anchors",
+      "session": "b",
+      "arms": ["control", "treatment", "routed"]
+    },
+    "r2": {
+      "what": "an anchored file changed and was re-indexed — the safety case",
+      "from": "anchors",
+      "session": "b",
+      "arms": ["control", "treatment", "routed"]
+    },
+    "r5": {
+      "what": "an unrelated file changed and was re-indexed — the false-drift case",
+      "from": "anchors",
+      "session": "b",
+      "arms": ["control", "treatment", "routed"]
+    },
+    "r8": {
+      "what": "a question nothing durable was recorded about — the wasted-call case",
+      "from": "tasks",
+      "taskId": "macos-runner",
+      "arms": ["treatment", "routed"]
+    }
+  }
+}

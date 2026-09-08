@@ -15,6 +15,14 @@ export const EXCLUDED = Object.freeze([
   'docs/EPICs/EPIC-137-Code-State-Anchored-Durable-Context.md',
   'docs/Architecture/EPIC-137-DECISIONS.md',
   'docs/EPICs/README.md',
+  // EPIC-137's validation record and evidence report, added by the routing
+  // research. Both postdate the anchors run and both state, in prose, what the
+  // carried question asks: the validation record lists the conditions and the
+  // evidence report quotes a verdict block. Re-running the anchors suite on a
+  // tree that holds them would be measuring how well an agent finds its own
+  // answer key.
+  'docs/EPICs/validation/EPIC-137-VALIDATION.md',
+  'docs/evidence/FERRET-DOES-AN-ANCHOR-CARRY.md',
 ]);
 
 /**
