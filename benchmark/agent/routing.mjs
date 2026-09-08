@@ -1,17 +1,5 @@
 #!/usr/bin/env node
-/**
- * Research harness — does *when* an agent asks Ferret change what the answer costs?
- *
- * EPIC-137 measured the anchor mechanism and found it correct, safe, and
- * unproductive, for one observed reason: the first Ferret call landed at tool
- * call 12–20 of 17–24, always after the investigation was finished. This is not
- * a Ferret change. It adds one arm whose only difference is an instruction about
- * *ordering* — check recorded context before opening source — and measures what
- * moves.
- *
- * Throwaway. It publishes nothing, changes no product behaviour, and the routing
- * text lives here rather than in any description Ferret ships.
- */
+/** Throwaway research harness: three arms differing only in when the agent is told to consult recorded context. No product change. */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -33,16 +21,7 @@ const HANDOVER = join(ROOT, 'HANDOVER.md');
 const WORKDIR = join(ROOT, '.local', 'agent-benchmark-run', 'routing');
 const STATE = join(WORKDIR, 'state.json');
 
-/**
- * The whole experiment, in four sentences.
- *
- * Deliberately says nothing the plain treatment is not also free to discover:
- * no file, no answer, no mention of a verdict, of staleness, or of trust. It
- * asks "check whether any" rather than "read the one that exists", so the arm
- * is fair on a question nothing was recorded about. Trust guidance is absent on
- * purpose — whether an early-routed agent blindly believes what it is handed is
- * the safety measurement, and instructing it either way would destroy that.
- */
+/** Names no file, no answer, no verdict vocabulary and no trust guidance — trust is what R2 measures. */
 const ROUTING = `Before you open any source file, check whether durable engineering context about this question has already been recorded by an earlier session and is retrievable through the tools available to you. Do that check first. Then continue however you judge best.`;
 
 /** control: no MCP. treatment: Ferret, contract unchanged. routed: Ferret, contract plus the ordering instruction. */
@@ -142,7 +121,7 @@ const strip = (value) =>
     .replaceAll('␃ferret:content␃', '')
     .trim();
 
-/** The notes file the control is handed: every statement A recorded, verbatim, and no verdict. */
+/** The control's notes: every statement A recorded, verbatim. No verdict — that is the capability under test. */
 function writeHandover(records) {
   const lines = [
     '# Handover — how Ferret decides whether a statement still describes the code',
@@ -170,13 +149,7 @@ function anchoredReads(result, paths) {
   }).length;
 }
 
-/**
- * Where in the session Ferret was asked, relative to where source was opened.
- *
- * This is the whole hypothesis reduced to two integers. `notes` treats the
- * control's handover file as its equivalent of a Ferret call, so the control is
- * measured on the same axis rather than scoring `n/a`.
- */
+/** The hypothesis as two integers. The control's notes file counts as its consult, so both arms score on one axis. */
 function ordering(result) {
   const entries = work(result);
   const isNotes = (entry) => JSON.stringify(entry.input ?? {}).includes('HANDOVER');
@@ -210,11 +183,7 @@ function ordering(result) {
   };
 }
 
-/**
- * Whether Ferret handed the session anything on point, and whether it handed it
- * a verdict. Substring over the tool result rather than a judgement: a statement
- * A recorded either came back in the text or it did not.
- */
+/** Substring over the tool result, not a judgement: a recorded statement either came back or it did not. */
 function whatFerretSupplied(result, records) {
   const texts = work(result)
     .filter((entry) => entry.ferret !== undefined)
