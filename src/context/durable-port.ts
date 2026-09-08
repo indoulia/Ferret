@@ -1,5 +1,6 @@
 import type { LifecycleState } from '../domain/index.js';
 
+import type { RecordedContextRelation } from './aggregate.js';
 import type { AnchorResolution, ContextAnchorInput, Correspondence, Verification } from './code-state.js';
 import type { ContextKind, DurableContext } from './durable.js';
 
@@ -156,6 +157,28 @@ export type ContextTransition = (typeof ContextTransition)[keyof typeof ContextT
 export const CONTEXT_TRANSITIONS: readonly ContextTransition[] = Object.freeze(
   Object.values(ContextTransition),
 );
+
+/**
+ * The recorded relations between statements a pack already holds — EPIC-139A.
+ *
+ * A narrow port of its own rather than a method on {@link DurableContextPort},
+ * for the reason `EvidenceReader` and `CodeStatePort` are narrow: assembly needs
+ * one read and nothing else, and a build that wires no reader reports no index
+ * rather than a wrong one. `DurableContextStore` satisfies it structurally.
+ *
+ * **One query per pack, bounded to the ids already retrieved.** Never over the
+ * corpus: a store holding a large relation graph outside the page must produce
+ * the same answer and the same read count.
+ */
+export interface ContextRelationReader {
+  /**
+   * Relations where **both** endpoints are in `ids`.
+   *
+   * Both, not either — that is what keeps a record the caller may not see from
+   * bridging two it may. An id outside the set is simply not connected.
+   */
+  relationsAmong(ids: readonly string[]): Promise<readonly RecordedContextRelation[]>;
+}
 
 export interface DurableContextPort {
   record(request: StoreContextRequest): Promise<StoredContext>;

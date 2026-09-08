@@ -99,6 +99,11 @@ export function mcpCommand(): Command {
           },
         });
 
+        // EPIC-128 and EPIC-139A. One instance, two ports: the surface an agent
+        // calls and the relation read a pack performs are the same store, so a
+        // trust report and a pack cannot disagree about what is recorded.
+        const durableContext = new DurableContextStore(storage.db, { codeState });
+
         // EPIC-055. `semantic` is deliberately absent: Ferret ships no embedding
         // provider, so the planner reports semantic retrieval as unavailable
         // with the reason, rather than returning an empty result that reads as
@@ -159,8 +164,12 @@ export function mcpCommand(): Command {
           // a trust report and a pack cannot disagree about whether the code
           // still matches. The composition root is the only place allowed to
           // know that this means PostgreSQL and Git.
-          context: new DurableContextStore(storage.db, { codeState }),
+          context: durableContext,
           codeState,
+          // EPIC-139A. The same store instance: the relation read is bounded to
+          // the ids a pack already retrieved, so it belongs to whatever already
+          // serves durable context rather than to a second connection.
+          contextRelations: durableContext,
           // EPIC-048. Without this the traceability tool is not registered at
           // all, and the 556 evidence rows a single index run records stay
           // unreachable from the only surface an AI client has.

@@ -496,7 +496,31 @@ describe('package contents', () => {
     // No dependency was added. Comments in both new files were cut by ~3 000
     // bytes before raising this; what is left records why a verdict is
     // `unknown` rather than `verified`, which is the safety property.
-    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_580_000);
+    //
+    // **2026-09-08, EPIC-139A — raised again.** 3 593 939 against 3 580 000:
+    // 0.4% over, and the relation index accounts for all of it. Measured on
+    // both sides in a second worktree, at merged `main` (`f3dd73d`, 3 562 203)
+    // and again with the change applied (3 589 679), so the bytes are a
+    // measurement rather than a subtraction:
+    //
+    //     +8 501  dist/context/aggregate.js         (links, groups, no composition)
+    //     +6 289  dist/context/aggregate.d.ts
+    //     +5 455  dist/context/pack.js              (the index, the shed order, the render)
+    //     +1 967  dist/storage/durable-context.js   (relationsAmong — one bounded query)
+    //     +1 273  dist/context/pack.d.ts
+    //     +1 051  dist/context/durable-port.d.ts
+    //       +842  dist/storage/durable-context.d.ts
+    //       +601  dist/cli/commands/mcp.js
+    //
+    // 27 476 bytes in total, no dependency added, no asset shipped, and the
+    // grammars unchanged at 5 881 661. Most of it is comment and type
+    // declaration, as every raise in this file has been. The total bound above
+    // still passes with room (9 471 340 against 9 550 000).
+    //
+    // Headroom 3%, on this file's standing reasoning: a round figure leaves
+    // room to hide in, and the next crossing should be a decision rather than a
+    // formality.
+    expect(pack.unpackedSize - grammarBytes).toBeLessThan(3_700_000);
   });
 
   it('does not ship a source map that points at files it does not contain', () => {

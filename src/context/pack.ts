@@ -28,7 +28,13 @@ import {
   type Correspondence,
   type Verification,
 } from './code-state.js';
-import { DURABLE_CONTEXT_KIND } from './durable.js';
+import {
+  relationIndex,
+  type IndexMember,
+  type RecordedContextRelation,
+  type RelationIndex,
+} from './aggregate.js';
+import { DURABLE_CONTEXT_KIND, durableContextOf } from './durable.js';
 import {
   MAX_STANDING_CONTEXT,
   isStandingContext,
@@ -41,6 +47,7 @@ import {
   MAX_EVIDENCE_PER_ITEM,
   type EvidenceReader,
 } from './evidence-port.js';
+import type { ContextRelationReader } from './durable-port.js';
 import {
   EvidenceExclusion,
   MAX_EVIDENCE_PER_FIELD,
@@ -85,7 +92,15 @@ import type { StatedEvidence } from '../domain/index.js';
  * consumer reading the record off a citation now reads it off `evidence` by
  * `id`, which is what a consumer of `excluded[]` has always had to do.
  */
-export const PACK_FORMAT_VERSION = 2;
+/**
+ * Three: the pack carries the relation index — EPIC-139A.
+ *
+ * `standing` is byte-identical with the index present and absent, so nothing a
+ * consumer already read has changed. The bump is Governance §21 all the same:
+ * a derived-result format gained a field, and reproducibility is stated by the
+ * version rather than inferred from the shape.
+ */
+export const PACK_FORMAT_VERSION = 3;
 
 /** Why a pack is smaller than the knowledge behind it. */
 export const TruncationReason = {
@@ -264,6 +279,20 @@ export interface ContextPack {
    * carried on each entry as `restates` rather than re-decided here.
    */
   readonly standing: readonly StandingContext[];
+  /**
+   * What Ferret already recorded between the statements above — EPIC-139A.
+   *
+   * An index, not a second list: every id in it indexes into `standing`, and no
+   * statement text is repeated. Absent when nothing is recorded between them,
+   * or when it did not fit — in which case `omitted` says so, because a partial
+   * index is a set of silent false negatives.
+   *
+   * **Not clusters.** It reports links (one relationship row each) and groups
+   * (keyed on the one record their members share) and composes nothing. A
+   * component over these would answer "are these one belief?" with edges that
+   * only meant "these are related" — see `aggregate.ts`.
+   */
+  readonly relations?: RelationIndex | undefined;
   readonly items: readonly PackItem[];
   /**
    * What was left out, and why.
@@ -404,6 +433,7 @@ export class ContextPackBuilder {
   readonly #access: AccessContext;
   readonly #evidence: EvidenceReader | undefined;
   readonly #codeState: CodeStatePort | undefined;
+  readonly #relations: ContextRelationReader | undefined;
 
   /**
    * `access` is EPIC-058's addition and is **required**, and it is a constructor
@@ -424,11 +454,15 @@ export class ContextPackBuilder {
     // EPIC-137. Optional for the same reason `evidence` is: a build that wires
     // no code-state reader reports no verdict, rather than a wrong one.
     codeState?: CodeStatePort,
+    // EPIC-139A. Optional for the same reason again: absent leaves the pack
+    // without a relation index, which is what it has today — not a wrong one.
+    relations?: ContextRelationReader,
   ) {
     this.#retrieval = retrieval;
     this.#access = access;
     this.#evidence = evidence;
     this.#codeState = codeState;
+    this.#relations = relations;
   }
 
   /**
@@ -613,6 +647,8 @@ export class ContextPackBuilder {
     // the whole section is capped at `MAX_STANDING_CONTEXT`. `ferret_search` is
     // untouched.
     const standing: StandingContext[] = [];
+    const indexMembers = new Map<string, IndexMember>();
+    let droppedIndex = false;
     // One working-tree read per pack, not per standing statement.
     const correspondenceMemo = new Map<string, Promise<Correspondence>>();
     let standingDropped = 0;
@@ -636,9 +672,29 @@ export class ContextPackBuilder {
         estimateDeliveredTokens,
         safety,
       );
-      if (budget.admit(entry.estimatedTokens)) standing.push(entry);
-      else standingDropped += 1;
+      if (budget.admit(entry.estimatedTokens)) {
+        standing.push(entry);
+        // EPIC-139A. Collected here, for admitted entries only, from the
+        // evidence step 4 already read — so the index costs no anchor read and
+        // a statement shed for budget is never in it.
+        indexMembers.set(entry.id, {
+          id: entry.id,
+          scope,
+          subject: durableContextOf(hit.entity).subjectId,
+          anchors: anchoredObservations(support).flatMap((observation) =>
+            observation.anchors.map((anchor) => ({ path: anchor.path, detail: anchor.symbol })),
+          ),
+        });
+      } else standingDropped += 1;
     }
+
+    // EPIC-139A. **One** query per pack, bounded to the ids already retrieved,
+    // and after the permission filter — `standing` holds only what this caller
+    // may see, so a withheld record is neither a member nor a bridge.
+    const recorded: readonly RecordedContextRelation[] =
+      this.#relations === undefined || indexMembers.size < 2
+        ? []
+        : await this.#relations.relationsAmong([...indexMembers.keys()]);
 
     // What the item limit actually cut off, counted where it happens rather
     // than inferred afterwards. See the omission below for what inferring it
@@ -696,8 +752,37 @@ export class ContextPackBuilder {
       keptStanding: readonly StandingContext[],
       droppedTotal: number,
       standingDroppedTotal: number,
+      withIndex: boolean,
     ): ContextPack => {
+      // EPIC-139A. Derived from the statements actually kept, so shedding one
+      // for budget cannot leave a link naming a statement the pack no longer
+      // carries. Pure and over at most `MAX_STANDING_CONTEXT` members, so
+      // recomputing it per attempt costs nothing.
+      const delivered = orderStanding(keptStanding);
+      const relations = withIndex
+        ? relationIndex(
+            delivered.flatMap((entry) => {
+              const member = indexMembers.get(entry.id);
+              return member === undefined ? [] : [member];
+            }),
+            recorded,
+            estimateDeliveredTokens,
+            safety,
+          )
+        : undefined;
       const omitted: PackOmission[] = evidenceOmissions(chosen);
+      if (!withIndex && droppedIndex) {
+        // EPIC-139A §17.3. Dropped **whole** and said so: a missing link is
+        // indistinguishable from an absent relation, so half an index is a set
+        // of silent false negatives.
+        omitted.push({
+          reason: TruncationReason.BUDGET,
+          count: 1,
+          detail:
+            'the relation index between the durable statements did not fit and was dropped ' +
+            'whole: a partial index cannot be told apart from an absence of relations',
+        });
+      }
       if (standingDroppedTotal > 0) {
         omitted.push({
           reason: TruncationReason.BUDGET,
@@ -768,7 +853,8 @@ export class ContextPackBuilder {
         producerVersion: VERSION,
         builtAt: new Date().toISOString(),
         question,
-        standing: orderStanding(keptStanding),
+        standing: delivered,
+        ...(relations === undefined ? {} : { relations }),
         items: [...chosen],
         omitted,
         contentSafety: safety.report,
@@ -806,10 +892,21 @@ export class ContextPackBuilder {
     let kept: readonly StandingContext[] = standing;
     let dropped = droppedForBudget;
     let shedStanding = standingDropped;
-    let pack = assemble(chosen, kept, dropped, shedStanding);
+    // EPIC-139A. The index is derived *from* the standing statements, so losing
+    // a statement to keep an index over it would be backwards. It is therefore
+    // shed after the items and before any standing entry.
+    //
+    // **All of it or none of it.** Anchor and subject groups need no store read
+    // — they come from the observations step 4 already fetched — so a build with
+    // no relation reader could report those and no links. It reports neither
+    // instead: an index whose links are empty because nothing looked cannot be
+    // told apart from one whose links are empty because no supersession exists,
+    // and that is the silent false negative §17.3 refuses in the budget case.
+    let withIndex = this.#relations !== undefined;
+    let pack = assemble(chosen, kept, dropped, shedStanding, withIndex);
     // Bounded: every iteration shrinks the last item strictly, removes it, or
     // removes a standing entry, so it cannot run longer than there is content.
-    while (pack.estimatedTokens > requested && (chosen.length > 0 || kept.length > 0)) {
+    while (pack.estimatedTokens > requested && (chosen.length > 0 || kept.length > 0 || withIndex)) {
       const last = chosen[chosen.length - 1];
       if (last !== undefined) {
         const room = last.estimatedTokens - (pack.estimatedTokens - requested);
@@ -824,6 +921,9 @@ export class ContextPackBuilder {
           chosen = chosen.slice(0, -1);
           dropped += 1;
         }
+      } else if (withIndex) {
+        withIndex = false;
+        droppedIndex = pack.relations !== undefined;
       } else {
         // Items exhausted and still over. Standing context is admitted first and
         // deliberately protected - EPIC-131 exists so a repository indexed
@@ -834,7 +934,7 @@ export class ContextPackBuilder {
         kept = kept.slice(0, -1);
         shedStanding += 1;
       }
-      pack = assemble(chosen, kept, dropped, shedStanding);
+      pack = assemble(chosen, kept, dropped, shedStanding, withIndex);
     }
     return pack;
   }
@@ -1226,6 +1326,33 @@ export function renderPack(pack: ContextPack): string {
         `support: ${String(entry.supportCount)}`,
       ].filter((one): one is string => one !== undefined);
       lines.push(`- ${entry.contextKind}: ${JSON.stringify(entry.statement)} [${flags.join('; ')}]`);
+    }
+    lines.push(``);
+  }
+
+  // EPIC-139A. What Ferret recorded between those statements, as recorded.
+  // Positions rather than uuids, because the reader is looking at the list
+  // above; the relation names and the sentences are Ferret's own words, and the
+  // one repository-derived value — a path — stays quoted by `JSON.stringify`.
+  const index = pack.relations;
+  if (index !== undefined) {
+    const at = new Map(pack.standing.map((entry, position) => [entry.id, position + 1]));
+    const position = (id: string): string => `statement ${String(at.get(id) ?? 0)}`;
+    lines.push(`## What Ferret recorded between them`);
+    for (const link of index.links) {
+      lines.push(`- ${position(link.from)} ${link.relation} ${position(link.to)}`);
+    }
+    for (const group of index.anchors) {
+      lines.push(
+        `- ${group.statements.map(position).join(', ')} rest on ${JSON.stringify(group.path)} ` +
+          '(a shared file, which is not evidence that they are one belief)',
+      );
+    }
+    for (const group of index.subjects) {
+      lines.push(`- ${group.statements.map(position).join(', ')} name one subject`);
+    }
+    if (index.absent.length > 0) {
+      lines.push(`- not present between these statements: ${index.absent.join(', ')}`);
     }
     lines.push(``);
   }
