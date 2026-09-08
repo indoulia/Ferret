@@ -904,8 +904,9 @@ export class ContextPackBuilder {
     // and that is the silent false negative §17.3 refuses in the budget case.
     let withIndex = this.#relations !== undefined;
     let pack = assemble(chosen, kept, dropped, shedStanding, withIndex);
-    // Bounded: every iteration shrinks the last item strictly, removes it, or
-    // removes a standing entry, so it cannot run longer than there is content.
+    // Bounded: every iteration shrinks the last item strictly, removes it, drops
+    // the relation index — which can happen at most once — or removes a standing
+    // entry, so it cannot run longer than there is content.
     while (pack.estimatedTokens > requested && (chosen.length > 0 || kept.length > 0 || withIndex)) {
       const last = chosen[chosen.length - 1];
       if (last !== undefined) {
