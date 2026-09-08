@@ -184,7 +184,7 @@ function parseAnswer(result) {
 }
 
 /** Runs one session to an answer, and returns what the metrics are computed from. */
-export async function run({ task, arm, root, cli, connection, configHome, workdir, model, effort }) {
+export async function run({ task, arm, root, cli, connection, configHome, workdir, model, effort, promptSuffix = '' }) {
   mkdirSync(workdir, { recursive: true });
   const settings = settingsFile({ root, directory: workdir });
   const mcp = mcpConfig({ arm, root, cli, connection, configHome, directory: workdir });
@@ -201,7 +201,9 @@ export async function run({ task, arm, root, cli, connection, configHome, workdi
     'stream-json',
     '--verbose',
     '--append-system-prompt',
-    CONTRACT,
+    promptSuffix.length === 0 ? CONTRACT : `${CONTRACT}
+
+${promptSuffix}`,
     '--json-schema',
     JSON.stringify(schemaFor(task)),
     '--tools',
