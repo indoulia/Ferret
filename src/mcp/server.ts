@@ -318,6 +318,9 @@ export function createMcpServer(dependencies: McpServerDependencies): McpServer 
       instructions:
         'Ferret answers questions about indexed repositories: commits, files, ' +
         'branches, worktrees, developers and the evidence behind each fact. ' +
+        // EPIC-138 added a routing sentence here and §14 rejected it on
+        // measurement: 0/9 sessions consulted before their first source read
+        // against the baseline's 7/9. See validation/EPIC-138-VALIDATION.md.
         CONTENT_NOTICE,
     },
   );

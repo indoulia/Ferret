@@ -1,0 +1,2588 @@
+{
+  "phases": {
+    "a": {
+      "tree": {
+        "commit": "d5f472c06aa40b3f8a6fbc1d1824820695850cdb",
+        "dirty": false
+      },
+      "model": "opus",
+      "effort": "high",
+      "scored": {
+        "task": "session-a",
+        "answered": true,
+        "stopped": "completed",
+        "verdict": null,
+        "factsCovered": 3,
+        "factsTotal": 3,
+        "factsComplete": true,
+        "facts": [
+          {
+            "id": "content-hash-is-the-key",
+            "covered": true
+          },
+          {
+            "id": "correspondence-required",
+            "covered": true
+          },
+          {
+            "id": "unknown-never-verified",
+            "covered": true
+          }
+        ],
+        "evidenceSourced": false,
+        "primaryCited": 0,
+        "primaryTotal": 0,
+        "citations": [
+          "file:src/context/code-state.ts",
+          "file:src/storage/code-state.ts",
+          "file:src/storage/durable-context.ts",
+          "file:src/context/pack.ts",
+          "file:src/git/worktree-state.ts",
+          "file:src/cli/commands/mcp.ts",
+          "commit:3b92c04",
+          "pr:229",
+          "file:tests/unit/code-state-verification.test.ts",
+          "context:ferret_context_record ids 456c0238-8057-8f24-89da-4a76c891ff39, af9e01f3-4c55-803e-94ca-e37495f176ba, b532bf6b-a1ed-8cfb-a64a-16945b4dfa47, 54c52b1f-7f6d-860b-af04-846e49525354"
+        ],
+        "citationsOffLabel": 10,
+        "toolCalls": 15,
+        "turns": 17,
+        "filesRead": 5,
+        "linesRead": 929,
+        "searches": 4,
+        "historyCalls": 1,
+        "ferretCalls": 5,
+        "refusals": 0,
+        "toolErrors": 0,
+        "contextTokens": 481542,
+        "inputTokens": 20,
+        "cacheReadTokens": 474582,
+        "cacheWriteTokens": 69655,
+        "outputTokens": 6940,
+        "nudges": 0,
+        "unsupportedCitations": 0,
+        "unsupported": [],
+        "stale": [],
+        "elapsedMs": 114130,
+        "toolMs": 15198,
+        "ferretSurfaces": {
+          "mcp__ferret__ferret_search": 1,
+          "mcp__ferret__ferret_context_record": 4
+        }
+      },
+      "answer": {
+        "conclusion": "Ferret's verdict is computed by the pure `verifyAnchors` in `src/context/code-state.ts`, shared by the trust surface and the context pack. It compares the *indexed* content hash captured for each anchored path when the statement was recorded against the indexed hash for that path now, gated on a live-tree correspondence check. `verified` requires all of: not superseded, active lifecycle, at least one anchored observation, correspondence established (live HEAD of the checked-out branch equals the single indexed head for that branch), and one whole observation whose every anchor resolves, is not withheld by exclusion/permission, is not in the `git status` dirty sample, with an untruncated sample, and whose hashes are byte-identical. Anything short of that is reported as `superseded`, `unanchored`, `unknown` with a category-only reason, or — only when correspondence holds and every anchor was readable but a hash differs — `stale`, which is explicitly \"needs re-verification\", not \"false\".",
+        "key_facts": [
+          "`verifyAnchors` (src/context/code-state.ts:157-215) checks lifecycle first: `supersededBy` set or lifecycle SUPERSEDED → `superseded`; any other historical lifecycle state, or zero anchored observations → `unanchored`.",
+          "`verified` is returned only if `correspondence.established` is true and some observation has ≥1 anchor report, no report carrying a `reason`, and every report `matches` (src/context/code-state.ts:175-188). Any observation may satisfy it; otherwise the newest observation's reports are what gets reported.",
+          "An anchor report `matches` only when the map entry exists, is not withheld, holds a hash, and that hash equals the recorded `observedHash`; absent/withheld/hashless are ANCHOR_UNRESOLVED, never 'unchanged' (src/context/code-state.ts:217-230).",
+          "Fallback order when nothing verified: correspondence not established → `unknown` with its reason (default index-does-not-correspond); else a blocked anchor's reason → `unknown`; else → `stale` (src/context/code-state.ts:195-214).",
+          "UnknownReason vocabulary: repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable — category only, never a path (src/context/code-state.ts:27-45).",
+          "`CodeStateStore.currentContent` marks a path PATH_DIRTY if it is in `correspondence.dirtyPaths`, and DIRT_UNKNOWN if the working-tree sample was truncated; exclusion maps to EXCLUDED and scope/permission to NOT_PERMITTED via the same `withholds` policy retrieval uses (src/storage/code-state.ts:122-161, 39-50).",
+          "Correspondence is established by comparing the live `git status --porcelain=v2 --branch` HEAD and *checked-out* branch against the single indexed head for that branch name; detached HEAD, an unindexed branch, or two disagreeing index rows all return unestablished (src/storage/code-state.ts:177-268; src/git/worktree-state.ts:74-86).",
+          "The checkout evaluated is resolved from indexed worktree entities matched against the caller's cwd (`process.cwd()` at the MCP composition root); several worktrees with no cwd match resolve to nothing and the verdict is `unknown` (src/storage/code-state.ts:219-246; src/cli/commands/mcp.ts:83-100).",
+          "The hash on both sides comes from the newest open FILE_HAS_VERSION edge, not the only one — a changed file keeps a stale open edge; contents are not re-hashed from disk at verify time (src/storage/code-state.ts:291-310).",
+          "Correspondence is never cached across calls (a per-instance memo would keep reporting `verified` against the head the server process first saw); it is memoised only within one find/pack call because `git status` is ~120ms against a 200-statement page (src/storage/code-state.ts:163-175; src/storage/durable-context.ts:543-552; src/context/pack.ts:441-457).",
+          "The dirty-path sample is capped at MAX_SAMPLED_PATHS = 50, and `sampleTruncated` above that is what drives working-tree-sample-truncated (src/git/worktree-state.ts:17, 198).",
+          "`ferret_context_trust` omits `verification` entirely when no code-state reader is wired, deliberately distinguishing 'Ferret cannot answer' from 'nothing was claimed' (src/storage/durable-context.ts:508-514).",
+          "This logic was introduced whole in commit 3b92c04 (EPIC-137, PR #229) and neither src/context/code-state.ts nor src/storage/code-state.ts has been modified since — `git log` shows 3b92c04 as the only commit touching them.",
+          "Within 3b92c04 several earlier drafts were reversed before merge: comparing the default branch instead of the checked-out one, requiring exactly one file version edge, and caching correspondence per store instance — the merged code implements the corrected forms."
+        ],
+        "citations": [
+          "src/context/code-state.ts",
+          "src/storage/code-state.ts",
+          "src/storage/durable-context.ts",
+          "src/context/pack.ts",
+          "src/git/worktree-state.ts",
+          "src/cli/commands/mcp.ts",
+          "3b92c04f90899859bb4e9ce612f28770859d1dc6",
+          "#229",
+          "tests/unit/code-state-verification.test.ts",
+          "ferret_context_record ids 456c0238-8057-8f24-89da-4a76c891ff39, af9e01f3-4c55-803e-94ca-e37495f176ba, b532bf6b-a1ed-8cfb-a64a-16945b4dfa47, 54c52b1f-7f6d-860b-af04-846e49525354"
+        ],
+        "confidence": "high"
+      },
+      "costUsd": 1.1084899999999998,
+      "records": [
+        {
+          "id": "54c52b1f-7f6d-860b-af04-846e49525354",
+          "statement": "␂ferret:content␂Two constraints hold on the code-state verdict path: correspondence is deliberately never cached across calls (an earlier per-instance memo made a session that committed keep hearing `verified` against the head the process first saw), and it is memoised only for the duration of one `ferret_context_find`/`ferret_context_pack` call because `git status` costs ~120ms against a 200-statement page. The checkout being evaluated comes from the caller's cwd matched against indexed worktree paths — Ferret's own repository has several live worktrees on different commits, so several worktrees with no matching cwd give `unknown` rather than a guess. Detached HEAD, an unindexed branch, and two index rows disagreeing about a branch head all yield `unknown`.␃ferret:content␃",
+          "contextKind": "gotcha",
+          "state": "active",
+          "current": true,
+          "scope": "162fed2e-7d79-83d2-8384-571f0d142eab",
+          "verification": {
+            "verdict": "verified",
+            "trustworthy": true,
+            "detail": "every anchored file is byte-identical to what Ferret has indexed for the state evaluated",
+            "anchors": [
+              {
+                "path": "src/context/pack.ts",
+                "observedHash": "git-blob:9ef25eaa8f26f7b03849a74647f43e7893b0781d",
+                "matches": true,
+                "symbol": "ContextPack.#verificationFor L434-458",
+                "currentHash": "git-blob:9ef25eaa8f26f7b03849a74647f43e7893b0781d"
+              },
+              {
+                "path": "src/storage/code-state.ts",
+                "observedHash": "git-blob:2eb506526f2c13d7932db933b66aa8cc0508a0e6",
+                "matches": true,
+                "symbol": "CodeStateStore.correspondence L163-268",
+                "currentHash": "git-blob:2eb506526f2c13d7932db933b66aa8cc0508a0e6"
+              },
+              {
+                "path": "src/storage/durable-context.ts",
+                "observedHash": "git-blob:3d416654d4cbc1938d79ac659e59db75eac29e93",
+                "matches": true,
+                "symbol": "DurableContextStore.#verify L525-553",
+                "currentHash": "git-blob:3d416654d4cbc1938d79ac659e59db75eac29e93"
+              }
+            ]
+          }
+        },
+        {
+          "id": "b532bf6b-a1ed-8cfb-a64a-16945b4dfa47",
+          "statement": "␂ferret:content␂What Ferret compares for an anchored statement is index-to-index, gated on the live tree: the \"observed\" hash is the indexed content hash (newest open FILE_HAS_VERSION edge — a changed file keeps a stale open edge, so newest, not only) captured when `record` ran, and the \"current\" hash is that same lookup now; the live working tree only supplies correspondence (HEAD, branch, dirty-path sample) via `git status --porcelain=v2`. File contents are never re-hashed from disk at verify time, so an unindexed edit surfaces as anchored-path-modified rather than as `stale`.␃ferret:content␃",
+          "contextKind": "fact",
+          "state": "active",
+          "current": true,
+          "scope": "162fed2e-7d79-83d2-8384-571f0d142eab",
+          "verification": {
+            "verdict": "verified",
+            "trustworthy": true,
+            "detail": "every anchored file is byte-identical to what Ferret has indexed for the state evaluated",
+            "anchors": [
+              {
+                "path": "src/storage/code-state.ts",
+                "observedHash": "git-blob:2eb506526f2c13d7932db933b66aa8cc0508a0e6",
+                "matches": true,
+                "symbol": "CodeStateStore.#currentVersions L291-311",
+                "currentHash": "git-blob:2eb506526f2c13d7932db933b66aa8cc0508a0e6"
+              },
+              {
+                "path": "src/storage/durable-context.ts",
+                "observedHash": "git-blob:3d416654d4cbc1938d79ac659e59db75eac29e93",
+                "matches": true,
+                "symbol": "anchorSetId L179-230",
+                "currentHash": "git-blob:3d416654d4cbc1938d79ac659e59db75eac29e93"
+              },
+              {
+                "path": "src/git/worktree-state.ts",
+                "observedHash": "git-blob:e7ada7cb8c090c4cf6c33a6ecd7815d27351036c",
+                "matches": true,
+                "symbol": "readWorktreeState L74-86",
+                "currentHash": "git-blob:e7ada7cb8c090c4cf6c33a6ecd7815d27351036c"
+              }
+            ]
+          }
+        },
+        {
+          "id": "af9e01f3-4c55-803e-94ca-e37495f176ba",
+          "statement": "␂ferret:content␂When Ferret cannot establish `verified` for a durable statement it reports one of four other verdicts, never a match: `superseded` (a replacement exists, outranks everything and is checked first), `unanchored` (no anchor recorded, or a historical lifecycle state — \"not a code claim\" as distinct from \"cannot tell\"), `unknown` with a category-only reason (index-does-not-correspond, repository-not-indexed, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable), or `stale` — reserved for the case where correspondence holds and every anchor was readable but a hash differs, and explicitly meaning \"needs re-verification\", not \"false\".␃ferret:content␃",
+          "contextKind": "fact",
+          "state": "active",
+          "current": true,
+          "scope": "162fed2e-7d79-83d2-8384-571f0d142eab",
+          "verification": {
+            "verdict": "verified",
+            "trustworthy": true,
+            "detail": "every anchored file is byte-identical to what Ferret has indexed for the state evaluated",
+            "anchors": [
+              {
+                "path": "src/context/code-state.ts",
+                "observedHash": "git-blob:d3cf0ed830eb98bf7a1af06c3ed298eea8b37d99",
+                "matches": true,
+                "symbol": "AnchorVerdict L10-45",
+                "currentHash": "git-blob:d3cf0ed830eb98bf7a1af06c3ed298eea8b37d99"
+              },
+              {
+                "path": "src/context/code-state.ts",
+                "observedHash": "git-blob:d3cf0ed830eb98bf7a1af06c3ed298eea8b37d99",
+                "matches": true,
+                "symbol": "verifyAnchors L157-215",
+                "currentHash": "git-blob:d3cf0ed830eb98bf7a1af06c3ed298eea8b37d99"
+              }
+            ]
+          }
+        },
+        {
+          "id": "456c0238-8057-8f24-89da-4a76c891ff39",
+          "statement": "␂ferret:content␂Ferret calls a durable statement `verified` only when: it is not superseded and its lifecycle is active; it has at least one anchored observation; correspondence is established (the checked-out branch's live HEAD equals the single indexed head Ferret holds for that branch name); and, for one whole observation, every anchored path resolves, is not withheld by access/exclusion, is not in `git status`'s dirty-path sample, the sample is not truncated, and the indexed content hash now is byte-identical to the hash recorded at observation time. Any one condition unestablished yields `unknown`, never a match.␃ferret:content␃",
+          "contextKind": "fact",
+          "state": "active",
+          "current": true,
+          "scope": "162fed2e-7d79-83d2-8384-571f0d142eab",
+          "verification": {
+            "verdict": "verified",
+            "trustworthy": true,
+            "detail": "every anchored file is byte-identical to what Ferret has indexed for the state evaluated",
+            "anchors": [
+              {
+                "path": "src/context/code-state.ts",
+                "observedHash": "git-blob:d3cf0ed830eb98bf7a1af06c3ed298eea8b37d99",
+                "matches": true,
+                "symbol": "verifyAnchors L157-230",
+                "currentHash": "git-blob:d3cf0ed830eb98bf7a1af06c3ed298eea8b37d99"
+              },
+              {
+                "path": "src/storage/code-state.ts",
+                "observedHash": "git-blob:2eb506526f2c13d7932db933b66aa8cc0508a0e6",
+                "matches": true,
+                "symbol": "CodeStateStore.currentContent L122-217",
+                "currentHash": "git-blob:2eb506526f2c13d7932db933b66aa8cc0508a0e6"
+              }
+            ]
+          }
+        }
+      ],
+      "anchoredPaths": [
+        "src/context/pack.ts",
+        "src/storage/code-state.ts",
+        "src/storage/durable-context.ts",
+        "src/git/worktree-state.ts",
+        "src/context/code-state.ts"
+      ]
+    },
+    "r1": {
+      "tree": {
+        "commit": "d5f472c06aa40b3f8a6fbc1d1824820695850cdb",
+        "dirty": false
+      },
+      "model": "opus",
+      "effort": "high",
+      "what": "tree unchanged since A recorded — the productivity case",
+      "carried": 4,
+      "carriedVerdicts": [
+        "verified",
+        "verified",
+        "verified",
+        "verified"
+      ],
+      "anchoredPaths": [
+        "src/context/pack.ts",
+        "src/storage/code-state.ts",
+        "src/storage/durable-context.ts",
+        "src/git/worktree-state.ts",
+        "src/context/code-state.ts"
+      ],
+      "routingText": "Before you open any source file, check whether durable engineering context about this question has already been recorded by an earlier session and is retrievable through the tools available to you. Do that check first. Then continue however you judge best.",
+      "runs": {
+        "control": {
+          "arm": "control",
+          "pass": 1,
+          "routed": false,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/mcp/context-tools.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/context/pack.ts",
+              "file:tests/unit/code-state-verification.test.ts",
+              "commit:3b92c04",
+              "pr:229"
+            ],
+            "citationsOffLabel": 8,
+            "toolCalls": 19,
+            "turns": 22,
+            "filesRead": 7,
+            "linesRead": 1010,
+            "searches": 8,
+            "historyCalls": 2,
+            "ferretCalls": 0,
+            "refusals": 3,
+            "toolErrors": 3,
+            "contextTokens": 376115,
+            "inputTokens": 28,
+            "cacheReadTokens": 369943,
+            "cacheWriteTokens": 43493,
+            "outputTokens": 6144,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 119583,
+            "toolMs": 33600,
+            "ferretSurfaces": {}
+          },
+          "anchoredFileReads": 2,
+          "ordering": {
+            "calls": 19,
+            "firstFerretCall": null,
+            "firstNotesCall": 15,
+            "firstSourceRead": 3,
+            "consultedBeforeSource": false,
+            "sourceReadsAfterConsult": 0,
+            "sequence": [
+              "search",
+              "Bash",
+              "read:durable.ts",
+              "read:EPIC-137-Code-State-Anchored-Durable-Context.md",
+              "search",
+              "git",
+              "read:code-state.ts",
+              "read:code-state.ts",
+              "search",
+              "read:context-tools.ts",
+              "Bash",
+              "read:EPIC-137-DECISIONS.md",
+              "search",
+              "search",
+              "notes",
+              "search",
+              "git",
+              "search",
+              "search"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 0,
+            "statementsReturned": 0,
+            "statementsHeld": 4,
+            "verdictsReturned": 0,
+            "verdictKinds": [],
+            "surfaces": []
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does compute a code-state verdict for anchored durable statements (EPIC-137, `verifyAnchors`), but `current: true` is a separate axis: it means only `lifecycle === ACTIVE` (not superseded/archived) and claims nothing about the code. The verified signal is `verification.verdict === 'verified'` (surfaced as `trustworthy: true`), which requires not-superseded and active lifecycle, at least one anchored observation, established correspondence (the checked-out branch's live HEAD equal to the single indexed head Ferret holds for that branch, in a worktree it can identify from the caller's cwd), and for one whole observation every anchored path resolving to an indexed file, not withheld by exclusion/permission, absent from git status's dirty-path sample, the sample untruncated, and its current indexed content hash byte-identical to the observed hash. Any one condition unestablished gives `unknown` with a category-only reason — never a match; the other outcomes are `superseded`, `unanchored`, and `stale`.",
+            "key_facts": [
+              "`describeContext` sets `current: context.entity.lifecycle === LifecycleState.ACTIVE` (src/mcp/context-tools.ts:102), and the comment at src/mcp/context-tools.ts:129-134 states `current` means unsuperseded and code-state verification is 'the separate question, and the two are labelled so a reader cannot mistake one for the other'.",
+              "The trust/verification block reports `verdict` plus `trustworthy: verification.verdict === AnchorVerdict.VERIFIED` and per-anchor path/observedHash/currentHash/matches/reason (src/mcp/context-tools.ts:135-149).",
+              "`verifyAnchors` checks lifecycle first: `supersededBy` set or lifecycle SUPERSEDED returns `superseded`; any historical lifecycle state returns `unanchored`; zero observations returns `unanchored` (src/context/code-state.ts:157-168).",
+              "`verified` is only returned inside `if (input.correspondence.established)`, for a candidate observation with no anchor carrying a reason and with `reports.length > 0 && every(matches)` (src/context/code-state.ts:175-188).",
+              "If correspondence is not established, the verdict is `unknown` with the correspondence reason — even when the hashes match (src/context/code-state.ts:195-202; pinned by tests/unit/code-state-verification.test.ts:80-85, which asserts UNKNOWN while `anchors[0].matches` is true).",
+              "`stale` is reserved for correspondence established, no anchor blocked, but a hash differing, and its detail says it 'needs re-verification — not that it is false' (src/context/code-state.ts:209-214).",
+              "Unknown reasons are category-only, never a path: repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable (src/context/code-state.ts:27-43).",
+              "Correspondence requires an indexed repository entity, an identifiable local worktree path, a non-detached HEAD, and `indexedHead === live.headCommit` for the checked-out branch, with exactly one indexed head row for that branch name (src/storage/code-state.ts:177-268).",
+              "A dirty anchored path, or a truncated dirty sample, withholds the current content as PATH_DIRTY / DIRT_UNKNOWN, so it cannot verify (src/storage/code-state.ts:149-157).",
+              "Correspondence is deliberately never cached across calls, only memoised for the duration of one call, because a cached answer would keep reporting `verified` against a stale head (src/storage/code-state.ts:163-175; src/storage/durable-context.ts:543-552).",
+              "When no code-state reader is wired, no verification field is emitted at all rather than a verdict (src/storage/durable-context.ts:509-514; src/context/pack.ts:425).",
+              "The trust surface and context packs share the same `verifyAnchors` so they cannot disagree (src/context/pack.ts:441-457; src/context/code-state.ts:154-157).",
+              "Commit 3b92c04 (EPIC-137, PR #229) is the most recent change to src/context/code-state.ts, src/storage/code-state.ts and src/mcp/context-tools.ts; nothing later reverses it."
+            ],
+            "citations": [
+              "src/context/code-state.ts",
+              "src/storage/code-state.ts",
+              "src/mcp/context-tools.ts",
+              "src/storage/durable-context.ts",
+              "src/context/pack.ts",
+              "tests/unit/code-state-verification.test.ts",
+              "3b92c04",
+              "PR #229"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.7746605000000002
+        },
+        "treatment": {
+          "arm": "treatment",
+          "pass": 1,
+          "routed": false,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/mcp/context-tools.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/context/pack.ts",
+              "file:src/context/standing.ts",
+              "file:src/cli/commands/mcp.ts",
+              "file:tests/unit/code-state-verification.test.ts",
+              "file:tests/integration/storage/code-state-anchors.test.ts",
+              "context:commit 3b92c04",
+              "context:commit 3cbe318",
+              "context:commit 74e2dbc",
+              "context:commit 208096e",
+              "context:ferret_context_find live output"
+            ],
+            "citationsOffLabel": 14,
+            "toolCalls": 24,
+            "turns": 26,
+            "filesRead": 7,
+            "linesRead": 766,
+            "searches": 10,
+            "historyCalls": 2,
+            "ferretCalls": 3,
+            "refusals": 2,
+            "toolErrors": 3,
+            "contextTokens": 635653,
+            "inputTokens": 32,
+            "cacheReadTokens": 627195,
+            "cacheWriteTokens": 58873,
+            "outputTokens": 8426,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 146667,
+            "toolMs": 30243,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_context_find": 2,
+              "mcp__ferret__ferret_search": 1
+            }
+          },
+          "anchoredFileReads": 4,
+          "ordering": {
+            "calls": 24,
+            "firstFerretCall": 21,
+            "firstNotesCall": null,
+            "firstSourceRead": 3,
+            "consultedBeforeSource": false,
+            "sourceReadsAfterConsult": 1,
+            "sequence": [
+              "git",
+              "search",
+              "read:code-state.ts",
+              "read:EPIC-137-DECISIONS.md",
+              "read:EPIC-137-Code-State-Anchored-Durable-Context.md",
+              "search",
+              "search",
+              "search",
+              "read:context-tools.ts",
+              "search",
+              "git",
+              "search",
+              "read:code-state.ts",
+              "read:pack.ts",
+              "search",
+              "search",
+              "search",
+              "read:code-state-verification.test.ts",
+              "search",
+              "read:context-tools.ts",
+              "ferret:ferret_context_find",
+              "ferret:ferret_search",
+              "ferret:ferret_context_find",
+              "read:code-state.ts"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 13770,
+            "statementsReturned": 3,
+            "statementsHeld": 4,
+            "verdictsReturned": 3,
+            "verdictKinds": [
+              "verified"
+            ],
+            "surfaces": [
+              "ferret_context_find",
+              "ferret_search",
+              "ferret_context_find"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether an anchored statement still matches the code — but `current: true` is not that report. `current` is set purely from `lifecycle === ACTIVE` (i.e. nobody retired or superseded it) and is deliberately labelled as a separate axis from the code-state verdict. Trust comes from the `verification` object: `verdict: \"verified\"` / `trustworthy: true` is only emitted when all six conditions hold, and when any one fails Ferret returns `superseded`, `unanchored`, `unknown` with a category-only reason, or `stale` — never a match.",
+            "key_facts": [
+              "`current` in the MCP output is computed as `context.entity.lifecycle === LifecycleState.ACTIVE` (src/mcp/context-tools.ts:102; also src/context/standing.ts:113, src/storage/durable-context.ts:493) — it means unsuperseded, nothing about the code.",
+              "The comment on `describeVerification` says explicitly: \"`current` above means unsuperseded; this is the separate question, and the two are labelled so a reader cannot mistake one for the other\" (src/mcp/context-tools.ts:128-134).",
+              "`trustworthy` is true only for `verdict === AnchorVerdict.VERIFIED` (src/mcp/context-tools.ts:138).",
+              "Condition 1-2 (lifecycle): a `supersededBy` edge or `lifecycle === SUPERSEDED` returns `superseded` before any hash is compared, and it \"outranks every other verdict\"; any other historical lifecycle state returns `unanchored` (src/context/code-state.ts:15, 160-165; tests AC-15 and the archived case, tests/unit/code-state-verification.test.ts:114-127).",
+              "Condition 3 (an anchor exists): zero anchored observations returns `unanchored`, described as \"no code-state anchor was recorded, so nothing about the repository is being claimed\" — distinct from `unknown` (src/context/code-state.ts:17-18, 147-148, 166-168; test AC-12).",
+              "Condition 4 (correspondence established): the indexed head for the *checked-out* branch must equal the live HEAD commit of the worktree matched to the caller's cwd; a non-local scope, unindexed repo, detached HEAD, missing/ambiguous indexed branch head, or an unreadable tree all give `established: false` and hence `unknown` — even when the hash matches (src/storage/code-state.ts:172-268; src/context/code-state.ts:195-202; test AC-11, tests/unit/code-state-verification.test.ts:80-91).",
+              "Condition 5 (every anchor readable): a path with uncommitted changes (`anchored-path-modified`), a truncated working-tree dirty sample (`working-tree-sample-truncated`), an exclusion rule (`anchor-excluded-by-rule`), a missing scope (`anchor-not-permitted`), or a path that no longer resolves to an indexed file (`anchor-does-not-resolve`) each force `unknown`, never \"unchanged\" — \"a path Ferret cannot speak for never matches\" (src/context/code-state.ts:27-45, 204-207, 217-230; src/storage/code-state.ts:136-160; tests AC-11 and AC-16).",
+              "Condition 6 (byte-identity): `verified` requires `reports.every(one => one.matches)` — every anchored file byte-identical to the indexed content hash. One drifted file of two is not verified (src/context/code-state.ts:179-187; tests/unit/code-state-verification.test.ts:151-168).",
+              "`stale` is narrow: correspondence held and every anchor was readable but a hash differs. Its detail says it \"needs re-verification — not that it is false\" (src/context/code-state.ts:209-214; test AC-7).",
+              "The comparison is index-to-index gated on the live tree: observed hash is the indexed content hash captured at `record` time, current hash is the same lookup now (newest open FILE_HAS_VERSION, not the only one); contents are never re-hashed from disk, so an unindexed edit surfaces as `anchored-path-modified`, not `stale` (src/storage/code-state.ts:158, 291-293; indexed durable statement b532bf6b-a1ed-8cfb-a64a-16945b4dfa47).",
+              "Correspondence is deliberately never cached across calls — an earlier per-instance memo was reversed because a session that committed kept being told `verified` against the head the process first saw; it is memoised only within one find/pack call (src/storage/code-state.ts:163-175; src/context/pack.ts:452-455; commit 3cbe318).",
+              "The same `verifyAnchors` serves both the trust surface and the pack \"so the two cannot disagree\" (src/context/code-state.ts:155; src/context/pack.ts:434-458).",
+              "If no `CodeStatePort` is wired into the composition, the `verification` field is omitted entirely rather than reported as unknown — absence of a verdict is not a verdict (src/storage/durable-context.ts:510-513; src/context/pack.ts:447-448; src/cli/commands/mcp.ts:83,162-163).",
+              "Live confirmation: `ferret_context_find` on this repository returns each statement with both `current: true` and a separate `verification` block carrying `verdict`, `trustworthy`, `detail` and per-anchor observed/current hashes."
+            ],
+            "citations": [
+              "src/context/code-state.ts",
+              "src/context/code-state.ts:10-45",
+              "src/context/code-state.ts:147-215",
+              "src/context/code-state.ts:217-230",
+              "src/mcp/context-tools.ts:95-150",
+              "src/mcp/context-tools.ts:409-429",
+              "src/storage/code-state.ts:122-161",
+              "src/storage/code-state.ts:163-268",
+              "src/storage/code-state.ts:291-293",
+              "src/storage/durable-context.ts:493",
+              "src/storage/durable-context.ts:505-553",
+              "src/context/pack.ts:434-458",
+              "src/context/standing.ts:113",
+              "src/cli/commands/mcp.ts:83",
+              "src/cli/commands/mcp.ts:162-163",
+              "tests/unit/code-state-verification.test.ts:46-180",
+              "tests/integration/storage/code-state-anchors.test.ts",
+              "commit 3b92c04",
+              "commit 3cbe318",
+              "commit 74e2dbc",
+              "commit 208096e",
+              "ferret_context_find live output (ids af9e01f3-4c55-803e-94ca-e37495f176ba, b532bf6b-a1ed-8cfb-a64a-16945b4dfa47, 54c52b1f-7f6d-860b-af04-846e49525354)"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 1.1141665
+        },
+        "routed": {
+          "arm": "routed",
+          "pass": 1,
+          "routed": true,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/mcp/context-tools.ts",
+              "file:src/git/worktree-state.ts:17,64-76,125",
+              "context:commit 3b92c04f90899859bb4e9ce612f28770859d1dc6 (feat(context): bind a durable statement to the code state it was observed against — EPIC-137, #229)",
+              "context:ferret durable context 456c0238-8057-8f24-89da-4a76c891ff39",
+              "context:ferret durable context af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "context:ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47",
+              "context:ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354"
+            ],
+            "citationsOffLabel": 10,
+            "toolCalls": 13,
+            "turns": 15,
+            "filesRead": 5,
+            "linesRead": 501,
+            "searches": 4,
+            "historyCalls": 0,
+            "ferretCalls": 4,
+            "refusals": 2,
+            "toolErrors": 2,
+            "contextTokens": 391029,
+            "inputTokens": 18,
+            "cacheReadTokens": 384877,
+            "cacheWriteTokens": 39014,
+            "outputTokens": 6134,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 103171,
+            "toolMs": 12673,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_search": 1,
+              "mcp__ferret__ferret_context_pack": 1,
+              "mcp__ferret__ferret_context_trust": 1,
+              "mcp__ferret__ferret_config_exclusions": 1
+            }
+          },
+          "anchoredFileReads": 3,
+          "ordering": {
+            "calls": 13,
+            "firstFerretCall": 1,
+            "firstNotesCall": null,
+            "firstSourceRead": 3,
+            "consultedBeforeSource": true,
+            "sourceReadsAfterConsult": 5,
+            "sequence": [
+              "ferret:ferret_search",
+              "ferret:ferret_context_pack",
+              "read:code-state.ts",
+              "ferret:ferret_context_trust",
+              "read:code-state.ts",
+              "search",
+              "read:durable-context.ts",
+              "search",
+              "read:context-tools.ts",
+              "search",
+              "read:EPIC-137-Code-State-Anchored-Durable-Context.md\"",
+              "ferret:ferret_config_exclusions",
+              "search"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 30340,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 5,
+            "verdictKinds": [
+              "verified"
+            ],
+            "surfaces": [
+              "ferret_search",
+              "ferret_context_pack",
+              "ferret_context_trust",
+              "ferret_config_exclusions!"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether an anchored statement still matches the code — but `current: true` is a different axis and is not enough to trust one. `current` is computed as `lifecycle === ACTIVE` (i.e. \"unsuperseded\"); the code-state answer is the separate `verification` block, whose `trustworthy` flag is true only for `verdict === 'verified'`. `verified` requires all of: not superseded, an active (non-historical) lifecycle, at least one anchored observation, established index/worktree correspondence, and — for one whole observation — every anchored path resolving, readable, clean, from an untruncated dirty sample, and byte-identical to the hash recorded at observation time. Any condition unestablished yields `superseded`, `unanchored`, `unknown` (with a category-only reason) or `stale` — never a match.",
+            "key_facts": [
+              "`current` is not a code-state signal: `src/storage/durable-context.ts:493` sets `current: held.entity.lifecycle === LifecycleState.ACTIVE`, i.e. unsuperseded and active — nothing about anchors or file content.",
+              "`src/mcp/context-tools.ts:128-138` labels the two axes explicitly (\"`current` above means unsuperseded; this is the separate question\") and derives `trustworthy: verification.verdict === AnchorVerdict.VERIFIED` — only `verified` licenses skipping the source.",
+              "`verifyAnchors` (`src/context/code-state.ts:157-215`) checks lifecycle first: a supersedes edge or `LifecycleState.SUPERSEDED` returns `superseded`; a historical lifecycle state or zero anchored observations returns `unanchored`. A matching anchor can never make a retired statement look trustworthy.",
+              "`verified` is only reachable inside `if (input.correspondence.established)` and only for a candidate observation with no anchor carrying a `reason` and where every anchor report `matches` (`src/context/code-state.ts:175-188`).",
+              "Correspondence means the live checked-out branch's HEAD equals the single indexed head Ferret holds for that branch name (`src/storage/code-state.ts:196-217`). Detached HEAD, an unindexed branch, or two index rows disagreeing about a branch head all fail (`#indexedHead` returns a head only when `new Set(heads).size === 1`, `:255-268`).",
+              "The tree evaluated comes from the caller's cwd matched against indexed worktree paths; several worktrees with no matching cwd yields no local path and so no correspondence (`src/storage/code-state.ts:225-246`).",
+              "Per-anchor blockers each withhold the hash rather than reporting \"unchanged\": path not an indexed file (`anchor-does-not-resolve`), withheld by access/exclusion, in the dirty-path sample (`anchored-path-modified`), or a truncated sample (`working-tree-sample-truncated`) — `src/storage/code-state.ts:136-158`; a path Ferret cannot speak for never matches (`src/context/code-state.ts:217-230`).",
+              "The dirty-path sample is capped at `MAX_SAMPLED_PATHS = 50` from `git status --porcelain=v2 --branch --untracked-files=all -z` (`src/git/worktree-state.ts:17,76,125`), which is why truncation is a distinct `unknown` reason.",
+              "Non-verified verdicts: `unknown` carries a category-only reason from `UnknownReason` (repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable) — `src/context/code-state.ts:27-43`.",
+              "`stale` is the last resort, reached only when correspondence holds and every anchor was readable but a hash differs; its own detail says \"needs re-verification — not that it is false\" (`src/context/code-state.ts:209-214`), and drift never changes lifecycle or writes to `EvidenceState` (`src/storage/durable-context.ts:518-524`).",
+              "The comparison is index-to-index, not disk: the observed hash is the indexed content hash captured when `record` ran and the current hash is that same lookup now; the live tree only supplies HEAD/branch/dirty paths. So an unindexed edit surfaces as `anchored-path-modified`, not `stale`.",
+              "`verification` can be absent from a trust reply entirely when no code-state reader is composed — deliberately not reported as `unanchored`, because \"Ferret cannot answer\" and \"nothing was claimed\" differ (`src/storage/durable-context.ts:508-514`).",
+              "Correspondence is deliberately never cached across calls (an earlier per-instance memo made a committing session keep hearing `verified` against the head the process first saw); it is memoised only within one find/pack call (`src/storage/code-state.ts:163-175`, and the `memo` map threaded at `src/storage/durable-context.ts:513`).",
+              "Superseded decision, now reversed: correspondence originally compared the default branch's indexed head, which made every verdict `unknown` on a feature branch; commit 3b92c04 changed it to the checked-out branch, and a later fix in the same commit made the tree a caller fact drawn from worktrees plus cwd."
+            ],
+            "citations": [
+              "src/context/code-state.ts:10-45 (AnchorVerdict, UnknownReason)",
+              "src/context/code-state.ts:157-215 (verifyAnchors)",
+              "src/context/code-state.ts:217-230 (report)",
+              "src/storage/code-state.ts:122-161 (currentContent)",
+              "src/storage/code-state.ts:163-217 (correspondence, #establish)",
+              "src/storage/code-state.ts:219-268 (#localPath, #indexedHead)",
+              "src/storage/durable-context.ts:490-516 (trust: current, verification)",
+              "src/storage/durable-context.ts:518-529 (#verify)",
+              "src/mcp/context-tools.ts:124-150 (describeVerification, trustworthy)",
+              "src/git/worktree-state.ts:17,64-76,125 (MAX_SAMPLED_PATHS, git status --porcelain=v2)",
+              "commit 3b92c04f90899859bb4e9ce612f28770859d1dc6 (feat(context): bind a durable statement to the code state it was observed against — EPIC-137, #229)",
+              "ferret durable context 456c0238-8057-8f24-89da-4a76c891ff39 (fact, active, verdict verified)",
+              "ferret durable context af9e01f3-4c55-803e-94ca-e37495f176ba (fact, active, verdict verified)",
+              "ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47 (fact, active, verdict verified)",
+              "ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354 (gotcha, active, verdict verified)"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.7370425
+        }
+      }
+    },
+    "r2": {
+      "tree": {
+        "commit": "32cfd789c94c6df8f02a67c930213ca4a76ea79c",
+        "dirty": false
+      },
+      "model": "opus",
+      "effort": "high",
+      "what": "an anchored file changed and was re-indexed — the safety case",
+      "carried": 4,
+      "carriedVerdicts": [
+        "verified",
+        "verified",
+        "stale",
+        "stale"
+      ],
+      "anchoredPaths": [
+        "src/context/pack.ts",
+        "src/storage/code-state.ts",
+        "src/storage/durable-context.ts",
+        "src/git/worktree-state.ts",
+        "src/context/code-state.ts"
+      ],
+      "routingText": "Before you open any source file, check whether durable engineering context about this question has already been recorded by an earlier session and is retrievable through the tools available to you. Do that check first. Then continue however you judge best.",
+      "runs": {
+        "control": {
+          "arm": "control",
+          "pass": 1,
+          "routed": false,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/mcp/context-tools.ts",
+              "file:src/context/code-state.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/context/pack.ts",
+              "file:src/mcp/server.ts",
+              "file:tests/unit/code-state-verification.test.ts"
+            ],
+            "citationsOffLabel": 7,
+            "toolCalls": 24,
+            "turns": 26,
+            "filesRead": 7,
+            "linesRead": 705,
+            "searches": 11,
+            "historyCalls": 2,
+            "ferretCalls": 0,
+            "refusals": 2,
+            "toolErrors": 3,
+            "contextTokens": 364201,
+            "inputTokens": 30,
+            "cacheReadTokens": 357629,
+            "cacheWriteTokens": 31127,
+            "outputTokens": 6542,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 111511,
+            "toolMs": 25601,
+            "ferretSurfaces": {}
+          },
+          "anchoredFileReads": 4,
+          "ordering": {
+            "calls": 24,
+            "firstFerretCall": null,
+            "firstNotesCall": null,
+            "firstSourceRead": 3,
+            "consultedBeforeSource": false,
+            "sourceReadsAfterConsult": 8,
+            "sequence": [
+              "search",
+              "Bash",
+              "read:EPIC-137-Code-State-Anchored-Durable-Context.md",
+              "Bash",
+              "read:code-state.ts",
+              "search",
+              "read:context-tools.ts",
+              "search",
+              "read:code-state.ts",
+              "read:durable-context.ts",
+              "search",
+              "git",
+              "read:EPIC-137-DECISIONS.md",
+              "search",
+              "search",
+              "search",
+              "Bash",
+              "read:pack.ts",
+              "search",
+              "search",
+              "search",
+              "git",
+              "read:context-tools.ts",
+              "search"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 0,
+            "statementsReturned": 0,
+            "statementsHeld": 4,
+            "verdictsReturned": 0,
+            "verdictKinds": [],
+            "surfaces": []
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether a durable statement still matches the code, but `current: true` is not that report — `current` is just `lifecycle === ACTIVE` (unsuperseded), a deliberately separate axis from the anchor verdict. `verified` is only returned when every condition in `verifyAnchors` holds: not superseded, lifecycle current, at least one anchored observation, established correspondence (repo indexed and locally readable, on a named branch, indexed head == live head commit), every anchor of one observation readable/resolvable and not dirty, and every one byte-identical to the observed hash. Otherwise it reports `superseded`, `unanchored`, `unknown` (with a reason category), or `stale` — and it may report no verification at all when no code-state reader is wired.",
+            "key_facts": [
+              "`current` on the MCP surface is computed as `context.entity.lifecycle === LifecycleState.ACTIVE`, i.e. unsuperseded — src/mcp/context-tools.ts:102; the code-match answer is a separate `verification` object whose `trustworthy` flag is `verdict === VERIFIED` (src/mcp/context-tools.ts:128-149).",
+              "`verifyAnchors` checks lifecycle first: a `supersededBy` edge or SUPERSEDED lifecycle returns `superseded` even when the anchor matches; any other historical lifecycle, or zero anchored observations, returns `unanchored` (src/context/code-state.ts:157-168).",
+              "`verified` requires correspondence to be established AND some observation whose anchors all have no blocking reason and all match byte-for-byte — a single drifted or unreadable anchor of two disqualifies the observation (src/context/code-state.ts:175-188; tests/unit/code-state-verification.test.ts:151).",
+              "Correspondence is established only if the scope is an indexed repository Ferret can read locally, HEAD is on a named branch (detached HEAD is not establishable), and the indexed head equals the live head commit; otherwise `unestablished` with NOT_INDEXED / NO_CORRESPONDENCE / NOT_LOCAL (src/storage/code-state.ts:172-217).",
+              "A path with uncommitted changes, or a truncated working-tree dirt sample, is withheld as PATH_DIRTY / DIRT_UNKNOWN, so it cannot verify (src/storage/code-state.ts:147-157).",
+              "Non-matching outcomes: `unknown` when correspondence is not established or an anchor is blocked (reasons include repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable), and `stale` when anchors are readable but changed — explicitly \"not that it is false\" (src/context/code-state.ts:26-43, 195-214, 232-253).",
+              "An anchor Ferret cannot speak for (absent, withheld, excluded, unpermitted, no current version) never counts as a match — it becomes a reason, not `matches: true` (src/context/code-state.ts:217-230).",
+              "Correspondence is deliberately never cached across calls (only memoised per call/page) so a commit made mid-session cannot leave a stale `verified` (src/storage/code-state.ts:163-175; src/storage/durable-context.ts:543-552).",
+              "The code-state reader is optional: when unwired, no verdict is emitted at all, which is distinct from `unanchored` (src/mcp/server.ts:240-243, 300-303; src/storage/durable-context.ts:508-514).",
+              "The pack and the trust surface go through the same `verifyAnchors`, so they cannot disagree (src/context/pack.ts:434-458)."
+            ],
+            "citations": [
+              "src/mcp/context-tools.ts:95-150",
+              "src/mcp/context-tools.ts:409-433",
+              "src/context/code-state.ts:1-262",
+              "src/storage/code-state.ts:122-217",
+              "src/storage/durable-context.ts:505-553",
+              "src/context/pack.ts:420-458",
+              "src/mcp/server.ts:240-303",
+              "tests/unit/code-state-verification.test.ts:46-171"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.6548035
+        },
+        "treatment": {
+          "arm": "treatment",
+          "pass": 1,
+          "routed": false,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/context/durable-port.ts",
+              "file:src/mcp/context-tools.ts",
+              "file:src/domain/kinds.ts",
+              "context:ferret_context_find (states: all) — records 54c52b1f-7f6d-860b-af04-846e49525354, b532bf6b-a1ed-8cfb-a64a-16945b4dfa47, 456c0238-8057-8f24-89da-4a76c891ff39, af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "context:commit 3b92c04 feat(context): bind a durable statement to the code state it was observed against — EPIC-137",
+              "context:commit bbf7d63 research(routing): move an anchored file's bytes without moving its behaviour",
+              "context:commit 32cfd78 research(routing): trim comments to one line each"
+            ],
+            "citationsOffLabel": 10,
+            "toolCalls": 16,
+            "turns": 18,
+            "filesRead": 5,
+            "linesRead": 759,
+            "searches": 8,
+            "historyCalls": 1,
+            "ferretCalls": 2,
+            "refusals": 2,
+            "toolErrors": 2,
+            "contextTokens": 496860,
+            "inputTokens": 26,
+            "cacheReadTokens": 489693,
+            "cacheWriteTokens": 35420,
+            "outputTokens": 7141,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 132467,
+            "toolMs": 23564,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_context_pack": 1,
+              "mcp__ferret__ferret_context_find": 1
+            }
+          },
+          "anchoredFileReads": 2,
+          "ordering": {
+            "calls": 16,
+            "firstFerretCall": 11,
+            "firstNotesCall": null,
+            "firstSourceRead": 3,
+            "consultedBeforeSource": false,
+            "sourceReadsAfterConsult": 1,
+            "sequence": [
+              "search",
+              "git",
+              "read:code-state.ts",
+              "search",
+              "search",
+              "read:EPIC-137-DECISIONS.md",
+              "search",
+              "read:durable-port.ts",
+              "read:code-state.ts",
+              "search",
+              "ferret:ferret_context_pack",
+              "search",
+              "ferret:ferret_context_find",
+              "search",
+              "read:context-tools.ts",
+              "search"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 18194,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 8,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_context_pack",
+              "ferret_context_find"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether a statement still matches the code — EPIC-137's `verification` block on `ferret_context_trust`/`ferret_context_find`/`ferret_context_pack` — but `current: true` is not that signal: `current` is purely the lifecycle test `lifecycle === ACTIVE` (EPIC-127), and the two are deliberately labelled apart so a reader cannot conflate them. The code-state signal is `verification.verdict === 'verified'` (surfaced as `trustworthy: true`); anything else is `stale`, `superseded`, `unanchored`, or `unknown` with a category-only reason. Live proof from this session: two durable statements came back `current: true` alongside `verdict: \"stale\"`, because bytes in `src/context/code-state.ts` moved on this branch.",
+            "key_facts": [
+              "`current` is computed as `held.entity.lifecycle === LifecycleState.ACTIVE` — a lifecycle fact only, with no reference to anchors or code state (src/storage/durable-context.ts:493, mirrored at src/mcp/context-tools.ts:102 and src/mcp/context-tools.ts:112).",
+              "The MCP layer states the distinction explicitly: \"`current` above means unsuperseded; this is the separate question, and the two are labelled so a reader cannot mistake one for the other\" (src/mcp/context-tools.ts:128-134). The code-state signal is `trustworthy: verification.verdict === AnchorVerdict.VERIFIED` (src/mcp/context-tools.ts:138).",
+              "`verifyAnchors` (src/context/code-state.ts:157-215) is the single verdict function shared by the trust surface and the pack; its header records \"Six conditions for `verified`; any one unestablished is `unknown`, never a match.\"",
+              "Conditions for `verified`: (1) not superseded and no `supersededBy` edge — checked first, outranks everything; (2) lifecycle not historical (SUPERSEDED/ARCHIVED/DELETED — src/domain/kinds.ts:126-130); (3) at least one anchored observation; (4) correspondence established — repository indexed and locally readable, HEAD not detached, and the live checked-out branch's HEAD equals the single indexed head Ferret holds for that branch name (src/storage/code-state.ts:177-217, #indexedHead 255-268); (5) for one whole observation, every anchored path resolves to an indexed file, is not withheld by exclusion or scope/permission, and is not dirty or in a truncated dirty sample (src/storage/code-state.ts:136-158); (6) each anchor's indexed content hash now is byte-identical to the hash recorded at observation time (src/context/code-state.ts:217-230).",
+              "When a condition does not hold, the verdicts are: `superseded` (\"replaced by a later statement, which is the answer instead\"); `unanchored` (no anchor recorded, or a historical lifecycle state — \"not a code claim\" as distinct from \"cannot tell\"); `unknown` carrying a category-only reason (repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable — src/context/code-state.ts:27-43, 232-253); and `stale` only when correspondence held and every anchor was readable but a hash differs — explicitly \"needs re-verification — not that it is false\" (src/context/code-state.ts:209-214).",
+              "`verification` is optional and absent entirely when the build wires no code-state reader — which the port documents is not the same as `unanchored`: \"one says Ferret cannot answer, the other that nothing was claimed\" (src/context/durable-port.ts:130-137).",
+              "Observed live: ferret_context_find returned statements 456c0238 and af9e01f3 with `current: true`, `state: active`, yet `verification.verdict: \"stale\"` / `trustworthy: false`, because `src/context/code-state.ts` changed hash (git-blob:d3cf0ed… → git-blob:e9ed814…) on this branch — commits bbf7d63 and 32cfd78 moved its bytes without changing behaviour.",
+              "Direction is independent both ways: `candidate` is not in HISTORICAL_LIFECYCLE_STATES, so a proposed statement can be `verified` while `current: false`.",
+              "A superseded earlier design is recorded in-source and must not be relied on: correspondence was once memoised per instance, which made a session that had committed keep hearing `verified` against the head the process first saw; it is now deliberately uncached across calls and memoised only within a single find/pack call (src/storage/code-state.ts:163-175, durable context 54c52b1f). Similarly, requiring exactly one open FILE_HAS_VERSION edge was reversed to \"newest open edge\" because it put `stale` out of reach (src/storage/code-state.ts:291-310)."
+            ],
+            "citations": [
+              "src/context/code-state.ts:10-45",
+              "src/context/code-state.ts:150-215",
+              "src/context/code-state.ts:217-253",
+              "src/storage/durable-context.ts:490-497",
+              "src/storage/durable-context.ts:525-542",
+              "src/storage/durable-context.ts:651-656",
+              "src/storage/code-state.ts:122-161",
+              "src/storage/code-state.ts:163-217",
+              "src/storage/code-state.ts:255-268",
+              "src/storage/code-state.ts:291-311",
+              "src/context/durable-port.ts:114-138",
+              "src/mcp/context-tools.ts:95-150",
+              "src/domain/kinds.ts:118-130",
+              "ferret_context_find (states: all) — records 54c52b1f-7f6d-860b-af04-846e49525354, b532bf6b-a1ed-8cfb-a64a-16945b4dfa47, 456c0238-8057-8f24-89da-4a76c891ff39, af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "commit 3b92c04 feat(context): bind a durable statement to the code state it was observed against — EPIC-137 (#229)",
+              "commit bbf7d63 research(routing): move an anchored file's bytes without moving its behaviour",
+              "commit 32cfd78 research(routing): trim comments to one line each"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.7787204999999999
+        },
+        "routed": {
+          "arm": "routed",
+          "pass": 1,
+          "routed": true,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 2,
+            "factsTotal": 3,
+            "factsComplete": false,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": false
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/storage/durable-context.ts",
+              "file:src/context/code-state.ts",
+              "file:src/storage/code-state.ts",
+              "context:ferret durable context 456c0238-8057-8f24-89da-4a76c891ff39",
+              "context:ferret durable context af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "context:ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47",
+              "context:ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354",
+              "context:commit bbf7d63",
+              "context:commit 32cfd78"
+            ],
+            "citationsOffLabel": 9,
+            "toolCalls": 10,
+            "turns": 12,
+            "filesRead": 4,
+            "linesRead": 575,
+            "searches": 2,
+            "historyCalls": 2,
+            "ferretCalls": 2,
+            "refusals": 0,
+            "toolErrors": 0,
+            "contextTokens": 256328,
+            "inputTokens": 14,
+            "cacheReadTokens": 251644,
+            "cacheWriteTokens": 26734,
+            "outputTokens": 4670,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 82335,
+            "toolMs": 14290,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_context_pack": 1,
+              "mcp__ferret__ferret_search": 1
+            }
+          },
+          "anchoredFileReads": 4,
+          "ordering": {
+            "calls": 10,
+            "firstFerretCall": 1,
+            "firstNotesCall": null,
+            "firstSourceRead": 5,
+            "consultedBeforeSource": true,
+            "sourceReadsAfterConsult": 4,
+            "sequence": [
+              "ferret:ferret_context_pack",
+              "ferret:ferret_search",
+              "search",
+              "git",
+              "read:code-state.ts",
+              "git",
+              "search",
+              "read:durable-context.ts",
+              "read:code-state.ts",
+              "read:code-state.ts"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 28141,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 4,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_context_pack",
+              "ferret_search"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether a durable statement still matches the code (a `verification` block with an `AnchorVerdict`), but `current: true` is not that signal — it is computed purely as `lifecycle === ACTIVE` and knows nothing about anchors or code. The proof is live in this session: statements `456c0238…` and `af9e01f3…` come back `current: true` with `verification.verdict: \"stale\"`. `verified` is only returned when the statement is neither superseded nor historical, has at least one anchored observation, correspondence is established (checked-out branch's live HEAD equals the single indexed head for that branch), and one whole observation's anchors all resolve, are not access/exclusion-withheld, are not in the dirty-path sample, the sample is not truncated, and every indexed hash is byte-identical to the recorded one. Anything else is `superseded`, `unanchored`, `unknown` (with a category-only reason), or `stale` — and verification is absent entirely when no code-state reader is wired.",
+            "key_facts": [
+              "`current` is set as `held.entity.lifecycle === LifecycleState.ACTIVE` (src/storage/durable-context.ts:493); its own doc comment reads \"True only for `active`. Everything else is history or a proposal.\" (src/storage/durable-context.ts:655-656). It is independent of any anchor comparison.",
+              "Observed live: ferret_context_pack returned statements 456c0238-8057-8f24-89da-4a76c891ff39 and af9e01f3-4c55-803e-94ca-e37495f176ba with `current: true` and `verification.verdict: \"stale\"` simultaneously.",
+              "`verifyAnchors` checks lifecycle first: `supersededBy` set or lifecycle SUPERSEDED returns `superseded`; a HISTORICAL_LIFECYCLE_STATES lifecycle or zero anchored observations returns `unanchored` (src/context/code-state.ts:157-168).",
+              "`verified` requires `input.correspondence.established` AND one candidate observation whose reports contain no `reason` AND have length > 0 AND every report `matches` (src/context/code-state.ts:175-188).",
+              "Correspondence is established only when the repository is indexed, a local worktree path is resolvable, HEAD is not detached, the checked-out branch has exactly one indexed head row, and that indexed head equals the live `headCommit`; otherwise `repository-not-indexed`, `index-does-not-correspond`, or `scope-not-locally-readable` (src/storage/code-state.ts:177-216, 249-266).",
+              "Per-anchor blocking reasons come from `currentContent`: `anchor-does-not-resolve` (path not an indexed file), `anchor-excluded-by-rule`/`anchor-not-permitted` (access withholds), `anchored-path-modified` (path in the dirty sample), `working-tree-sample-truncated` (src/storage/code-state.ts:135-158).",
+              "`stale` is reserved for correspondence established and every anchor readable but a hash differing, and its detail string says \"needs re-verification — not that it is false\" (src/context/code-state.ts:209-214). `unknown` carries a category-only reason, never a path (src/context/code-state.ts:26, 195-207).",
+              "The comparison is index-to-index: `observedHash` is the recorded evidence `sourceContentHash`, `currentHash` is the newest open FILE_HAS_VERSION edge now; files are never re-hashed from disk at verify time, so an unindexed edit surfaces as `anchored-path-modified` rather than `stale` (src/storage/code-state.ts:291-311, src/context/code-state.ts:217-230).",
+              "Correspondence is deliberately never cached across calls — an earlier per-instance memo made a session that committed keep hearing `verified` against the head the process first saw — and is memoised only for one find/pack call because `git status` costs ~120ms (src/storage/code-state.ts:163-174, src/storage/durable-context.ts:543-552).",
+              "The `verification` field is omitted entirely (not reported as `unanchored`) when no code-state reader is configured, because \"Ferret cannot answer\" and \"nothing was claimed\" are different answers (src/storage/durable-context.ts:508-513).",
+              "The two statements reporting `stale` are stale only because commits bbf7d63/32cfd78 changed one comment line in src/context/code-state.ts (`git diff bbf7d63~1 HEAD`); I re-read the file and the described behaviour is unchanged, which is itself an instance of `stale` meaning \"needs re-verification\", not \"false\"."
+            ],
+            "citations": [
+              "src/storage/durable-context.ts:493",
+              "src/storage/durable-context.ts:655-656",
+              "src/storage/durable-context.ts:508-513",
+              "src/storage/durable-context.ts:525-553",
+              "src/context/code-state.ts:10-45",
+              "src/context/code-state.ts:157-215",
+              "src/context/code-state.ts:217-230",
+              "src/storage/code-state.ts:122-161",
+              "src/storage/code-state.ts:163-216",
+              "src/storage/code-state.ts:249-266",
+              "src/storage/code-state.ts:291-311",
+              "ferret durable context 456c0238-8057-8f24-89da-4a76c891ff39",
+              "ferret durable context af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47",
+              "ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354",
+              "commit bbf7d63",
+              "commit 32cfd78"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.511006
+        }
+      }
+    },
+    "r5": {
+      "tree": {
+        "commit": "3e3ea861665252cf7a83f8f1419c80bba29d30ed",
+        "dirty": false
+      },
+      "model": "opus",
+      "effort": "high",
+      "what": "an unrelated file changed and was re-indexed — the false-drift case",
+      "carried": 4,
+      "carriedVerdicts": [
+        "verified",
+        "verified",
+        "stale",
+        "stale"
+      ],
+      "anchoredPaths": [
+        "src/context/pack.ts",
+        "src/storage/code-state.ts",
+        "src/storage/durable-context.ts",
+        "src/git/worktree-state.ts",
+        "src/context/code-state.ts"
+      ],
+      "routingText": "Before you open any source file, check whether durable engineering context about this question has already been recorded by an earlier session and is retrievable through the tools available to you. Do that check first. Then continue however you judge best.",
+      "runs": {
+        "control": {
+          "arm": "control",
+          "pass": 1,
+          "routed": false,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/mcp/context-tools.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/context/durable-port.ts",
+              "file:src/context/standing.ts",
+              "file:src/context/pack.ts",
+              "file:tests/unit/code-state-verification.test.ts"
+            ],
+            "citationsOffLabel": 8,
+            "toolCalls": 27,
+            "turns": 31,
+            "filesRead": 5,
+            "linesRead": 1142,
+            "searches": 17,
+            "historyCalls": 0,
+            "ferretCalls": 0,
+            "refusals": 2,
+            "toolErrors": 5,
+            "contextTokens": 588681,
+            "inputTokens": 40,
+            "cacheReadTokens": 575358,
+            "cacheWriteTokens": 45544,
+            "outputTokens": 13283,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 203665,
+            "toolMs": 37762,
+            "ferretSurfaces": {}
+          },
+          "anchoredFileReads": 3,
+          "ordering": {
+            "calls": 27,
+            "firstFerretCall": null,
+            "firstNotesCall": null,
+            "firstSourceRead": 6,
+            "consultedBeforeSource": false,
+            "sourceReadsAfterConsult": 6,
+            "sequence": [
+              "Bash",
+              "search",
+              "Bash",
+              "search",
+              "search",
+              "read:durable.ts",
+              "read:code-state.ts",
+              "search",
+              "search",
+              "read:context-tools.ts",
+              "search",
+              "Bash",
+              "search",
+              "Bash",
+              "search",
+              "read:code-state-verification.test.ts",
+              "search",
+              "search",
+              "read:code-state.ts",
+              "search",
+              "search",
+              "search",
+              "search",
+              "search",
+              "read:code-state.ts",
+              "search",
+              "search"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 0,
+            "statementsReturned": 0,
+            "statementsHeld": 4,
+            "verdictsReturned": 0,
+            "verdictKinds": [],
+            "surfaces": []
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does answer \"does this statement still match the code\", but through a separate code-state verdict (verification.verdict === 'verified', surfaced as trustworthy), not through `current`. `current: true` only means lifecycle `active` — unsuperseded — and the code labels it as the other question. verifyAnchors returns `verified` only when all six conditions hold: not superseded, still current context, at least one anchored observation, correspondence established between the indexed state and the checked-out state, every anchored path readable/unblocked, and every anchor byte-identical. Otherwise it reports `superseded`, `unanchored`, `unknown` with a category reason, or `stale` — never a match — and the `verification` field is omitted entirely when no code-state reader is wired.",
+            "key_facts": [
+              "`current` in the MCP context output is computed as context.entity.lifecycle === LifecycleState.ACTIVE, i.e. unsuperseded only (src/mcp/context-tools.ts:102); the comment at src/mcp/context-tools.ts:128-134 states '`current` above means unsuperseded; this is the separate question'.",
+              "Verification is a second axis, not a lifecycle state: AnchorVerdict = verified | stale | superseded | unknown | unanchored (src/context/code-state.ts:10-19).",
+              "verifyAnchors' stated contract: 'Six conditions for verified; any one unestablished is unknown, never a match' — shared by the trust surface and the pack so the two cannot disagree (src/context/code-state.ts:152-157; src/context/pack.ts:436-441).",
+              "Condition: not superseded — a supersededBy edge or lifecycle `superseded` returns `superseded`, outranking a matching anchor (src/context/code-state.ts:160-162; tests/unit/code-state-verification.test.ts AC-15 cases).",
+              "Condition: still current context — any historical lifecycle (e.g. archived) returns `unanchored`, 'no code state is claimed' (src/context/code-state.ts:163-165; test 'an archived statement claims no code state').",
+              "Condition: at least one anchored observation — zero observations returns `unanchored`, deliberately distinct from `unknown` (src/context/code-state.ts:166-168; test AC-12).",
+              "Condition: correspondence established — repository indexed as a REPOSITORY entity, a locally readable worktree, not detached HEAD, exactly one indexed head for the checked-out branch, and that head equal to the live head; otherwise unestablished with NOT_INDEXED / NO_CORRESPONDENCE / NOT_LOCAL, which yields `unknown` even when the hash matches (src/storage/code-state.ts:172-217; src/context/code-state.ts:195-202; test AC-11).",
+              "Condition: every anchored path readable — a path that no longer resolves to an indexed file, is covered by an exclusion rule, needs a scope the caller lacks, is dirty in the working tree, or falls in a truncated dirty sample yields `unknown` with a category reason, never a match (src/storage/code-state.ts:136-159; src/context/code-state.ts:204-207, 217-230; tests AC-11 and AC-16).",
+              "Condition: every anchor byte-identical — one drifted file out of two is not verified; a changed anchored file is `stale`, explicitly 'not that it is false', and reverting the content verifies again (src/context/code-state.ts:179-188, 209-214; tests AC-7, AC-9, 'every anchor must match').",
+              "Verdicts are reported over the newest anchored observation when none verifies, and a re-anchored newer observation can verify while the older stays stale (src/context/code-state.ts:190-192; tests AC-21 and 'reports the newest observation when none matches').",
+              "When no CodeStatePort is wired, the belief omits `verification` altogether rather than reporting `unanchored` — 'Ferret cannot answer' and 'nothing was claimed' are different answers (src/storage/durable-context.ts:508-514; src/context/durable-port.ts:131-134).",
+              "MCP output derives trustworthy = (verdict === AnchorVerdict.VERIFIED) and carries verdict, detail, reason and per-anchor observed/current hashes (src/mcp/context-tools.ts:135-150); anchor input is capped at MAX_ANCHORS = 20 (src/context/code-state.ts:24; src/mcp/context-tools.ts:254-264).",
+              "Two earlier decisions in this area were reversed and the reversals are what the code does now: correspondence compares the checked-out branch, not the default one (src/storage/code-state.ts:196-203), and a path resolves to the newest open FILE_HAS_VERSION edge rather than requiring exactly one, because requiring one put `stale` out of reach (src/storage/code-state.ts:291-303).",
+              "Correspondence is deliberately not cached across calls — a memoised answer would keep reporting `verified` against a stale head (src/storage/code-state.ts:163-175; src/storage/durable-context.ts:543-552)."
+            ],
+            "citations": [
+              "src/context/code-state.ts:10-19",
+              "src/context/code-state.ts:152-215",
+              "src/context/code-state.ts:217-230",
+              "src/context/code-state.ts:24",
+              "src/mcp/context-tools.ts:95-150",
+              "src/mcp/context-tools.ts:254-264",
+              "src/storage/code-state.ts:122-217",
+              "src/storage/code-state.ts:248-310",
+              "src/storage/durable-context.ts:500-553",
+              "src/storage/durable-context.ts:666-672",
+              "src/context/durable-port.ts:126-136",
+              "src/context/standing.ts:59-82",
+              "src/context/pack.ts:436-441",
+              "tests/unit/code-state-verification.test.ts"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 1.076413
+        },
+        "treatment": {
+          "arm": "treatment",
+          "pass": 1,
+          "routed": false,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/mcp/context-tools.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/context/pack.ts",
+              "file:tests/unit/code-state-verification.test.ts",
+              "context:ferret_context_trust on context 456c0238-8057-8f24-89da-4a76c891ff39",
+              "context:ferret_context_find",
+              "context:commit bbf7d63 research(routing): move an anchored file's bytes without moving its behaviour",
+              "context:commit 32cfd78 research(routing): trim comments to one line each",
+              "context:commit 3b92c04 feat(context): bind a durable statement to the code state it was observed against — EPIC-137"
+            ],
+            "citationsOffLabel": 11,
+            "toolCalls": 21,
+            "turns": 24,
+            "filesRead": 6,
+            "linesRead": 804,
+            "searches": 11,
+            "historyCalls": 1,
+            "ferretCalls": 3,
+            "refusals": 3,
+            "toolErrors": 4,
+            "contextTokens": 597748,
+            "inputTokens": 30,
+            "cacheReadTokens": 589293,
+            "cacheWriteTokens": 33695,
+            "outputTokens": 8425,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 135912,
+            "toolMs": 23536,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_health": 1,
+              "mcp__ferret__ferret_context_find": 1,
+              "mcp__ferret__ferret_context_trust": 1
+            }
+          },
+          "anchoredFileReads": 4,
+          "ordering": {
+            "calls": 21,
+            "firstFerretCall": 1,
+            "firstNotesCall": null,
+            "firstSourceRead": 3,
+            "consultedBeforeSource": true,
+            "sourceReadsAfterConsult": 6,
+            "sequence": [
+              "ferret:ferret_health",
+              "search",
+              "read:code-state.ts",
+              "search",
+              "search",
+              "search",
+              "read:context-tools.ts",
+              "search",
+              "read:EPIC-137-DECISIONS.md",
+              "search",
+              "read:code-state.ts",
+              "ferret:ferret_context_find",
+              "search",
+              "read:durable-context.ts",
+              "read:pack.ts",
+              "search",
+              "git",
+              "search",
+              "search",
+              "search",
+              "ferret:ferret_context_trust"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 14501,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 5,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_health",
+              "ferret_context_find",
+              "ferret_context_trust"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether a durable statement still matches the code (EPIC-137 anchors), but `current: true` is not that signal — it only means the record's lifecycle is `active`/unsuperseded, and the source comments say the two axes are labelled apart precisely so a reader cannot conflate them. Trust comes from `verification.verdict === 'verified'` (surfaced as `trustworthy: true`), which needs six conditions to hold at once; if any one fails Ferret reports `superseded`, `unanchored`, `unknown` with a category-only reason, or `stale` — never a match. Live proof: statement 456c0238 reads `current: true` alongside `verdict: \"stale\", trustworthy: false`.",
+            "key_facts": [
+              "`describeContext` sets `current: context.entity.lifecycle === LifecycleState.ACTIVE` — unsuperseded/active only, with no code comparison (src/mcp/context-tools.ts:102; the belief repeats it at src/storage/durable-context.ts:493).",
+              "The comment above `describeVerification` states outright: \"`current` above means unsuperseded; this is the separate question, and the two are labelled so a reader cannot mistake one for the other\" (src/mcp/context-tools.ts:128-134).",
+              "`trustworthy` is computed solely as `verification.verdict === AnchorVerdict.VERIFIED` (src/mcp/context-tools.ts:138).",
+              "Condition 1 — not superseded: a `supersededBy` edge or `lifecycle === superseded` returns `superseded` before any hash is compared, because \"a matching anchor must never make a retired statement look trustworthy\" (src/context/code-state.ts:158-162).",
+              "Condition 2 — lifecycle current: any historical state (e.g. archived) returns `unanchored` with \"not current context, so no code state is claimed\" (src/context/code-state.ts:163-165).",
+              "Condition 3 — at least one anchored observation: zero anchors returns `unanchored`, deliberately distinct from `unknown` (verify-from-source versus not-a-code-claim) (src/context/code-state.ts:17-18, 166-168).",
+              "Condition 4 — correspondence established: the repository must be indexed, locally readable, on a non-detached HEAD, and the live HEAD must equal the single indexed head for the checked-out branch; two index rows disagreeing about that branch head yields nothing (src/storage/code-state.ts:177-217, 255-268). Not established gives `unknown`, even when the hash matches (src/context/code-state.ts:195-202).",
+              "Condition 5 — every anchored path readable: absent from the index, withheld by exclusion/scope/permission, present in the `git status` dirty-path sample, or a truncated dirty sample each mark the anchor with a reason, and any reason on an observation disqualifies it from `verified` (src/storage/code-state.ts:136-158; src/context/code-state.ts:176-178, 204-207, 217-230).",
+              "Condition 6 — every anchor byte-identical: `candidate.reports.every((one) => one.matches)` over one whole observation; \"every anchor must match: one drifted file of two is not verified\" (src/context/code-state.ts:179-187; tests/unit/code-state-verification.test.ts:151).",
+              "Non-verified verdicts are `superseded`, `unanchored`, `unknown` (with a category-only reason from `UnknownReason`: index-does-not-correspond, repository-not-indexed, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable), and `stale` (src/context/code-state.ts:10-19, 27-43, 195-215).",
+              "`stale` is reserved for correspondence-holds-and-all-anchors-readable-but-a-hash-differs, and explicitly means needs re-verification, not false: \"Not a claim that the statement is false\" (src/context/code-state.ts:12, 209-214; tests/unit/code-state-verification.test.ts:59).",
+              "The comparison is index-to-index gated on the live tree: both observed and current hashes come from the newest open FILE_HAS_VERSION edge, and the working tree only supplies HEAD/branch/dirty paths — so an unindexed local edit surfaces as `unknown`/anchored-path-modified rather than `stale` (src/storage/code-state.ts:291-310, 147-152).",
+              "A re-anchored observation can verify while an older one stays stale, because `verifyAnchors` scans candidate observations and reports over the newest when none matches (src/context/code-state.ts:170-193; tests/unit/code-state-verification.test.ts:129, 140).",
+              "Correspondence is never cached across calls — an earlier per-instance memo was reversed because a session that committed kept hearing `verified` against the head the process first saw; it is memoised only for the duration of one find/pack call (src/storage/code-state.ts:163-175; src/storage/durable-context.ts:543-552; src/context/pack.ts:441-458).",
+              "Verification is absent rather than `unanchored` when no code-state reader is configured, since \"Ferret cannot answer\" and \"nothing was claimed\" are different answers (src/storage/durable-context.ts:508-514; src/context/pack.ts:447-450).",
+              "Observed live: ferret_context_trust on 456c0238-8057-8f24-89da-4a76c891ff39 returned `current: true` with `verdict: stale`, `trustworthy: false`; two other statements returned `verdict: verified`, `trustworthy: true`.",
+              "The two indexed statements describing these verdicts (456c0238, af9e01f3) are themselves `stale` only because src/context/code-state.ts bytes moved in commits bbf7d63 and 32cfd78; I re-derived every condition from the current source, where `verifyAnchors` now spans lines 157-215."
+            ],
+            "citations": [
+              "src/context/code-state.ts:10-19",
+              "src/context/code-state.ts:27-43",
+              "src/context/code-state.ts:150-215",
+              "src/context/code-state.ts:217-230",
+              "src/context/code-state.ts:264-297",
+              "src/storage/code-state.ts:122-161",
+              "src/storage/code-state.ts:163-217",
+              "src/storage/code-state.ts:248-268",
+              "src/storage/code-state.ts:291-310",
+              "src/mcp/context-tools.ts:95-150",
+              "src/storage/durable-context.ts:490-553",
+              "src/context/pack.ts:434-458",
+              "tests/unit/code-state-verification.test.ts:46-176",
+              "ferret_context_trust on context 456c0238-8057-8f24-89da-4a76c891ff39",
+              "ferret_context_find (contexts 54c52b1f, b532bf6b, af9e01f3, 456c0238)",
+              "commit bbf7d63 research(routing): move an anchored file's bytes without moving its behaviour",
+              "commit 32cfd78 research(routing): trim comments to one line each",
+              "commit 3b92c04 feat(context): bind a durable statement to the code state it was observed against — EPIC-137 (#229)"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.8434005
+        },
+        "routed": {
+          "arm": "routed",
+          "pass": 1,
+          "routed": true,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 2,
+            "factsTotal": 3,
+            "factsComplete": false,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": false
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/context/durable-port.ts",
+              "context:ferret durable context 456c0238-8057-8f24-89da-4a76c891ff39",
+              "context:ferret durable context af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "context:ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354",
+              "context:ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47",
+              "context:commit bbf7d632a8ccbb38032c7bc7b7dc7b6b96722df8",
+              "context:commit 3b92c04f90899859bb4e9ce612f28770859d1dc6"
+            ],
+            "citationsOffLabel": 10,
+            "toolCalls": 9,
+            "turns": 11,
+            "filesRead": 3,
+            "linesRead": 433,
+            "searches": 2,
+            "historyCalls": 2,
+            "ferretCalls": 2,
+            "refusals": 0,
+            "toolErrors": 0,
+            "contextTokens": 214255,
+            "inputTokens": 12,
+            "cacheReadTokens": 209412,
+            "cacheWriteTokens": 24561,
+            "outputTokens": 4831,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 79219,
+            "toolMs": 11144,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_context_pack": 1,
+              "mcp__ferret__ferret_search": 1
+            }
+          },
+          "anchoredFileReads": 2,
+          "ordering": {
+            "calls": 9,
+            "firstFerretCall": 1,
+            "firstNotesCall": null,
+            "firstSourceRead": 3,
+            "consultedBeforeSource": true,
+            "sourceReadsAfterConsult": 3,
+            "sequence": [
+              "ferret:ferret_context_pack",
+              "ferret:ferret_search",
+              "read:code-state.ts",
+              "git",
+              "search",
+              "git",
+              "read:code-state.ts",
+              "read:durable-port.ts",
+              "search"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 27312,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 4,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_context_pack",
+              "ferret_search"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether an anchored statement still matches the code, but `current: true` is not that report — it is the lifecycle axis only (`current = lifecycle === ACTIVE`, src/storage/durable-context.ts:493). `verified` is a separate verdict requiring: not superseded and lifecycle not historical; at least one anchored observation; correspondence established (the checked-out branch's live HEAD equals exactly one indexed head Ferret holds for that branch); and, for one whole observation, every anchored path resolving, not withheld by exclusion or permission, absent from `git status`'s dirty-path sample with that sample untruncated, and its indexed hash byte-identical to the one recorded at observation time. Any condition unestablished gives `superseded`, `unanchored`, `unknown` with a category-only reason, or `stale` — never a match. Two of the four durable statements retrieved for this question prove the point: they carry `current: true` and `verdict: stale`.",
+            "key_facts": [
+              "`current` is computed as `held.entity.lifecycle === LifecycleState.ACTIVE` (src/storage/durable-context.ts:493) — it says nobody retired the statement, not that the code still matches; the code-state verdict is documented as a second axis (src/context/code-state.ts:3-9).",
+              "verifyAnchors (src/context/code-state.ts:157-215) returns `superseded` first if `supersededBy` is set or lifecycle is SUPERSEDED, then `unanchored` for a historical lifecycle state or zero anchored observations.",
+              "`verified` requires correspondence.established AND one whole observation whose reports all have no blocking reason and all `matches === true` (src/context/code-state.ts:175-188); detail: 'every anchored file is byte-identical to what Ferret has indexed for the state evaluated'.",
+              "Correspondence requires the live checked-out branch (not the default) and HEAD to equal the indexed head; detached HEAD, an unindexed branch, or two index rows disagreeing about a branch head all yield unestablished (src/storage/code-state.ts:196-217, #indexedHead 255-268 returns a head only when `new Set(heads).size === 1`).",
+              "The checkout evaluated is resolved from the caller's cwd matched against indexed worktree paths; several worktrees with no matching cwd return undefined, so correspondence is unavailable rather than guessed (src/storage/code-state.ts:225-246).",
+              "currentContent withholds an anchor as `anchored-path-modified` when the path is in the dirty-path sample, and as `working-tree-sample-truncated` when the sample overflowed (src/storage/code-state.ts:146-157).",
+              "A path Ferret cannot speak for never matches: absent from the map, withheld, or holding no hash all become a reason, and `matches` is false (src/context/code-state.ts:217-230).",
+              "Non-verified verdicts are `superseded`, `unanchored`, `unknown` with one of eight category-only reasons (repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable — src/context/code-state.ts:27-43), or `stale`.",
+              "`stale` is reached only when correspondence holds and no anchor was blocked but a hash differs, and its own detail says it means 'needs re-verification — not that it is false' (src/context/code-state.ts:209-214).",
+              "Correspondence is deliberately not cached across calls — an earlier per-instance memo made a session that committed keep hearing `verified` against the head the process first saw — and is memoised only for the duration of one call (src/storage/code-state.ts:163-175; src/context/durable-port.ts:43-51).",
+              "Live demonstration: durable statements 456c0238 and af9e01f3 are returned with `current: true` but `verification.verdict: stale`, because commit bbf7d63 'research(routing): move an anchored file's bytes without moving its behaviour' rewrote only a doc comment above MAX_ANCHORS in src/context/code-state.ts (observedHash d3cf0ed -> current e9ed814), while their substance still matches the code I read."
+            ],
+            "citations": [
+              "src/context/code-state.ts:3-9",
+              "src/context/code-state.ts:10-45",
+              "src/context/code-state.ts:157-215",
+              "src/context/code-state.ts:217-230",
+              "src/context/code-state.ts:232-253",
+              "src/storage/durable-context.ts:493",
+              "src/storage/code-state.ts:146-157",
+              "src/storage/code-state.ts:163-175",
+              "src/storage/code-state.ts:196-217",
+              "src/storage/code-state.ts:225-246",
+              "src/storage/code-state.ts:255-268",
+              "src/context/durable-port.ts:43-51",
+              "ferret durable context 456c0238-8057-8f24-89da-4a76c891ff39 (current: true, verdict stale)",
+              "ferret durable context af9e01f3-4c55-803e-94ca-e37495f176ba (current: true, verdict stale)",
+              "ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354 (verified)",
+              "ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47 (verified)",
+              "commit bbf7d632a8ccbb38032c7bc7b7dc7b6b96722df8",
+              "commit 3b92c04f90899859bb4e9ce612f28770859d1dc6 (EPIC-137, #229)"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.47217
+        },
+        "treatment#1": {
+          "arm": "treatment",
+          "pass": 1,
+          "routed": false,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/mcp/context-tools.ts",
+              "file:src/context/standing.ts",
+              "file:src/context/pack.ts",
+              "context:commit 3b92c04",
+              "context:commit 32cfd78",
+              "context:commit bbf7d63",
+              "context:ferret_context_find (kind=fact) — ids 456c0238-8057-8f24-89da-4a76c891ff39, af9e01f3-4c55-803e-94ca-e37495f176ba, b532bf6b-a1ed-8cfb-a64a-16945b4dfa47",
+              "context:ferret_context_trust — 456c0238-8057-8f24-89da-4a76c891ff39"
+            ],
+            "citationsOffLabel": 11,
+            "toolCalls": 21,
+            "turns": 23,
+            "filesRead": 7,
+            "linesRead": 891,
+            "searches": 10,
+            "historyCalls": 1,
+            "ferretCalls": 3,
+            "refusals": 3,
+            "toolErrors": 4,
+            "contextTokens": 505134,
+            "inputTokens": 26,
+            "cacheReadTokens": 498029,
+            "cacheWriteTokens": 35332,
+            "outputTokens": 7079,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 123829,
+            "toolMs": 19323,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_search": 1,
+              "mcp__ferret__ferret_context_find": 1,
+              "mcp__ferret__ferret_context_trust": 1
+            }
+          },
+          "anchoredFileReads": 4,
+          "ordering": {
+            "calls": 21,
+            "firstFerretCall": 16,
+            "firstNotesCall": null,
+            "firstSourceRead": 3,
+            "consultedBeforeSource": false,
+            "sourceReadsAfterConsult": 1,
+            "sequence": [
+              "search",
+              "search",
+              "read:code-state.ts",
+              "search",
+              "search",
+              "search",
+              "read:EPIC-137-DECISIONS.md",
+              "read:standing.ts",
+              "search",
+              "read:context-tools.ts",
+              "read:durable-context.ts",
+              "read:code-state.ts",
+              "search",
+              "search",
+              "search",
+              "ferret:ferret_search",
+              "search",
+              "git",
+              "read:pack.ts",
+              "ferret:ferret_context_find",
+              "ferret:ferret_context_trust"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 19980,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 4,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_search",
+              "ferret_context_find",
+              "ferret_context_trust"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether an anchored statement still matches the code, but on a separate axis from lifecycle: `current: true` only means the record's lifecycle is `active` (unsuperseded), and says nothing about code state — `describeVerification` deliberately labels the two apart. Trust lives in `verification.verdict`/`trustworthy`, which is `verified` only when all of: not superseded, lifecycle active, at least one anchored observation, correspondence established (live HEAD of the checked-out branch equals the single indexed head for that branch), and, for one whole observation, every anchored path resolves, is not withheld by exclusion/permission, is not in the dirty-path sample, the sample is not truncated, and the indexed content hash is byte-identical to the recorded one. Any unestablished condition yields `unknown` with a category-only reason, a hash difference with everything else established yields `stale` (\"needs re-verification\", not false), a replacement yields `superseded`, no anchor or a historical lifecycle yields `unanchored`, and the whole field is absent when no code-state reader is composed.",
+            "key_facts": [
+              "`current` is computed as `held.entity.lifecycle === LifecycleState.ACTIVE` in src/storage/durable-context.ts:? / src/mcp/context-tools.ts:102 and src/context/standing.ts:113 — an unsuperseded/active flag, not a code-state claim.",
+              "src/mcp/context-tools.ts:128-138 states explicitly that `current` means unsuperseded while `verification` is the separate question, and exposes `trustworthy: verification.verdict === AnchorVerdict.VERIFIED`.",
+              "src/context/code-state.ts:157-215 (`verifyAnchors`, documented as EPIC-137 §8, \"Six conditions for `verified`; any one unestablished is `unknown`, never a match\") checks supersession first, then historical lifecycle, then presence of anchored observations, then `correspondence.established`, then that one observation has no blocked anchor and every anchor matches.",
+              "VERIFIED requires every anchor of a single observation to be byte-identical; a partially matching observation does not qualify (src/context/code-state.ts:175-188).",
+              "Verdicts other than verified: `superseded` (replacement exists, checked first, outranks all), `unanchored` (no anchor recorded, or historical lifecycle — \"nothing about the repository is being claimed\"), `unknown` with a category-only `UnknownReason`, and `stale` only when correspondence holds and all anchors were readable but a hash differs — detail says \"needs re-verification — not that it is false\" (src/context/code-state.ts:10-45, 195-215).",
+              "UnknownReason categories: repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable (src/context/code-state.ts:27-43, with per-reason wording in `unknownDetail`).",
+              "Correspondence is established only if the scope is an indexed repository readable locally, HEAD is not detached, the checked-out branch has exactly one indexed head, and it equals the live HEAD; otherwise unestablished, and `established: false` is never upgraded later (src/storage/code-state.ts:172-217, src/context/code-state.ts:76-91).",
+              "A dirty anchored path or a truncated `git status` sample withholds the current hash (PATH_DIRTY / DIRT_UNKNOWN), so it becomes `unknown` rather than a match or `stale` (src/storage/code-state.ts:147-157).",
+              "Correspondence is deliberately never cached across calls — an earlier per-instance memo kept reporting `verified` against the head the process first saw — and is memoised only within one call (src/storage/code-state.ts:163-175, src/storage/durable-context.ts:543-552).",
+              "When no code-state port is composed, `verification` is omitted entirely rather than reported as `unanchored`, because \"Ferret cannot answer\" and \"nothing was claimed\" are different answers (src/storage/durable-context.ts:508-514; src/context/pack.ts:447-450).",
+              "Live demonstration on this branch: ferret_context_find returned three statements all with `current: true`, of which two carry `verdict: stale, trustworthy: false` because src/context/code-state.ts changed hash (the branch's comment-trimming/byte-moving commits 32cfd78 and bbf7d63), while one is `verified` — so `current: true` coexists with a non-verified verdict.",
+              "The verification logic is current, not superseded: src/context/code-state.ts and src/storage/code-state.ts have only comment/byte-move commits (32cfd78, bbf7d63) since the feature landed in 3b92c04 (#229)."
+            ],
+            "citations": [
+              "src/context/code-state.ts:10-45",
+              "src/context/code-state.ts:76-91",
+              "src/context/code-state.ts:150-215",
+              "src/context/code-state.ts:217-253",
+              "src/storage/code-state.ts:122-161",
+              "src/storage/code-state.ts:163-217",
+              "src/storage/durable-context.ts:495-553",
+              "src/mcp/context-tools.ts:100-150",
+              "src/context/standing.ts:49-119",
+              "src/context/pack.ts:434-458",
+              "commit 3b92c04 (#229)",
+              "commit 32cfd78",
+              "commit bbf7d63",
+              "ferret_context_find (kind=fact) — ids 456c0238-8057-8f24-89da-4a76c891ff39, af9e01f3-4c55-803e-94ca-e37495f176ba, b532bf6b-a1ed-8cfb-a64a-16945b4dfa47",
+              "ferret_context_trust — 456c0238-8057-8f24-89da-4a76c891ff39"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.7804685
+        },
+        "routed#1": {
+          "arm": "routed",
+          "pass": 1,
+          "routed": true,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/mcp/context-tools.ts",
+              "file:ferret_context_find / ferret_context_trust on 456c0238-8057-8f24-89da-4a76c891ff39",
+              "context:ferret_context_trust on af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "context:ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354",
+              "context:ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47",
+              "context:commit bbf7d63 research(routing): move an anchored file's bytes without moving its behaviour",
+              "context:commit 32cfd78 research(routing): trim comments to one line each"
+            ],
+            "citationsOffLabel": 9,
+            "toolCalls": 10,
+            "turns": 12,
+            "filesRead": 2,
+            "linesRead": 449,
+            "searches": 2,
+            "historyCalls": 1,
+            "ferretCalls": 5,
+            "refusals": 0,
+            "toolErrors": 0,
+            "contextTokens": 223727,
+            "inputTokens": 12,
+            "cacheReadTokens": 218019,
+            "cacheWriteTokens": 31997,
+            "outputTokens": 5696,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 87453,
+            "toolMs": 11575,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_context_pack": 1,
+              "mcp__ferret__ferret_search": 1,
+              "mcp__ferret__ferret_context_trust": 2,
+              "mcp__ferret__ferret_context_find": 1
+            }
+          },
+          "anchoredFileReads": 2,
+          "ordering": {
+            "calls": 10,
+            "firstFerretCall": 1,
+            "firstNotesCall": null,
+            "firstSourceRead": 6,
+            "consultedBeforeSource": true,
+            "sourceReadsAfterConsult": 2,
+            "sequence": [
+              "ferret:ferret_context_pack",
+              "ferret:ferret_search",
+              "ferret:ferret_context_trust",
+              "ferret:ferret_context_trust",
+              "ferret:ferret_context_find",
+              "read:code-state.ts",
+              "git",
+              "search",
+              "read:code-state.ts",
+              "search"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 37262,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 10,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_context_pack",
+              "ferret_search",
+              "ferret_context_trust",
+              "ferret_context_trust",
+              "ferret_context_find"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether an anchored statement still matches the code, but `current: true` is not enough to trust one — `current` is only `lifecycle === ACTIVE` (unsuperseded), a deliberately separate axis from the code-state verdict, and `trustworthy` is true only when the verdict is `verified`. Ferret reports `verified` only when all of: not superseded and lifecycle not historical; at least one anchored observation; correspondence established (the checked-out branch's live HEAD equals the single indexed head for that branch name); and, for one whole observation, every anchored path resolves to an indexed file, is not withheld by access/exclusion, is not in `git status`'s dirty-path set, the sample is not truncated, and the indexed hash is byte-identical to the one recorded at observation. Otherwise it reports `superseded`, `unanchored`, `unknown` (with one of eight category-only reasons), or `stale` — and `stale` explicitly means \"needs re-verification\", not \"false\". Two of Ferret's own recorded statements about this very mechanism are currently `current: true, trustworthy: false, verdict: stale` because a comment-only edit moved their anchored file's bytes.",
+            "key_facts": [
+              "`current` on a context record is computed as `context.entity.lifecycle === LifecycleState.ACTIVE` — i.e. unsuperseded/active only (src/mcp/context-tools.ts:102).",
+              "`trustworthy` is a distinct field computed as `verification.verdict === AnchorVerdict.VERIFIED` (src/mcp/context-tools.ts:138); its doc comment states \"`current` above means unsuperseded; this is the separate question, and the two are labelled so a reader cannot mistake one for the other\" (src/mcp/context-tools.ts:128-133).",
+              "`verifyAnchors` checks lifecycle first: `supersededBy !== undefined || lifecycle === SUPERSEDED` yields `superseded`; a historical lifecycle state or zero anchored observations yields `unanchored` (src/context/code-state.ts:157-168).",
+              "`verified` requires `input.correspondence.established` AND one whole observation whose reports have no `reason` and where every report `matches` (src/context/code-state.ts:175-187).",
+              "Correspondence is established only when the checked-out branch and HEAD are both readable and the single indexed head for that branch name equals the live head commit; detached HEAD, an unindexed branch, and two index rows disagreeing about a branch head all yield unestablished (src/storage/code-state.ts `#establish`, `#indexedHead`).",
+              "Per-anchor blocking reasons come from `currentContent`: path not an indexed file → `anchor-does-not-resolve`; access/exclusion → `anchor-excluded-by-rule`/`anchor-not-permitted`; path in `correspondence.dirtyPaths` → `anchored-path-modified`; `dirtySampleTruncated` → `working-tree-sample-truncated` (src/storage/code-state.ts `currentContent`).",
+              "The five verdicts are `verified`, `stale`, `superseded`, `unknown`, `unanchored`, and the eight `UnknownReason` categories are repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable (src/context/code-state.ts:10-45).",
+              "`stale` is returned only when correspondence is established and no anchor was blocked but a hash differs, with the detail \"an anchored file has changed since this was observed, so it needs re-verification — not that it is false\" (src/context/code-state.ts:209-214).",
+              "The comparison is index-to-index: `currentContent` returns the indexed version hash for the file entity and never re-hashes from disk; the live tree supplies only HEAD, branch and the dirty-path sample (src/storage/code-state.ts `currentContent`, `#establish`).",
+              "Correspondence is deliberately never cached — an earlier per-instance memo meant a session that committed kept being told `verified` against the head the process first saw (src/storage/code-state.ts, doc comment on `correspondence`).",
+              "Live demonstration: durable statements 456c0238-8057-8f24-89da-4a76c891ff39 and af9e01f3-4c55-803e-94ca-e37495f176ba report `state: active, current: true` alongside `verdict: stale, trustworthy: false`, because their anchored `src/context/code-state.ts` moved from git-blob d3cf0ed to e9ed814.",
+              "That hash move came from commits bbf7d63 and 32cfd78, which only rewrote the doc comment on `MAX_ANCHORS` — confirming `stale` reflects bytes moving, not the statement becoming false.",
+              "Nuance: statement 456c0238 (and the doc comment at src/context/code-state.ts:150-153) says any unestablished condition yields `unknown`, but the code returns `stale` for the hash-mismatch case when correspondence holds and no anchor was blocked."
+            ],
+            "citations": [
+              "src/context/code-state.ts:10-45 (AnchorVerdict, UnknownReason)",
+              "src/context/code-state.ts:150-215 (verifyAnchors)",
+              "src/context/code-state.ts:217-230 (report)",
+              "src/storage/code-state.ts:122-160 (currentContent)",
+              "src/storage/code-state.ts:163-268 (correspondence, #establish, #localPath, #indexedHead)",
+              "src/mcp/context-tools.ts:100-150 (describeContext, describeBelief, describeVerification)",
+              "ferret_context_find / ferret_context_trust on 456c0238-8057-8f24-89da-4a76c891ff39",
+              "ferret_context_trust on af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354 (verdict verified)",
+              "ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47 (verdict verified)",
+              "commit bbf7d63 research(routing): move an anchored file's bytes without moving its behaviour",
+              "commit 32cfd78 research(routing): trim comments to one line each"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.5724585
+        },
+        "treatment#2": {
+          "arm": "treatment",
+          "pass": 2,
+          "routed": false,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/context/standing.ts",
+              "file:src/mcp/context-tools.ts",
+              "file:src/storage/code-state.ts",
+              "file:src/domain/kinds.ts",
+              "file:src/context/pack.ts",
+              "file:docs/EPICs/ROADMAP.md",
+              "commit:bbf7d63",
+              "commit:32cfd78",
+              "commit:3b92c04",
+              "context:ferret_context_find: context af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "context:ferret_context_find: context 456c0238-8057-8f24-89da-4a76c891ff39",
+              "context:ferret_context_find: context 54c52b1f-7f6d-860b-af04-846e49525354",
+              "context:ferret_context_find: context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47"
+            ],
+            "citationsOffLabel": 14,
+            "toolCalls": 16,
+            "turns": 18,
+            "filesRead": 2,
+            "linesRead": 388,
+            "searches": 12,
+            "historyCalls": 1,
+            "ferretCalls": 1,
+            "refusals": 4,
+            "toolErrors": 4,
+            "contextTokens": 390531,
+            "inputTokens": 22,
+            "cacheReadTokens": 383896,
+            "cacheWriteTokens": 22149,
+            "outputTokens": 6613,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 108140,
+            "toolMs": 19271,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_context_find": 1
+            }
+          },
+          "anchoredFileReads": 1,
+          "ordering": {
+            "calls": 16,
+            "firstFerretCall": 12,
+            "firstNotesCall": null,
+            "firstSourceRead": 3,
+            "consultedBeforeSource": false,
+            "sourceReadsAfterConsult": 0,
+            "sequence": [
+              "search",
+              "search",
+              "read:code-state.ts",
+              "search",
+              "search",
+              "read:standing.ts",
+              "search",
+              "search",
+              "search",
+              "search",
+              "search",
+              "ferret:ferret_context_find",
+              "search",
+              "search",
+              "search",
+              "git"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 8658,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 4,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_context_find"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether a statement still matches the code, but `current` is a *different* axis: it is set purely from lifecycle (`current: held.entity.lifecycle === ACTIVE`, standing.ts:113) and means only \"unsuperseded/not retired\". Code-state trust lives in the separate `verification` block, whose `trustworthy` is true only for verdict `verified` (context-tools.ts:138). `verifyAnchors` requires six things for `verified` — not superseded, lifecycle not historical, at least one anchored observation, established correspondence between indexed head and the live checkout, every anchor of one whole observation readable, and every anchored path's indexed hash byte-identical to what was recorded. Otherwise it returns `superseded`, `unanchored`, `unknown` with a category-only reason, or `stale`, never a match.",
+            "key_facts": [
+              "`current` is computed as `held.entity.lifecycle === LifecycleState.ACTIVE` (src/context/standing.ts:113); its doc comment reads \"True only for `active`. Everything else is history or a proposal.\"",
+              "The MCP surface documents the split explicitly: \"`current` above means unsuperseded; this is the separate question, and the two are labelled so a reader cannot mistake one for the other\" (src/mcp/context-tools.ts:128-134).",
+              "`trustworthy` in the MCP output is derived solely as `verification.verdict === AnchorVerdict.VERIFIED` (src/mcp/context-tools.ts:138) — it is not derived from `current`.",
+              "Condition 1: not superseded. `supersededBy !== undefined || lifecycle === SUPERSEDED` returns verdict `superseded`, checked first because it \"outranks every other verdict\" (src/context/code-state.ts:15, 160-162).",
+              "Condition 2: lifecycle not historical. Archived/deleted/superseded return `unanchored` with detail \"not current context, so no code state is claimed\" (src/context/code-state.ts:163-165, src/domain/kinds.ts:126-130).",
+              "Condition 3: at least one anchored observation. Zero observations return `unanchored` — \"no code-state anchor was recorded, so nothing about the repository is being claimed\" (src/context/code-state.ts:147-148, 166-168).",
+              "Condition 4: `correspondence.established` must hold; the adapter establishes it only when the live branch HEAD equals the single indexed head for that branch, and returns unestablished for not-indexed, detached HEAD, unindexed branch, or two index rows disagreeing about the head (src/storage/code-state.ts:172-215, 251-267).",
+              "Condition 5: every anchor of one observation must be readable — a withheld or unresolvable path yields a `reason` and \"a path Ferret cannot speak for never matches\"; dirty paths and a truncated dirty sample are withheld (src/context/code-state.ts:217-230; src/storage/code-state.ts:149-155).",
+              "Condition 6: every anchor's current content hash must equal the observed hash; `matches` requires `reason === undefined && held?.contentHash === anchor.contentHash` (src/context/code-state.ts:227).",
+              "When correspondence is not established the verdict is `unknown` with reason `index-does-not-correspond` (or the correspondence's own reason); when correspondence holds but an anchor is blocked the verdict is `unknown` with that anchor's category reason; when correspondence holds and all anchors were readable but a hash differs the verdict is `stale` (src/context/code-state.ts:195-214).",
+              "`stale` explicitly does not mean false: \"An anchored path's content moved. Not a claim that the statement is false\" and \"it needs re-verification — not that it is false\" (src/context/code-state.ts:12-13, 213).",
+              "Unknown reasons are category-only and never leak a path: repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable (src/context/code-state.ts:26-43).",
+              "Live counter-example from this repository: ferret_context_find returned contexts af9e01f3-4c55-803e-94ca-e37495f176ba and 456c0238-8057-8f24-89da-4a76c891ff39 with `current: true` but `verdict: \"stale\"`, `trustworthy: false` — observed git-blob:d3cf0ed8… against current git-blob:e9ed8144… for src/context/code-state.ts.",
+              "That staleness was produced by commits bbf7d63 \"move an anchored file's bytes without moving its behaviour\" and 32cfd78 \"trim comments to one line each\", which touched src/context/code-state.ts without changing behaviour — anchors compare bytes, not behaviour.",
+              "EPIC-137's design is still in force and not reversed: the only commits to src/context/code-state.ts after the feature merge 3b92c04 are the two byte-moving research commits; #138 in docs/EPICs/ROADMAP.md:74 is unrelated registry hygiene.",
+              "The same `verifyAnchors` is shared by the trust surface and the pack \"so the two cannot disagree\" (src/context/code-state.ts:155; src/context/pack.ts:438-457)."
+            ],
+            "citations": [
+              "src/context/code-state.ts",
+              "src/context/standing.ts",
+              "src/mcp/context-tools.ts",
+              "src/storage/code-state.ts",
+              "src/domain/kinds.ts",
+              "src/context/pack.ts",
+              "docs/EPICs/ROADMAP.md",
+              "bbf7d63",
+              "32cfd78",
+              "3b92c04",
+              "ferret_context_find: context af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "ferret_context_find: context 456c0238-8057-8f24-89da-4a76c891ff39",
+              "ferret_context_find: context 54c52b1f-7f6d-860b-af04-846e49525354",
+              "ferret_context_find: context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.579902
+        },
+        "routed#2": {
+          "arm": "routed",
+          "pass": 2,
+          "routed": true,
+          "scored": {
+            "task": "session-b",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "no",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "current-is-not-verified",
+                "covered": true
+              },
+              {
+                "id": "content-hash-is-the-key",
+                "covered": true
+              },
+              {
+                "id": "correspondence-required",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 0,
+            "primaryTotal": 0,
+            "citations": [
+              "file:src/context/code-state.ts",
+              "file:src/storage/durable-context.ts",
+              "file:src/mcp/context-tools.ts",
+              "context:ferret durable context 456c0238-8057-8f24-89da-4a76c891ff39",
+              "context:ferret durable context af9e01f3-4c55-803e-94ca-e37495f176ba",
+              "context:ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47",
+              "context:ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354",
+              "context:commit bbf7d63",
+              "context:commit 32cfd78",
+              "context:commit 3b92c04",
+              "file:docs/Architecture/EPIC-137-DECISIONS.md"
+            ],
+            "citationsOffLabel": 11,
+            "toolCalls": 12,
+            "turns": 14,
+            "filesRead": 2,
+            "linesRead": 357,
+            "searches": 3,
+            "historyCalls": 3,
+            "ferretCalls": 4,
+            "refusals": 1,
+            "toolErrors": 1,
+            "contextTokens": 269286,
+            "inputTokens": 14,
+            "cacheReadTokens": 263204,
+            "cacheWriteTokens": 28791,
+            "outputTokens": 6068,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "stale": [],
+            "elapsedMs": 96026,
+            "toolMs": 12535,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_context_pack": 1,
+              "mcp__ferret__ferret_search": 1,
+              "mcp__ferret__ferret_context_find": 1,
+              "mcp__ferret__ferret_context_trust": 1
+            }
+          },
+          "anchoredFileReads": 2,
+          "ordering": {
+            "calls": 12,
+            "firstFerretCall": 1,
+            "firstNotesCall": null,
+            "firstSourceRead": 5,
+            "consultedBeforeSource": true,
+            "sourceReadsAfterConsult": 2,
+            "sequence": [
+              "ferret:ferret_context_pack",
+              "ferret:ferret_search",
+              "ferret:ferret_context_find",
+              "ferret:ferret_context_trust",
+              "read:code-state.ts",
+              "git",
+              "git",
+              "search",
+              "git",
+              "search",
+              "read:context-tools.ts",
+              "search"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 34218,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 9,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_context_pack",
+              "ferret_search",
+              "ferret_context_find",
+              "ferret_context_trust"
+            ]
+          },
+          "answer": {
+            "verdict": "no",
+            "conclusion": "Half right. Ferret does report whether a statement still matches the code, but through a separate `verification.verdict` field — not through `current`. `current` is computed solely as `lifecycle === ACTIVE` (`src/storage/durable-context.ts:493`), i.e. \"nobody retired or replaced this\", and `src/mcp/context-tools.ts:131-135` labels the two axes apart deliberately so \"a reader cannot mistake one for the other\". Only `verdict: 'verified'` sets `trustworthy: true`; that requires six conditions to hold at once, and any one unestablished yields `unknown` with a category-only reason, while a readable-but-differing hash yields `stale`, which means \"needs re-verification\", not \"false\".",
+            "key_facts": [
+              "`current` is derived only from lifecycle: `current: held.entity.lifecycle === LifecycleState.ACTIVE` in src/storage/durable-context.ts:493 — it carries no code-state meaning.",
+              "Trust on the MCP surface is bound to the verdict, not to `current`: `trustworthy: verification.verdict === AnchorVerdict.VERIFIED` (src/mcp/context-tools.ts:138).",
+              "src/mcp/context-tools.ts:131-135 states explicitly that `current` means unsuperseded and code-state is \"the separate question\", labelled so the two cannot be confused.",
+              "Live proof in this repository: statements 456c0238 and af9e01f3 are both `state: active, current: true` yet report `verdict: stale, trustworthy: false`, because their anchor src/context/code-state.ts moved from blob d3cf0ed to e9ed814.",
+              "Six conditions for `verified` (src/context/code-state.ts:150-215): not superseded and no ENTITY_SUPERSEDES_ENTITY edge; lifecycle not in HISTORICAL_LIFECYCLE_STATES; at least one anchored observation; correspondence established; and for one whole observation every anchor has no blocking reason and every anchor's indexed hash is byte-identical to the hash recorded at observation time.",
+              "A blocking anchor reason covers: path no longer an indexed file, excluded by rule, scope not permitted, path in git status's dirty-path sample, or that sample truncated (src/context/code-state.ts:26-45, 204-207, report() at 217-230).",
+              "Non-verified outcomes are `superseded` (checked first, names the replacement), `unanchored` (no anchor recorded, or a historical lifecycle state — not-a-code-claim rather than cannot-tell), `unknown` with a category-only UnknownReason, or `stale`.",
+              "`unknown` reasons are category only, never a path a caller may not see: repository-not-indexed, index-does-not-correspond, anchored-path-modified, working-tree-sample-truncated, anchor-does-not-resolve, anchor-excluded-by-rule, anchor-not-permitted, scope-not-locally-readable.",
+              "`stale` is reserved for the narrow case where correspondence holds and every anchor was readable but a hash differs; its detail reads \"needs re-verification — not that it is false\" (src/context/code-state.ts:209-214).",
+              "A fifth outcome is absence: `verification` is omitted entirely when no code-state reader is configured, because \"Ferret cannot answer\" and \"nothing was claimed\" are different answers (src/storage/durable-context.ts:508-514).",
+              "The comparison is index-to-index, gated on the live tree: file contents are never re-hashed from disk at verify time, so an unindexed working-tree edit surfaces as `unknown`/anchored-path-modified rather than as `stale` (durable context b532bf6b, verified).",
+              "The `stale` verdicts on the two statements are byte-drift only, not a behaviour reversal: commits bbf7d63 and 32cfd78 changed just the doc comment above MAX_ANCHORS in src/context/code-state.ts, so both statements' substance still matches the code I read.",
+              "Correspondence is never cached across calls and is memoised only within one ferret_context_find/ferret_context_pack call; detached HEAD, an unindexed branch, no worktree matching the caller's cwd, or two index rows disagreeing about a branch head all yield `unknown` (durable context 54c52b1f, verified)."
+            ],
+            "citations": [
+              "src/context/code-state.ts:10-45",
+              "src/context/code-state.ts:150-215",
+              "src/context/code-state.ts:217-230",
+              "src/context/code-state.ts:232-253",
+              "src/storage/durable-context.ts:493",
+              "src/storage/durable-context.ts:506-552",
+              "src/mcp/context-tools.ts:128-150",
+              "ferret durable context 456c0238-8057-8f24-89da-4a76c891ff39 (verdict stale)",
+              "ferret durable context af9e01f3-4c55-803e-94ca-e37495f176ba (verdict stale)",
+              "ferret durable context b532bf6b-a1ed-8cfb-a64a-16945b4dfa47 (verdict verified)",
+              "ferret durable context 54c52b1f-7f6d-860b-af04-846e49525354 (verdict verified)",
+              "commit bbf7d63",
+              "commit 32cfd78",
+              "commit 3b92c04",
+              "docs/Architecture/EPIC-137-DECISIONS.md:51"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.572301
+        }
+      }
+    },
+    "r8": {
+      "tree": {
+        "commit": "3e3ea861665252cf7a83f8f1419c80bba29d30ed",
+        "dirty": false
+      },
+      "model": "opus",
+      "effort": "high",
+      "what": "a question nothing durable was recorded about — the wasted-call case",
+      "carried": 4,
+      "carriedVerdicts": [
+        "verified",
+        "verified",
+        "stale",
+        "stale"
+      ],
+      "anchoredPaths": [
+        "src/context/pack.ts",
+        "src/storage/code-state.ts",
+        "src/storage/durable-context.ts",
+        "src/git/worktree-state.ts",
+        "src/context/code-state.ts"
+      ],
+      "routingText": "Before you open any source file, check whether durable engineering context about this question has already been recorded by an earlier session and is retrievable through the tools available to you. Do that check first. Then continue however you judge best.",
+      "runs": {
+        "treatment": {
+          "arm": "treatment",
+          "pass": 1,
+          "routed": false,
+          "scored": {
+            "task": "macos-runner",
+            "group": "decision",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "do-not-add-a-macos-runner",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "owner-decision",
+                "covered": true
+              },
+              {
+                "id": "coverage-deferred",
+                "covered": true
+              },
+              {
+                "id": "was-measured",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": true,
+            "primaryCited": 2,
+            "primaryTotal": 2,
+            "citations": [
+              "file:.github/workflows/ci.yml",
+              "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md",
+              "file:docs/EPICs/ROADMAP.md",
+              "file:README.md",
+              "context:commit 9bae9f2 \"ci: Windows is the only platform this workflow tests (#155)\"",
+              "context:commit 29e7fbd \"feat(EPIC-105): Cross-Platform Packaging — macOS measured and passing (#140)\"",
+              "context:commit 9100405",
+              "file:git log --oneline -15 -- .github/workflows/ci.yml docs/EPICs/EPIC-115-macOS-Packaging-Validation.md"
+            ],
+            "citationsOffLabel": 5,
+            "toolCalls": 16,
+            "turns": 18,
+            "filesRead": 3,
+            "linesRead": 181,
+            "searches": 6,
+            "historyCalls": 4,
+            "ferretCalls": 2,
+            "refusals": 1,
+            "toolErrors": 3,
+            "contextTokens": 406544,
+            "inputTokens": 22,
+            "cacheReadTokens": 401969,
+            "cacheWriteTokens": 51904,
+            "outputTokens": 4553,
+            "nudges": 0,
+            "unsupportedCitations": 2,
+            "unsupported": [
+              "context:commit 9bae9f2 \"ci: Windows is the only platform this workflow tests (#155)\"",
+              "context:commit 29e7fbd \"feat(EPIC-105): Cross-Platform Packaging — macOS measured and passing (#140)\""
+            ],
+            "staleAsserted": false,
+            "stale": [
+              {
+                "id": "claims-a-runner-exists",
+                "asserted": false
+              }
+            ],
+            "elapsedMs": 82935,
+            "toolMs": 16060,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_context_pack": 1,
+              "mcp__ferret__ferret_search": 1
+            }
+          },
+          "anchoredFileReads": 0,
+          "ordering": {
+            "calls": 16,
+            "firstFerretCall": 1,
+            "firstNotesCall": null,
+            "firstSourceRead": 2,
+            "consultedBeforeSource": true,
+            "sourceReadsAfterConsult": 2,
+            "sequence": [
+              "ferret:ferret_context_pack",
+              "read:no-macos-ci.md",
+              "ferret:ferret_search",
+              "search",
+              "Bash",
+              "search",
+              "read:EPIC-115-macOS-Packaging-Validation.md",
+              "search",
+              "search",
+              "git",
+              "git",
+              "search",
+              "git",
+              "search",
+              "git",
+              "read:ci.yml"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 27806,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 4,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_context_pack",
+              "ferret_search"
+            ]
+          },
+          "answer": {
+            "verdict": "do-not-add-a-macos-runner",
+            "conclusion": "No — the repository's current record is an explicit owner decision of 2026-09-05 not to enable remote CI for macOS, and nothing since has reversed it. That decision itself superseded an earlier same-day decision to add a macOS packaging lane, so the \"add a runner\" position is the reversed one; what survives from it is the non-optional clause that no record may claim macOS is validated. Adding a runner now would need a fresh owner approval, and the record already documents what it would cost (3m47s, EPIC-105's measured job) and buy (the POSIX global-install path and the shutdown/signal contract), with a nightly scheduled lane as the standing recommendation if it is ever revisited.",
+            "key_facts": [
+              "The `verify` matrix in .github/workflows/ci.yml is `os: ['windows-latest']` only, annotated \"**Windows only, by owner decision, 2026-09-05.** Ubuntu and macOS are dropped from this matrix\" and \"this workflow no longer measures macOS, and no record should claim it does.\"",
+              "EPIC-115 records two owner decisions taken 2026-09-05 in order: first add genuine macOS packaging validation, then — \"superseding the runner half of the first\" — do not enable remote CI for macOS; the Epic is CLOSED with coverage DEFERRED and explicitly lists \"A `macos-latest` job\" under Non-scope, \"Declined by the owner\".",
+              "EPIC-115's acceptance criterion 6 is \"No CI change — `.github/workflows/ci.yml` is untouched by this Epic\"; what the Epic delivered was correcting the README's false platform claims, not coverage.",
+              "docs/EPICs/ROADMAP.md row 7 records EPIC-115 as \"CLOSED — coverage DEFERRED · No runner enabled, by owner decision ... Revisit needs a runner approval\", and lists macOS coverage under \"Not in this queue\" as declined 2026-09-05.",
+              "The ROADMAP decision entry states the second decision \"removes option A, B and C alike\" and that restoring macOS \"needs approval because it partly reverses a 2026-09-05 owner decision\"; its recommendation if revisited is option B, a nightly scheduled `macos-latest` job (measured at 3m47s by EPIC-105).",
+              "README.md's platform table currently reads \"| macOS | **not currently measured** | — |\", consistent with CI; macOS was last measured on 2026-09-03 (EPIC-105, PR #140: 112 test files, 2463 tests, packaging suite and seven signal tests).",
+              "The last commits touching .github/workflows/ci.yml are 9bae9f2 (\"ci: Windows is the only platform this workflow tests\", #155) and 9100405 (concurrency cancellation), with no later commit re-adding macOS; no post-2026-09-05 commit approves a macOS runner.",
+              "The named unmeasured gaps are the POSIX global-install path (lib/node_modules, bin shim shebang, executable bit) and the shutdown contract (the seven signal tests are describe.skip on Windows because Node delivers no SIGTERM there)."
+            ],
+            "citations": [
+              ".github/workflows/ci.yml (lines 66-99, and the matrix comment at 73-91)",
+              "docs/EPICs/EPIC-115-macOS-Packaging-Validation.md (Status line 3; Decisions 41-56; Non-scope 92-95; Acceptance criterion 6 line 116; Known limitations 131-133)",
+              "docs/EPICs/ROADMAP.md (row 7 line 71; decision entry lines 448-513; \"Not in this queue\" lines 802-805)",
+              "README.md (platform table lines 488-492; macOS paragraphs 499-515)",
+              "commit 9bae9f2 \"ci: Windows is the only platform this workflow tests (#155)\"",
+              "commit 29e7fbd \"feat(EPIC-105): Cross-Platform Packaging — macOS measured and passing (#140)\"",
+              "commit 9100405 (most recent change to .github/workflows/ci.yml)",
+              "git log --oneline -15 -- .github/workflows/ci.yml docs/EPICs/EPIC-115-macOS-Packaging-Validation.md"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.8349605
+        },
+        "routed": {
+          "arm": "routed",
+          "pass": 1,
+          "routed": true,
+          "scored": {
+            "task": "macos-runner",
+            "group": "decision",
+            "answered": true,
+            "stopped": "completed",
+            "verdict": "do-not-add-a-macos-runner",
+            "verdictCorrect": true,
+            "factsCovered": 3,
+            "factsTotal": 3,
+            "factsComplete": true,
+            "facts": [
+              {
+                "id": "owner-decision",
+                "covered": true
+              },
+              {
+                "id": "coverage-deferred",
+                "covered": true
+              },
+              {
+                "id": "was-measured",
+                "covered": true
+              }
+            ],
+            "evidenceSourced": false,
+            "primaryCited": 1,
+            "primaryTotal": 2,
+            "citations": [
+              "file:docs/EPICs/EPIC-115-macOS-Packaging-Validation.md:3-12, 41-56, 90-105, 129-143",
+              "file:docs/EPICs/validation/EPIC-115-VALIDATION.md:1-12, 31-41, 54-70",
+              "file:.github/workflows/ci.yml",
+              "file:README.md",
+              "file:docs/EPICs/ROADMAP.md:71, 444-513, 802-805",
+              "file:git log --format='%h %ad %s' -- .github/workflows/ci.yml",
+              "context:commit 1072c3d docs(platforms): the README verified macOS on every pull request three days after it stopped (EPIC-115)",
+              "context:commit 29e7fbd feat(EPIC-105): Cross-Platform Packaging — macOS measured and passing",
+              "file:docs/EPICs/validation/EPIC-105-VALIDATION.md:6, 19, 31",
+              "context:mcp__ferret__ferret_context_find"
+            ],
+            "citationsOffLabel": 8,
+            "toolCalls": 17,
+            "turns": 20,
+            "filesRead": 2,
+            "linesRead": 228,
+            "searches": 6,
+            "historyCalls": 2,
+            "ferretCalls": 6,
+            "refusals": 1,
+            "toolErrors": 2,
+            "contextTokens": 413323,
+            "inputTokens": 20,
+            "cacheReadTokens": 405371,
+            "cacheWriteTokens": 40921,
+            "outputTokens": 7932,
+            "nudges": 0,
+            "unsupportedCitations": 0,
+            "unsupported": [],
+            "staleAsserted": false,
+            "stale": [
+              {
+                "id": "claims-a-runner-exists",
+                "asserted": false
+              }
+            ],
+            "elapsedMs": 118629,
+            "toolMs": 21542,
+            "ferretSurfaces": {
+              "mcp__ferret__ferret_context_pack": 1,
+              "mcp__ferret__ferret_search": 2,
+              "mcp__ferret__ferret_context_find": 1,
+              "mcp__ferret__ferret_config_exclusions": 1,
+              "mcp__ferret__ferret_answer": 1
+            }
+          },
+          "anchoredFileReads": 0,
+          "ordering": {
+            "calls": 17,
+            "firstFerretCall": 1,
+            "firstNotesCall": null,
+            "firstSourceRead": 7,
+            "consultedBeforeSource": true,
+            "sourceReadsAfterConsult": 2,
+            "sequence": [
+              "ferret:ferret_context_pack",
+              "ferret:ferret_search",
+              "ferret:ferret_context_find",
+              "ferret:ferret_search",
+              "ferret:ferret_config_exclusions",
+              "search",
+              "read:EPIC-115-macOS-Packaging-Validation.md",
+              "read:EPIC-115-VALIDATION.md",
+              "git",
+              "search",
+              "search",
+              "git",
+              "search",
+              "Bash",
+              "search",
+              "ferret:ferret_answer",
+              "search"
+            ]
+          },
+          "supplied": {
+            "ferretResultChars": 31794,
+            "statementsReturned": 4,
+            "statementsHeld": 4,
+            "verdictsReturned": 8,
+            "verdictKinds": [
+              "verified",
+              "stale"
+            ],
+            "surfaces": [
+              "ferret_context_pack",
+              "ferret_search",
+              "ferret_context_find",
+              "ferret_search",
+              "ferret_config_exclusions!",
+              "ferret_answer"
+            ]
+          },
+          "answer": {
+            "verdict": "do-not-add-a-macos-runner",
+            "conclusion": "No. The repository's record shows this was decided rather than left open: on 2026-09-05 the owner dropped macOS from the verify matrix, then in a second decision the same day declined to enable remote CI for macOS at all — explicitly superseding the earlier decision to add a macOS packaging lane. EPIC-115 was closed with coverage DEFERRED and no CI change, delivering instead the non-optional half of the decision: correcting the README so nothing claims macOS is verified. That state is still current — ci.yml has not been touched since 2026-09-05 and its verify matrix is windows-latest only. Restoring a runner needs a fresh owner approval, not an engineering judgement; the cost (3m47s) and what it buys are already recorded so revisiting is a decision, not a rediscovery.",
+            "key_facts": [
+              "Durable context check done first: Ferret's store holds only 4 active statements, all about the code-state/anchor verification path; none concerns macOS or CI, so no recorded engineering context answers this and the answer rests on repository documents.",
+              "EPIC-115 records two owner decisions of 2026-09-05 in order: first 'add genuine macOS packaging validation, preferably on a scheduled lane'; second, 'superseding the runner half of the first: do not enable remote CI for macOS. It is the owner's last priority.' The first is the superseded one.",
+              "EPIC-115 status line reads 'CLOSED — coverage DEFERRED by owner decision; the false claim is corrected'; a macos-latest job is listed under Non-scope as 'Declined by the owner', and acceptance criterion 6 is 'No CI change'.",
+              "The surviving clause of the reversed first decision is documentary, not a runner: 'do not pretend macOS is validated unless the packaging path actually ran on macOS' — which is what EPIC-115 delivered.",
+              "Current CI confirms no later reversal: .github/workflows/ci.yml sets os: ['windows-latest'] for verify, with the comment 'Windows only, by owner decision, 2026-09-05' and 'this workflow no longer measures macOS, and no record should claim it does'.",
+              "git log on .github/workflows/ci.yml shows its last change was 2026-09-05 (9100405, a concurrency-comment fix); the matrix change was 9bae9f2 'ci: Windows is the only platform this workflow tests'. Nothing since then re-added macOS.",
+              "README's platform table now reads '| macOS | **not currently measured** | — |', distinguishing unmeasured from unsupported, and dates the last passing macOS evidence to EPIC-105's 2026-09-03 run (112 test files, 2463 tests, packaging suite and seven signal tests).",
+              "ROADMAP row 7 states 'No runner enabled, by owner decision… Owner decision 2026-09-05: not a priority. Revisit needs a runner approval'; its options A/B/C and the 'Recommendation: B' scheduled lane are retained only as the superseded alternatives, with 'This needs approval because it partly reverses a 2026-09-05 owner decision'.",
+              "What a runner would buy is named rather than admitted: the POSIX global-install path (lib/node_modules, bin shim shebang, executable bit) and the shutdown contract (the seven signal tests are describe.skip on Windows because Node delivers no SIGTERM there), at a measured cost of 3m47s."
+            ],
+            "citations": [
+              "docs/EPICs/EPIC-115-macOS-Packaging-Validation.md:3-12, 41-56, 90-105, 129-143",
+              "docs/EPICs/validation/EPIC-115-VALIDATION.md:1-12, 31-41, 54-70",
+              ".github/workflows/ci.yml:67-98",
+              "README.md:488-515",
+              "docs/EPICs/ROADMAP.md:71, 444-513, 802-805",
+              "git log --format='%h %ad %s' -- .github/workflows/ci.yml (last change 9100405, 2026-09-05; matrix change 9bae9f2)",
+              "commit 1072c3d docs(platforms): the README verified macOS on every pull request three days after it stopped (EPIC-115) (#167)",
+              "commit 29e7fbd feat(EPIC-105): Cross-Platform Packaging — macOS measured and passing (#140)",
+              "docs/EPICs/validation/EPIC-105-VALIDATION.md:6, 19, 31",
+              "mcp__ferret__ferret_context_find (4 active statements: 54c52b1f, b532bf6b, af9e01f3, 456c0238 — none about macOS/CI)"
+            ],
+            "confidence": "high"
+          },
+          "costUsd": 0.8112964999999999
+        }
+      }
+    }
+  },
+  "setup": {
+    "database": "ferret_agent_ab",
+    "tree": {
+      "commit": "d5f472c06aa40b3f8a6fbc1d1824820695850cdb",
+      "dirty": false
+    },
+    "indexSeconds": 505
+  },
+  "reindex": {
+    "database": "ferret_agent_ab",
+    "tree": {
+      "commit": "3e3ea861665252cf7a83f8f1419c80bba29d30ed",
+      "dirty": false
+    },
+    "indexSeconds": 53
+  }
+}
