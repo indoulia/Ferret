@@ -23,6 +23,15 @@ export const EXCLUDED = Object.freeze([
   // answer key.
   'docs/EPICs/validation/EPIC-137-VALIDATION.md',
   'docs/evidence/FERRET-DOES-AN-ANCHOR-CARRY.md',
+  // EPIC-138 §21. All six state the routing result in prose; the last two do
+  // not exist yet, which is the point — R138 §9 found a report contaminates the
+  // next run of the suite that produced it.
+  'docs/EPICs/EPIC-138-Durable-Context-Routing-Guidance.md',
+  'docs/Architecture/EPIC-138-DECISIONS.md',
+  'docs/EPICs/ROADMAP.md',
+  'docs/evidence/FERRET-WHEN-DOES-THE-AGENT-ASK.md',
+  'docs/EPICs/validation/EPIC-138-VALIDATION.md',
+  'docs/evidence/FERRET-DOES-A-SERVER-STRING-ROUTE.md',
 ]);
 
 /**

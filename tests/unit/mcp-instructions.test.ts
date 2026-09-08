@@ -6,23 +6,11 @@ import { describe, expect, it } from 'vitest';
 import { CONTENT_NOTICE } from '../../src/index.js';
 
 /**
- * The `initialize` instructions, as text — EPIC-138 AC-2, AC-6, AC-7, AC-8.
+ * The `initialize` guidance as text — EPIC-138 AC-2, AC-6, AC-7, AC-8.
  *
- * The one string every MCP client shows before a session's first turn. EPIC-138
- * adds one sentence to it, and the whole Epic *is* that sentence: there is no
- * behaviour to assert, so what is asserted is what the words may and may not
- * say.
- *
- * **The lists below were written and committed before the wording was chosen.**
- * That ordering is the only thing that makes them a control rather than a
- * description — a forbidden-phrase list written after the sentence is a list the
- * sentence passes by construction, and proves nothing about the next person to
- * edit it. `git log` on this file against `src/mcp/server.ts` is the evidence.
- *
- * Source-level rather than through a client, on the precedent of
- * `mcp-destructive-tools.test.ts`: the property is *what the shipped literal
- * says*. AC-1 asserts the same string reaches a real client, and lives in
- * `tests/integration/mcp/tools.test.ts` where a client already exists.
+ * The lists below were committed red, before the wording existed: a
+ * forbidden-phrase list written afterwards is one the sentence passes by
+ * construction. AC-1 asserts the same string through a real client.
  */
 
 const SERVER = fileURLToPath(new URL('../../src/mcp/server.ts', import.meta.url));
@@ -32,18 +20,16 @@ const PURPOSE =
   'Ferret answers questions about indexed repositories: commits, files, ' +
   'branches, worktrees, developers and the evidence behind each fact. ';
 
-/**
- * The instructions literal, read out of the source and concatenated.
- *
- * Throws rather than returning something empty when the shape it expects is
- * gone: a text control that silently starts asserting against `''` passes every
- * list it holds, which is the failure mode this whole file exists to prevent.
- */
+/** Block comments wholesale, line comments only when they start a line — as `mcp-destructive-tools.test.ts` does. */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+/** The instructions literal, concatenated. Throws rather than returning `''`, which would pass every list below. */
 function instructionsLiteral(): string {
-  // Line endings normalized: this repository is developed on Windows and
-  // checked out on Linux in CI, and a control that matched only one of them
-  // would pass on one platform by not running.
-  const source = readFileSync(SERVER, 'utf8').replaceAll('\r\n', '\n');
+  // CRLF normalized for CI, and comments stripped — the first run of this
+  // extractor scored the literal's own comment block, not the literal.
+  const source = stripComments(readFileSync(SERVER, 'utf8').replaceAll('\r\n', '\n'));
   const field = /\n\s*instructions:\s*([\s\S]*?CONTENT_NOTICE,)\n/.exec(source);
   if (field === null) {
     throw new Error('src/mcp/server.ts no longer composes `instructions:` ending in CONTENT_NOTICE.');
@@ -67,15 +53,7 @@ function guidance(): string {
   return instructions.slice(PURPOSE.length, instructions.length - CONTENT_NOTICE.length);
 }
 
-/**
- * AC-6. No call count, and no instruction to call on every question.
- *
- * *Check early, not call endlessly.* R138 §8 measured what the other reading
- * costs: on a question nothing was recorded about, early routing produced three
- * times the Ferret calls and +36 s for no correctness change. A sentence that
- * reads as a policy of querying buys rediscovery savings with useless calls,
- * and §15 refuses that trade.
- */
+/** AC-6. Check early, not call endlessly: R138 §8 measured a querying policy at 3x the calls for no correctness gain. */
 const FORBIDDEN_UNCONDITIONAL: readonly RegExp[] = Object.freeze([
   /\balways\b/i,
   /\bmust\b/i,
@@ -91,15 +69,7 @@ const FORBIDDEN_UNCONDITIONAL: readonly RegExp[] = Object.freeze([
   /\b\d+\s+(?:times?|calls?|tools?)\b/i,
 ]);
 
-/**
- * AC-7. No claim that Ferret is authoritative, correct, complete, or preferable
- * to reading source.
- *
- * EPIC-137 §8 makes `verified` a claim about bytes — that what was observed
- * still matches the indexed code — and nothing more. Guidance that upgrades it
- * into a claim about truth would license exactly the stale-context failure §14's
- * U2 gate exists to catch.
- */
+/** AC-7. `verified` is a claim about bytes (EPIC-137 §8); guidance that upgrades it to truth licenses the U2 failure. */
 const FORBIDDEN_AUTHORITY: readonly RegExp[] = Object.freeze([
   /\bauthoritative\b/i,
   /\bauthority\b/i,
@@ -118,13 +88,7 @@ const FORBIDDEN_AUTHORITY: readonly RegExp[] = Object.freeze([
   /\b(?:instead of|rather than|in place of)\s+(?:reading\s+)?(?:the\s+)?source\b/i,
 ]);
 
-/**
- * AC-8. No verdict may read as permission to skip source verification.
- *
- * Applies to `verified` as much as to the three that mean *verify*: the risk is
- * not that an agent distrusts a `stale` record, it is that it reads any verdict
- * as a reason to stop.
- */
+/** AC-8. No verdict reads as permission to stop — `verified` included, which is the one that could. */
 const FORBIDDEN_SKIPPING_VERIFICATION: readonly RegExp[] = Object.freeze([
   /\b(?:no need|need not|needs no|unnecessary|not necessary|do not need|skip)\b[^.]*\bverif/i,
   /\bverif[a-z]*\b[^.]*\b(?:unnecessary|not needed|optional|no longer needed)\b/i,
@@ -140,17 +104,13 @@ describe('the routing guidance in the initialize instructions', () => {
   it('is one sentence, between the purpose sentence and the notice', () => {
     const text = guidance();
     expect(text.trim().length).toBeGreaterThan(0);
-    // One terminator, at the end. Two sentences is a paragraph, and a paragraph
-    // in a handshake is the surface EPIC-136 §2.3 measured the cost of.
+    // One terminator: a paragraph in a handshake is EPIC-136 §2.3's cost.
     expect(text.match(/[.!?](?=\s|$)/g)).toHaveLength(1);
   });
 
   it('costs a handshake roughly the sentence it is — EPIC-138 §20', () => {
-    // Characters, not tokens: no tokenizer ships with this repository, and
-    // `estimateTokens` is deliberately pessimistic about whitespace in a way
-    // that misreads prose. English prose runs 4–4.7 characters per token, so
-    // 320 characters is the ~60–76 tokens §20 budgets. The per-turn cost is
-    // zero by construction — this string is sent at `initialize`, once.
+    // Characters: no tokenizer ships here and `estimateTokens` misreads prose.
+    // 320 chars is §20's ~60-76 tokens at 4-4.7 chars each; per-turn cost is nil.
     expect(guidance().length).toBeLessThanOrEqual(320);
   });
 
@@ -168,7 +128,7 @@ describe('the routing guidance in the initialize instructions', () => {
     const text = guidance();
     for (const verdict of VERDICTS_REQUIRING_VERIFICATION) {
       expect(text).toContain(verdict);
-      // And says so *after* naming it, so the two cannot be read apart.
+      // After naming it, so the two cannot be read apart.
       expect(text.slice(text.indexOf(verdict))).toMatch(/\bverif/i);
     }
     expect(text).toMatch(/\bsource\b/i);

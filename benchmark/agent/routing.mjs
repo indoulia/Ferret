@@ -24,11 +24,20 @@ const STATE = join(WORKDIR, 'state.json');
 /** Names no file, no answer, no verdict vocabulary and no trust guidance — trust is what R2 measures. */
 const ROUTING = `Before you open any source file, check whether durable engineering context about this question has already been recorded by an earlier session and is retrievable through the tools available to you. Do that check first. Then continue however you judge best.`;
 
-/** control: no MCP. treatment: Ferret, contract unchanged. routed: Ferret, contract plus the ordering instruction. */
+/** EPIC-138 §14: the pre-change build, copied to `.local/routing-baseline` before src/mcp/server.ts changed. */
+const BASELINE_CLI = join(ROOT, '.local', 'routing-baseline', 'dist', 'cli', 'main.js');
+
+/**
+ * control: no MCP. treatment/baseline: Ferret, contract unchanged. routed: plus the client-side ordering
+ * instruction. guided: EPIC-138's server string, which is why it alone runs the current build — the product
+ * has no toggle (D4), so the arms are two builds rather than one flag.
+ */
 const CONDITIONS = {
-  control: { mcp: false, suffix: '' },
-  treatment: { mcp: true, suffix: '' },
-  routed: { mcp: true, suffix: ROUTING },
+  control: { mcp: false, suffix: '', cli: BASELINE_CLI },
+  treatment: { mcp: true, suffix: '', cli: BASELINE_CLI },
+  baseline: { mcp: true, suffix: '', cli: BASELINE_CLI },
+  guided: { mcp: true, suffix: '', cli: undefined },
+  routed: { mcp: true, suffix: ROUTING, cli: BASELINE_CLI },
 };
 
 const argv = process.argv.slice(2);
@@ -44,7 +53,7 @@ const repeat = Number(flag('repeat', '1'));
 
 if (phase === undefined) {
   process.stderr.write(
-    'usage: node benchmark/agent/routing.mjs --phase setup|a|reindex|r1|r2|r5|r8|report|drop [--arms control,treatment,routed] [--repeat n]\n',
+    'usage: node benchmark/agent/routing.mjs --phase setup|a|reindex|r1|r2|r5|r8|report|drop [--arms baseline,guided,routed] [--repeat n]\n',
   );
   process.exit(2);
 }
@@ -97,6 +106,12 @@ async function assertAnswerKeyUnreachable(configHome) {
       'docs/EPICs/validation/EPIC-137-VALIDATION.md',
       'docs/evidence/FERRET-DOES-AN-ANCHOR-CARRY.md',
       'docs/evidence/FERRET-DOES-A-REAL-AGENT-DO-BETTER.md',
+      'docs/EPICs/EPIC-138-Durable-Context-Routing-Guidance.md',
+      'docs/Architecture/EPIC-138-DECISIONS.md',
+      'docs/evidence/FERRET-WHEN-DOES-THE-AGENT-ASK.md',
+      'docs/EPICs/validation/EPIC-138-VALIDATION.md',
+      'docs/evidence/FERRET-DOES-A-SERVER-STRING-ROUTE.md',
+      'docs/EPICs/ROADMAP.md',
     ]) {
       const body = await call(client, 'ferret_find', { kind: 'file', attributes: { path }, limit: 1 });
       if ((body.results ?? []).length > 0) {
@@ -324,7 +339,7 @@ if (/^r[0-9]$/.test(phase)) {
         task,
         arm: condition.mcp ? 'treatment' : 'control',
         root: ROOT,
-        cli: CLI,
+        cli: condition.cli ?? CLI,
         connection: CONNECTION,
         configHome: home,
         workdir: join(WORKDIR, `${phase}-${label}`),
@@ -337,6 +352,7 @@ if (/^r[0-9]$/.test(phase)) {
         arm,
         pass,
         routed: condition.suffix.length > 0,
+        server: condition.cli === undefined ? 'guided' : 'baseline',
         scored: grade({ task, result }),
         anchoredFileReads: anchoredReads(result, anchoredPaths),
         ordering: ordering(result),

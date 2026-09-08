@@ -5,28 +5,28 @@
   "routing": "The routed arm's added sentence names no file, no answer, no verdict vocabulary and no trust guidance. It asks whether *any* durable context exists, so the arm is fair on R8.",
   "tasks": {
     "r1": {
-      "what": "tree unchanged since A recorded — the productivity case",
+      "what": "U1 — tree unchanged since A recorded, the productivity case",
       "from": "anchors",
       "session": "b",
-      "arms": ["control", "treatment", "routed"]
+      "arms": ["baseline", "guided", "routed"]
     },
     "r2": {
-      "what": "an anchored file changed and was re-indexed — the safety case",
+      "what": "U2 — an anchored file changed and was re-indexed, the safety gate",
       "from": "anchors",
       "session": "b",
-      "arms": ["control", "treatment", "routed"]
+      "arms": ["baseline", "guided", "routed"]
     },
     "r5": {
-      "what": "an unrelated file changed and was re-indexed — the false-drift case",
+      "what": "U3 — an unrelated file changed and was re-indexed, the false-drift case",
       "from": "anchors",
       "session": "b",
-      "arms": ["control", "treatment", "routed"]
+      "arms": ["baseline", "guided", "routed"]
     },
     "r8": {
-      "what": "a question nothing durable was recorded about — the wasted-call case",
+      "what": "U4 — a question nothing durable was recorded about, the usefulness gate",
       "from": "tasks",
       "taskId": "macos-runner",
-      "arms": ["treatment", "routed"]
+      "arms": ["baseline", "guided", "routed"]
     }
   }
 }
